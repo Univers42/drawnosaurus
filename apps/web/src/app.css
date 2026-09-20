@@ -3,8 +3,13 @@
   --muted: #6b7280;
   --line: #e5e7eb;
   --accent: #4c6ef5;
+  --accent-subtle: #edf2ff;
   --surface: #ffffff;
   --canvas: #f8f9fb;
+  --fg-strong: #111827;
+  --bg-hover: #f3f4f6;
+  --danger: #b42318;
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
 
   color-scheme: light;
   font-family:

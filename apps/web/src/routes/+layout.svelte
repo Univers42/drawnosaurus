@@ -1,15 +1,19 @@
 <script lang="ts">
   import { resolve } from "$app/paths";
+  import { page } from "$app/state";
   import "../app.css";
 
   let { children } = $props();
+  const onBoard = $derived(page.url.pathname.includes("/boards/"));
 </script>
 
 <div class="shell">
-  <header>
-    <a class="brand" href={resolve("/")}>drawnosaurus</a>
-    <span class="tagline">Rust/WASM canvas, boards in MongoDB</span>
-  </header>
+  {#if !onBoard}
+    <header>
+      <a class="brand" href={resolve("/")}>drawnosaurus</a>
+      <span class="tagline">Rust/WASM canvas, boards in MongoDB</span>
+    </header>
+  {/if}
 
   <main>
     {@render children?.()}
