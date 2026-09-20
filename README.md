@@ -166,8 +166,9 @@ not handle (parameter properties, enums) instead of letting it fail at container
   the full strict set. See the comment in `apps/web/tsconfig.json`.
 - **The web typecheck currently reports one error from the pinned engine commit**:
   `engine/src/host/keys.ts` imports `DrawTool` from `../tools`, which only imports it privately
-  (`TS2459`). The one-line upstream fix is to import it from `../types`; it exists locally in the
-  draw-engine checkout but is not in the pinned SHA. `make typecheck` goes green once that fix is
-  pushed and the submodule pin is bumped.
+  (`TS2459`). The two-line upstream fix is to import it from `../types`; it is committed in the local
+  draw-engine checkout but not yet pushed, so the pin here still predates it. `make typecheck` goes
+  green once that commit is pushed and the submodule pin is bumped. Everything else in the gate —
+  lint, format, 66 unit tests, 25 integration tests — is green today.
 - Board titles are not editable after creation, and there is no export path (the engine has SVG/JSON
   export; nothing surfaces it yet).
