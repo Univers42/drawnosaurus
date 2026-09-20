@@ -69,7 +69,7 @@ quality: ## The gate: typecheck + lint + format + unit tests
 verify: quality test-integration ## Everything CI runs
 	@echo -e "$(GREEN)✔ verify green$(RESET)"
 
-dev: ## Vite dev server on :5173 with the API on :4000
+dev: ## Vite dev server + API with hot reload, on WEB_PORT and API_PORT
 	$(DC) up -d mongo
 	$(RUN) --no-deps --service-ports -d --name drawnosaurus-api tooling \
 		pnpm --filter @drawnosaurus/api dev
