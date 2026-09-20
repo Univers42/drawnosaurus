@@ -10,7 +10,10 @@ export type IconName =
   | "line"
   | "freedraw"
   | "text"
+  | "sticky"
   | "eraser"
+  | "undo"
+  | "redo"
   | "sendToBack"
   | "backward"
   | "forward"
@@ -78,6 +81,10 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "path", d: "M9 20h6" },
     { tag: "path", d: "M12 4v16" },
   ],
+  sticky: [
+    { tag: "path", d: "M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" },
+    { tag: "path", d: "M15 3v6h6" },
+  ],
   eraser: [
     {
       tag: "path",
@@ -85,6 +92,14 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     },
     { tag: "path", d: "M22 21H7" },
     { tag: "path", d: "m5 11 9 9" },
+  ],
+  undo: [
+    { tag: "path", d: "M3 7v6h6" },
+    { tag: "path", d: "M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" },
+  ],
+  redo: [
+    { tag: "path", d: "M21 7v6h-6" },
+    { tag: "path", d: "M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" },
   ],
   sendToBack: [
     { tag: "rect", x: "8", y: "8", width: "12", height: "12", rx: "2" },

@@ -11,7 +11,8 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "start": "node build/index.js",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run --exclude \"**/*.bench.ts\"",
+    "test:bench": "vitest bench --run"
   },
   "dependencies": {
     "@drawnosaurus/contract": "workspace:*"

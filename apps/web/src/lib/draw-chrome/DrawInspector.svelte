@@ -115,7 +115,7 @@
     />
   </InspectorRow>
   {#if selectedCount > 0 && engine}
-    <InspectorRow label="Arrange">
+    <InspectorRow label="Layers">
       <InspectorIconRow
         buttons={[
           {
@@ -195,14 +195,16 @@
 <style>
   .panel {
     position: absolute;
-    top: 16px;
-    right: 16px;
+    top: 66px;
+    left: 14px;
     width: 216px;
     padding: 14px;
     border-radius: 12px;
-    max-height: calc(100% - 72px);
+    max-height: calc(100% - 120px);
     overflow-y: auto;
-    z-index: 2;
+    z-index: 15;
+    box-shadow: var(--shadow-md);
+    transition: opacity 0.15s ease;
   }
 
   .title {

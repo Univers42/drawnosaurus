@@ -17,7 +17,7 @@
   }
 </script>
 
-<div class="draw-panel bar" role="group" aria-label="Zoom controls">
+<div class="draw-panel bar" role="group" aria-label="Zoom and history controls">
   <button
     type="button"
     onmousedown={holdFocus}
@@ -55,7 +55,31 @@
   >
     <Icon name="fit" size={15} />
   </button>
+
+  <div class="rule" aria-hidden="true"></div>
+
+  <button
+    type="button"
+    onmousedown={holdFocus}
+    aria-label="Undo (⌘Z)"
+    title="Undo — ⌘Z"
+    onclick={() => engine?.undo()}
+  >
+    <Icon name="undo" size={15} />
+  </button>
+
+  <button
+    type="button"
+    onmousedown={holdFocus}
+    aria-label="Redo (⌘⇧Z)"
+    title="Redo — ⌘⇧Z"
+    onclick={() => engine?.redo()}
+  >
+    <Icon name="redo" size={15} />
+  </button>
+
   {#if !contentVisible}
+    <div class="rule" aria-hidden="true"></div>
     <button
       type="button"
       class="back"
@@ -64,7 +88,7 @@
       onclick={() => engine?.fit()}
     >
       <Icon name="focus" size={15} />
-      Back to content
+      <span>Fit</span>
     </button>
   {/if}
 </div>
@@ -72,19 +96,20 @@
 <style>
   .bar {
     position: absolute;
-    bottom: 16px;
-    left: 16px;
+    bottom: 14px;
+    left: 14px;
     display: flex;
     align-items: center;
-    gap: 2px;
-    padding: 4px;
-    border-radius: 10px;
-    z-index: 2;
+    gap: 3px;
+    padding: 3px 6px;
+    border-radius: 9px;
+    z-index: 20;
+    box-shadow: var(--shadow-sm);
   }
 
   button {
-    height: 28px;
-    min-width: 28px;
+    height: 30px;
+    min-width: 30px;
     display: grid;
     place-items: center;
     padding: 0 4px;
@@ -92,17 +117,29 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--ink);
+    transition: background 0.12s ease;
+  }
+
+  button:hover {
+    background: var(--bg);
   }
 
   .pct {
-    min-width: 48px;
+    min-width: 44px;
     color: var(--fg-strong);
+  }
+
+  .rule {
+    width: 1px;
+    height: 18px;
+    margin: 0 3px;
+    background: var(--line);
   }
 
   .back {
     display: flex;
-    gap: 6px;
-    padding: 0 10px;
+    gap: 4px;
+    padding: 0 8px;
     color: var(--accent);
   }
 </style>

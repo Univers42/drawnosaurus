@@ -1,7 +1,6 @@
 <script lang="ts">
-  import type { DrawTool } from "@osionos/draw-engine/types";
   import Icon from "./Icon.svelte";
-  import { DRAW_TOOLS } from "./tools.ts";
+  import { DRAW_TOOLS, type ExtendedTool } from "./tools.ts";
 
   let {
     active,
@@ -9,9 +8,9 @@
     onSelect,
     onToggleToolLock,
   }: {
-    active: DrawTool;
+    active: ExtendedTool;
     toolLocked: boolean;
-    onSelect: (tool: DrawTool) => void;
+    onSelect: (tool: ExtendedTool) => void;
     onToggleToolLock: () => void;
   } = $props();
 
@@ -44,6 +43,7 @@
       onclick={() => onSelect(entry.tool)}
     >
       <Icon name={entry.icon} size={18} />
+      <span class="hotkey-badge">{entry.hotkey}</span>
     </button>
   {/each}
 </div>
@@ -51,21 +51,31 @@
 <style>
   .bar {
     position: absolute;
-    top: 16px;
+    top: 14px;
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 4px;
-    padding: 6px;
-    border-radius: 12px;
-    z-index: 2;
+    align-items: center;
+    gap: 3px;
+    padding: 4px;
+    border-radius: 10px;
+    z-index: 20;
+    box-shadow: var(--shadow-md);
   }
 
   button {
-    width: 44px;
-    height: 44px;
+    position: relative;
+    width: 36px;
+    height: 36px;
     display: grid;
     place-items: center;
+    border-radius: 8px;
+    color: var(--ink);
+    transition: all 0.12s ease;
+  }
+
+  button:hover:not(.active) {
+    background: var(--bg);
   }
 
   button.active {
@@ -73,10 +83,21 @@
     background: var(--accent-subtle);
   }
 
+  .hotkey-badge {
+    position: absolute;
+    right: 2px;
+    bottom: 1px;
+    font-size: 9px;
+    font-weight: 700;
+    opacity: 0.6;
+    pointer-events: none;
+    line-height: 1;
+  }
+
   .rule {
     width: 1px;
-    align-self: stretch;
-    margin: 6px 2px;
+    height: 20px;
+    margin: 0 2px;
     background: var(--line);
   }
 </style>

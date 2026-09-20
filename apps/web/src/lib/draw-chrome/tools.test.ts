@@ -14,6 +14,7 @@ describe("DRAW_TOOLS", () => {
       "line",
       "freedraw",
       "text",
+      "sticky",
       "eraser",
     ]);
   });
