@@ -7,16 +7,18 @@
   import InspectorIconRow from "./InspectorIconRow.svelte";
   import {
     FILL_STYLES,
-    FILL_SWATCHES,
     FONT_SIZES,
     SLOPPINESS,
     STROKE_STYLES,
-    STROKE_SWATCHES,
+    getFillSwatches,
+    getStrokeSwatches,
+    type ThemeMode,
     WIDTHS,
   } from "./inspector.ts";
 
   let {
     style,
+    themeMode = "light",
     selectedCount,
     engine,
     onApply,
@@ -24,8 +26,12 @@
     style: DrawElementStyle;
     selectedCount: number;
     engine: DrawEngine | null;
+    themeMode?: ThemeMode;
     onApply: (patch: Partial<DrawElementStyle>) => void;
   } = $props();
+
+  const strokePresets = $derived(getStrokeSwatches(themeMode));
+  const fillPresets = $derived(getFillSwatches(themeMode));
 
   const hasText = $derived(
     selectedCount > 0 && !!engine?.getSelectedElements().some((element) => element.type === "text"),
@@ -38,14 +44,14 @@
   <InspectorRow label="Stroke">
     <InspectorSwatches
       value={style.strokeColor}
-      presets={STROKE_SWATCHES}
+      presets={strokePresets}
       onPick={(color) => onApply({ strokeColor: color })}
     />
   </InspectorRow>
   <InspectorRow label="Background">
     <InspectorSwatches
       value={style.backgroundColor}
-      presets={FILL_SWATCHES}
+      presets={fillPresets}
       allowTransparent
       onPick={(color) => onApply({ backgroundColor: color })}
     />

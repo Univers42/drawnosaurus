@@ -42,9 +42,9 @@
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="export-title">
-  <div class="modal-card">
+  <div class="modal-card pop-in">
     <div class="modal-header">
-      <h3 id="export-title">Export Image</h3>
+      <h3 id="export-title">Export Drawing</h3>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
     </div>
 
@@ -77,16 +77,25 @@
         onclick={handleExportPng}
         disabled={exporting}
       >
-        <strong>PNG</strong>
-        <span>Raster image ({scale}x resolution)</span>
+        <div class="card-icon">PNG</div>
+        <div class="card-text">
+          <strong>PNG Image</strong>
+          <span>High-res raster ({scale}x resolution)</span>
+        </div>
       </button>
       <button type="button" class="action-card" onclick={handleExportSvg}>
-        <strong>SVG</strong>
-        <span>Scalable vector graphics</span>
+        <div class="card-icon svg-badge">SVG</div>
+        <div class="card-text">
+          <strong>SVG Vector</strong>
+          <span>Scalable vector graphics for design tools</span>
+        </div>
       </button>
       <button type="button" class="action-card" onclick={handleExportJson}>
-        <strong>.osidraw</strong>
-        <span>Native JSON drawing project</span>
+        <div class="card-icon json-badge">OSI</div>
+        <div class="card-text">
+          <strong>.osidraw File</strong>
+          <span>Native JSON scene for backup & reload</span>
+        </div>
       </button>
     </div>
   </div>
@@ -100,17 +109,17 @@
     display: grid;
     place-items: center;
     z-index: 100;
-    backdrop-filter: blur(3px);
+    backdrop-filter: blur(4px);
   }
 
   .modal-card {
     background: var(--surface);
     color: var(--ink);
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: 16px;
     padding: 24px;
-    width: 460px;
-    max-width: 90vw;
+    width: 480px;
+    max-width: 92vw;
     box-shadow: var(--shadow-lg);
   }
 
@@ -118,13 +127,14 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 18px;
   }
 
   .modal-header h3 {
     margin: 0;
     font-size: 18px;
     font-weight: 700;
+    color: var(--fg-strong);
   }
 
   .close-btn {
@@ -133,14 +143,19 @@
     font-size: 16px;
     cursor: pointer;
     color: var(--muted);
-    padding: 4px 8px;
+    padding: 6px 10px;
     border-radius: 6px;
+    transition: background var(--transition);
+  }
+
+  .close-btn:hover {
+    background: var(--bg-hover);
   }
 
   .options-section {
     background: var(--bg);
-    border-radius: 8px;
-    padding: 12px;
+    border-radius: 10px;
+    padding: 14px;
     margin-bottom: 20px;
     display: flex;
     flex-direction: column;
@@ -157,17 +172,19 @@
 
   .scale-chips {
     display: flex;
-    gap: 4px;
+    gap: 6px;
   }
 
   .scale-chip {
-    padding: 4px 10px;
+    padding: 4px 12px;
     border-radius: 6px;
     border: 1px solid var(--line);
     background: var(--surface);
     color: var(--ink);
     font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
+    transition: all var(--transition);
   }
 
   .scale-chip.active {
@@ -184,29 +201,58 @@
 
   .action-card {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
+    gap: 14px;
     padding: 12px 16px;
-    border-radius: 10px;
+    border-radius: 12px;
     border: 1px solid var(--line);
     background: var(--surface);
     cursor: pointer;
     text-align: left;
-    transition: all 0.15s ease;
+    transition: all var(--transition);
   }
 
   .action-card:hover {
     border-color: var(--accent);
     transform: translateY(-1px);
     box-shadow: var(--shadow-sm);
+    background: var(--bg);
   }
 
-  .action-card strong {
+  .card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 800;
+    flex-shrink: 0;
+  }
+
+  .card-icon.svg-badge {
+    background: rgba(47, 158, 68, 0.14);
+    color: #2f9e44;
+  }
+
+  .card-icon.json-badge {
+    background: rgba(240, 140, 0, 0.14);
+    color: #f08c00;
+  }
+
+  .card-text {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card-text strong {
     font-size: 14px;
-    color: var(--ink);
+    color: var(--fg-strong);
   }
 
-  .action-card span {
+  .card-text span {
     font-size: 12px;
     color: var(--muted);
     margin-top: 2px;

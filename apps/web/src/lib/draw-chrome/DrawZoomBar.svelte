@@ -101,10 +101,11 @@
     display: flex;
     align-items: center;
     gap: 3px;
-    padding: 3px 6px;
-    border-radius: 9px;
+    padding: 4px 6px;
+    border-radius: var(--radius);
     z-index: 20;
     box-shadow: var(--shadow-sm);
+    backdrop-filter: blur(8px);
   }
 
   button {
@@ -117,16 +118,24 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--ink);
-    transition: background 0.12s ease;
+    transition:
+      background var(--transition),
+      transform 0.1s ease;
   }
 
   button:hover {
-    background: var(--bg);
+    background: var(--bg-hover);
+  }
+
+  button:active {
+    transform: scale(0.94);
   }
 
   .pct {
     min-width: 44px;
     color: var(--fg-strong);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 11px;
   }
 
   .rule {
@@ -141,5 +150,6 @@
     gap: 4px;
     padding: 0 8px;
     color: var(--accent);
+    font-weight: 700;
   }
 </style>

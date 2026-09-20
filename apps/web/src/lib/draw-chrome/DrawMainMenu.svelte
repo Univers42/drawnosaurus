@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
+  import MainMenuIcon from "./MainMenuIcon.svelte";
 
   let {
     engine,
@@ -58,7 +59,7 @@
 <div class="menu-backdrop" role="presentation" onclick={onClose}>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
-    class="menu-drawer"
+    class="menu-drawer draw-panel"
     tabindex="-1"
     role="dialog"
     aria-label="Main menu"
@@ -82,12 +83,12 @@
 
     <div class="menu-items">
       <button type="button" class="menu-item" onclick={handleOpenFile}>
-        <span class="icon">📂</span>
+        <MainMenuIcon name="folder" />
         <span>Open / Import file</span>
       </button>
 
       <button type="button" class="menu-item" onclick={handleSaveJson}>
-        <span class="icon">💾</span>
+        <MainMenuIcon name="disk" />
         <span>Save to disk (.osidraw)</span>
       </button>
 
@@ -99,7 +100,7 @@
           onOpenExport();
         }}
       >
-        <span class="icon">🖼️</span>
+        <MainMenuIcon name="image" />
         <span>Export image (PNG, SVG)...</span>
       </button>
 
@@ -111,21 +112,21 @@
           onOpenMermaid();
         }}
       >
-        <span class="icon">🧜</span>
+        <MainMenuIcon name="diagram" />
         <span>Mermaid to diagram...</span>
       </button>
 
       <hr class="divider" />
 
       <button type="button" class="menu-item" onclick={onToggleTheme}>
-        <span class="icon">{themeMode === "dark" ? "☀️" : "🌙"}</span>
-        <span>Theme: {themeMode === "dark" ? "Light mode" : "Dark mode"}</span>
+        <MainMenuIcon name={themeMode === "dark" ? "sun" : "moon"} />
+        <span>{themeMode === "dark" ? "Light mode" : "Dark mode"}</span>
       </button>
 
       <hr class="divider" />
 
       <button type="button" class="menu-item danger" onclick={handleClear}>
-        <span class="icon">🗑️</span>
+        <MainMenuIcon name="trash" />
         <span>Clear canvas (Reset)</span>
       </button>
     </div>
@@ -136,7 +137,8 @@
   .menu-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(4px);
     z-index: 90;
   }
 
@@ -152,8 +154,8 @@
     box-shadow: var(--shadow-lg);
     display: flex;
     flex-direction: column;
-    padding: 16px;
-    animation: slideIn 0.15s ease-out;
+    padding: 18px 16px;
+    animation: slideIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   @keyframes slideIn {
@@ -170,7 +172,7 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
-    padding-bottom: 12px;
+    padding-bottom: 14px;
     border-bottom: 1px solid var(--line);
   }
 
@@ -182,7 +184,7 @@
   }
 
   .logo {
-    font-size: 20px;
+    font-size: 22px;
   }
 
   .close-btn {
@@ -191,8 +193,13 @@
     font-size: 16px;
     cursor: pointer;
     color: var(--muted);
-    padding: 4px 8px;
+    padding: 6px 10px;
     border-radius: 6px;
+    transition: background var(--transition);
+  }
+
+  .close-btn:hover {
+    background: var(--bg-hover);
   }
 
   .menu-items {
@@ -206,7 +213,7 @@
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     border: none;
     background: transparent;
     color: var(--ink);
@@ -214,11 +221,17 @@
     font-weight: 500;
     cursor: pointer;
     text-align: left;
-    transition: background 0.12s ease;
+    transition:
+      background var(--transition),
+      transform 0.1s ease;
   }
 
   .menu-item:hover {
     background: var(--bg);
+  }
+
+  .menu-item:active {
+    transform: scale(0.98);
   }
 
   .menu-item.danger {

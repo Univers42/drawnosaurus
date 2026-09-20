@@ -11,7 +11,6 @@
     TextEditRequest,
   } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
-  import type { DrawElementDto } from "@drawnosaurus/contract";
   import { cursorForTool, styleOf } from "./style.ts";
   import { zoomPercent } from "./camera.ts";
   import { themeFromCss } from "./theme.ts";
@@ -20,16 +19,11 @@
   import { createStickyNote } from "../notes/stickyNotes.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
   import DrawHeader from "./DrawHeader.svelte";
-  import DrawMainMenu from "./DrawMainMenu.svelte";
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
-  import DrawContextMenu from "./DrawContextMenu.svelte";
-  import DrawMermaidModal from "./DrawMermaidModal.svelte";
-  import DrawExportModal from "./DrawExportModal.svelte";
-  import DrawShareModal from "./DrawShareModal.svelte";
-  import DrawShortcutsDialog from "./DrawShortcutsDialog.svelte";
+  import DrawModals from "./DrawModals.svelte";
   import PeerCursors from "./PeerCursors.svelte";
   import "./draw-chrome.css";
 
@@ -75,7 +69,6 @@
   // Realtime
   let peers = $state<PeerCursor[]>([]);
   let realtime: RealtimeChannel<never> | null = null;
-
   let raf = 0;
   let pending: Camera | null = null;
   const cursor = $derived(cursorForTool(tool === "sticky" ? "rectangle" : tool));
@@ -94,13 +87,18 @@
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", themeMode === "dark");
     }
+    const cur = engine?.getNextStyle();
+    if (cur && (cur.strokeColor === "#1e1e1e" || cur.strokeColor === "#f8f9fa")) {
+      engine?.setNextStyle({ strokeColor: ink });
+      syncStyle(engine);
+    }
   }
 
   function handleToolSelect(next: ExtendedTool): void {
     if (next === "sticky") {
       if (engine && typeof window !== "undefined") {
-        const center = engine.screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
-        const [note, text] = createStickyNote(center.x - 90, center.y - 90, "", "yellow");
+        const c = engine.screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
+        const [note, text] = createStickyNote(c.x - 90, c.y - 90, "", "yellow");
         engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements: [note, text] }));
       }
       tool = "select";
@@ -108,13 +106,24 @@
     } else {
       tool = next;
       engine?.setTool(next);
+      if (next === "arrow") {
+        engine?.setArrowheads({ end: "arrow" });
+      } else if (next === "line") {
+        engine?.setArrowheads({ start: "none", end: "none" });
+      }
+      syncStyle(engine);
     }
   }
 
-  function handleInsertMermaid(elements: DrawElementDto[]): void {
-    if (!engine) return;
-    const payload = JSON.stringify({ type: "osidraw", version: 1, elements });
-    engine.pasteJson(payload);
+  function handleSceneChange(json: string): void {
+    onSceneChange?.(json);
+    if (!realtime) return;
+    try {
+      const data = JSON.parse(json);
+      if (data.elements) realtime.sendPatch({ elements: data.elements });
+    } catch {
+      // ignore
+    }
   }
 
   onMount(() => {
@@ -128,6 +137,10 @@
       realtime.connect();
       unsub = realtime.onPeers((list) => {
         peers = list;
+      });
+      realtime.onRemotePatch((patch) => {
+        if (!engine || !patch.elements?.length) return;
+        engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements: patch.elements }));
       });
     }
 
@@ -178,7 +191,7 @@
     {theme}
     defaultStroke={ink}
     {ariaLabel}
-    {onSceneChange}
+    onSceneChange={handleSceneChange}
     {onCameraChange}
     onReady={(next) => {
       engine = next;
@@ -225,17 +238,20 @@
     }}
   />
 
-  {#if selectedCount > 0}
-    <DrawInspector
-      style={activeStyle}
-      {selectedCount}
-      {engine}
-      onApply={(patch) => {
+  <DrawInspector
+    style={activeStyle}
+    {selectedCount}
+    {engine}
+    {themeMode}
+    onApply={(patch) => {
+      if (selectedCount > 0) {
         engine?.applyStyle(patch);
-        syncStyle(engine);
-      }}
-    />
-  {/if}
+      } else {
+        engine?.setNextStyle(patch);
+      }
+      syncStyle(engine);
+    }}
+  />
 
   <DrawZoomBar {engine} {zoom} {contentVisible} />
 
@@ -248,51 +264,20 @@
     />
   {/if}
 
-  {#if menu}
-    <DrawContextMenu
-      x={menu.x}
-      y={menu.y}
-      element={menu.element}
-      onPickArrowhead={(patch) => {
-        engine?.setArrowheads(patch);
-        menu = menu?.element?.linear
-          ? { ...menu, element: { ...menu.element, linear: { ...menu.element.linear, ...patch } } }
-          : menu;
-      }}
-      onRun={(action) => {
-        if (engine && menu) action(engine, engine.screenToWorld(menu.x, menu.y));
-        menu = null;
-      }}
-      onClose={() => {
-        menu = null;
-      }}
-    />
-  {/if}
-
-  {#if showMainMenu}
-    <DrawMainMenu
-      {engine}
-      {themeMode}
-      onToggleTheme={toggleTheme}
-      onOpenExport={() => (showExport = true)}
-      onOpenMermaid={() => (showMermaid = true)}
-      onClose={() => (showMainMenu = false)}
-    />
-  {/if}
-
-  {#if showExport}
-    <DrawExportModal {engine} onClose={() => (showExport = false)} />
-  {/if}
-
-  {#if showMermaid}
-    <DrawMermaidModal onInsert={handleInsertMermaid} onClose={() => (showMermaid = false)} />
-  {/if}
-
-  {#if showShare}
-    <DrawShareModal {slug} {peers} onClose={() => (showShare = false)} />
-  {/if}
-
-  {#if showShortcuts}
-    <DrawShortcutsDialog onClose={() => (showShortcuts = false)} />
-  {/if}
+  <DrawModals
+    {engine}
+    {themeMode}
+    {slug}
+    {peers}
+    bind:menu
+    bind:showMainMenu
+    bind:showExport
+    bind:showMermaid
+    bind:showShare
+    bind:showShortcuts
+    onToggleTheme={toggleTheme}
+    onInsertMermaid={(elements) => {
+      if (engine) engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements }));
+    }}
+  />
 </div>

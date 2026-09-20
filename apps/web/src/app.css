@@ -1,18 +1,26 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
 :root {
   --ink: #1e1e1e;
   --muted: #6b7280;
   --line: #e5e7eb;
-  --accent: #4c6ef5;
-  --accent-subtle: #edf2ff;
+  --accent: #6965db;
+  --accent-subtle: #eef0ff;
   --surface: #ffffff;
   --canvas: #f8f9fb;
   --fg-strong: #111827;
-  --bg-hover: #f3f4f6;
-  --danger: #b42318;
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --bg: #f3f4f6;
+  --bg-hover: #edeef0;
+  --danger: #e03131;
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.14);
+  --radius: 10px;
+  --transition: 0.15s ease;
 
   color-scheme: light;
   font-family:
+    "Inter",
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -21,6 +29,25 @@
     Helvetica,
     Arial,
     sans-serif;
+}
+
+:root.dark {
+  --ink: #e8eaed;
+  --muted: #9ca3af;
+  --line: #3a3a3a;
+  --accent: #848ce9;
+  --accent-subtle: rgba(132, 140, 233, 0.14);
+  --surface: #232329;
+  --canvas: #191919;
+  --fg-strong: #f0f0f0;
+  --bg: #2a2a30;
+  --bg-hover: #33333a;
+  --danger: #ff6b6b;
+  --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.45);
+
+  color-scheme: dark;
 }
 
 * {
@@ -33,6 +60,9 @@ body {
   height: 100%;
   color: var(--ink);
   background: var(--canvas);
+  transition:
+    background var(--transition),
+    color var(--transition);
 }
 
 a {
@@ -45,8 +75,13 @@ button {
   cursor: pointer;
   border: 1px solid var(--line);
   background: var(--surface);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 0.45rem 0.8rem;
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition),
+    box-shadow var(--transition);
 }
 
 button:hover:not(:disabled) {
@@ -62,12 +97,22 @@ input {
   font: inherit;
   padding: 0.45rem 0.65rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--surface);
+  color: var(--ink);
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    color var(--transition);
 }
 
 input:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+::selection {
+  background: var(--accent-subtle);
+  color: var(--fg-strong);
 }

@@ -1,8 +1,10 @@
+/* Drawnosaurus chrome styling */
 .draw-chrome {
   position: relative;
   width: 100%;
   height: 100%;
   overflow: hidden;
+  user-select: none;
 }
 
 .draw-chrome button {
@@ -11,8 +13,12 @@
   border: none;
   background: transparent;
   padding: 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
   color: inherit;
+  transition:
+    background var(--transition),
+    transform var(--transition),
+    color var(--transition);
 }
 
 .draw-chrome button:hover:not(:disabled) {
@@ -20,11 +26,74 @@
 }
 
 .draw-chrome button:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .draw-panel {
   background: var(--surface);
   border: 1px solid var(--line);
   box-shadow: var(--shadow-md);
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition:
+    background var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition);
+}
+
+:root.dark .draw-panel {
+  background: rgba(35, 35, 41, 0.88);
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+:root:not(.dark) .draw-panel {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* Modal and dialog backdrops */
+.draw-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.pop-in {
+  animation: popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

@@ -57,10 +57,11 @@
     display: flex;
     align-items: center;
     gap: 3px;
-    padding: 4px;
-    border-radius: 10px;
+    padding: 5px;
+    border-radius: 12px;
     z-index: 20;
     box-shadow: var(--shadow-md);
+    transition: box-shadow var(--transition);
   }
 
   button {
@@ -71,33 +72,47 @@
     place-items: center;
     border-radius: 8px;
     color: var(--ink);
-    transition: all 0.12s ease;
+    transition:
+      background var(--transition),
+      color var(--transition),
+      transform 0.1s ease;
+  }
+
+  button:active {
+    transform: scale(0.92);
   }
 
   button:hover:not(.active) {
-    background: var(--bg);
+    background: var(--bg-hover);
   }
 
   button.active {
     color: var(--accent);
     background: var(--accent-subtle);
+    font-weight: 600;
   }
 
   .hotkey-badge {
     position: absolute;
-    right: 2px;
-    bottom: 1px;
+    right: 3px;
+    bottom: 2px;
     font-size: 9px;
     font-weight: 700;
-    opacity: 0.6;
+    opacity: 0.55;
     pointer-events: none;
     line-height: 1;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+  }
+
+  button.active .hotkey-badge {
+    opacity: 0.9;
+    color: var(--accent);
   }
 
   .rule {
     width: 1px;
-    height: 20px;
-    margin: 0 2px;
+    height: 22px;
+    margin: 0 3px;
     background: var(--line);
   }
 </style>

@@ -29,14 +29,20 @@
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="share-title">
-  <div class="modal-card">
+  <div class="modal-card pop-in">
     <div class="modal-header">
-      <h3 id="share-title">Live Collaboration</h3>
+      <div class="title-with-status">
+        <h3 id="share-title">Live Collaboration</h3>
+        <span class="live-pill">
+          <span class="pulse-dot"></span>
+          Live
+        </span>
+      </div>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
     </div>
 
     <p class="description">
-      Share this link to invite others to view and edit this board in real-time.
+      Anyone with this link can join this board in real-time, see your cursor, and draw together.
     </p>
 
     <div class="link-box">
@@ -47,16 +53,21 @@
     </div>
 
     <div class="peers-section">
-      <h4>Active Collaborators ({peers.length + 1})</h4>
+      <div class="peers-header">
+        <h4>Active Collaborators</h4>
+        <span class="count-badge">{peers.length + 1} online</span>
+      </div>
       <div class="peers-list">
         <div class="peer-item me">
-          <span class="dot" style:background="#1971c2"></span>
-          <span>You</span>
+          <div class="avatar" style:background="#6965db">You</div>
+          <span class="name">You (Host)</span>
         </div>
         {#each peers as peer (peer.clientId)}
           <div class="peer-item">
-            <span class="dot" style:background={peer.color}></span>
-            <span>{peer.name}</span>
+            <div class="avatar" style:background={peer.color}>
+              {peer.name.slice(0, 2).toUpperCase()}
+            </div>
+            <span class="name">{peer.name}</span>
           </div>
         {/each}
       </div>
@@ -72,16 +83,16 @@
     display: grid;
     place-items: center;
     z-index: 100;
-    backdrop-filter: blur(3px);
+    backdrop-filter: blur(4px);
   }
 
   .modal-card {
     background: var(--surface);
     color: var(--ink);
     border: 1px solid var(--line);
-    border-radius: 14px;
+    border-radius: 16px;
     padding: 24px;
-    width: 440px;
+    width: 460px;
     max-width: 90vw;
     box-shadow: var(--shadow-lg);
   }
@@ -93,10 +104,46 @@
     margin-bottom: 12px;
   }
 
+  .title-with-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
   .modal-header h3 {
     margin: 0;
     font-size: 18px;
     font-weight: 700;
+    color: var(--fg-strong);
+  }
+
+  .live-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2f9e44;
+    background: rgba(47, 158, 68, 0.12);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #2f9e44;
+    animation: pulse 1.2s infinite alternate;
+  }
+
+  @keyframes pulse {
+    from {
+      opacity: 0.4;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   .close-btn {
@@ -105,14 +152,20 @@
     font-size: 16px;
     cursor: pointer;
     color: var(--muted);
-    padding: 4px 8px;
+    padding: 6px 10px;
     border-radius: 6px;
+    transition: background var(--transition);
+  }
+
+  .close-btn:hover {
+    background: var(--bg-hover);
   }
 
   .description {
     font-size: 13px;
     color: var(--muted);
     margin: 0 0 16px;
+    line-height: 1.45;
   }
 
   .link-box {
@@ -124,7 +177,7 @@
   .link-box input {
     flex: 1;
     padding: 8px 12px;
-    border-radius: 8px;
+    border-radius: var(--radius);
     border: 1px solid var(--line);
     background: var(--bg);
     color: var(--ink);
@@ -136,17 +189,34 @@
     background: var(--accent);
     color: #ffffff;
     border: none;
-    border-radius: 8px;
+    border-radius: var(--radius);
     font-weight: 600;
     font-size: 13px;
     cursor: pointer;
     white-space: nowrap;
+    transition: all var(--transition);
+  }
+
+  .copy-btn:hover {
+    filter: brightness(1.08);
+  }
+
+  .peers-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
   }
 
   .peers-section h4 {
-    margin: 0 0 10px;
+    margin: 0;
     font-size: 13px;
     font-weight: 600;
+    color: var(--muted);
+  }
+
+  .count-badge {
+    font-size: 11px;
     color: var(--muted);
   }
 
@@ -154,20 +224,34 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    max-height: 140px;
+    max-height: 150px;
     overflow-y: auto;
+    padding: 2px;
   }
 
   .peer-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     font-size: 13px;
+    padding: 4px 6px;
+    border-radius: 8px;
   }
 
-  .dot {
-    width: 10px;
-    height: 10px;
+  .avatar {
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+  }
+
+  .name {
+    color: var(--ink);
+    font-weight: 500;
   }
 </style>

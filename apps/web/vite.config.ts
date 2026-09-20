@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
- * The engine alias itself lives in svelte.config.js (`kit.alias`) so it is declared
+ * The engine alias itself lives in svelte.config.js (kit.alias) so it is declared
  * once for both Vite and tsc. What is still needed here: the engine sits OUTSIDE
  * this project's root, and Vite's dev server refuses to serve files from outside the
  * root unless they are allow-listed — so dev would 403 on the WASM glue without this.
@@ -19,7 +19,7 @@ export default defineConfig({
     fs: { allow: [engineSrc, enginePkg] },
     proxy: {
       // Same-origin in dev so the browser never needs CORS.
-      "/v1": { target: apiTarget, changeOrigin: true },
+      "/v1": { target: apiTarget, changeOrigin: true, ws: true },
     },
   },
   assetsInclude: ["**/*.wasm"],

@@ -5,22 +5,46 @@
     onToggleMenu,
     onOpenShare,
     onOpenShortcuts,
+    onRename,
   }: {
     title?: string;
     status?: string;
     onToggleMenu: () => void;
     onOpenShare: () => void;
     onOpenShortcuts: () => void;
+    onRename?: (nextTitle: string) => void;
   } = $props();
+
+  let isEditing = $state(false);
+  let editValue = $state("");
+
+  function startEdit(): void {
+    editValue = title;
+    isEditing = true;
+  }
+
+  function commitEdit(): void {
+    if (!isEditing) return;
+    isEditing = false;
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== title) {
+      onRename?.(trimmed);
+    }
+  }
+
+  function handleKeyDown(e: KeyboardEvent): void {
+    if (e.key === "Enter") commitEdit();
+    else if (e.key === "Escape") isEditing = false;
+  }
 
   const statusText = $derived(
     status === "saving"
       ? "Saving…"
       : status === "error"
-        ? "Saved locally 💾"
+        ? "Saved locally"
         : status === "dirty"
           ? "Unsaved changes"
-          : "Saved ✓",
+          : "Saved",
   );
 </script>
 
@@ -35,10 +59,11 @@
     >
       <svg
         viewBox="0 0 24 24"
-        width="20"
-        height="20"
+        width="18"
+        height="18"
         stroke="currentColor"
-        stroke-width="2"
+        stroke-width="2.2"
+        stroke-linecap="round"
         fill="none"
       >
         <line x1="4" y1="6" x2="20" y2="6" />
@@ -47,8 +72,32 @@
       </svg>
     </button>
 
-    <span class="board-title" {title}>{title}</span>
-    <span class="save-status" class:saving={status === "saving"} class:cached={status === "error"}>
+    {#if isEditing}
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        type="text"
+        class="title-input"
+        bind:value={editValue}
+        onblur={commitEdit}
+        onkeydown={handleKeyDown}
+        aria-label="Edit board title"
+        autofocus
+      />
+    {:else}
+      <button type="button" class="board-title-btn" onclick={startEdit} title="Click to rename">
+        <span class="board-title">{title}</span>
+      </button>
+    {/if}
+
+    <span
+      class="save-status"
+      class:saving={status === "saving"}
+      class:cached={status === "error"}
+      class:dirty={status === "dirty"}
+    >
+      {#if status === "saving"}
+        <span class="dot-pulse"></span>
+      {/if}
       {statusText}
     </span>
   </div>
@@ -63,8 +112,8 @@
     >
       <svg
         viewBox="0 0 24 24"
-        width="16"
-        height="16"
+        width="15"
+        height="15"
         stroke="currentColor"
         stroke-width="2"
         fill="none"
@@ -117,7 +166,7 @@
     height: 38px;
     min-width: 38px;
     padding: 0 10px;
-    border-radius: 9px;
+    border-radius: var(--radius);
     border: 1px solid var(--line);
     background: var(--surface);
     color: var(--ink);
@@ -125,13 +174,32 @@
     place-items: center;
     cursor: pointer;
     box-shadow: var(--shadow-sm);
-    transition: all 0.15s ease;
+    backdrop-filter: blur(8px);
+    transition: all var(--transition);
   }
 
   .menu-btn:hover,
   .help-btn:hover {
-    background: var(--bg);
+    background: var(--bg-hover);
     border-color: var(--accent);
+  }
+
+  .board-title-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    padding: 3px 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition:
+      border-color var(--transition),
+      background var(--transition);
+  }
+
+  .board-title-btn:hover {
+    background: var(--bg);
+    border-color: var(--line);
   }
 
   .board-title {
@@ -142,7 +210,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding: 0 4px;
+  }
+
+  .title-input {
+    font-size: 13px;
+    font-weight: 600;
+    max-width: 180px;
+    padding: 3px 6px;
+    height: 28px;
   }
 
   .save-status {
@@ -150,13 +225,40 @@
     color: var(--muted);
     background: var(--surface);
     border: 1px solid var(--line);
-    padding: 4px 8px;
+    padding: 3px 8px;
     border-radius: 6px;
     box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    backdrop-filter: blur(8px);
   }
 
   .save-status.cached {
     color: var(--accent);
+  }
+
+  .save-status.dirty {
+    color: var(--danger);
+  }
+
+  .dot-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1s infinite alternate;
+  }
+
+  @keyframes pulse {
+    from {
+      opacity: 0.3;
+      transform: scale(0.8);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1.2);
+    }
   }
 
   .share-btn {
@@ -165,7 +267,7 @@
     align-items: center;
     gap: 6px;
     padding: 0 14px;
-    border-radius: 9px;
+    border-radius: var(--radius);
     border: none;
     background: var(--accent);
     color: #ffffff;
@@ -173,11 +275,17 @@
     font-weight: 600;
     cursor: pointer;
     box-shadow: var(--shadow-sm);
-    transition: opacity 0.15s ease;
+    transition: all var(--transition);
   }
 
   .share-btn:hover {
-    opacity: 0.92;
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .share-btn:active {
+    transform: translateY(0);
   }
 
   .help-btn {

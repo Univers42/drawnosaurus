@@ -17,21 +17,37 @@
 
   let value = $state("");
   let node: HTMLTextAreaElement | undefined;
-  let editingId = $state("");
-
-  $effect.pre(() => {
-    if (editingId === request.id) return;
-    editingId = request.id;
-    value = request.text;
-  });
+  let originalText = "";
+  let finished = false;
 
   onMount(() => {
+    originalText = request.text;
+    value = request.text;
     node?.focus();
     node?.select();
+    autoResize();
   });
 
-  function commit(next: string): void {
-    engine.setElementText(request.id, next);
+  function autoResize(): void {
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${Math.max(node.scrollHeight, fontSizePx * 1.3)}px`;
+    const lines = value.split("\n");
+    const maxLineLen = Math.max(...lines.map((l) => l.length), 1);
+    const approxWidth = Math.max(maxLineLen * fontSizePx * 0.65 + 24, 60);
+    node.style.width = `${approxWidth}px`;
+  }
+
+  function finish(): void {
+    if (finished) return;
+    finished = true;
+    const finalVal = value.trim();
+    if (finalVal.length === 0 && originalText.trim().length === 0) {
+      engine.deleteSelection();
+    } else {
+      engine.setElementText(request.id, value);
+    }
+    onDone();
   }
 </script>
 
@@ -47,32 +63,40 @@
   style:font-size={`${fontSizePx}px`}
   oninput={(event) => {
     value = event.currentTarget.value;
-    commit(value);
+    autoResize();
   }}
   onblur={() => {
-    commit(value);
-    onDone();
+    finish();
   }}
   onkeydown={(event) => {
     event.stopPropagation();
-    if (event.key === "Escape") event.currentTarget.blur();
+    if (event.key === "Escape") {
+      finished = true;
+      engine.setElementText(request.id, originalText);
+      onDone();
+    } else if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      finish();
+    }
   }}
 ></textarea>
 
 <style>
   textarea {
     position: absolute;
-    min-width: 40px;
-    padding: 0;
+    min-width: 60px;
+    padding: 2px 6px;
     margin: 0;
-    border: 1px dashed var(--accent);
+    border: 1.5px dashed var(--accent, #4c6ef5);
+    border-radius: 4px;
     outline: none;
     resize: none;
     overflow: hidden;
-    background: transparent;
+    background: var(--color-bg, #ffffff);
     font-family: sans-serif;
     line-height: 1.25;
     white-space: pre;
-    z-index: 3;
+    z-index: 20;
+    box-sizing: border-box;
   }
 </style>
