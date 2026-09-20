@@ -1,0 +1,15 @@
+# The engine is a git submodule consumed as SOURCE through a Vite/tsconfig
+# alias, not a workspace package — it ships no build output and its pkg/ WASM
+# is produced by `make wasm`. Keep it out of `packages:`.
+packages:
+  - apps/*
+  - packages/*
+
+# Mirrors .npmrc: 7-day release-age hold on every dependency. pnpm-workspace.yaml
+# is the only place this knob can be set for pnpm.
+minimumReleaseAge: 10080
+
+# Explicit allowlist: pnpm blocks postinstall scripts by default. esbuild needs
+# its binary step or Vite cannot build at all.
+onlyBuiltDependencies:
+  - esbuild

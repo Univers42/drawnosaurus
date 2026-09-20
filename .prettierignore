@@ -1,0 +1,8 @@
+engine
+node_modules
+.pnpm-store
+build
+dist
+.svelte-kit
+coverage
+pnpm-lock.yaml

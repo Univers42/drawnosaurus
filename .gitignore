@@ -1,0 +1,16 @@
+node_modules
+# pnpm falls back to a store inside the repo when its configured store dir is not
+# writable — never commit 100+MB of content-addressed packages.
+.pnpm-store
+dist
+build
+.svelte-kit
+coverage
+*.tsbuildinfo
+
+# WASM build output inside the engine submodule (produced by `make wasm`).
+engine/pkg
+engine/target
+
+.env
+.env.local

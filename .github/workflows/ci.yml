@@ -1,0 +1,204 @@
+# CI — the same gate as `make verify`, split into jobs that can run in parallel.
+#
+# Submodule checkout: `submodules: true`, deliberately NOT `recursive`. The engine is
+# cloned over https so the default token is enough, but the engine itself carries an
+# SSH-URL submodule (claude-deal-with-the-devil) that a recursive checkout would try
+# to fetch over SSH and fail on. Nothing in the build needs it.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+
+jobs:
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint scripts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          find scripts -type f -name '*.sh' -print0 \
+            | xargs -0 --no-run-if-empty shellcheck -S error
+
+  wasm:
+    name: Build engine WASM
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Install Rust with the wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: Install wasm-bindgen-cli
+        run: |
+          # Must match `wasm-bindgen = "=<version>"` in the crate. wasm-build.sh
+          # asserts it, so a drift here fails loudly rather than at runtime.
+          version=0.2.128
+          curl -sSL "https://github.com/rustwasm/wasm-bindgen/releases/download/${version}/wasm-bindgen-${version}-x86_64-unknown-linux-musl.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin --strip-components=1
+          sudo chmod +x /usr/local/bin/wasm-bindgen
+
+      - name: Build engine/pkg
+        run: ENGINE_DIR=engine bash scripts/wasm-build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-pkg
+          path: engine/pkg
+          if-no-files-found: error
+          retention-days: 1
+
+  quality:
+    name: Typecheck, lint, format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The typecheck needs engine/pkg: the engine's wasmLoad.ts imports the generated
+    # ../pkg/draw_engine.js, so without the artifact svelte-check cannot resolve it.
+    needs: wasm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-pkg
+          path: engine/pkg
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1}).ok'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      MONGO_URL: mongodb://localhost:27017
+      MONGO_DB: drawnosaurus_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: API integration tests against a real MongoDB
+        run: pnpm test:integration
+
+  docker:
+    name: Build images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # web.Dockerfile consumes engine/pkg from the build context; it carries no Rust
+    # toolchain by design.
+    needs: wasm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-pkg
+          path: engine/pkg
+
+      - name: Build the api image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          push: false
+          load: true
+          tags: drawnosaurus-api:ci
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: Build the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          push: false
+          load: true
+          tags: drawnosaurus-web:ci
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+      - name: Smoke-test the api image
+        run: |
+          # Proves the image boots and answers, which a build alone does not.
+          docker network create ci-net
+          docker run -d --name ci-mongo --network ci-net mongo:7
+          docker run -d --name ci-api --network ci-net \
+            -e MONGO_URL=mongodb://ci-mongo:27017 -p 4000:4000 drawnosaurus-api:ci
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:4000/healthz >/dev/null 2>&1; then
+              echo "api is up after ${attempt} attempt(s)"
+              curl -fsS http://localhost:4000/readyz
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "api never became healthy" >&2
+          docker logs ci-api >&2
+          exit 1

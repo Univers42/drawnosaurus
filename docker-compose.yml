@@ -1,0 +1,83 @@
+services:
+  mongo:
+    image: mongo:7
+    command: ["--bind_ip_all", "--quiet"]
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      # Host ports are all overridable because this machine also runs the sibling
+      # osionos stack, which already owns 3000/4000/5173/27017. Container-internal
+      # ports never change, so the compose network and CI are unaffected.
+      - "${MONGO_PORT:-27019}:27017"
+    healthcheck:
+      # api and the test runner both wait on this: connecting to a mongod that is
+      # still starting up is the classic flaky-CI cause.
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: drawnosaurus
+      PORT: "4000"
+      # The browser talks to the API cross-origin in this compose setup (different
+      # ports); the Vite dev proxy is same-origin and needs none of this.
+      CORS_ORIGIN: "*"
+      AUTH_MODE: dev
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "${API_PORT:-4300}:4000"
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    environment:
+      PORT: "3000"
+      # Read at runtime, not baked in, so one image can point anywhere. It must be the
+      # HOST-visible api address: the browser resolves it, not the compose network.
+      PUBLIC_API_URL: http://localhost:${API_PORT:-4300}
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-5273}:3000"
+
+  # Ephemeral runner for install/typecheck/lint/test. The repo is bind-mounted so
+  # results land on the host; only the pnpm download cache is a volume.
+  tooling:
+    image: node:22-bookworm-slim
+    working_dir: /app
+    environment:
+      CI: "1"
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: drawnosaurus_test
+      PNPM_HOME: /pnpm
+      npm_config_store_dir: /pnpm/store
+    volumes:
+      - .:/app
+      - pnpm_store:/pnpm/store
+    entrypoint: ["/app/scripts/with-pnpm.sh"]
+    command: ["pnpm", "quality"]
+
+  # Builds engine/pkg from the Rust crate. Separate from every other image so only
+  # this one needs a Rust toolchain.
+  wasm:
+    build:
+      context: .
+      dockerfile: docker/wasm.Dockerfile
+    volumes:
+      - ./engine:/engine
+      - cargo_home:/cargo-home
+
+volumes:
+  mongo_data:
+  pnpm_store:
+  cargo_home:

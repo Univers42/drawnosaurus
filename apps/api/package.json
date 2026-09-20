@@ -1,0 +1,29 @@
+{
+  "name": "@drawnosaurus/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fastify HTTP API: /v1/boards over MongoDB. Validates untrusted scenes at the boundary and reconciles element writes.",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "dev": "node --experimental-strip-types --watch src/server.ts",
+    "start": "node --experimental-strip-types src/server.ts",
+    "test": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration"
+  },
+  "dependencies": {
+    "@drawnosaurus/contract": "workspace:*",
+    "@fastify/cors": "^11.1.0",
+    "@fastify/websocket": "^11.3.0",
+    "fastify": "^5.6.1",
+    "mongodb": "^6.21.0",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

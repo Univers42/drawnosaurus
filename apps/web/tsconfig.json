@@ -1,0 +1,30 @@
+{
+  "extends": ["../../tsconfig.base.json", "./.svelte-kit/tsconfig.json"],
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+
+    // No `paths` here on purpose — the engine alias lives in svelte.config.js
+    // (kit.alias), which generates it into .svelte-kit/tsconfig.json alongside
+    // SvelteKit's own aliases. Declaring paths here would replace, not merge.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    // Two flags from tsconfig.base.json are deliberately off HERE ONLY.
+    //
+    // The engine is a git submodule with its own toolchain, and because it ships
+    // TypeScript source rather than declarations it lands inside this program's
+    // import graph — so these flags would police a dependency's internals, which is
+    // not drawnosaurus's call. apps/api and packages/contract keep both.
+    //
+    //  - erasableSyntaxOnly exists for the API's Node type-stripping runtime and is
+    //    meaningless in a bundled app; engine/src/types.ts uses a parameter property.
+    //  - exactOptionalPropertyTypes: the engine's Svelte adapter assigns possibly
+    //    undefined handlers into its own optional callback bag.
+    "erasableSyntaxOnly": false,
+    "exactOptionalPropertyTypes": false
+  }
+}
