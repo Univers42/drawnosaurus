@@ -1,0 +1,22 @@
+{
+  "name": "@drawnosaurus/contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The wire contract: osidraw element schemas, board DTOs, and the last-write-wins reconcile primitive. Shared by web and api so the merge rule exists once.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

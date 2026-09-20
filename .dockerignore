@@ -1,0 +1,12 @@
+.git
+node_modules
+**/node_modules
+.pnpm-store
+dist
+build
+.svelte-kit
+coverage
+engine/target
+engine/claude-deal-with-the-devil
+.env
+.env.local
