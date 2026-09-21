@@ -6,3 +6,5 @@ dist
 .svelte-kit
 coverage
 pnpm-lock.yaml
+.playwright-mcp
+third_party

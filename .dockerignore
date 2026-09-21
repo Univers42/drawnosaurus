@@ -8,5 +8,8 @@ build
 coverage
 engine/target
 engine/claude-deal-with-the-devil
+# The parity reference. Never belongs in an image — it is read by the conformance
+# tooling on the host, and it is larger than every one of our images put together.
+third_party
 .env
 .env.local

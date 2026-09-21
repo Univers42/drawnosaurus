@@ -1,6 +1,35 @@
 import { describe, expect, it } from "vitest";
 import { LIGHT_THEME } from "@osionos/draw-engine/types";
-import { themeFromCss } from "./theme.ts";
+import { persistThemeMode, readThemeMode, themeFromCss } from "./theme.ts";
+
+describe("theme mode persistence", () => {
+  const store = (value: string | null) => ({ getItem: () => value });
+
+  it("round-trips the chosen mode", () => {
+    const written: Record<string, string> = {};
+    persistThemeMode({ setItem: (k, v) => void (written[k] = v) }, "dark");
+    expect(readThemeMode({ getItem: (k) => written[k] ?? null })).toBe("dark");
+  });
+
+  it("defaults to light for an unset, unknown or absent store", () => {
+    expect(readThemeMode(store(null))).toBe("light");
+    expect(readThemeMode(store("solarized"))).toBe("light");
+    expect(readThemeMode(undefined)).toBe("light");
+  });
+
+  it("survives storage that throws — a private window is not a failed toggle", () => {
+    const hostile = {
+      getItem: (): string => {
+        throw new Error("blocked");
+      },
+      setItem: (): void => {
+        throw new Error("blocked");
+      },
+    };
+    expect(readThemeMode(hostile)).toBe("light");
+    expect(() => persistThemeMode(hostile, "dark")).not.toThrow();
+  });
+});
 
 describe("themeFromCss", () => {
   it("reads the host tokens", () => {
@@ -17,7 +46,14 @@ describe("themeFromCss", () => {
     };
 
     expect(themeFromCss(style)).toEqual({
-      theme: { background: "#ffffff", grid: "rgba(17, 17, 17, 0.06)", accent: "#4c6ef5" },
+      theme: {
+        background: "#ffffff",
+        grid: "rgba(17, 17, 17, 0.06)",
+        accent: "#4c6ef5",
+        // Carried from the fallback, not read from the page: it is Excalidraw's
+        // constant and matching it exactly is the whole point.
+        bindingHighlight: LIGHT_THEME.bindingHighlight,
+      },
       ink: "#1e1e1e",
     });
   });

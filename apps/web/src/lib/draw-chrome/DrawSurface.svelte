@@ -13,11 +13,12 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { cursorForTool, styleOf } from "./style.ts";
   import { zoomPercent } from "./camera.ts";
-  import { themeFromCss } from "./theme.ts";
+  import { persistThemeMode, readThemeMode, themeFromCss } from "./theme.ts";
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote } from "../notes/stickyNotes.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
+  import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
@@ -68,7 +69,7 @@
 
   // Realtime
   let peers = $state<PeerCursor[]>([]);
-  let realtime: RealtimeChannel<never> | null = null;
+  let realtime: RealtimeChannel<StampedElement> | null = null;
   let raf = 0;
   let pending: Camera | null = null;
   const cursor = $derived(cursorForTool(tool === "sticky" ? "rectangle" : tool));
@@ -87,6 +88,7 @@
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", themeMode === "dark");
     }
+    persistThemeMode(typeof localStorage === "undefined" ? undefined : localStorage, themeMode);
     const cur = engine?.getNextStyle();
     if (cur && (cur.strokeColor === "#1e1e1e" || cur.strokeColor === "#f8f9fa")) {
       engine?.setNextStyle({ strokeColor: ink });
@@ -106,11 +108,12 @@
     } else {
       tool = next;
       engine?.setTool(next);
-      if (next === "arrow") {
-        engine?.setArrowheads({ end: "arrow" });
-      } else if (next === "line") {
-        engine?.setArrowheads({ start: "none", end: "none" });
-      }
+      // Deliberately NOT calling setArrowheads here. It mutates the *current
+      // selection*, and after drawing a shape that selection is the shape you just
+      // drew — so picking the line tool silently stripped the head off the arrow
+      // before it. Picking a tool must never edit an existing element. The engine
+      // already defaults an arrow's head from its type (render::default_arrowhead),
+      // so this was redundant as well as harmful.
       syncStyle(engine);
     }
   }
@@ -120,13 +123,30 @@
     if (!realtime) return;
     try {
       const data = JSON.parse(json);
-      if (data.elements) realtime.sendPatch({ elements: data.elements });
+      // The engine reports a delta for the common path and the full scene only for the
+      // structural changes a delta cannot describe. Broadcast whichever arrived —
+      // reading only `elements` would have silently stopped collaborating the moment
+      // deltas landed, and reading only `updated` would break z-order changes.
+      const elements: StampedElement[] = Array.isArray(data.updated)
+        ? data.updated
+        : Array.isArray(data.elements)
+          ? data.elements
+          : [];
+      if (elements.length > 0) {
+        realtime.sendPatch({ elements });
+      }
     } catch {
-      // ignore
+      // A malformed payload is not worth tearing the session down for.
     }
   }
 
   onMount(() => {
+    // Apply the stored choice *before* reading the tokens: themeFromCss resolves the
+    // canvas colours off the host CSS variables, and the `dark` class is what swaps
+    // them. Reading first would hand the engine a white canvas under dark chrome.
+    themeMode = readThemeMode(localStorage);
+    document.documentElement.classList.toggle("dark", themeMode === "dark");
+
     const resolved = themeFromCss(getComputedStyle(document.documentElement));
     theme = resolved.theme;
     ink = resolved.ink;
@@ -140,7 +160,16 @@
       });
       realtime.onRemotePatch((patch) => {
         if (!engine || !patch.elements?.length) return;
-        engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements: patch.elements }));
+        // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote
+        // edits through it duplicated every one of them — and because the result was
+        // then broadcast back, two clients grew the board without bound. A four-element
+        // board reached 8,273 elements and three frames a second that way.
+        //
+        // `applyRemotePatch` also emits no scene event, so nothing echoes back to the
+        // peer that sent it.
+        engine.applyRemotePatch(
+          JSON.stringify({ type: "osidraw", version: 1, elements: patch.elements }),
+        );
       });
     }
 
@@ -152,6 +181,7 @@
 
   onDestroy(() => {
     if (raf) cancelAnimationFrame(raf);
+    if (cursorRaf) cancelAnimationFrame(cursorRaf);
     realtime?.disconnect();
   });
 
@@ -169,15 +199,51 @@
     });
   }
 
+  // Peer-cursor broadcast, rAF-coalesced.
+  //
+  // This used to run on every raw mousemove — ~120/s on a high-polling mouse — and each
+  // one did `engine.screenToWorld`, which is a WASM call that serialises the camera to
+  // JSON in Rust and parses it back in JS, followed by an unthrottled WebSocket frame.
+  // It also fired while the pointer was merely over the toolbar, because the handler sat
+  // on the outermost chrome div.
+  //
+  // Now: bound to the canvas, at most one computation per frame, skipped entirely when
+  // the pointer has not moved a whole pixel, and the camera comes from the `currentCamera`
+  // the engine already pushes to us — so there is no WASM hop at all.
+  let cursorRaf = 0;
+  let cursorPending: { x: number; y: number } | null = null;
+  let lastSent = { x: Number.NaN, y: Number.NaN };
+
   function onCanvasPointerMove(e: MouseEvent): void {
-    if (!realtime || !engine) return;
-    const world = engine.screenToWorld(e.clientX, e.clientY);
-    realtime.sendCursor(world.x, world.y);
+    if (!realtime || !currentCamera) return;
+
+    const target = e.currentTarget as HTMLElement | null;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
+    cursorPending = {
+      x: (sx - currentCamera.x) / currentCamera.scale,
+      y: (sy - currentCamera.y) / currentCamera.scale,
+    };
+
+    if (cursorRaf) return;
+    cursorRaf = requestAnimationFrame(() => {
+      cursorRaf = 0;
+      const next = cursorPending;
+      cursorPending = null;
+      if (!next || !realtime) return;
+      if (Math.abs(next.x - lastSent.x) < 1 && Math.abs(next.y - lastSent.y) < 1) return;
+      lastSent = next;
+      realtime.sendCursor(next.x, next.y);
+    });
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="draw-chrome" style:cursor onmousemove={onCanvasPointerMove}>
+<div class="draw-chrome" style:cursor>
   <DrawHeader
     {title}
     {status}
@@ -186,44 +252,47 @@
     onOpenShortcuts={() => (showShortcuts = true)}
   />
 
-  <DrawCanvas
-    {scene}
-    {theme}
-    defaultStroke={ink}
-    {ariaLabel}
-    onSceneChange={handleSceneChange}
-    {onCameraChange}
-    onReady={(next) => {
-      engine = next;
-      syncStyle(next);
-      onReady?.(next);
-    }}
-    onToolChange={(next: DrawTool) => {
-      tool = next;
-    }}
-    onSelectionChange={(ids) => {
-      selectedCount = ids.length;
-      syncStyle(engine);
-    }}
-    onRequestTextEdit={(request) => {
-      textEdit = request;
-    }}
-    onContextMenu={(point) => {
-      if (!engine) return;
-      menu = {
-        x: point.x,
-        y: point.y,
-        element: menuElementFromSelection(
-          engine.getSelectedElements(),
-          engine.selectionLocked(),
-          engine.selectionIsGroup(),
-        ),
-      };
-    }}
-    onToolLockChange={(locked) => {
-      toolLocked = locked;
-    }}
-  />
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="canvas-host" onmousemove={onCanvasPointerMove}>
+    <DrawCanvas
+      {scene}
+      {theme}
+      defaultStroke={ink}
+      {ariaLabel}
+      onSceneChange={handleSceneChange}
+      {onCameraChange}
+      onReady={(next) => {
+        engine = next;
+        syncStyle(next);
+        onReady?.(next);
+      }}
+      onToolChange={(next: DrawTool) => {
+        tool = next;
+      }}
+      onSelectionChange={(ids) => {
+        selectedCount = ids.length;
+        syncStyle(engine);
+      }}
+      onRequestTextEdit={(request) => {
+        textEdit = request;
+      }}
+      onContextMenu={(point) => {
+        if (!engine) return;
+        menu = {
+          x: point.x,
+          y: point.y,
+          element: menuElementFromSelection(
+            engine.getSelectedElements(),
+            engine.selectionLocked(),
+            engine.selectionIsGroup(),
+          ),
+        };
+      }}
+      onToolLockChange={(locked) => {
+        toolLocked = locked;
+      }}
+    />
+  </div>
 
   <PeerCursors {peers} camera={currentCamera} />
 

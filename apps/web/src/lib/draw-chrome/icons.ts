@@ -18,6 +18,10 @@ export type IconName =
   | "backward"
   | "forward"
   | "bringToFront"
+  | "group"
+  | "ungroup"
+  | "flipHorizontal"
+  | "flipVertical"
   | "alignLeft"
   | "alignCenterX"
   | "alignRight"
@@ -120,6 +124,30 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
   bringToFront: [
     { tag: "rect", x: "4", y: "4", width: "12", height: "12", rx: "2" },
     { tag: "path", d: "M16 8h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-2" },
+  ],
+  // Two overlapping rectangles inside a dashed boundary: the selection becomes one
+  // thing.
+  group: [
+    { tag: "rect", x: "3", y: "3", width: "7", height: "7", rx: "1" },
+    { tag: "rect", x: "11", y: "11", width: "10", height: "10", rx: "1" },
+    { tag: "path", d: "M3 13v6a2 2 0 0 0 2 2h4" },
+  ],
+  // The same pair with the boundary broken: they go back to being separate.
+  ungroup: [
+    { tag: "rect", x: "3", y: "3", width: "7", height: "7", rx: "1" },
+    { tag: "rect", x: "14", y: "14", width: "7", height: "7", rx: "1" },
+    { tag: "path", d: "M12 3h2M12 21h-2M3 12v2M21 12v-2" },
+  ],
+  // An axis with a shape mirrored across it.
+  flipHorizontal: [
+    { tag: "line", x1: "12", y1: "3", x2: "12", y2: "21" },
+    { tag: "path", d: "M8 7 3 12l5 5z" },
+    { tag: "path", d: "M16 7l5 5-5 5z" },
+  ],
+  flipVertical: [
+    { tag: "line", x1: "3", y1: "12", x2: "21", y2: "12" },
+    { tag: "path", d: "M7 8 12 3l5 5z" },
+    { tag: "path", d: "M7 16l5 5 5-5z" },
   ],
   alignLeft: [
     { tag: "line", x1: "4", y1: "4", x2: "4", y2: "20" },

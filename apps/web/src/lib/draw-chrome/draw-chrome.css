@@ -97,3 +97,12 @@
 .pop-in {
   animation: popIn 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* Scopes the peer-cursor pointer handler to the canvas instead of the whole chrome,
+   which also covers the toolbar and the style panel. Purely a hit-target wrapper — it
+   must not affect layout, so it fills its parent exactly and passes clicks through to
+   the canvas beneath it. */
+.canvas-host {
+  position: absolute;
+  inset: 0;
+}

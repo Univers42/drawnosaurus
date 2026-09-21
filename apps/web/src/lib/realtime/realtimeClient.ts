@@ -1,4 +1,20 @@
+import { env } from "$env/dynamic/public";
 import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
+
+/**
+ * The live socket lives on the API, which is not always the page's origin: compose
+ * publishes web and api on different host ports, and the browser — not the compose
+ * network — resolves this URL. So it mirrors the HTTP client exactly: PUBLIC_API_URL
+ * when set, relative otherwise (dev proxy and same-origin deploys), then http(s)
+ * swapped for ws(s). Resolving against the page href keeps any path prefix in the
+ * base, which a bare `new URL(path, origin)` would drop.
+ */
+export function liveSocketUrl(slug: string, apiBase: string, pageHref: string): string {
+  const base = apiBase.replace(/\/$/, "");
+  const url = new URL(`${base}/v1/boards/${slug}/live`, pageHref);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
 
 export interface PeerCursor {
   clientId: string;
@@ -80,9 +96,7 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   private defaultWsUrl(): string {
-    const loc = window.location;
-    const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-    return `${proto}//${loc.host}/v1/boards/${this.slug}/live`;
+    return liveSocketUrl(this.slug, env.PUBLIC_API_URL ?? "", window.location.href);
   }
 
   sendCursor(x: number, y: number): void {

@@ -19,7 +19,7 @@ between them is an `.osidraw` scene document.
 Everything runs in Docker; there is no host Node requirement.
 
 ```sh
-make wasm    # build engine/pkg from the Rust crate — required once, before any web build
+make all     # submodule → WASM → deps → quality gate → the running stack
 make up      # mongo + api + web
 make verify  # the full gate: typecheck, lint, format, unit tests, integration tests
 make help    # every target
@@ -30,8 +30,16 @@ Then open **http://localhost:5273**. The API is on **http://localhost:4300**.
 > Host ports default to 5273/4300/27019 instead of the usual 5173/4000/27017 because the sibling
 > osionos stack already owns those. Override per invocation: `make up API_PORT=4500 WEB_PORT=5500`.
 
-`make wasm` is not optional and not automatic: `engine/src/wasmLoad.ts` imports the generated
-`engine/pkg/draw_engine.js`, so without it both the web build and the typecheck fail to resolve.
+`engine/src/wasmLoad.ts` imports the generated `engine/pkg/draw_engine.js`, which is gitignored build
+output — absent from a fresh clone, and needed by the web build, the web image and the typecheck
+alike. Every target that consumes it (`up`, `build`, `dev`, `typecheck`, `quality`) now declares it
+as a prerequisite and builds it on demand, so a clean checkout goes straight to `make up`. `make
+wasm` still forces a rebuild, which is what you want after touching the crate.
+
+> **Rootless Docker.** `make wasm` passes `--user $(id -u):$(id -g)` only on a rootful daemon. Under
+> rootless Docker, container root is already mapped to the invoking host user — the bind mount comes
+> out host-owned unaided, and an explicit `--user` fails outright, because the host uid has no
+> mapping inside the namespace. The Makefile detects which one it is talking to.
 
 ## Layout
 
