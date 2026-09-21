@@ -2,6 +2,7 @@ export type IconName =
   | "lock"
   | "lockOpen"
   | "select"
+  | "lasso"
   | "hand"
   | "rectangle"
   | "diamond"
@@ -12,6 +13,9 @@ export type IconName =
   | "text"
   | "sticky"
   | "eraser"
+  | "laser"
+  | "frame"
+  | "image"
   | "undo"
   | "redo"
   | "sendToBack"
@@ -51,6 +55,15 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "path", d: "M7 11V7a5 5 0 0 1 9.9-1" },
   ],
   select: [{ tag: "path", d: "m4 4 7.07 17 2.51-7.39L21 11.07z" }],
+  // Excalidraw's lasso: a dashed loop with a cursor at its tail.
+  lasso: [
+    {
+      tag: "path",
+      d: "M4.028 13.252c-.475-.65-.744-1.36-.744-2.11C3.284 7.75 7.19 5 12.009 5s8.725 2.75 8.725 6.143c0 3.392-3.906 6.142-8.725 6.142-.696 0-1.373-.057-2.022-.165",
+    },
+    { tag: "path", d: "M5.5 17.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" },
+    { tag: "path", d: "M6.5 17c.5 1 1 2 1 3.5" },
+  ],
   hand: [
     { tag: "path", d: "M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0" },
     { tag: "path", d: "M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2" },
@@ -96,6 +109,38 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     },
     { tag: "path", d: "M22 21H7" },
     { tag: "path", d: "m5 11 9 9" },
+  ],
+  // Excalidraw's `laserPointerToolIcon`, scaled from their 20-unit grid to our 24 (x1.2)
+  // and left unrotated — theirs carries a `rotate(90)` on a wrapping <g>, which our icon
+  // nodes have no way to express. A pointer body with the beam breaking up at its tip.
+  laser: [
+    {
+      tag: "path",
+      d: "m11.57 16.43 9.33-9.33a2.83 2.83 0 0 0-4-4l-9.33 9.33L9.6 14.4l1.97 2.03Z",
+    },
+    { tag: "path", d: "m15.9 4.1 4 4" },
+    { tag: "path", d: "M12 12l2.4-2.4" },
+    { tag: "path", d: "M6 18l3.6-3.6" },
+    { tag: "path", d: "M2.59 21.47l1.2-1.2" },
+    { tag: "path", d: "M6.54 22.84l-.17-1.69" },
+    { tag: "path", d: "M2.85 14.26l1.04 1.34" },
+    { tag: "path", d: "M10.03 20.73l-1.44-.91" },
+    { tag: "path", d: "M1.14 17.58l1.69.16" },
+  ],
+  // Excalidraw's `frameToolIcon`: two horizontal rules crossing two vertical ones, the
+  // crop marks a frame is. Deliberately not a plain rectangle — that is the shape tool.
+  frame: [
+    { tag: "path", d: "M4 7h16" },
+    { tag: "path", d: "M4 17h16" },
+    { tag: "path", d: "M7 4v16" },
+    { tag: "path", d: "M17 4v16" },
+  ],
+  // A framed picture: a mountain and a sun inside a box, which is the near-universal
+  // shape for "an image goes here".
+  image: [
+    { tag: "rect", x: "3", y: "3", width: "18", height: "18", rx: "2" },
+    { tag: "circle", cx: "8.5", cy: "8.5", r: "1.5" },
+    { tag: "path", d: "m21 15-4.5-4.5L9 18" },
   ],
   undo: [
     { tag: "path", d: "M3 7v6h6" },

@@ -1,6 +1,15 @@
 import type { DrawElement, DrawElementStyle, DrawTool } from "@osionos/draw-engine/types";
 
-const DRAW_SHAPE_TOOLS = new Set<DrawTool>([
+/**
+ * Tools whose cursor is a crosshair — every tool aimed at a point rather than at a thing.
+ *
+ * Named for what it decides rather than for shapes: it has never been only shapes, and
+ * the eraser, the lasso and the laser are all aimed the same way. These must agree with
+ * the engine's own hover cursors, which is why the lasso is here — the engine already
+ * showed a crosshair once a loop was under way, so the pointer changed shape the moment
+ * you pressed.
+ */
+const CROSSHAIR_TOOLS = new Set<DrawTool>([
   "rectangle",
   "diamond",
   "ellipse",
@@ -8,6 +17,9 @@ const DRAW_SHAPE_TOOLS = new Set<DrawTool>([
   "arrow",
   "freedraw",
   "eraser",
+  "lasso",
+  "laser",
+  "frame",
 ]);
 
 /** `<input type="color">` only accepts #rrggbb. Anything else (transparent, tokens) falls back. */
@@ -19,7 +31,7 @@ import type { ExtendedTool } from "./tools.ts";
 
 export function cursorForTool(tool: ExtendedTool): string {
   if (tool === "text") return "text";
-  if (tool === "sticky" || DRAW_SHAPE_TOOLS.has(tool as DrawTool)) return "crosshair";
+  if (tool === "sticky" || CROSSHAIR_TOOLS.has(tool)) return "crosshair";
   return "default";
 }
 

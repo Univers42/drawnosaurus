@@ -1,0 +1,230 @@
+import { describe, expect, it } from "vitest";
+import type { DrawElement, DrawElementType } from "@osionos/draw-engine/types";
+import { getShapeActions, isDrawingTool, isTransparent } from "./shapeActions.ts";
+import type { ExtendedTool } from "./tools.ts";
+
+type Sel = Pick<DrawElement, "type" | "backgroundColor">;
+
+const el = (type: DrawElementType, backgroundColor = "transparent"): Sel => ({
+  type,
+  backgroundColor,
+});
+
+const actions = (tool: ExtendedTool, selected: Sel[] = [], nextBg = "transparent") =>
+  getShapeActions(tool, selected, nextBg);
+
+describe("panel visibility", () => {
+  it("stays hidden with the select tool and nothing selected", () => {
+    // The controls would have nothing to act on, and a panel that is always there is
+    // one you stop reading.
+    expect(actions("select").visible).toBe(false);
+  });
+
+  it("appears for a drawing tool, so defaults can be set before drawing", () => {
+    for (const tool of ["rectangle", "ellipse", "arrow", "line", "text", "freedraw"] as const) {
+      expect(actions(tool).visible, tool).toBe(true);
+    }
+  });
+
+  it("appears when something is selected", () => {
+    expect(actions("select", [el("rectangle")]).visible).toBe(true);
+  });
+
+  it("stays hidden for the tools that create nothing", () => {
+    for (const tool of ["select", "hand", "eraser", "lasso", "laser", "frame", "image"] as const) {
+      expect(actions(tool).visible, tool).toBe(false);
+      expect(isDrawingTool(tool), tool).toBe(false);
+    }
+  });
+});
+
+describe("controls follow the element", () => {
+  it("an arrow gets arrowheads, and nothing else does", () => {
+    expect(actions("select", [el("arrow")]).arrowheads).toBe(true);
+    for (const t of ["rectangle", "ellipse", "diamond", "line", "text", "freedraw"] as const) {
+      expect(actions("select", [el(t)]).arrowheads, t).toBe(false);
+    }
+  });
+
+  it("an ellipse has no corners to round", () => {
+    // Excalidraw's `canChangeRoundness` deliberately omits it.
+    expect(actions("select", [el("ellipse")]).roundness).toBe(false);
+    expect(actions("select", [el("rectangle")]).roundness).toBe(true);
+    expect(actions("select", [el("diamond")]).roundness).toBe(true);
+    expect(actions("select", [el("line")]).roundness).toBe(true);
+  });
+
+  it("an arrow has no background to fill", () => {
+    expect(actions("select", [el("arrow")]).backgroundColor).toBe(false);
+    expect(actions("select", [el("rectangle")]).backgroundColor).toBe(true);
+  });
+
+  it("text has a colour but no stroke width or dash pattern", () => {
+    const text = actions("select", [el("text")]);
+    expect(text.strokeColor).toBe(true);
+    expect(text.strokeWidth).toBe(false);
+    expect(text.strokeStyle).toBe(false);
+    expect(text.text).toBe(true);
+  });
+
+  it("a freehand stroke has width but no dash pattern", () => {
+    const draw = actions("select", [el("freedraw")]);
+    expect(draw.strokeWidth).toBe(true);
+    expect(draw.strokeStyle).toBe(false);
+    expect(draw.sloppiness).toBe(false);
+  });
+});
+
+describe("fill style", () => {
+  it("is hidden while the background paints nothing", () => {
+    expect(actions("select", [el("rectangle", "transparent")]).fill).toBe(false);
+    expect(actions("rectangle", [], "transparent").fill).toBe(false);
+  });
+
+  it("appears once there is a fill to style", () => {
+    expect(actions("select", [el("rectangle", "#ffec99")]).fill).toBe(true);
+    expect(actions("rectangle", [], "#ffec99").fill).toBe(true);
+  });
+
+  it("treats a zero-alpha hex as no fill", () => {
+    expect(isTransparent("#ffffff00")).toBe(true);
+    expect(isTransparent("#fff0")).toBe(true);
+    expect(isTransparent("#ffffff")).toBe(false);
+    expect(actions("select", [el("rectangle", "#ffffff00")]).fill).toBe(false);
+  });
+});
+
+describe("a mixed selection offers the union", () => {
+  it("shows a control that applies to any one of them", () => {
+    // Excalidraw's `forToolOrSelection` is `some`, not `every`: hiding a control
+    // because one member cannot use it would make it unreachable for the rest.
+    const mixed = actions("select", [el("arrow"), el("rectangle", "#ffec99")]);
+    expect(mixed.arrowheads).toBe(true);
+    expect(mixed.backgroundColor).toBe(true);
+    expect(mixed.fill).toBe(true);
+    expect(mixed.roundness).toBe(true);
+  });
+});
+
+describe("arrangement controls", () => {
+  it("need something to arrange", () => {
+    const none = actions("rectangle");
+    expect(none.layers).toBe(false);
+    expect(none.group).toBe(false);
+    expect(none.mirror).toBe(false);
+  });
+
+  it("align needs two, distribute needs three", () => {
+    const one = actions("select", [el("rectangle")]);
+    const two = actions("select", [el("rectangle"), el("ellipse")]);
+    const three = actions("select", [el("rectangle"), el("ellipse"), el("diamond")]);
+
+    expect(one.align).toBe(false);
+    expect(two.align).toBe(true);
+    expect(two.distribute).toBe(false);
+    expect(three.distribute).toBe(true);
+  });
+});
+
+describe("the active tool preconfigures", () => {
+  it("offers a rectangle's controls before one exists", () => {
+    const tool = actions("rectangle", [], "#ffec99");
+    expect(tool.visible).toBe(true);
+    expect(tool.backgroundColor).toBe(true);
+    expect(tool.fill).toBe(true);
+    expect(tool.roundness).toBe(true);
+    expect(tool.arrowheads).toBe(false);
+  });
+
+  it("offers arrowheads while the arrow tool is active", () => {
+    expect(actions("arrow").arrowheads).toBe(true);
+  });
+
+  it("treats the sticky-note tool as the rectangle it builds", () => {
+    const sticky = actions("sticky");
+    expect(sticky.visible).toBe(true);
+    expect(sticky.backgroundColor).toBe(true);
+    expect(sticky.roundness).toBe(true);
+  });
+});
+
+describe("the lasso is a selection tool, not a drawing one", () => {
+  it("shows no style panel on its own", () => {
+    // Excalidraw's `showSelectedShapeActions` excludes `lasso` alongside `selection`:
+    // there is nothing for a stroke colour to act on while you are still choosing what
+    // to act on. It also means the panel cannot sit under the loop you are drawing.
+    expect(isDrawingTool("lasso")).toBe(false);
+    expect(actions("lasso").visible).toBe(false);
+  });
+
+  it("still shows one once the loop has caught something", () => {
+    expect(actions("lasso", [el("rectangle")]).visible).toBe(true);
+  });
+});
+
+describe("the laser draws nothing, so it styles nothing", () => {
+  it("shows no style panel", () => {
+    // A laser mark never becomes an element, so every control in the panel would be
+    // setting a property of something that will not exist. Excalidraw hides the panel
+    // for `laser` for the same reason.
+    expect(isDrawingTool("laser")).toBe(false);
+    expect(actions("laser").visible).toBe(false);
+  });
+
+  it("does show one if something was already selected", () => {
+    // Picking up the laser mid-edit should not discard the selection you were working
+    // on, so the panel stays for as long as that selection does.
+    expect(actions("laser", [el("rectangle")]).visible).toBe(true);
+  });
+});
+
+describe("a frame has a fixed appearance, so it styles nothing", () => {
+  it("offers a selected frame actions but no style controls", () => {
+    // A frame is always the same grey at the same weight, so every appearance control
+    // answers no — Excalidraw excludes frames from those for the same reason. What does
+    // still apply is everything about the frame as an object: send it to back, flip it,
+    // group it. So the panel appears, carrying only those.
+    const actions = getShapeActions("select", [el("frame")], "transparent");
+    expect(actions.strokeColor).toBe(false);
+    expect(actions.backgroundColor).toBe(false);
+    expect(actions.strokeWidth).toBe(false);
+    expect(actions.roundness).toBe(false);
+    expect(actions.opacity).toBe(false);
+
+    expect(actions.visible).toBe(true);
+    expect(actions.layers).toBe(true);
+    expect(actions.mirror).toBe(true);
+  });
+
+  it("offers nothing at all while the frame tool is active with an empty board", () => {
+    const actions = getShapeActions("frame", [], "transparent");
+    expect(actions.visible).toBe(false);
+  });
+
+  it("still shows one when a frame is selected alongside something stylable", () => {
+    // The controls act on what they can. Hiding the panel because one member of the
+    // selection has no stroke colour would make a mixed selection unstylable.
+    const actions = getShapeActions("select", [el("frame"), el("rectangle")], "transparent");
+    expect(actions.visible).toBe(true);
+    expect(actions.strokeColor).toBe(true);
+  });
+});
+
+describe("an image is styled by selection, not by its tool", () => {
+  it("shows nothing while the picker is open", () => {
+    // The image tool lasts exactly as long as a file dialog. A panel that flashes up for
+    // that long is noise.
+    expect(getShapeActions("image", [], "transparent").visible).toBe(false);
+  });
+
+  it("offers a selected image its corners and its opacity, and no stroke", () => {
+    // An image has no stroke or fill to set, but Excalidraw does let you round its
+    // corners and fade it.
+    const actions = getShapeActions("select", [el("image")], "transparent");
+    expect(actions.visible).toBe(true);
+    expect(actions.roundness).toBe(true);
+    expect(actions.opacity).toBe(true);
+    expect(actions.strokeColor).toBe(false);
+    expect(actions.backgroundColor).toBe(false);
+  });
+});

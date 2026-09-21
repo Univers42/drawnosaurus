@@ -4,6 +4,7 @@
   import { DARK_THEME, DEFAULT_ELEMENT_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
+    DrawElement,
     DrawElementStyle,
     DrawTheme,
     DrawTool,
@@ -16,10 +17,13 @@
   import {
     persistCanvasBackground,
     persistThemePreference,
+    persistGridPreference,
     readCanvasBackground,
+    readGridPreference,
     readThemePreference,
     resolveThemeMode,
     themeFromCss,
+    type GridPreference,
     type ThemeMode,
     type ThemePreference,
   } from "./theme.ts";
@@ -27,6 +31,13 @@
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote, DEFAULT_STICKY_NOTE_SIZE } from "../notes/stickyNotes.ts";
   import { EraserTrail } from "../eraser/eraserTrail.ts";
+  import {
+    IMAGE_ACCEPT,
+    describeRejection,
+    imagesFrom,
+    readImageFile,
+    rejectImageFile,
+  } from "./imageFile.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
@@ -34,6 +45,7 @@
   import { downloadBlob } from "./download.ts";
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
+  import { getShapeActions } from "./shapeActions.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
   import DrawModals from "./DrawModals.svelte";
@@ -63,10 +75,42 @@
   let themeMode = $state<ThemeMode>("light");
   let themePreference = $state<ThemePreference>("light");
   let canvasBackground = $state<string | null>(null);
+  let grid = $state<GridPreference>({ enabled: false, size: 20, step: 5, snap: true });
   let ink = $state("#1e1e1e");
   let tool = $state<ExtendedTool>("select");
   let toolLocked = $state(false);
   let selectedCount = $state(0);
+  /** The selected elements, so the panel can decide which controls apply. */
+  let selection = $state.raw<DrawElement[]>([]);
+
+  /**
+   * Whether a pointer gesture is in flight on the canvas.
+   *
+   * The panel's visibility is frozen while one is, which is what stops it appearing
+   * mid-drag. Clicking an unselected element selects it *and* starts moving it in the
+   * same gesture, so without this the panel pops in under the cursor the instant you
+   * start to drag, and pops out again if you drag a marquee across empty space.
+   *
+   * Set on the **capture** phase. The canvas handles `pointerdown` and changes the
+   * selection before the event bubbles this far, so a bubble-phase listener sets the
+   * flag a beat too late and the panel has already appeared.
+   */
+  let dragging = $state(false);
+
+  /**
+   * Whether the style panel is on screen.
+   *
+   * Excalidraw's `showSelectedShapeActions`: a drawing tool is active, so defaults can
+   * be set before drawing, or something is selected. Held still during a drag — a panel
+   * already open stays open, and one that was closed does not appear until the gesture
+   * finishes.
+   */
+  let panelVisible = $state(false);
+
+  $effect(() => {
+    const want = getShapeActions(tool, selection, activeStyle.backgroundColor).visible;
+    if (!dragging) panelVisible = want;
+  });
   let activeStyle = $state<DrawElementStyle>(DEFAULT_ELEMENT_STYLE);
   let textEdit = $state<TextEditRequest | null>(null);
   let zoom = $state(100);
@@ -145,10 +189,105 @@
     applyTheme();
   }
 
+  function pickGrid(patch: Partial<GridPreference>): void {
+    grid = { ...grid, ...patch };
+    persistGridPreference(typeof localStorage === "undefined" ? undefined : localStorage, grid);
+    engine?.setGrid(grid);
+  }
+
   function pickCanvasBackground(color: string): void {
     canvasBackground = color;
     persistCanvasBackground(typeof localStorage === "undefined" ? undefined : localStorage, color);
     applyTheme();
+  }
+
+  let canvasHost: HTMLDivElement | undefined = $state();
+  let imageInput: HTMLInputElement | undefined = $state();
+  /**
+   * Why the last image was refused, if it was.
+   *
+   * Shown rather than swallowed: a file that simply does not appear looks like the board
+   * is broken, and the person who dropped it has no way to tell whether it was too big,
+   * the wrong kind, or corrupt. Cleared on a timer so it does not become furniture.
+   */
+  let imageNotice = $state<string | null>(null);
+  let imageNoticeTimer = 0;
+
+  function notify(message: string): void {
+    imageNotice = message;
+    if (typeof window === "undefined") return;
+    clearTimeout(imageNoticeTimer);
+    imageNoticeTimer = window.setTimeout(() => (imageNotice = null), 5000);
+  }
+  /** Where a dropped image should land; a picked one lands in the middle of the view. */
+  let imageDropAt: { x: number; y: number } | null = null;
+
+  /**
+   * Decode a file and hand it to the engine.
+   *
+   * Everything about *where* and *how big* is the engine's — see `insertImage` — so this
+   * does only what a browser must: check the file is one we can read, decode it, and
+   * report the natural size.
+   */
+  async function placeImageFile(file: File, at: { x: number; y: number }): Promise<void> {
+    const rejection = rejectImageFile(file);
+    if (rejection) {
+      notify(describeRejection(rejection));
+      return;
+    }
+    const decoded = await readImageFile(file);
+    if (!decoded) {
+      notify(describeRejection("decode"));
+      return;
+    }
+    engine?.insertImage(decoded.dataUrl, decoded.naturalWidth, decoded.naturalHeight, at.x, at.y);
+  }
+
+  function viewportCentre(): { x: number; y: number } {
+    const rect = canvasHost?.getBoundingClientRect();
+    return rect ? { x: rect.width / 2, y: rect.height / 2 } : { x: 0, y: 0 };
+  }
+
+  async function onImageChosen(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    // Cleared before any await: picking the same file twice in a row fires no `change`
+    // event unless the value is reset, so the second attempt would silently do nothing.
+    input.value = "";
+    const at = imageDropAt ?? viewportCentre();
+    imageDropAt = null;
+    if (file) await placeImageFile(file, at);
+    // The picker is the whole gesture; there is nothing to stay in the mode for.
+    handleToolSelect("select");
+  }
+
+  async function onCanvasDrop(event: DragEvent): Promise<void> {
+    const files = imagesFrom(Array.from(event.dataTransfer?.files ?? []));
+    if (files.length === 0) return;
+    event.preventDefault();
+    const rect = canvasHost?.getBoundingClientRect();
+    const at = rect
+      ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      : viewportCentre();
+    // Dropped where they were dropped: several files stack from that point rather than
+    // landing on top of one another, because the engine centres each on the point it is
+    // given.
+    for (const [index, file] of files.entries()) {
+      await placeImageFile(file, { x: at.x + index * 24, y: at.y + index * 24 });
+    }
+  }
+
+  /**
+   * Choosing the image tool *is* the gesture.
+   *
+   * Excalidraw opens the picker straight away rather than waiting for a click on the
+   * canvas. Hung off the engine's tool change rather than off the toolbar button so that
+   * both ways in behave the same — pressing 9 used to set the tool and then sit there,
+   * because only the button knew what the tool was for.
+   */
+  function openImagePicker(): void {
+    imageDropAt = null;
+    imageInput?.click();
   }
 
   function handleToolSelect(next: ExtendedTool): void {
@@ -364,6 +503,7 @@
     // them. Reading first would hand the engine a white canvas under dark chrome.
     themePreference = readThemePreference(localStorage);
     canvasBackground = readCanvasBackground(localStorage);
+    grid = readGridPreference(localStorage);
     themeMode = resolveThemeMode(themePreference, systemPrefersDark());
     document.documentElement.classList.toggle("dark", themeMode === "dark");
 
@@ -537,9 +677,16 @@
           new Blob([engine.exportJson()], { type: "application/json" }),
         );
       }
+<<<<<<< HEAD
     } else if (!mod && (event.key === "9" || key === "n")) {
       event.preventDefault();
       handleToolSelect("sticky");
+=======
+    } else if (mod && event.key === "'") {
+      // Excalidraw's grid shortcut.
+      event.preventDefault();
+      pickGrid({ enabled: !grid.enabled });
+>>>>>>> origin/develop
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
@@ -565,8 +712,10 @@
           {engine}
           {themePreference}
           {canvasBackground}
+          {grid}
           onPickTheme={pickTheme}
           onPickCanvasBackground={pickCanvasBackground}
+          onPickGrid={pickGrid}
           onOpenExport={() => (showExport = true)}
           onOpenMermaid={() => (showMermaid = true)}
           onOpenShare={() => (showShare = true)}
@@ -578,7 +727,19 @@
   </DrawHeader>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="canvas-host" onmousemove={onCanvasPointerMove} onmouseleave={onCanvasPointerLeave}>
+  <div
+    bind:this={canvasHost}
+    class="canvas-host"
+    ondragover={(event) => {
+      if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) event.preventDefault();
+    }}
+    ondrop={onCanvasDrop}
+    onmousemove={onCanvasPointerMove}
+    onmouseleave={onCanvasPointerLeave}
+    onpointerdowncapture={() => (dragging = true)}
+    onpointerup={() => (dragging = false)}
+    onpointercancel={() => (dragging = false)}
+  >
     <DrawCanvas
       {scene}
       {theme}
@@ -588,15 +749,18 @@
       {onCameraChange}
       onReady={(next) => {
         engine = next;
+        next.setGrid(grid);
         syncStyle(next);
         onReady?.(next);
       }}
       onToolChange={(next: DrawTool) => {
         if (tool === "sticky" && next === "select") return;
         tool = next;
+        if (next === "image") openImagePicker();
       }}
       onSelectionChange={(ids) => {
         selectedCount = ids.length;
+        selection = engine?.getSelectedElements() ?? [];
         syncStyle(engine);
       }}
       onRequestTextEdit={(request) => {
@@ -631,6 +795,23 @@
     {/if}
   </div>
 
+  <!--
+    Off-screen rather than `display: none`: a hidden input cannot be opened by script in
+    some browsers, and this one is only ever opened by script.
+  -->
+  <input
+    bind:this={imageInput}
+    class="sr-only"
+    type="file"
+    accept={IMAGE_ACCEPT}
+    aria-label="Insert image"
+    onchange={onImageChosen}
+  />
+
+  {#if imageNotice}
+    <p class="image-notice" role="status">{imageNotice}</p>
+  {/if}
+
   <PeerCursors {peers} camera={currentCamera} />
 
   <DrawToolbar
@@ -644,20 +825,24 @@
     }}
   />
 
-  <DrawInspector
-    style={activeStyle}
-    {selectedCount}
-    {engine}
-    {themeMode}
-    onApply={(patch) => {
-      if (selectedCount > 0) {
-        engine?.applyStyle(patch);
-      } else {
-        engine?.setNextStyle(patch);
-      }
-      syncStyle(engine);
-    }}
-  />
+  {#if panelVisible}
+    <DrawInspector
+      style={activeStyle}
+      {selectedCount}
+      {selection}
+      {tool}
+      {engine}
+      {themeMode}
+      onApply={(patch) => {
+        if (selectedCount > 0) {
+          engine?.applyStyle(patch);
+        } else {
+          engine?.setNextStyle(patch);
+        }
+        syncStyle(engine);
+      }}
+    />
+  {/if}
 
   <DrawZoomBar {engine} {zoom} {contentVisible} />
 

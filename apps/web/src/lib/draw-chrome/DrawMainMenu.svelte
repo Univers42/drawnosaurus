@@ -3,8 +3,8 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
   import MainMenuIcon from "./MainMenuIcon.svelte";
-  import { CANVAS_BACKGROUNDS } from "./inspector.ts";
-  import type { ThemePreference } from "./theme.ts";
+  import { CANVAS_BACKGROUNDS, GRID_SIZES } from "./inspector.ts";
+  import type { GridPreference, ThemePreference } from "./theme.ts";
 
   /**
    * The main menu, rebuilt to Excalidraw's shape.
@@ -27,8 +27,10 @@
     engine,
     themePreference = "light",
     canvasBackground = null,
+    grid,
     onPickTheme,
     onPickCanvasBackground,
+    onPickGrid,
     onOpenExport,
     onOpenMermaid,
     onOpenShare,
@@ -38,8 +40,10 @@
     engine: DrawEngine | null;
     themePreference: ThemePreference;
     canvasBackground: string | null;
+    grid: GridPreference;
     onPickTheme: (preference: ThemePreference) => void;
     onPickCanvasBackground: (color: string) => void;
+    onPickGrid: (patch: Partial<GridPreference>) => void;
     onOpenExport: () => void;
     onOpenMermaid: () => void;
     onOpenShare: () => void;
@@ -250,6 +254,59 @@
       </div>
     </div>
 
+    <div class="dropdown-menu-item-bare">
+      <span class="dropdown-menu-item__text">Show grid</span>
+      <button
+        type="button"
+        role="switch"
+        class="switch"
+        class:on={grid.enabled}
+        aria-checked={grid.enabled}
+        aria-label="Show grid"
+        onclick={() => onPickGrid({ enabled: !grid.enabled })}
+      >
+        <span class="knob"></span>
+      </button>
+    </div>
+
+    {#if grid.enabled}
+      <div class="dropdown-menu-item-bare">
+        <span class="dropdown-menu-item__text">Snap to grid</span>
+        <button
+          type="button"
+          role="switch"
+          class="switch"
+          class:on={grid.snap}
+          aria-checked={grid.snap}
+          aria-label="Snap to grid"
+          onclick={() => onPickGrid({ snap: !grid.snap })}
+        >
+          <span class="knob"></span>
+        </button>
+      </div>
+
+      <div class="dropdown-menu-item-bare">
+        <span class="dropdown-menu-item__text">Grid size</span>
+        <div class="RadioGroup" role="radiogroup" aria-label="Grid size">
+          {#each GRID_SIZES as option (option.value)}
+            <button
+              type="button"
+              role="radio"
+              class="RadioGroup__choice text"
+              class:active={grid.size === option.value}
+              aria-checked={grid.size === option.value}
+              aria-label={`Grid size ${option.label}`}
+              onclick={() => onPickGrid({ size: option.value })}
+            >
+              {option.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+    {/if}
+
+    <div class="dropdown-menu-separator" role="separator"></div>
+
     <div class="dropdown-menu-item-custom">
       <div class="menu-section-label">Canvas background</div>
       <div class="swatches" role="radiogroup" aria-label="Canvas background">
@@ -419,5 +476,45 @@
 
   .swatch.active {
     box-shadow: 0 0 0 2px var(--accent);
+  }
+
+  /* A switch, not a checkbox: these are modes that take effect immediately. */
+  .switch {
+    position: relative;
+    width: 32px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--bg);
+    cursor: pointer;
+    flex: 0 0 auto;
+    transition: background var(--transition, 120ms);
+  }
+
+  .switch.on {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--surface);
+    transition: transform var(--transition, 120ms);
+  }
+
+  .switch.on .knob {
+    transform: translateX(14px);
+  }
+
+  .RadioGroup__choice.text {
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: inherit;
   }
 </style>

@@ -95,6 +95,63 @@ export function persistCanvasBackground(
   }
 }
 
+const GRID_STORAGE_KEY = "drawnosaurus:grid";
+
+/** The shape the menu and the engine agree on. Mirrors the engine's `GridSettings`. */
+export interface GridPreference {
+  enabled: boolean;
+  size: number;
+  step: number;
+  snap: boolean;
+}
+
+export const DEFAULT_GRID_PREFERENCE: GridPreference = {
+  enabled: false,
+  size: 20,
+  step: 5,
+  snap: true,
+};
+
+/**
+ * The stored grid choice, validated field by field.
+ *
+ * Persisted because a grid is a working preference rather than a property of one
+ * drawing — someone who works on a grid wants it on the next board too. Validated
+ * because this is user-editable storage: a size of 0 would divide by zero in the
+ * snapper and loop forever in the renderer.
+ */
+export function readGridPreference(storage?: Pick<Storage, "getItem"> | undefined): GridPreference {
+  try {
+    const raw = storage?.getItem(GRID_STORAGE_KEY);
+    if (!raw) return DEFAULT_GRID_PREFERENCE;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return DEFAULT_GRID_PREFERENCE;
+    const g = parsed as Record<string, unknown>;
+    return {
+      enabled: g.enabled === true,
+      size: typeof g.size === "number" && g.size >= 1 ? g.size : DEFAULT_GRID_PREFERENCE.size,
+      step:
+        typeof g.step === "number" && g.step >= 1
+          ? Math.round(g.step)
+          : DEFAULT_GRID_PREFERENCE.step,
+      snap: g.snap !== false,
+    };
+  } catch {
+    return DEFAULT_GRID_PREFERENCE;
+  }
+}
+
+export function persistGridPreference(
+  storage: Pick<Storage, "setItem"> | undefined,
+  grid: GridPreference,
+): void {
+  try {
+    storage?.setItem(GRID_STORAGE_KEY, JSON.stringify(grid));
+  } catch {
+    // As with the theme: not persisting beats failing the click.
+  }
+}
+
 /**
  * Resolve engine chrome from the host tokens. The engine stays token-agnostic.
  *
