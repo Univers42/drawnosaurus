@@ -68,6 +68,20 @@ export const SLOPPINESS: Array<{ label: string; value: number }> = [
   { label: "Extra", value: 2 },
 ];
 
+/**
+ * Excalidraw's "Edges", which is a mode and not a radius.
+ *
+ * Their elements carry `roundness: {type: 3}` with no value at all, and the engine gives
+ * a rounded shape a size-adaptive radius — a small rectangle gets a proportional corner,
+ * a large one a fixed 32. The panel used to offer a 0-40px slider, which was a promise
+ * nothing kept: measured on the canvas, a radius of 1, 8, 32 and 64 all produced pixel-
+ * identical corners, because only "is it rounded" was ever read.
+ */
+export const EDGES: Array<{ label: string; value: number | null }> = [
+  { label: "Sharp", value: null },
+  { label: "Round", value: 8 },
+];
+
 export const FILL_STYLES: Array<{ label: string; value: FillStyle }> = [
   { label: "Hachure", value: "hachure" },
   { label: "Cross", value: "cross-hatch" },

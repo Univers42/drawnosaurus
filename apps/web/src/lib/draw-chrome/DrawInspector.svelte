@@ -6,6 +6,7 @@
   import InspectorSegmented from "./InspectorSegmented.svelte";
   import InspectorIconRow from "./InspectorIconRow.svelte";
   import {
+    EDGES,
     FILL_STYLES,
     FONT_SIZES,
     SLOPPINESS,
@@ -109,15 +110,12 @@
       oninput={(e) => onApply({ opacity: Number(e.currentTarget.value) })}
     />
   </InspectorRow>
-  <InspectorRow label={`Corners — ${style.roundness ?? 0}px`}>
-    <input
-      type="range"
-      min={0}
-      max={40}
-      step={2}
-      value={style.roundness ?? 0}
-      aria-label="Corner rounding"
-      oninput={(e) => onApply({ roundness: Number(e.currentTarget.value) || null })}
+  <InspectorRow label="Edges">
+    <InspectorSegmented
+      ariaLabel="Edges"
+      options={EDGES}
+      value={style.roundness === null || style.roundness === undefined ? null : 8}
+      onPick={(v) => onApply({ roundness: v === null ? null : Number(v) })}
     />
   </InspectorRow>
   {#if selectedCount > 0 && engine}
