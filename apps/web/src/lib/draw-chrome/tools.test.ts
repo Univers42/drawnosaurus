@@ -18,6 +18,7 @@ describe("DRAW_TOOLS", () => {
       "freedraw",
       "text",
       "sticky",
+      "image",
       "eraser",
       "laser",
       "frame",
