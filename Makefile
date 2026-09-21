@@ -123,10 +123,31 @@ logs: ## Tail service logs
 shell: ## Interactive shell in the tooling container
 	$(RUN) --no-deps tooling bash
 
+# The SHA drawnosaurus is held to for Excalidraw parity. Committed; the tree it names
+# is not — see .gitignore.
+ORACLE_SHA := $(shell sed -n 's/^excalidraw=//p' scripts/oracle-sha.txt)
+
+oracle: ## Fetch the Excalidraw parity reference at the pinned SHA
+	@test -d third_party/excalidraw || { \
+		echo "[oracle] cloning excalidraw"; \
+		git clone --filter=blob:none https://github.com/excalidraw/excalidraw.git \
+			third_party/excalidraw; \
+	}
+	@cd third_party/excalidraw && git fetch --quiet origin $(ORACLE_SHA) 2>/dev/null; \
+		git checkout --quiet --detach $(ORACLE_SHA)
+	@echo -e "$(GREEN)✔ excalidraw pinned at $(ORACLE_SHA)$(RESET)"
+
+# Regenerating fixtures is deliberate: it re-derives what we are held to. Run it when
+# the pin moves, never to make a red test go green.
+oracle-fixtures: oracle ## Regenerate the rough.js conformance fixtures
+	cd engine/tools/rough-oracle && npm install && npm run generate
+	@echo -e "$(GREEN)✔ fixtures regenerated — review the diff before committing$(RESET)"
+
 clean: ## Remove containers, volumes, images, and build output
 	$(DC) down -v --rmi local
 	rm -rf engine/pkg apps/web/build apps/web/.svelte-kit
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
 .PHONY: all help submodules wasm install lock typecheck lint format test \
-	test-integration quality verify dev build up down logs shell clean
+	test-integration quality verify dev build up down logs shell clean \
+	oracle oracle-fixtures

@@ -107,11 +107,12 @@
     } else {
       tool = next;
       engine?.setTool(next);
-      if (next === "arrow") {
-        engine?.setArrowheads({ end: "arrow" });
-      } else if (next === "line") {
-        engine?.setArrowheads({ start: "none", end: "none" });
-      }
+      // Deliberately NOT calling setArrowheads here. It mutates the *current
+      // selection*, and after drawing a shape that selection is the shape you just
+      // drew — so picking the line tool silently stripped the head off the arrow
+      // before it. Picking a tool must never edit an existing element. The engine
+      // already defaults an arrow's head from its type (render::default_arrowhead),
+      // so this was redundant as well as harmful.
       syncStyle(engine);
     }
   }
@@ -159,6 +160,7 @@
 
   onDestroy(() => {
     if (raf) cancelAnimationFrame(raf);
+    if (cursorRaf) cancelAnimationFrame(cursorRaf);
     realtime?.disconnect();
   });
 
@@ -176,15 +178,51 @@
     });
   }
 
+  // Peer-cursor broadcast, rAF-coalesced.
+  //
+  // This used to run on every raw mousemove — ~120/s on a high-polling mouse — and each
+  // one did `engine.screenToWorld`, which is a WASM call that serialises the camera to
+  // JSON in Rust and parses it back in JS, followed by an unthrottled WebSocket frame.
+  // It also fired while the pointer was merely over the toolbar, because the handler sat
+  // on the outermost chrome div.
+  //
+  // Now: bound to the canvas, at most one computation per frame, skipped entirely when
+  // the pointer has not moved a whole pixel, and the camera comes from the `currentCamera`
+  // the engine already pushes to us — so there is no WASM hop at all.
+  let cursorRaf = 0;
+  let cursorPending: { x: number; y: number } | null = null;
+  let lastSent = { x: Number.NaN, y: Number.NaN };
+
   function onCanvasPointerMove(e: MouseEvent): void {
-    if (!realtime || !engine) return;
-    const world = engine.screenToWorld(e.clientX, e.clientY);
-    realtime.sendCursor(world.x, world.y);
+    if (!realtime || !currentCamera) return;
+
+    const target = e.currentTarget as HTMLElement | null;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+
+    // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
+    cursorPending = {
+      x: (sx - currentCamera.x) / currentCamera.scale,
+      y: (sy - currentCamera.y) / currentCamera.scale,
+    };
+
+    if (cursorRaf) return;
+    cursorRaf = requestAnimationFrame(() => {
+      cursorRaf = 0;
+      const next = cursorPending;
+      cursorPending = null;
+      if (!next || !realtime) return;
+      if (Math.abs(next.x - lastSent.x) < 1 && Math.abs(next.y - lastSent.y) < 1) return;
+      lastSent = next;
+      realtime.sendCursor(next.x, next.y);
+    });
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="draw-chrome" style:cursor onmousemove={onCanvasPointerMove}>
+<div class="draw-chrome" style:cursor>
   <DrawHeader
     {title}
     {status}
@@ -193,44 +231,47 @@
     onOpenShortcuts={() => (showShortcuts = true)}
   />
 
-  <DrawCanvas
-    {scene}
-    {theme}
-    defaultStroke={ink}
-    {ariaLabel}
-    onSceneChange={handleSceneChange}
-    {onCameraChange}
-    onReady={(next) => {
-      engine = next;
-      syncStyle(next);
-      onReady?.(next);
-    }}
-    onToolChange={(next: DrawTool) => {
-      tool = next;
-    }}
-    onSelectionChange={(ids) => {
-      selectedCount = ids.length;
-      syncStyle(engine);
-    }}
-    onRequestTextEdit={(request) => {
-      textEdit = request;
-    }}
-    onContextMenu={(point) => {
-      if (!engine) return;
-      menu = {
-        x: point.x,
-        y: point.y,
-        element: menuElementFromSelection(
-          engine.getSelectedElements(),
-          engine.selectionLocked(),
-          engine.selectionIsGroup(),
-        ),
-      };
-    }}
-    onToolLockChange={(locked) => {
-      toolLocked = locked;
-    }}
-  />
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="canvas-host" onmousemove={onCanvasPointerMove}>
+    <DrawCanvas
+      {scene}
+      {theme}
+      defaultStroke={ink}
+      {ariaLabel}
+      onSceneChange={handleSceneChange}
+      {onCameraChange}
+      onReady={(next) => {
+        engine = next;
+        syncStyle(next);
+        onReady?.(next);
+      }}
+      onToolChange={(next: DrawTool) => {
+        tool = next;
+      }}
+      onSelectionChange={(ids) => {
+        selectedCount = ids.length;
+        syncStyle(engine);
+      }}
+      onRequestTextEdit={(request) => {
+        textEdit = request;
+      }}
+      onContextMenu={(point) => {
+        if (!engine) return;
+        menu = {
+          x: point.x,
+          y: point.y,
+          element: menuElementFromSelection(
+            engine.getSelectedElements(),
+            engine.selectionLocked(),
+            engine.selectionIsGroup(),
+          ),
+        };
+      }}
+      onToolLockChange={(locked) => {
+        toolLocked = locked;
+      }}
+    />
+  </div>
 
   <PeerCursors {peers} camera={currentCamera} />
 
