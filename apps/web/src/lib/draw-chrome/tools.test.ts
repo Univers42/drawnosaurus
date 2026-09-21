@@ -22,6 +22,7 @@ describe("DRAW_TOOLS", () => {
       "eraser",
       "laser",
       "frame",
+      "embed",
     ]);
   });
 

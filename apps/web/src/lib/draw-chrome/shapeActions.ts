@@ -93,7 +93,10 @@ export const isDrawingTool = (tool: ExtendedTool): boolean =>
   // The image tool opens a file picker and is gone again; a panel that flashes up for
   // the length of a dialog is noise. A *selected* image still shows one, because that
   // is driven by the selection rather than by the tool.
-  tool !== "image";
+  tool !== "image" &&
+  // Same as the image tool: it opens a dialog and is gone. A *selected* embed still
+  // shows a panel, because that is driven by the selection.
+  tool !== "embed";
 
 /** Whether a colour paints nothing, so a fill style would have nothing to apply to. */
 export const isTransparent = (color: string): boolean => {
