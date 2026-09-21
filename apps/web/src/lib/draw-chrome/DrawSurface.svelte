@@ -26,6 +26,7 @@
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote } from "../notes/stickyNotes.ts";
+  import { EraserTrail } from "../eraser/eraserTrail.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
@@ -72,6 +73,16 @@
   let contentVisible = $state(true);
   let currentCamera = $state<Camera | undefined>(undefined);
   let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
+  let eraserTrailSvgPath = $state("");
+  let stickyStartPoint: { x: number; y: number } | null = null;
+  const eraserTrail = new EraserTrail({
+    decayTime: 220,
+    size: 16,
+    streamline: 0.25,
+    onUpdate: (pathD) => {
+      eraserTrailSvgPath = pathD;
+    },
+  });
 
   // Modals state
   let showMainMenu = $state(false);
@@ -141,12 +152,7 @@
 
   function handleToolSelect(next: ExtendedTool): void {
     if (next === "sticky") {
-      if (engine && typeof window !== "undefined") {
-        const c = engine.screenToWorld(window.innerWidth / 2, window.innerHeight / 2);
-        const [note, text] = createStickyNote(c.x - 90, c.y - 90, "", "yellow");
-        engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements: [note, text] }));
-      }
-      tool = "select";
+      tool = "sticky";
       engine?.setTool("select");
     } else {
       tool = next;
@@ -158,6 +164,61 @@
       // already defaults an arrow's head from its type (render::default_arrowhead),
       // so this was redundant as well as harmful.
       syncStyle(engine);
+    }
+  }
+
+  function handleCanvasPointerDown(point: { x: number; y: number }, _event: PointerEvent): boolean | void {
+    if (tool === "eraser") {
+      eraserTrail.start(point.x, point.y);
+    } else if (tool === "sticky") {
+      stickyStartPoint = { x: point.x, y: point.y };
+      return true;
+    }
+  }
+
+  function handleCanvasPointerMove(point: { x: number; y: number }, _event: PointerEvent): void {
+    if (tool === "eraser") {
+      eraserTrail.addPoint(point.x, point.y);
+    }
+  }
+
+  function handleCanvasPointerUp(point: { x: number; y: number }, _event: PointerEvent): void {
+    if (tool === "eraser") {
+      eraserTrail.stop();
+    } else if (tool === "sticky" && stickyStartPoint && engine) {
+      const start = stickyStartPoint;
+      stickyStartPoint = null;
+
+      const dx = Math.abs(point.x - start.x);
+      const dy = Math.abs(point.y - start.y);
+      const worldStart = engine.screenToWorld(start.x, start.y);
+      const worldEnd = engine.screenToWorld(point.x, point.y);
+
+      let x: number;
+      let y: number;
+      let w = 200;
+      let h = 200;
+
+      if (dx > 10 || dy > 10) {
+        x = Math.min(worldStart.x, worldEnd.x);
+        y = Math.min(worldStart.y, worldEnd.y);
+        w = Math.max(Math.abs(worldEnd.x - worldStart.x), 100);
+        h = Math.max(Math.abs(worldEnd.y - worldStart.y), 100);
+      } else {
+        x = worldEnd.x - w / 2;
+        y = worldEnd.y - h / 2;
+      }
+
+      const [note, text] = createStickyNote(x, y, "", "yellow", w, h);
+      engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements: [note, text] }), {
+        x: x + w / 2,
+        y: y + h / 2,
+      });
+
+      if (!toolLocked) {
+        tool = "select";
+        engine.setTool("select");
+      }
     }
   }
 
@@ -240,6 +301,7 @@
   onDestroy(() => {
     if (raf) cancelAnimationFrame(raf);
     if (cursorRaf) cancelAnimationFrame(cursorRaf);
+    eraserTrail.clear();
     realtime?.disconnect();
   });
 
@@ -434,7 +496,18 @@
       onToolLockChange={(locked) => {
         toolLocked = locked;
       }}
+      onPointerDown={handleCanvasPointerDown}
+      onPointerMove={handleCanvasPointerMove}
+      onPointerUp={handleCanvasPointerUp}
     />
+    {#if eraserTrailSvgPath}
+      <svg class="eraser-trail-canvas" aria-hidden="true">
+        <path
+          d={eraserTrailSvgPath}
+          fill={themeMode === "dark" ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.2)"}
+        />
+      </svg>
+    {/if}
   </div>
 
   <PeerCursors {peers} camera={currentCamera} />
