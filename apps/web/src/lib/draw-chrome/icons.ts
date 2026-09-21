@@ -18,6 +18,7 @@ export type IconName =
   | "image"
   | "embed"
   | "autoshape"
+  | "more"
   | "undo"
   | "redo"
   | "sendToBack"
@@ -155,6 +156,12 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
   autoshape: [
     { tag: "path", d: "M3 17c2-3 1-6 3-7s3 2 5 1 2-4 4-4" },
     { tag: "rect", x: "13", y: "13", width: "8", height: "8", rx: "1" },
+  ],
+  // Three dots: the standard "there is more behind this".
+  more: [
+    { tag: "circle", cx: "5", cy: "12", r: "1.5" },
+    { tag: "circle", cx: "12", cy: "12", r: "1.5" },
+    { tag: "circle", cx: "19", cy: "12", r: "1.5" },
   ],
   undo: [
     { tag: "path", d: "M3 7v6h6" },
