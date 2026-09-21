@@ -29,4 +29,5 @@ export const DRAW_TOOLS: readonly ToolDef[] = [
   { tool: "laser", label: "Laser pointer", hotkey: "K", icon: "laser" },
   { tool: "frame", label: "Frame", hotkey: "F", icon: "frame" },
   { tool: "embed", label: "Embed web page", hotkey: "W", icon: "embed" },
+  { tool: "autoshape", label: "Draw to shape", hotkey: "G", icon: "autoshape" },
 ];

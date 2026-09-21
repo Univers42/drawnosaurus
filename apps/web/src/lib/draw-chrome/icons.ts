@@ -17,6 +17,7 @@ export type IconName =
   | "frame"
   | "image"
   | "embed"
+  | "autoshape"
   | "undo"
   | "redo"
   | "sendToBack"
@@ -149,6 +150,11 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "circle", cx: "12", cy: "12", r: "9" },
     { tag: "path", d: "M3 12h18" },
     { tag: "path", d: "M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" },
+  ],
+  // A wobbly stroke becoming a clean square: the tool's whole promise in one picture.
+  autoshape: [
+    { tag: "path", d: "M3 17c2-3 1-6 3-7s3 2 5 1 2-4 4-4" },
+    { tag: "rect", x: "13", y: "13", width: "8", height: "8", rx: "1" },
   ],
   undo: [
     { tag: "path", d: "M3 7v6h6" },
