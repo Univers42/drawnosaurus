@@ -31,7 +31,7 @@ describe("panel visibility", () => {
   });
 
   it("stays hidden for the tools that create nothing", () => {
-    for (const tool of ["select", "hand", "eraser", "lasso", "laser", "frame"] as const) {
+    for (const tool of ["select", "hand", "eraser", "lasso", "laser", "frame", "image"] as const) {
       expect(actions(tool).visible, tool).toBe(false);
       expect(isDrawingTool(tool), tool).toBe(false);
     }
@@ -207,5 +207,24 @@ describe("a frame has a fixed appearance, so it styles nothing", () => {
     const actions = getShapeActions("select", [el("frame"), el("rectangle")], "transparent");
     expect(actions.visible).toBe(true);
     expect(actions.strokeColor).toBe(true);
+  });
+});
+
+describe("an image is styled by selection, not by its tool", () => {
+  it("shows nothing while the picker is open", () => {
+    // The image tool lasts exactly as long as a file dialog. A panel that flashes up for
+    // that long is noise.
+    expect(getShapeActions("image", [], "transparent").visible).toBe(false);
+  });
+
+  it("offers a selected image its corners and its opacity, and no stroke", () => {
+    // An image has no stroke or fill to set, but Excalidraw does let you round its
+    // corners and fade it.
+    const actions = getShapeActions("select", [el("image")], "transparent");
+    expect(actions.visible).toBe(true);
+    expect(actions.roundness).toBe(true);
+    expect(actions.opacity).toBe(true);
+    expect(actions.strokeColor).toBe(false);
+    expect(actions.backgroundColor).toBe(false);
   });
 });

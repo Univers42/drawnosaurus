@@ -30,6 +30,13 @@
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote } from "../notes/stickyNotes.ts";
+  import {
+    IMAGE_ACCEPT,
+    describeRejection,
+    imagesFrom,
+    readImageFile,
+    rejectImageFile,
+  } from "./imageFile.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
@@ -180,6 +187,95 @@
     canvasBackground = color;
     persistCanvasBackground(typeof localStorage === "undefined" ? undefined : localStorage, color);
     applyTheme();
+  }
+
+  let canvasHost: HTMLDivElement | undefined = $state();
+  let imageInput: HTMLInputElement | undefined = $state();
+  /**
+   * Why the last image was refused, if it was.
+   *
+   * Shown rather than swallowed: a file that simply does not appear looks like the board
+   * is broken, and the person who dropped it has no way to tell whether it was too big,
+   * the wrong kind, or corrupt. Cleared on a timer so it does not become furniture.
+   */
+  let imageNotice = $state<string | null>(null);
+  let imageNoticeTimer = 0;
+
+  function notify(message: string): void {
+    imageNotice = message;
+    if (typeof window === "undefined") return;
+    clearTimeout(imageNoticeTimer);
+    imageNoticeTimer = window.setTimeout(() => (imageNotice = null), 5000);
+  }
+  /** Where a dropped image should land; a picked one lands in the middle of the view. */
+  let imageDropAt: { x: number; y: number } | null = null;
+
+  /**
+   * Decode a file and hand it to the engine.
+   *
+   * Everything about *where* and *how big* is the engine's — see `insertImage` — so this
+   * does only what a browser must: check the file is one we can read, decode it, and
+   * report the natural size.
+   */
+  async function placeImageFile(file: File, at: { x: number; y: number }): Promise<void> {
+    const rejection = rejectImageFile(file);
+    if (rejection) {
+      notify(describeRejection(rejection));
+      return;
+    }
+    const decoded = await readImageFile(file);
+    if (!decoded) {
+      notify(describeRejection("decode"));
+      return;
+    }
+    engine?.insertImage(decoded.dataUrl, decoded.naturalWidth, decoded.naturalHeight, at.x, at.y);
+  }
+
+  function viewportCentre(): { x: number; y: number } {
+    const rect = canvasHost?.getBoundingClientRect();
+    return rect ? { x: rect.width / 2, y: rect.height / 2 } : { x: 0, y: 0 };
+  }
+
+  async function onImageChosen(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    // Cleared before any await: picking the same file twice in a row fires no `change`
+    // event unless the value is reset, so the second attempt would silently do nothing.
+    input.value = "";
+    const at = imageDropAt ?? viewportCentre();
+    imageDropAt = null;
+    if (file) await placeImageFile(file, at);
+    // The picker is the whole gesture; there is nothing to stay in the mode for.
+    handleToolSelect("select");
+  }
+
+  async function onCanvasDrop(event: DragEvent): Promise<void> {
+    const files = imagesFrom(Array.from(event.dataTransfer?.files ?? []));
+    if (files.length === 0) return;
+    event.preventDefault();
+    const rect = canvasHost?.getBoundingClientRect();
+    const at = rect
+      ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      : viewportCentre();
+    // Dropped where they were dropped: several files stack from that point rather than
+    // landing on top of one another, because the engine centres each on the point it is
+    // given.
+    for (const [index, file] of files.entries()) {
+      await placeImageFile(file, { x: at.x + index * 24, y: at.y + index * 24 });
+    }
+  }
+
+  /**
+   * Choosing the image tool *is* the gesture.
+   *
+   * Excalidraw opens the picker straight away rather than waiting for a click on the
+   * canvas. Hung off the engine's tool change rather than off the toolbar button so that
+   * both ways in behave the same — pressing 9 used to set the tool and then sit there,
+   * because only the button knew what the tool was for.
+   */
+  function openImagePicker(): void {
+    imageDropAt = null;
+    imageInput?.click();
   }
 
   function handleToolSelect(next: ExtendedTool): void {
@@ -447,7 +543,12 @@
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
+    bind:this={canvasHost}
     class="canvas-host"
+    ondragover={(event) => {
+      if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) event.preventDefault();
+    }}
+    ondrop={onCanvasDrop}
     onmousemove={onCanvasPointerMove}
     onmouseleave={onCanvasPointerLeave}
     onpointerdowncapture={() => (dragging = true)}
@@ -469,6 +570,7 @@
       }}
       onToolChange={(next: DrawTool) => {
         tool = next;
+        if (next === "image") openImagePicker();
       }}
       onSelectionChange={(ids) => {
         selectedCount = ids.length;
@@ -495,6 +597,23 @@
       }}
     />
   </div>
+
+  <!--
+    Off-screen rather than `display: none`: a hidden input cannot be opened by script in
+    some browsers, and this one is only ever opened by script.
+  -->
+  <input
+    bind:this={imageInput}
+    class="sr-only"
+    type="file"
+    accept={IMAGE_ACCEPT}
+    aria-label="Insert image"
+    onchange={onImageChosen}
+  />
+
+  {#if imageNotice}
+    <p class="image-notice" role="status">{imageNotice}</p>
+  {/if}
 
   <PeerCursors {peers} camera={currentCamera} />
 

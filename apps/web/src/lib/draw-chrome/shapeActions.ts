@@ -89,7 +89,11 @@ export const isDrawingTool = (tool: ExtendedTool): boolean =>
   tool !== "laser" &&
   // A frame has a fixed appearance — Excalidraw's shape actions exclude frames
   // entirely — so there is nothing to offer while the frame tool is active either.
-  tool !== "frame";
+  tool !== "frame" &&
+  // The image tool opens a file picker and is gone again; a panel that flashes up for
+  // the length of a dialog is noise. A *selected* image still shows one, because that
+  // is driven by the selection rather than by the tool.
+  tool !== "image";
 
 /** Whether a colour paints nothing, so a fill style would have nothing to apply to. */
 export const isTransparent = (color: string): boolean => {

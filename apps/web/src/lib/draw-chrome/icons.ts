@@ -15,6 +15,7 @@ export type IconName =
   | "eraser"
   | "laser"
   | "frame"
+  | "image"
   | "undo"
   | "redo"
   | "sendToBack"
@@ -133,6 +134,13 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "path", d: "M4 17h16" },
     { tag: "path", d: "M7 4v16" },
     { tag: "path", d: "M17 4v16" },
+  ],
+  // A framed picture: a mountain and a sun inside a box, which is the near-universal
+  // shape for "an image goes here".
+  image: [
+    { tag: "rect", x: "3", y: "3", width: "18", height: "18", rx: "2" },
+    { tag: "circle", cx: "8.5", cy: "8.5", r: "1.5" },
+    { tag: "path", d: "m21 15-4.5-4.5L9 18" },
   ],
   undo: [
     { tag: "path", d: "M3 7v6h6" },
