@@ -23,6 +23,7 @@ describe("DRAW_TOOLS", () => {
       "laser",
       "frame",
       "embed",
+      "autoshape",
     ]);
   });
 
