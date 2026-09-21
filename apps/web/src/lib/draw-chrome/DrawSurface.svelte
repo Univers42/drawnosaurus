@@ -13,13 +13,24 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { cursorForTool, styleOf } from "./style.ts";
   import { zoomPercent } from "./camera.ts";
-  import { persistThemeMode, readThemeMode, themeFromCss } from "./theme.ts";
+  import {
+    persistCanvasBackground,
+    persistThemePreference,
+    readCanvasBackground,
+    readThemePreference,
+    resolveThemeMode,
+    themeFromCss,
+    type ThemeMode,
+    type ThemePreference,
+  } from "./theme.ts";
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote } from "../notes/stickyNotes.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
+  import DrawMainMenu from "./DrawMainMenu.svelte";
+  import { downloadBlob } from "./download.ts";
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import DrawZoomBar from "./DrawZoomBar.svelte";
@@ -48,7 +59,9 @@
 
   let engine = $state.raw<DrawEngine | null>(null);
   let theme = $state<DrawTheme>(LIGHT_THEME);
-  let themeMode = $state<"light" | "dark">("light");
+  let themeMode = $state<ThemeMode>("light");
+  let themePreference = $state<ThemePreference>("light");
+  let canvasBackground = $state<string | null>(null);
   let ink = $state("#1e1e1e");
   let tool = $state<ExtendedTool>("select");
   let toolLocked = $state(false);
@@ -82,20 +95,48 @@
     activeStyle = first ? styleOf(first) : source.getNextStyle();
   }
 
-  function toggleTheme(): void {
-    themeMode = themeMode === "dark" ? "light" : "dark";
-    theme = themeMode === "dark" ? DARK_THEME : LIGHT_THEME;
+  /** Whether the OS is currently asking for a dark UI. */
+  function systemPrefersDark(): boolean {
+    return (
+      typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches
+    );
+  }
+
+  /**
+   * Repaints for the current preference.
+   *
+   * Split from the click handler because "system" has to be re-applied whenever the OS
+   * changes its mind, not only when the user picks something.
+   */
+  function applyTheme(): void {
+    themeMode = resolveThemeMode(themePreference, systemPrefersDark());
+    const base = themeMode === "dark" ? DARK_THEME : LIGHT_THEME;
+    theme = { ...base, background: canvasBackground ?? base.background };
     ink = themeMode === "dark" ? "#f8f9fa" : "#1e1e1e";
     engine?.setTheme(theme);
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", themeMode === "dark");
     }
-    persistThemeMode(typeof localStorage === "undefined" ? undefined : localStorage, themeMode);
     const cur = engine?.getNextStyle();
     if (cur && (cur.strokeColor === "#1e1e1e" || cur.strokeColor === "#f8f9fa")) {
       engine?.setNextStyle({ strokeColor: ink });
       syncStyle(engine);
     }
+  }
+
+  function pickTheme(preference: ThemePreference): void {
+    themePreference = preference;
+    persistThemePreference(
+      typeof localStorage === "undefined" ? undefined : localStorage,
+      preference,
+    );
+    applyTheme();
+  }
+
+  function pickCanvasBackground(color: string): void {
+    canvasBackground = color;
+    persistCanvasBackground(typeof localStorage === "undefined" ? undefined : localStorage, color);
+    applyTheme();
   }
 
   function handleToolSelect(next: ExtendedTool): void {
@@ -146,12 +187,26 @@
     // Apply the stored choice *before* reading the tokens: themeFromCss resolves the
     // canvas colours off the host CSS variables, and the `dark` class is what swaps
     // them. Reading first would hand the engine a white canvas under dark chrome.
-    themeMode = readThemeMode(localStorage);
+    themePreference = readThemePreference(localStorage);
+    canvasBackground = readCanvasBackground(localStorage);
+    themeMode = resolveThemeMode(themePreference, systemPrefersDark());
     document.documentElement.classList.toggle("dark", themeMode === "dark");
 
-    const resolved = themeFromCss(getComputedStyle(document.documentElement));
+    const resolved = themeFromCss(
+      getComputedStyle(document.documentElement),
+      undefined,
+      canvasBackground,
+    );
     theme = resolved.theme;
     ink = resolved.ink;
+
+    // "System" is a standing instruction, so it has to keep following the OS while the
+    // board is open — not only at the moment it was chosen.
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemThemeChange = (): void => {
+      if (themePreference === "system") applyTheme();
+    };
+    media.addEventListener("change", onSystemThemeChange);
 
     let unsub: (() => void) | undefined;
     if (slug) {
@@ -176,6 +231,7 @@
     }
 
     return () => {
+      media.removeEventListener("change", onSystemThemeChange);
       unsub?.();
       realtime?.disconnect();
     };
@@ -263,7 +319,53 @@
   function onCanvasPointerLeave(): void {
     hoverCursor = null;
   }
+
+  let mainMenu = $state.raw<DrawMainMenu | null>(null);
+
+  /**
+   * The shortcuts the main menu advertises.
+   *
+   * They live here rather than in the engine's key handler because they are application
+   * actions — open a file, save one, open a dialog — not canvas edits. A menu that
+   * prints "Ctrl+O" next to an item and then ignores the key is worse than one that
+   * prints nothing.
+   *
+   * Skipped while a text field has focus, so typing in the title or the text editor is
+   * never intercepted.
+   */
+  function onAppShortcut(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
+      return;
+    }
+
+    const mod = event.metaKey || event.ctrlKey;
+    const key = event.key.toLowerCase();
+
+    if (mod && event.shiftKey && key === "e") {
+      event.preventDefault();
+      showExport = true;
+    } else if (mod && key === "o") {
+      event.preventDefault();
+      // The file picker lives inside the menu, so the menu has to exist to open it.
+      showMainMenu = true;
+      queueMicrotask(() => mainMenu?.openFile());
+    } else if (mod && key === "s") {
+      event.preventDefault();
+      if (engine) {
+        downloadBlob(
+          "drawing.osidraw",
+          new Blob([engine.exportJson()], { type: "application/json" }),
+        );
+      }
+    } else if (!mod && event.key === "?") {
+      event.preventDefault();
+      showShortcuts = true;
+    }
+  }
 </script>
+
+<svelte:window onkeydown={onAppShortcut} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="draw-chrome" style:cursor={hoverCursor ?? toolCursor}>
@@ -273,7 +375,25 @@
     onToggleMenu={() => (showMainMenu = !showMainMenu)}
     onOpenShare={() => (showShare = true)}
     onOpenShortcuts={() => (showShortcuts = true)}
-  />
+  >
+    {#snippet menu()}
+      {#if showMainMenu}
+        <DrawMainMenu
+          bind:this={mainMenu}
+          {engine}
+          {themePreference}
+          {canvasBackground}
+          onPickTheme={pickTheme}
+          onPickCanvasBackground={pickCanvasBackground}
+          onOpenExport={() => (showExport = true)}
+          onOpenMermaid={() => (showMermaid = true)}
+          onOpenShare={() => (showShare = true)}
+          onOpenShortcuts={() => (showShortcuts = true)}
+          onClose={() => (showMainMenu = false)}
+        />
+      {/if}
+    {/snippet}
+  </DrawHeader>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="canvas-host" onmousemove={onCanvasPointerMove} onmouseleave={onCanvasPointerLeave}>
@@ -358,7 +478,6 @@
 
   <DrawModals
     {engine}
-    {themeMode}
     {slug}
     {peers}
     bind:menu
@@ -367,7 +486,6 @@
     bind:showMermaid
     bind:showShare
     bind:showShortcuts
-    onToggleTheme={toggleTheme}
     onInsertMermaid={(elements) => {
       if (engine) engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements }));
     }}

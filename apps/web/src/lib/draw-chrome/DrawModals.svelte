@@ -3,7 +3,6 @@
   import type { DrawElementDto } from "@drawnosaurus/contract";
   import type { PeerCursor } from "../realtime/realtimeClient.ts";
   import type { MenuElementInfo } from "./menu.ts";
-  import DrawMainMenu from "./DrawMainMenu.svelte";
   import DrawExportModal from "./DrawExportModal.svelte";
   import DrawMermaidModal from "./DrawMermaidModal.svelte";
   import DrawShareModal from "./DrawShareModal.svelte";
@@ -12,7 +11,6 @@
 
   let {
     engine,
-    themeMode,
     slug = "",
     peers = [],
     menu = $bindable(null),
@@ -21,11 +19,9 @@
     showMermaid = $bindable(false),
     showShare = $bindable(false),
     showShortcuts = $bindable(false),
-    onToggleTheme,
     onInsertMermaid,
   }: {
     engine: DrawEngine | null;
-    themeMode: "light" | "dark";
     slug?: string;
     peers?: PeerCursor[];
     menu: { x: number; y: number; element: MenuElementInfo | null } | null;
@@ -34,7 +30,6 @@
     showMermaid: boolean;
     showShare: boolean;
     showShortcuts: boolean;
-    onToggleTheme: () => void;
     onInsertMermaid: (elements: DrawElementDto[]) => void;
   } = $props();
 
@@ -60,17 +55,6 @@
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
-
-{#if showMainMenu}
-  <DrawMainMenu
-    {engine}
-    {themeMode}
-    {onToggleTheme}
-    onOpenExport={() => (showExport = true)}
-    onOpenMermaid={() => (showMermaid = true)}
-    onClose={() => (showMainMenu = false)}
-  />
-{/if}
 
 {#if showExport}
   <DrawExportModal {engine} onClose={() => (showExport = false)} />

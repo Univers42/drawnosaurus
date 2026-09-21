@@ -2,7 +2,11 @@
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { persistThemeMode, readThemeMode } from "$lib/draw-chrome/theme.ts";
+  import {
+    persistThemePreference,
+    readThemePreference,
+    resolveThemeMode,
+  } from "$lib/draw-chrome/theme.ts";
   import "../app.css";
 
   let { children } = $props();
@@ -10,7 +14,12 @@
   let dark = $state(false);
 
   onMount(() => {
-    dark = readThemeMode(localStorage) === "dark";
+    // The gallery's toggle is two-state, but the stored preference may be "system" —
+    // set from the board's menu. Resolve it rather than treating it as "not dark".
+    const preference = readThemePreference(localStorage);
+    dark =
+      resolveThemeMode(preference, window.matchMedia("(prefers-color-scheme: dark)").matches) ===
+      "dark";
     document.documentElement.classList.toggle("dark", dark);
   });
 
@@ -19,7 +28,7 @@
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", dark);
     }
-    persistThemeMode(
+    persistThemePreference(
       typeof localStorage === "undefined" ? undefined : localStorage,
       dark ? "dark" : "light",
     );

@@ -62,6 +62,12 @@ export const STROKE_STYLES: Array<{ label: string; value: StrokeStyle }> = [
   { label: "···", value: "dotted" },
 ];
 
+/**
+ * The canvas paper colours, matching Excalidraw's top picks for the canvas background:
+ * white, a near-white grey, a cool tint, a warm cream and a pink-ish neutral.
+ */
+export const CANVAS_BACKGROUNDS: string[] = ["#ffffff", "#f8f9fa", "#f5faff", "#fffce8", "#fdf8f6"];
+
 export const SLOPPINESS: Array<{ label: string; value: number }> = [
   { label: "Fine", value: 0 },
   { label: "Rough", value: 1 },
