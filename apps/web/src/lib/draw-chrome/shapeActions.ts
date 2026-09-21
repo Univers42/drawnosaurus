@@ -20,8 +20,15 @@ import type { ExtendedTool } from "./tools.ts";
 /** An element type or a tool name; the predicates accept either, as Excalidraw's do. */
 type Kind = DrawElementType | ExtendedTool;
 
-/** A sticky note is a rectangle carrying a label, so it answers like one. */
-const asElementKind = (kind: Kind): Kind => (kind === "sticky" ? "rectangle" : kind);
+/**
+ * Tools that stand in for an element type when the panel asks about them.
+ *
+ * A sticky note is a rectangle carrying a label. The auto-shape tool does not know yet
+ * what it will draw, and answering as a rectangle offers every control it might need —
+ * better than offering none for a tool that genuinely draws.
+ */
+const asElementKind = (kind: Kind): Kind =>
+  kind === "sticky" || kind === "autoshape" ? "rectangle" : kind;
 
 const hasBackground = (kind: Kind): boolean =>
   ["rectangle", "ellipse", "diamond", "line", "freedraw"].includes(asElementKind(kind));

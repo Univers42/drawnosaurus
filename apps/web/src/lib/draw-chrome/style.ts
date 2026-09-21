@@ -20,6 +20,7 @@ const CROSSHAIR_TOOLS = new Set<DrawTool>([
   "lasso",
   "laser",
   "frame",
+  "autoshape",
 ]);
 
 /** `<input type="color">` only accepts #rrggbb. Anything else (transparent, tokens) falls back. */
