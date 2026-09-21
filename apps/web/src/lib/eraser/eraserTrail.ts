@@ -79,7 +79,9 @@ export class EraserTrail {
     this.points = [];
     this.isDrawing = false;
     if (this.rafId) {
-      cancelAnimationFrame(this.rafId);
+      if (typeof cancelAnimationFrame !== "undefined") {
+        cancelAnimationFrame(this.rafId);
+      }
       this.rafId = 0;
     }
     this.onUpdate?.("");
@@ -90,7 +92,7 @@ export class EraserTrail {
   }
 
   private ensureLoop(): void {
-    if (this.rafId) return;
+    if (this.rafId || typeof requestAnimationFrame === "undefined") return;
     this.rafId = requestAnimationFrame(this.tick);
   }
 

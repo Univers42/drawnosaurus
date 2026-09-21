@@ -25,7 +25,7 @@
   } from "./theme.ts";
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { type ExtendedTool } from "./tools.ts";
-  import { createStickyNote } from "../notes/stickyNotes.ts";
+  import { createStickyNote, DEFAULT_STICKY_NOTE_SIZE } from "../notes/stickyNotes.ts";
   import { EraserTrail } from "../eraser/eraserTrail.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
@@ -75,6 +75,7 @@
   let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
   let eraserTrailSvgPath = $state("");
   let stickyStartPoint: { x: number; y: number } | null = null;
+  const elementsPendingErase = new Map<string, { element: DrawElement; originalOpacity: number }>();
   const eraserTrail = new EraserTrail({
     decayTime: 220,
     size: 16,
@@ -167,9 +168,84 @@
     }
   }
 
+  let lastEraserPoint: { x: number; y: number } | null = null;
+
+  function checkEraserHit(sx: number, sy: number): void {
+    if (!engine) return;
+    const hit = engine.hitTest(sx, sy, 12);
+    if (!hit) return;
+
+    if (elementsPendingErase.has(hit.id)) return;
+
+    let toDim: DrawElement[] = [hit];
+    try {
+      const parsed = JSON.parse(engine.exportJson());
+      const elements: DrawElement[] = Array.isArray(parsed?.elements) ? parsed.elements : [];
+      if (hit.groupId) {
+        const grouped = elements.filter((el) => el.groupId === hit.groupId && !el.isDeleted);
+        if (grouped.length > 0) toDim = grouped;
+      } else {
+        const boundTexts = elements.filter((el) => el.containerId === hit.id && !el.isDeleted);
+        if (boundTexts.length > 0) toDim = [...toDim, ...boundTexts];
+        if (hit.containerId) {
+          const container = elements.find((el) => el.id === hit.containerId && !el.isDeleted);
+          if (container) toDim = [...toDim, container];
+        }
+      }
+    } catch {
+      // Fallback to hit element only
+    }
+
+    const patchElements: DrawElement[] = [];
+    for (const el of toDim) {
+      if (!elementsPendingErase.has(el.id)) {
+        elementsPendingErase.set(el.id, { element: el, originalOpacity: el.opacity });
+        patchElements.push({
+          ...el,
+          opacity: Math.min(el.opacity, 20),
+          version: el.version + 1,
+          versionNonce: Math.floor(Math.random() * 1_000_000_000),
+        });
+      }
+    }
+
+    if (patchElements.length > 0) {
+      engine.applyRemotePatch(
+        JSON.stringify({
+          type: "osidraw",
+          version: 1,
+          elements: patchElements,
+        }),
+      );
+    }
+  }
+
+  function cancelPendingEraser(): void {
+    if (elementsPendingErase.size > 0 && engine) {
+      const restored = Array.from(elementsPendingErase.values()).map(({ element, originalOpacity }) => ({
+        ...element,
+        opacity: originalOpacity,
+        version: element.version + 2,
+        versionNonce: Math.floor(Math.random() * 1_000_000_000),
+      }));
+      elementsPendingErase.clear();
+      engine.applyRemotePatch(
+        JSON.stringify({
+          type: "osidraw",
+          version: 1,
+          elements: restored,
+        }),
+      );
+    }
+  }
+
   function handleCanvasPointerDown(point: { x: number; y: number }, _event: PointerEvent): boolean | void {
     if (tool === "eraser") {
+      lastEraserPoint = { x: point.x, y: point.y };
       eraserTrail.start(point.x, point.y);
+      elementsPendingErase.clear();
+      checkEraserHit(point.x, point.y);
+      return true;
     } else if (tool === "sticky") {
       stickyStartPoint = { x: point.x, y: point.y };
       return true;
@@ -179,12 +255,33 @@
   function handleCanvasPointerMove(point: { x: number; y: number }, _event: PointerEvent): void {
     if (tool === "eraser") {
       eraserTrail.addPoint(point.x, point.y);
+      if (lastEraserPoint) {
+        const dx = point.x - lastEraserPoint.x;
+        const dy = point.y - lastEraserPoint.y;
+        const dist = Math.hypot(dx, dy);
+        const steps = Math.max(1, Math.ceil(dist / 8));
+        for (let i = 1; i <= steps; i++) {
+          const ix = lastEraserPoint.x + dx * (i / steps);
+          const iy = lastEraserPoint.y + dy * (i / steps);
+          checkEraserHit(ix, iy);
+        }
+      } else {
+        checkEraserHit(point.x, point.y);
+      }
+      lastEraserPoint = { x: point.x, y: point.y };
     }
   }
 
   function handleCanvasPointerUp(point: { x: number; y: number }, _event: PointerEvent): void {
     if (tool === "eraser") {
+      lastEraserPoint = null;
       eraserTrail.stop();
+      if (elementsPendingErase.size > 0 && engine) {
+        const ids = Array.from(elementsPendingErase.keys());
+        elementsPendingErase.clear();
+        engine.select(ids);
+        engine.deleteSelection();
+      }
     } else if (tool === "sticky" && stickyStartPoint && engine) {
       const start = stickyStartPoint;
       stickyStartPoint = null;
@@ -196,8 +293,8 @@
 
       let x: number;
       let y: number;
-      let w = 200;
-      let h = 200;
+      let w = DEFAULT_STICKY_NOTE_SIZE;
+      let h = DEFAULT_STICKY_NOTE_SIZE;
 
       if (dx > 10 || dy > 10) {
         x = Math.min(worldStart.x, worldEnd.x);
@@ -209,11 +306,14 @@
         y = worldEnd.y - h / 2;
       }
 
-      const [note, text] = createStickyNote(x, y, "", "yellow", w, h);
-      engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements: [note, text] }), {
-        x: x + w / 2,
-        y: y + h / 2,
-      });
+      const [shadow, note, date, text] = createStickyNote(x, y, "", "yellow", w, h);
+      engine.pasteJson(
+        JSON.stringify({ type: "osidraw", version: 1, elements: [shadow, note, date, text] }),
+        {
+          x: x + w / 2,
+          y: y + h / 2,
+        },
+      );
 
       if (!toolLocked) {
         tool = "select";
@@ -301,6 +401,7 @@
   onDestroy(() => {
     if (raf) cancelAnimationFrame(raf);
     if (cursorRaf) cancelAnimationFrame(cursorRaf);
+    cancelPendingEraser();
     eraserTrail.clear();
     realtime?.disconnect();
   });
@@ -404,7 +505,9 @@
     const mod = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
 
-    if (mod && event.shiftKey && key === "e") {
+    if (event.key === "Escape") {
+      cancelPendingEraser();
+    } else if (mod && event.shiftKey && key === "e") {
       event.preventDefault();
       showExport = true;
     } else if (mod && key === "o") {

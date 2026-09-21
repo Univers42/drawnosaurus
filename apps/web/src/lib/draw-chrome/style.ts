@@ -15,9 +15,11 @@ export function toHex(color: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#1e1e1e";
 }
 
-export function cursorForTool(tool: DrawTool): string {
+import type { ExtendedTool } from "./tools.ts";
+
+export function cursorForTool(tool: ExtendedTool): string {
   if (tool === "text") return "text";
-  if (DRAW_SHAPE_TOOLS.has(tool)) return "crosshair";
+  if (tool === "sticky" || DRAW_SHAPE_TOOLS.has(tool as DrawTool)) return "crosshair";
   return "default";
 }
 
