@@ -99,7 +99,9 @@
       {#each boards as board (board.slug)}
         <a class="board-card" href={resolve("/boards/[slug]", { slug: board.slug })}>
           <div class="card-preview">
-            <span class="preview-badge">{board.elementCount} elements</span>
+            <span class="preview-badge"
+              >{board.elementCount} {board.elementCount === 1 ? "element" : "elements"}</span
+            >
           </div>
           <div class="card-body">
             <div class="card-title-row">

@@ -1,17 +1,28 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import { persistThemeMode, readThemeMode } from "$lib/draw-chrome/theme.ts";
   import "../app.css";
 
   let { children } = $props();
   const onBoard = $derived(page.url.pathname.includes("/boards/"));
   let dark = $state(false);
 
+  onMount(() => {
+    dark = readThemeMode(localStorage) === "dark";
+    document.documentElement.classList.toggle("dark", dark);
+  });
+
   function toggleTheme(): void {
     dark = !dark;
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", dark);
     }
+    persistThemeMode(
+      typeof localStorage === "undefined" ? undefined : localStorage,
+      dark ? "dark" : "light",
+    );
   }
 </script>
 

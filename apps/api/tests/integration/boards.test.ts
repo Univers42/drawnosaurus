@@ -227,3 +227,30 @@ describe("full replace", () => {
     expect(response.statusCode).toBe(200);
   });
 });
+
+describe("CORS preflight", () => {
+  /**
+   * @fastify/cors defaults `methods` to GET,HEAD,POST, which fails the preflight for
+   * every mutating route here. Nothing catches it server-side: the browser blocks the
+   * request before it is sent, so the API logs nothing and only the cross-origin
+   * deployment breaks — compose publishes web and api on different host ports, while
+   * the dev proxy is same-origin and never preflights.
+   */
+  it.each(["PATCH", "PUT", "DELETE", "POST"])("allows a %s preflight", async (method) => {
+    const preflight = await app.inject({
+      method: "OPTIONS",
+      url: "/v1/boards/aaaaaaaaaa/elements",
+      headers: {
+        origin: "http://localhost:5273",
+        "access-control-request-method": method,
+        "access-control-request-headers": "content-type",
+      },
+    });
+
+    expect(preflight.statusCode).toBe(204);
+    const allowed = String(preflight.headers["access-control-allow-methods"] ?? "")
+      .split(",")
+      .map((value) => value.trim());
+    expect(allowed).toContain(method);
+  });
+});

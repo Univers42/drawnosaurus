@@ -21,16 +21,17 @@
   const saver = new SceneAutosaver<DrawElement>({
     readScene: () => live,
     send: async (patch) => {
-      // Cache locally always so work is never lost
+      // The local draft is the safety net for a write that does not land, so it is
+      // cached before the request goes out, not after it succeeds.
       if (typeof localStorage !== "undefined" && slug) {
         localStorage.setItem(`${LOCAL_STORAGE_PREFIX}${slug}`, JSON.stringify(live));
       }
-      try {
-        await patchElements(slug, patch);
-      } catch {
-        // Fall back to local draft silently without crashing UI
-        status = "error";
-      }
+      // Deliberately NOT caught. The autosaver needs the rejection: it is what leaves
+      // the patch unacknowledged and arms the retry. Swallowing it here made the
+      // tracker treat never-sent elements as saved — so they were never resent — and
+      // let the "idle" that follows a successful send overwrite the error status,
+      // leaving the header reading "Saved" for a board the server had never received.
+      await patchElements(slug, patch);
     },
     onStatus: (next) => {
       status = next;

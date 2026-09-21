@@ -13,7 +13,7 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { cursorForTool, styleOf } from "./style.ts";
   import { zoomPercent } from "./camera.ts";
-  import { themeFromCss } from "./theme.ts";
+  import { persistThemeMode, readThemeMode, themeFromCss } from "./theme.ts";
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote } from "../notes/stickyNotes.ts";
@@ -87,6 +87,7 @@
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", themeMode === "dark");
     }
+    persistThemeMode(typeof localStorage === "undefined" ? undefined : localStorage, themeMode);
     const cur = engine?.getNextStyle();
     if (cur && (cur.strokeColor === "#1e1e1e" || cur.strokeColor === "#f8f9fa")) {
       engine?.setNextStyle({ strokeColor: ink });
@@ -127,6 +128,12 @@
   }
 
   onMount(() => {
+    // Apply the stored choice *before* reading the tokens: themeFromCss resolves the
+    // canvas colours off the host CSS variables, and the `dark` class is what swaps
+    // them. Reading first would hand the engine a white canvas under dark chrome.
+    themeMode = readThemeMode(localStorage);
+    document.documentElement.classList.toggle("dark", themeMode === "dark");
+
     const resolved = themeFromCss(getComputedStyle(document.documentElement));
     theme = resolved.theme;
     ink = resolved.ink;
