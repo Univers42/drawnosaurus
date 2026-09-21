@@ -34,7 +34,16 @@ export async function buildApp({
     bodyLimit: config.bodyLimit,
   });
 
-  await app.register(cors, { origin: config.corsOrigin, exposedHeaders: ["ETag", "Location"] });
+  // `methods` is explicit because @fastify/cors defaults to GET,HEAD,POST — which
+  // silently fails the preflight for every mutating route this API has. The browser
+  // then blocks the request before it is sent, so the server logs nothing and only
+  // the cross-origin deployment (compose publishes web and api on different ports)
+  // is affected; the same-origin dev proxy never preflights at all.
+  await app.register(cors, {
+    origin: config.corsOrigin,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
+    exposedHeaders: ["ETag", "Location"],
+  });
   await app.register(websocket);
 
   registerErrorHandler(app);

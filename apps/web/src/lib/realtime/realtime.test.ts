@@ -1,5 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { RealtimeChannel, getCollaboratorProfile } from "./realtimeClient.ts";
+import { RealtimeChannel, getCollaboratorProfile, liveSocketUrl } from "./realtimeClient.ts";
+
+describe("liveSocketUrl", () => {
+  const page = "http://localhost:5273/boards/abc123";
+
+  it("targets the API origin when PUBLIC_API_URL is set", () => {
+    // The compose case: web on 5273, api on 4300. Deriving the host from the page
+    // sent the handshake to the web server, which 404s — it has no /v1 route.
+    expect(liveSocketUrl("abc123", "http://localhost:4300", page)).toBe(
+      "ws://localhost:4300/v1/boards/abc123/live",
+    );
+  });
+
+  it("stays same-origin when PUBLIC_API_URL is unset", () => {
+    expect(liveSocketUrl("abc123", "", page)).toBe("ws://localhost:5273/v1/boards/abc123/live");
+  });
+
+  it("upgrades to wss when the API is https", () => {
+    expect(liveSocketUrl("abc123", "https://api.example.com", page)).toBe(
+      "wss://api.example.com/v1/boards/abc123/live",
+    );
+  });
+
+  it("keeps a path prefix and tolerates a trailing slash in the base", () => {
+    expect(liveSocketUrl("abc123", "https://example.com/api/", page)).toBe(
+      "wss://example.com/api/v1/boards/abc123/live",
+    );
+  });
+});
 
 describe("realtimeClient", () => {
   it("generates a valid collaborator profile", () => {

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
+
   let {
     title = "Untitled",
     status = "idle",
@@ -6,6 +8,7 @@
     onOpenShare,
     onOpenShortcuts,
     onRename,
+    menu,
   }: {
     title?: string;
     status?: string;
@@ -13,6 +16,12 @@
     onOpenShare: () => void;
     onOpenShortcuts: () => void;
     onRename?: (nextTitle: string) => void;
+    /**
+     * The main menu, rendered here rather than at the page level so it can be positioned
+     * against its own trigger. A dropdown that lives elsewhere has to be told where the
+     * button is, and then told again whenever the layout moves.
+     */
+    menu?: Snippet;
   } = $props();
 
   let isEditing = $state(false);
@@ -50,27 +59,31 @@
 
 <header class="draw-header" aria-label="Canvas header">
   <div class="left-group">
-    <button
-      type="button"
-      class="menu-btn"
-      onclick={onToggleMenu}
-      aria-label="Open main menu"
-      title="Main menu"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        width="18"
-        height="18"
-        stroke="currentColor"
-        stroke-width="2.2"
-        stroke-linecap="round"
-        fill="none"
+    <div class="menu-anchor">
+      <button
+        type="button"
+        class="menu-btn"
+        onclick={onToggleMenu}
+        aria-label="Open main menu"
+        aria-haspopup="menu"
+        title="Main menu"
       >
-        <line x1="4" y1="6" x2="20" y2="6" />
-        <line x1="4" y1="12" x2="20" y2="12" />
-        <line x1="4" y1="18" x2="20" y2="18" />
-      </svg>
-    </button>
+        <svg
+          viewBox="0 0 24 24"
+          width="18"
+          height="18"
+          stroke="currentColor"
+          stroke-width="2.2"
+          stroke-linecap="round"
+          fill="none"
+        >
+          <line x1="4" y1="6" x2="20" y2="6" />
+          <line x1="4" y1="12" x2="20" y2="12" />
+          <line x1="4" y1="18" x2="20" y2="18" />
+        </svg>
+      </button>
+      {@render menu?.()}
+    </div>
 
     {#if isEditing}
       <!-- svelte-ignore a11y_autofocus -->
@@ -151,6 +164,13 @@
     align-items: center;
     pointer-events: none;
     z-index: 20;
+  }
+
+  /* The dropdown positions itself against this, so it follows the button. */
+  .menu-anchor {
+    position: relative;
+    display: flex;
+    align-items: center;
   }
 
   .left-group,

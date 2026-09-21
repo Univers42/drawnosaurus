@@ -12,5 +12,14 @@ coverage
 engine/pkg
 engine/target
 
+# Snapshots, screenshots and console logs written by the Playwright MCP browser
+# session — evidence from a run, not source.
+.playwright-mcp
+
+# The Excalidraw parity reference, fetched by `make oracle` at the SHA pinned in
+# scripts/oracle-sha.txt. ~100MB of someone else's history; the pin is the artefact
+# worth committing, not the tree.
+third_party/
+
 .env
 .env.local

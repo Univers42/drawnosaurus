@@ -6,6 +6,7 @@
   import InspectorSegmented from "./InspectorSegmented.svelte";
   import InspectorIconRow from "./InspectorIconRow.svelte";
   import {
+    EDGES,
     FILL_STYLES,
     FONT_SIZES,
     SLOPPINESS,
@@ -109,15 +110,12 @@
       oninput={(e) => onApply({ opacity: Number(e.currentTarget.value) })}
     />
   </InspectorRow>
-  <InspectorRow label={`Corners — ${style.roundness ?? 0}px`}>
-    <input
-      type="range"
-      min={0}
-      max={40}
-      step={2}
-      value={style.roundness ?? 0}
-      aria-label="Corner rounding"
-      oninput={(e) => onApply({ roundness: Number(e.currentTarget.value) || null })}
+  <InspectorRow label="Edges">
+    <InspectorSegmented
+      ariaLabel="Edges"
+      options={EDGES}
+      value={style.roundness === null || style.roundness === undefined ? null : 8}
+      onPick={(v) => onApply({ roundness: v === null ? null : Number(v) })}
     />
   </InspectorRow>
   {#if selectedCount > 0 && engine}
@@ -143,6 +141,48 @@
             label: "Bring to front (⌘⌥])",
             icon: "bringToFront",
             onPick: () => engine.reorderSelection("front"),
+          },
+        ]}
+      />
+    </InspectorRow>
+  {/if}
+  {#if selectedCount > 0 && engine}
+    <InspectorRow label="Mirror">
+      <InspectorIconRow
+        buttons={[
+          {
+            label: "Flip horizontally",
+            icon: "flipHorizontal",
+            onPick: () => engine.flipSelection("horizontal"),
+          },
+          {
+            label: "Flip vertically",
+            icon: "flipVertical",
+            onPick: () => engine.flipSelection("vertical"),
+          },
+        ]}
+      />
+    </InspectorRow>
+  {/if}
+  <!--
+    Group and ungroup existed in the engine and in the right-click menu, but there was
+    no way to reach them from the panel — so selecting several elements and grouping
+    them looked impossible. Shown from two elements up, and also for a single selection
+    that is already a group, which is the only way to ungroup one.
+  -->
+  {#if engine && (selectedCount >= 2 || (selectedCount > 0 && engine.selectionIsGroup()))}
+    <InspectorRow label="Group">
+      <InspectorIconRow
+        buttons={[
+          {
+            label: "Group selection",
+            icon: "group",
+            onPick: () => engine.groupSelection(),
+          },
+          {
+            label: "Ungroup selection",
+            icon: "ungroup",
+            onPick: () => engine.ungroupSelection(),
           },
         ]}
       />

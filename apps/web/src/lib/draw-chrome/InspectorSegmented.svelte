@@ -1,5 +1,7 @@
 <script lang="ts">
-  type Option = string | number;
+  // `null` is a real choice, not "unset": Edges uses it for sharp corners, which is how
+  // the engine spells "no roundness".
+  type Option = string | number | null;
 
   let {
     options,

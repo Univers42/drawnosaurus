@@ -9,6 +9,8 @@ export default ts.config(
     // The engine is a submodule with its own toolchain — never lint it here.
     ignores: [
       "engine/**",
+      // Someone else's source, pinned for comparison — never ours to lint.
+      "third_party/**",
       "**/build/**",
       "**/dist/**",
       "**/.svelte-kit/**",

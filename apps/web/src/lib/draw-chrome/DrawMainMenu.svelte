@@ -1,246 +1,423 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
   import MainMenuIcon from "./MainMenuIcon.svelte";
+  import { CANVAS_BACKGROUNDS } from "./inspector.ts";
+  import type { ThemePreference } from "./theme.ts";
 
+  /**
+   * The main menu, rebuilt to Excalidraw's shape.
+   *
+   * What it replaced was a full-viewport backdrop with `backdrop-filter: blur(4px)`
+   * behind a 280px side drawer. Blurring the whole viewport forces the compositor to
+   * re-filter everything underneath on every frame it is open, over a canvas that is
+   * already the expensive part of the page — which is why it felt slow — and a drawer
+   * is the wrong shape for a menu hanging off a toolbar button.
+   *
+   * This is a compact dropdown anchored under its trigger, with no backdrop at all. The
+   * metrics are Excalidraw's, taken from `dropdownMenu/DropdownMenu.scss` at the SHA in
+   * `scripts/oracle-sha.txt`: 2rem rows, 0.875rem text, 1rem icons, a 0.625rem gap
+   * between icon and label, 0.5rem of horizontal padding, and the shortcut pushed right
+   * at half opacity.
+   *
+   * Their social links are deliberately not here. The feature items are.
+   */
   let {
     engine,
-    themeMode = "light",
-    onToggleTheme,
+    themePreference = "light",
+    canvasBackground = null,
+    onPickTheme,
+    onPickCanvasBackground,
     onOpenExport,
     onOpenMermaid,
+    onOpenShare,
+    onOpenShortcuts,
     onClose,
   }: {
     engine: DrawEngine | null;
-    themeMode: "light" | "dark";
-    onToggleTheme: () => void;
+    themePreference: ThemePreference;
+    canvasBackground: string | null;
+    onPickTheme: (preference: ThemePreference) => void;
+    onPickCanvasBackground: (color: string) => void;
     onOpenExport: () => void;
     onOpenMermaid: () => void;
+    onOpenShare: () => void;
+    onOpenShortcuts: () => void;
     onClose: () => void;
   } = $props();
 
   let fileInput: HTMLInputElement;
+  let root: HTMLDivElement | undefined;
 
-  function handleSaveJson(): void {
-    if (!engine) return;
-    const json = engine.exportJson();
-    downloadBlob("drawing.osidraw", new Blob([json], { type: "application/json" }));
+  /**
+   * Focus the menu when it opens, and hand focus back to the trigger when it closes.
+   *
+   * Without the first, the arrow keys do nothing: the keydown handler lives on the menu,
+   * and with focus still on the page body the event never reaches it — so the menu reads
+   * as keyboard-navigable and is not. Without the second, dismissing leaves focus
+   * nowhere, and the next Tab restarts from the top of the document.
+   */
+  onMount(() => {
+    const returnTo = document.activeElement as HTMLElement | null;
+    root?.focus();
+    return () => returnTo?.focus?.();
+  });
+
+  /** Runs an action and dismisses, which is what selecting a menu item means. */
+  function pick(run: () => void): void {
+    run();
     onClose();
   }
 
-  function handleOpenFile(): void {
+  export function openFile(): void {
     fileInput?.click();
   }
 
-  function onFileSelected(e: Event): void {
-    const file = (e.target as HTMLInputElement).files?.[0];
+  function onFileSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
     if (!file || !engine) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const content = reader.result as string;
-      try {
-        engine.loadScene(content);
-        onClose();
-      } catch {
-        alert("Could not load file: invalid drawing format");
+      if (!engine.loadScene(String(reader.result))) {
+        alert("Could not load that file — it is not a drawing this app understands.");
+        return;
       }
+      onClose();
     };
     reader.readAsText(file);
   }
 
-  function handleClear(): void {
-    if (confirm("Clear canvas? This cannot be undone.")) {
+  function saveToDisk(): void {
+    if (!engine) return;
+    downloadBlob("drawing.osidraw", new Blob([engine.exportJson()], { type: "application/json" }));
+  }
+
+  function resetCanvas(): void {
+    if (confirm("Reset the canvas? This clears the drawing and cannot be undone.")) {
       engine?.clear();
-      onClose();
     }
   }
+
+  /**
+   * Arrow-key navigation between the rows.
+   *
+   * A `role="menu"` that can only be used with a pointer is a menu in name only, and it
+   * is the part most often left out.
+   */
+  function onKeyDown(event: KeyboardEvent): void {
+    const items = [...(root?.querySelectorAll<HTMLElement>("[role='menuitem']") ?? [])];
+    if (items.length === 0) return;
+    const at = items.indexOf(document.activeElement as HTMLElement);
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      const next =
+        at < 0 ? (step > 0 ? 0 : items.length - 1) : (at + step + items.length) % items.length;
+      items[next]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  }
+
+  const THEMES: Array<{ value: ThemePreference; icon: "sun" | "moon" | "system"; label: string }> =
+    [
+      { value: "light", icon: "sun", label: "Light" },
+      { value: "dark", icon: "moon", label: "Dark" },
+      { value: "system", icon: "system", label: "System" },
+    ];
 </script>
 
-<div class="menu-backdrop" role="presentation" onclick={onClose}>
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <div
-    class="menu-drawer draw-panel"
-    tabindex="-1"
-    role="dialog"
-    aria-label="Main menu"
-    onclick={(e) => e.stopPropagation()}
-  >
-    <div class="drawer-header">
-      <div class="brand">
-        <span class="logo">🦕</span>
-        <strong>drawnosaurus</strong>
+<svelte:window
+  onpointerdown={(event) => {
+    // Dismiss on a click outside. No backdrop element: one would either swallow the
+    // click that should have landed on the canvas, or need a blur to look deliberate.
+    if (root && !root.contains(event.target as Node)) onClose();
+  }}
+/>
+
+<input
+  type="file"
+  accept=".osidraw,.json,.excalidraw"
+  bind:this={fileInput}
+  hidden
+  onchange={onFileSelected}
+/>
+
+<div
+  class="dropdown-menu main-menu"
+  bind:this={root}
+  role="menu"
+  aria-orientation="vertical"
+  aria-label="Main menu"
+  tabindex="-1"
+  onkeydown={onKeyDown}
+>
+  <div class="dropdown-menu-container">
+    <button type="button" role="menuitem" class="dropdown-menu-item" onclick={openFile}>
+      <MainMenuIcon name="folder" />
+      <span class="dropdown-menu-item__text">Open</span>
+      <span class="dropdown-menu-item__shortcut">Ctrl+O</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(saveToDisk)}
+    >
+      <MainMenuIcon name="disk" />
+      <span class="dropdown-menu-item__text">Save to disk</span>
+      <span class="dropdown-menu-item__shortcut">Ctrl+S</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(onOpenExport)}
+    >
+      <MainMenuIcon name="image" />
+      <span class="dropdown-menu-item__text">Export image…</span>
+      <span class="dropdown-menu-item__shortcut">Ctrl+Shift+E</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(onOpenMermaid)}
+    >
+      <MainMenuIcon name="diagram" />
+      <span class="dropdown-menu-item__text">Mermaid to diagram…</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(onOpenShare)}
+    >
+      <MainMenuIcon name="collab" />
+      <span class="dropdown-menu-item__text">Live collaboration…</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(onOpenShortcuts)}
+    >
+      <MainMenuIcon name="help" />
+      <span class="dropdown-menu-item__text">Keyboard shortcuts</span>
+      <span class="dropdown-menu-item__shortcut">?</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(resetCanvas)}
+    >
+      <MainMenuIcon name="trash" />
+      <span class="dropdown-menu-item__text">Reset the canvas</span>
+    </button>
+
+    <div class="dropdown-menu-separator" role="separator"></div>
+
+    <div class="dropdown-menu-item-bare">
+      <span class="dropdown-menu-item__text">Theme</span>
+      <div class="RadioGroup" role="radiogroup" aria-label="Theme">
+        {#each THEMES as choice (choice.value)}
+          <button
+            type="button"
+            role="radio"
+            class="RadioGroup__choice"
+            class:active={themePreference === choice.value}
+            aria-checked={themePreference === choice.value}
+            aria-label={choice.label}
+            title={choice.label}
+            onclick={() => onPickTheme(choice.value)}
+          >
+            <MainMenuIcon name={choice.icon} />
+          </button>
+        {/each}
       </div>
-      <button type="button" class="close-btn" onclick={onClose} aria-label="Close menu">✕</button>
     </div>
 
-    <input
-      type="file"
-      accept=".osidraw,.json,.excalidraw"
-      bind:this={fileInput}
-      style="display: none;"
-      onchange={onFileSelected}
-    />
-
-    <div class="menu-items">
-      <button type="button" class="menu-item" onclick={handleOpenFile}>
-        <MainMenuIcon name="folder" />
-        <span>Open / Import file</span>
-      </button>
-
-      <button type="button" class="menu-item" onclick={handleSaveJson}>
-        <MainMenuIcon name="disk" />
-        <span>Save to disk (.osidraw)</span>
-      </button>
-
-      <button
-        type="button"
-        class="menu-item"
-        onclick={() => {
-          onClose();
-          onOpenExport();
-        }}
-      >
-        <MainMenuIcon name="image" />
-        <span>Export image (PNG, SVG)...</span>
-      </button>
-
-      <button
-        type="button"
-        class="menu-item"
-        onclick={() => {
-          onClose();
-          onOpenMermaid();
-        }}
-      >
-        <MainMenuIcon name="diagram" />
-        <span>Mermaid to diagram...</span>
-      </button>
-
-      <hr class="divider" />
-
-      <button type="button" class="menu-item" onclick={onToggleTheme}>
-        <MainMenuIcon name={themeMode === "dark" ? "sun" : "moon"} />
-        <span>{themeMode === "dark" ? "Light mode" : "Dark mode"}</span>
-      </button>
-
-      <hr class="divider" />
-
-      <button type="button" class="menu-item danger" onclick={handleClear}>
-        <MainMenuIcon name="trash" />
-        <span>Clear canvas (Reset)</span>
-      </button>
+    <div class="dropdown-menu-item-custom">
+      <div class="menu-section-label">Canvas background</div>
+      <div class="swatches" role="radiogroup" aria-label="Canvas background">
+        {#each CANVAS_BACKGROUNDS as color (color)}
+          <button
+            type="button"
+            role="radio"
+            class="swatch"
+            class:active={canvasBackground === color}
+            aria-checked={canvasBackground === color}
+            aria-label={color}
+            title={color}
+            style:--swatch-color={color}
+            onclick={() => onPickCanvasBackground(color)}
+          ></button>
+        {/each}
+      </div>
     </div>
   </div>
 </div>
 
 <style>
-  .menu-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(4px);
-    z-index: 90;
-  }
-
-  .menu-drawer {
+  /* Anchored under the trigger, the way Excalidraw's popper places it. */
+  .dropdown-menu {
     position: absolute;
-    top: 0;
+    top: 100%;
     left: 0;
-    bottom: 0;
-    width: 280px;
+    margin-top: 6px;
+    min-width: 232px;
+    max-width: 20rem;
+    z-index: 110;
+  }
+
+  .dropdown-menu-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 2px;
+    box-sizing: border-box;
     background: var(--surface);
-    color: var(--ink);
-    border-right: 1px solid var(--line);
-    box-shadow: var(--shadow-lg);
-    display: flex;
-    flex-direction: column;
-    padding: 18px 16px;
-    animation: slideIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow-md);
+    overflow-y: auto;
+    max-height: calc(100svh - 6rem);
   }
 
-  @keyframes slideIn {
-    from {
-      transform: translateX(-100%);
-    }
-    to {
-      transform: translateX(0);
-    }
-  }
-
-  .drawer-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 14px;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .brand {
+  .dropdown-menu-item,
+  .dropdown-menu-item-bare {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 16px;
+    column-gap: 0.625rem;
+    padding: 0 0.5rem;
+    height: 2rem;
+    font-size: 0.875rem;
+    font-weight: 400;
+    font-family: inherit;
+    color: var(--fg-strong);
+    width: 100%;
+    box-sizing: border-box;
   }
 
-  .logo {
-    font-size: 22px;
-  }
-
-  .close-btn {
-    border: none;
+  .dropdown-menu-item {
     background: transparent;
-    font-size: 16px;
-    cursor: pointer;
-    color: var(--muted);
-    padding: 6px 10px;
+    border: none;
     border-radius: 6px;
-    transition: background var(--transition);
-  }
-
-  .close-btn:hover {
-    background: var(--bg-hover);
-  }
-
-  .menu-items {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .menu-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: var(--radius);
-    border: none;
-    background: transparent;
-    color: var(--ink);
-    font-size: 13px;
-    font-weight: 500;
     cursor: pointer;
     text-align: left;
-    transition:
-      background var(--transition),
-      transform 0.1s ease;
+    flex: 1 0 auto;
   }
 
-  .menu-item:hover {
+  .dropdown-menu-item:hover,
+  .dropdown-menu-item:focus-visible {
+    background: var(--bg);
+    outline: none;
+  }
+
+  .dropdown-menu-item:active {
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+
+  .dropdown-menu-item__text {
+    flex: 1 1 auto;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .dropdown-menu-item__shortcut {
+    margin-inline-start: auto;
+    opacity: 0.5;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .dropdown-menu-item-bare {
+    justify-content: space-between;
+  }
+
+  .dropdown-menu-separator {
+    height: 1px;
+    background: var(--line);
+    margin: 6px 0;
+    flex: 0 0 auto;
+  }
+
+  .RadioGroup {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+  }
+
+  .RadioGroup__choice {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 24px;
+    padding: 0 0.375rem;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+  }
+
+  .RadioGroup__choice.active {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  .RadioGroup__choice:not(.active):hover {
     background: var(--bg);
   }
 
-  .menu-item:active {
-    transform: scale(0.98);
+  .dropdown-menu-item-custom {
+    margin-top: 0.5rem;
+    padding: 0 0.5rem 0.25rem;
   }
 
-  .menu-item.danger {
-    color: var(--danger);
+  .menu-section-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 0.375rem;
   }
 
-  .divider {
-    border: none;
-    border-top: 1px solid var(--line);
-    margin: 8px 0;
+  .swatches {
+    display: flex;
+    gap: 6px;
+  }
+
+  .swatch {
+    width: 1.35rem;
+    height: 1.35rem;
+    padding: 0;
+    border-radius: 5px;
+    border: 1px solid var(--line);
+    background: var(--swatch-color);
+    cursor: pointer;
+  }
+
+  .swatch.active {
+    box-shadow: 0 0 0 2px var(--accent);
   }
 </style>

@@ -1,17 +1,37 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
+  import {
+    persistThemePreference,
+    readThemePreference,
+    resolveThemeMode,
+  } from "$lib/draw-chrome/theme.ts";
   import "../app.css";
 
   let { children } = $props();
   const onBoard = $derived(page.url.pathname.includes("/boards/"));
   let dark = $state(false);
 
+  onMount(() => {
+    // The gallery's toggle is two-state, but the stored preference may be "system" —
+    // set from the board's menu. Resolve it rather than treating it as "not dark".
+    const preference = readThemePreference(localStorage);
+    dark =
+      resolveThemeMode(preference, window.matchMedia("(prefers-color-scheme: dark)").matches) ===
+      "dark";
+    document.documentElement.classList.toggle("dark", dark);
+  });
+
   function toggleTheme(): void {
     dark = !dark;
     if (typeof document !== "undefined") {
       document.documentElement.classList.toggle("dark", dark);
     }
+    persistThemePreference(
+      typeof localStorage === "undefined" ? undefined : localStorage,
+      dark ? "dark" : "light",
+    );
   }
 </script>
 

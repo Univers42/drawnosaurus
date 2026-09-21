@@ -3,7 +3,6 @@
   import type { DrawElementDto } from "@drawnosaurus/contract";
   import type { PeerCursor } from "../realtime/realtimeClient.ts";
   import type { MenuElementInfo } from "./menu.ts";
-  import DrawMainMenu from "./DrawMainMenu.svelte";
   import DrawExportModal from "./DrawExportModal.svelte";
   import DrawMermaidModal from "./DrawMermaidModal.svelte";
   import DrawShareModal from "./DrawShareModal.svelte";
@@ -12,7 +11,6 @@
 
   let {
     engine,
-    themeMode,
     slug = "",
     peers = [],
     menu = $bindable(null),
@@ -21,11 +19,9 @@
     showMermaid = $bindable(false),
     showShare = $bindable(false),
     showShortcuts = $bindable(false),
-    onToggleTheme,
     onInsertMermaid,
   }: {
     engine: DrawEngine | null;
-    themeMode: "light" | "dark";
     slug?: string;
     peers?: PeerCursor[];
     menu: { x: number; y: number; element: MenuElementInfo | null } | null;
@@ -34,21 +30,31 @@
     showMermaid: boolean;
     showShare: boolean;
     showShortcuts: boolean;
-    onToggleTheme: () => void;
     onInsertMermaid: (elements: DrawElementDto[]) => void;
   } = $props();
+
+  /**
+   * One Escape handler for every layer instead of one inside each dialog. These stack
+   * — export and mermaid are opened *from* the main menu — so the key has to dismiss
+   * the topmost one, and a rule that lives in five places drifts. Innermost first;
+   * with nothing open the event is left alone for the canvas.
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Escape") return;
+
+    if (menu) menu = null;
+    else if (showExport) showExport = false;
+    else if (showMermaid) showMermaid = false;
+    else if (showShare) showShare = false;
+    else if (showShortcuts) showShortcuts = false;
+    else if (showMainMenu) showMainMenu = false;
+    else return;
+
+    event.preventDefault();
+  }
 </script>
 
-{#if showMainMenu}
-  <DrawMainMenu
-    {engine}
-    {themeMode}
-    {onToggleTheme}
-    onOpenExport={() => (showExport = true)}
-    onOpenMermaid={() => (showMermaid = true)}
-    onClose={() => (showMainMenu = false)}
-  />
-{/if}
+<svelte:window onkeydown={handleKeydown} />
 
 {#if showExport}
   <DrawExportModal {engine} onClose={() => (showExport = false)} />
