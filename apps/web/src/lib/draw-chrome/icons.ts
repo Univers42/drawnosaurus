@@ -2,6 +2,7 @@ export type IconName =
   | "lock"
   | "lockOpen"
   | "select"
+  | "lasso"
   | "hand"
   | "rectangle"
   | "diamond"
@@ -51,6 +52,15 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "path", d: "M7 11V7a5 5 0 0 1 9.9-1" },
   ],
   select: [{ tag: "path", d: "m4 4 7.07 17 2.51-7.39L21 11.07z" }],
+  // Excalidraw's lasso: a dashed loop with a cursor at its tail.
+  lasso: [
+    {
+      tag: "path",
+      d: "M4.028 13.252c-.475-.65-.744-1.36-.744-2.11C3.284 7.75 7.19 5 12.009 5s8.725 2.75 8.725 6.143c0 3.392-3.906 6.142-8.725 6.142-.696 0-1.373-.057-2.022-.165",
+    },
+    { tag: "path", d: "M5.5 17.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" },
+    { tag: "path", d: "M6.5 17c.5 1 1 2 1 3.5" },
+  ],
   hand: [
     { tag: "path", d: "M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0" },
     { tag: "path", d: "M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2" },

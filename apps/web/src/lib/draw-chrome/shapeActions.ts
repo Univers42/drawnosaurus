@@ -52,9 +52,15 @@ const canHaveArrowheads = (kind: Kind): boolean => asElementKind(kind) === "arro
 
 const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
 
-/** Tools that create something, as opposed to selecting, panning or erasing. */
+/**
+ * Tools that create something, as opposed to selecting, panning or erasing.
+ *
+ * The lasso is a *selection* tool despite being drawn: Excalidraw's
+ * `showSelectedShapeActions` excludes it alongside `selection`, because there is nothing
+ * for a stroke colour or a fill style to act on while you are choosing what to act on.
+ */
 export const isDrawingTool = (tool: ExtendedTool): boolean =>
-  tool !== "select" && tool !== "hand" && tool !== "eraser";
+  tool !== "select" && tool !== "lasso" && tool !== "hand" && tool !== "eraser";
 
 /** Whether a colour paints nothing, so a fill style would have nothing to apply to. */
 export const isTransparent = (color: string): boolean => {
