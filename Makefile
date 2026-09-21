@@ -33,6 +33,12 @@ export API_PORT   ?= 4300
 export WEB_PORT   ?= 5273
 export MONGO_PORT ?= 27019
 
+# `dev` gets its own host ports so a hot-reload server and the built images from
+# `up` can run side by side — otherwise starting one silently takes the other's
+# port and you debug the wrong build.
+export DEV_WEB_PORT ?= 5373
+export DEV_API_PORT ?= 4373
+
 CYAN  := \033[36m
 GREEN := \033[32m
 RESET := \033[0m
@@ -99,11 +105,19 @@ quality: $(ENGINE_PKG) ## The gate: typecheck + lint + format + unit tests
 verify: quality test-integration ## Everything CI runs
 	@echo -e "$(GREEN)✔ verify green$(RESET)"
 
-dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on WEB_PORT and API_PORT
+dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and DEV_API_PORT
 	$(DC) up -d mongo
-	$(RUN) --no-deps --service-ports -d --name drawnosaurus-api tooling \
+	-$(DC) rm -fsv drawnosaurus-api 2>/dev/null
+	$(RUN) --no-deps -d --name drawnosaurus-api -p $(DEV_API_PORT):4000 tooling \
 		pnpm --filter @drawnosaurus/api dev
-	$(RUN) --no-deps --service-ports tooling pnpm --filter @drawnosaurus/web dev
+	@echo -e "$(GREEN)dev: web http://localhost:$(DEV_WEB_PORT)  api http://localhost:$(DEV_API_PORT)$(RESET)"
+	@# --service-ports is useless here: `tooling` is a generic runner and declares no
+	@# ports, so it published nothing and the server was unreachable from the host.
+	@# The proxy target is the API container by name; inside this container 127.0.0.1
+	@# is the container itself, not the API.
+	$(RUN) --no-deps -p $(DEV_WEB_PORT):5173 \
+		-e API_PROXY_TARGET=http://drawnosaurus-api:4000 \
+		tooling pnpm --filter @drawnosaurus/web dev
 
 build: $(ENGINE_PKG) ## Build the api and web images
 	$(DC) build api web
