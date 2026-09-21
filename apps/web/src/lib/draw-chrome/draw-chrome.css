@@ -107,6 +107,16 @@
   inset: 0;
 }
 
+.eraser-trail-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  overflow: visible;
+}
+
 /* Visually gone but still operable. A file input hidden with `display: none` cannot be
    opened by script in every browser, and this one is only ever opened by script. */
 .sr-only {

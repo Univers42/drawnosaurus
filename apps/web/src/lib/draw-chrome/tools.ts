@@ -1,7 +1,7 @@
 import type { DrawTool } from "@osionos/draw-engine/types";
 import type { IconName } from "./icons.ts";
 
-export type ExtendedTool = DrawTool | "sticky";
+export type ExtendedTool = DrawTool | "sticky" | "image" | "frame" | "embed" | "autoshape" | "laser" | "lasso";
 
 export interface ToolDef {
   tool: ExtendedTool;
