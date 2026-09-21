@@ -18,6 +18,7 @@ export type IconName =
   | "image"
   | "embed"
   | "autoshape"
+  | "bucketfill"
   | "more"
   | "undo"
   | "redo"
@@ -156,6 +157,11 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
   autoshape: [
     { tag: "path", d: "M3 17c2-3 1-6 3-7s3 2 5 1 2-4 4-4" },
     { tag: "rect", x: "13", y: "13", width: "8", height: "8", rx: "1" },
+  ],
+  // A tipped bucket with a drop coming off it: the tool pours paint into a region.
+  bucketfill: [
+    { tag: "path", d: "M6 3l10 10-7 7a2 2 0 0 1-3 0l-4-4a2 2 0 0 1 0-3z" },
+    { tag: "path", d: "M20 15s2 2.5 2 4a2 2 0 1 1-4 0c0-1.5 2-4 2-4z" },
   ],
   // Three dots: the standard "there is more behind this".
   more: [
