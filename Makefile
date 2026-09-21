@@ -115,8 +115,13 @@ dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and
 	@# ports, so it published nothing and the server was unreachable from the host.
 	@# The proxy target is the API container by name; inside this container 127.0.0.1
 	@# is the container itself, not the API.
+	@# VITE_USE_POLLING: the working copy is bind-mounted from a network filesystem, and
+	@# inotify does not cross either boundary — without polling Vite never sees an edit
+	@# and serves what it compiled at startup, which looks exactly like a change that was
+	@# never made and survives any number of rebuilds.
 	$(RUN) --no-deps -p $(DEV_WEB_PORT):5173 \
 		-e API_PROXY_TARGET=http://drawnosaurus-api:4000 \
+		-e VITE_USE_POLLING=1 \
 		tooling pnpm --filter @drawnosaurus/web dev
 
 build: $(ENGINE_PKG) ## Build the api and web images
