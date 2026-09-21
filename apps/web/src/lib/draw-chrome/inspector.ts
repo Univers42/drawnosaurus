@@ -2,41 +2,26 @@ import type { FillStyle, StrokeStyle } from "@osionos/draw-engine/types";
 
 export type ThemeMode = "light" | "dark";
 
-export const LIGHT_STROKE_SWATCHES = [
-  "#1e1e1e",
-  "#e03131",
-  "#2f9e44",
-  "#1971c2",
-  "#f08c00",
-  "#9c36b5",
-];
+/**
+ * Quick picks, five of them, as Excalidraw's `DEFAULT_ELEMENT_STROKE_PICKS` and
+ * `DEFAULT_ELEMENT_BACKGROUND_PICKS` are.
+ *
+ * Five is not arbitrary: the row is five swatches, a divider and the current colour,
+ * which is exactly what fits the panel on one line. We carried six plus a separate
+ * transparent button plus the colour input — eight slots in a 188px row — so it wrapped
+ * onto a second line and the current colour ended up orphaned below the presets.
+ *
+ * Order matters, because these are positional: black/none, red, green, blue, yellow.
+ * The background row leads with transparent, which is where Excalidraw puts it rather
+ * than hanging it off the side as an extra control.
+ */
+export const LIGHT_STROKE_SWATCHES = ["#1e1e1e", "#e03131", "#2f9e44", "#1971c2", "#f08c00"];
 
-export const DARK_STROKE_SWATCHES = [
-  "#f8f9fa",
-  "#ff8787",
-  "#69db7c",
-  "#74c0fc",
-  "#ffd43b",
-  "#da77f2",
-];
+export const DARK_STROKE_SWATCHES = ["#f8f9fa", "#ff8787", "#69db7c", "#74c0fc", "#ffd43b"];
 
-export const LIGHT_FILL_SWATCHES = [
-  "#ffc9c9",
-  "#b2f2bb",
-  "#a5d8ff",
-  "#ffec99",
-  "#eebefa",
-  "#d0ebff",
-];
+export const LIGHT_FILL_SWATCHES = ["transparent", "#ffc9c9", "#b2f2bb", "#a5d8ff", "#ffec99"];
 
-export const DARK_FILL_SWATCHES = [
-  "#5c2b29",
-  "#1b4729",
-  "#183b5e",
-  "#5e4514",
-  "#4d1d5c",
-  "#1c4456",
-];
+export const DARK_FILL_SWATCHES = ["transparent", "#5c2b29", "#1b4729", "#183b5e", "#5e4514"];
 
 export function getStrokeSwatches(themeMode: ThemeMode = "light"): string[] {
   return themeMode === "dark" ? DARK_STROKE_SWATCHES : LIGHT_STROKE_SWATCHES;

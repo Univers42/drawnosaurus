@@ -89,7 +89,6 @@
       <InspectorSwatches
         value={style.backgroundColor}
         presets={fillPresets}
-        allowTransparent
         onPick={(color) => onApply({ backgroundColor: color })}
       />
     </InspectorRow>
