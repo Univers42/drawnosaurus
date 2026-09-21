@@ -20,6 +20,7 @@ describe("DRAW_TOOLS", () => {
       "sticky",
       "eraser",
       "laser",
+      "frame",
     ]);
   });
 
