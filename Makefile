@@ -143,6 +143,11 @@ oracle-fixtures: oracle ## Regenerate the rough.js conformance fixtures
 	cd engine/tools/rough-oracle && npm install && npm run generate
 	@echo -e "$(GREEN)✔ fixtures regenerated — review the diff before committing$(RESET)"
 
+bench: ## Run the engine benchmarks (criterion)
+	cd engine && docker compose run --rm --no-deps draw-engine \
+		cargo bench --workspace -- --warm-up-time 1 --measurement-time 3
+	@echo -e "$(GREEN)✔ benchmarks done$(RESET)"
+
 clean: ## Remove containers, volumes, images, and build output
 	$(DC) down -v --rmi local
 	rm -rf engine/pkg apps/web/build apps/web/.svelte-kit
@@ -150,4 +155,4 @@ clean: ## Remove containers, volumes, images, and build output
 
 .PHONY: all help submodules wasm install lock typecheck lint format test \
 	test-integration quality verify dev build up down logs shell clean \
-	oracle oracle-fixtures
+	oracle oracle-fixtures bench
