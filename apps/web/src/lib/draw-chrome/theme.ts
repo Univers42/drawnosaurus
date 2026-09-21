@@ -52,6 +52,10 @@ export function themeFromCss(style: CssVars, fallback: DrawTheme = LIGHT_THEME):
       background: read("--surface", fallback.background),
       grid: read("--line", fallback.grid),
       accent: read("--accent", fallback.accent),
+      // Not a host token: the binding highlight is Excalidraw's own constant, and
+      // matching it is the point. It comes from the fallback theme rather than from
+      // the page's palette.
+      bindingHighlight: fallback.bindingHighlight,
     },
     ink: read("--ink", "#1e1e1e"),
   };

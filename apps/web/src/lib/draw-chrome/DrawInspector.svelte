@@ -148,6 +148,48 @@
       />
     </InspectorRow>
   {/if}
+  {#if selectedCount > 0 && engine}
+    <InspectorRow label="Mirror">
+      <InspectorIconRow
+        buttons={[
+          {
+            label: "Flip horizontally",
+            icon: "flipHorizontal",
+            onPick: () => engine.flipSelection("horizontal"),
+          },
+          {
+            label: "Flip vertically",
+            icon: "flipVertical",
+            onPick: () => engine.flipSelection("vertical"),
+          },
+        ]}
+      />
+    </InspectorRow>
+  {/if}
+  <!--
+    Group and ungroup existed in the engine and in the right-click menu, but there was
+    no way to reach them from the panel — so selecting several elements and grouping
+    them looked impossible. Shown from two elements up, and also for a single selection
+    that is already a group, which is the only way to ungroup one.
+  -->
+  {#if engine && (selectedCount >= 2 || (selectedCount > 0 && engine.selectionIsGroup()))}
+    <InspectorRow label="Group">
+      <InspectorIconRow
+        buttons={[
+          {
+            label: "Group selection",
+            icon: "group",
+            onPick: () => engine.groupSelection(),
+          },
+          {
+            label: "Ungroup selection",
+            icon: "ungroup",
+            onPick: () => engine.ungroupSelection(),
+          },
+        ]}
+      />
+    </InspectorRow>
+  {/if}
   {#if selectedCount >= 2 && engine}
     <InspectorRow label="Align">
       <InspectorIconRow

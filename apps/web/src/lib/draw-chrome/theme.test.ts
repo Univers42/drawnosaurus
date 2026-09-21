@@ -46,7 +46,14 @@ describe("themeFromCss", () => {
     };
 
     expect(themeFromCss(style)).toEqual({
-      theme: { background: "#ffffff", grid: "rgba(17, 17, 17, 0.06)", accent: "#4c6ef5" },
+      theme: {
+        background: "#ffffff",
+        grid: "rgba(17, 17, 17, 0.06)",
+        accent: "#4c6ef5",
+        // Carried from the fallback, not read from the page: it is Excalidraw's
+        // constant and matching it exactly is the whole point.
+        bindingHighlight: LIGHT_THEME.bindingHighlight,
+      },
       ink: "#1e1e1e",
     });
   });
