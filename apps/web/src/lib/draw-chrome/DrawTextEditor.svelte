@@ -20,8 +20,8 @@
   let originalText = "";
   let finished = false;
 
-  // const isContainer = $derived(Boolean(request.containerId)); // TODO: Implement when TextEditRequest supports containerId
-  const isContainer = $derived(false);
+  /** Text bound to a shape, rather than free-standing text placed on the canvas. */
+  const isContainer = $derived(Boolean(request.containerId));
 
   onMount(() => {
     originalText = request.text;
@@ -39,12 +39,19 @@
     node.style.height = "auto";
     node.style.height = `${Math.max(node.scrollHeight, fontSizePx * 1.3)}px`;
 
-    // if (isContainer && request.width) { // TODO: Implement when TextEditRequest supports width
-    //   node.style.width = `${request.width}px`;
-    // } else {
-      const measured = engine.measureText(value, fontSizePx).width;
-      node.style.width = `${Math.max(measured + CHROME_PX, 60)}px`;
-    // }
+    if (isContainer && request.width) {
+      // Bound text is as wide as the shape holding it and wraps inside it, so the box
+      // must not grow with the text the way free-standing text does.
+      node.style.width = `${request.width}px`;
+      return;
+    }
+    // Measured by the engine, against the font the canvas draws with. This used to
+    // guess `maxLineLength * fontSize * 0.65`, counting UTF-16 units — so the box was a
+    // third too wide for "Hello", nearly three times too wide for "iiii", and far too
+    // narrow for "WWWW". The text visibly jumped the moment an edit was committed,
+    // because the canvas and the textarea disagreed about how wide it was.
+    const measured = engine.measureText(value, fontSizePx).width;
+    node.style.width = `${Math.max(measured + CHROME_PX, 60)}px`;
   }
 
   function finish(): void {

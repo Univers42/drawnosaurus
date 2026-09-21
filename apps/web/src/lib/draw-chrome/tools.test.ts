@@ -75,4 +75,15 @@ describe("DRAW_TOOLS", () => {
       expect(toolForKey(entry.hotkey), `${entry.label} (${entry.hotkey})`).toBe(entry.tool);
     }
   });
+
+  it("leaves the sticky note's hotkey to itself", () => {
+    // The sticky note is handled by the host's own keydown listener, and the engine has
+    // its own on the canvas. `preventDefault` does not stop the other one, so a key the
+    // engine also maps fires *both*: "9" selected the sticky note and opened the image
+    // picker in one keystroke. The only safe key for a host tool is one the engine
+    // ignores entirely.
+    const sticky = toolDef("sticky");
+    expect(sticky).toBeDefined();
+    expect(toolForKey(sticky!.hotkey)).toBeNull();
+  });
 });

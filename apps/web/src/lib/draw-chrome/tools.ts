@@ -1,7 +1,15 @@
 import type { DrawTool } from "@osionos/draw-engine/types";
 import type { IconName } from "./icons.ts";
 
-export type ExtendedTool = DrawTool | "sticky" | "image" | "frame" | "embed" | "autoshape" | "laser" | "lasso";
+/**
+ * Every tool the toolbar can show: the engine's own, plus the host's.
+ *
+ * Only `"sticky"` is listed here. Everything else — image, frame, embed, autoshape,
+ * laser, lasso — is the engine's, and naming those again would fork the tool list: the
+ * union would keep compiling after the engine dropped or renamed one, and the toolbar
+ * would offer a tool `setTool` no longer accepts.
+ */
+export type ExtendedTool = DrawTool | "sticky";
 
 export interface ToolDef {
   tool: ExtendedTool;

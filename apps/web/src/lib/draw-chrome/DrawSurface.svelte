@@ -31,8 +31,8 @@
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote, DEFAULT_STICKY_NOTE_SIZE } from "../notes/stickyNotes.ts";
   import { EraserTrail } from "../eraser/eraserTrail.ts";
-  // import { parseEmbedFrames, sandboxFor, frameStyle, type EmbedFrame } from "./embed.ts"; // TODO: Implement when embed is supported
-  // import DrawEmbedModal from "./DrawEmbedModal.svelte"; // TODO: Implement when embed is supported
+  import { parseEmbedFrames, sandboxFor, frameStyle, type EmbedFrame } from "./embed.ts";
+  import DrawEmbedModal from "./DrawEmbedModal.svelte";
   import {
     IMAGE_ACCEPT,
     describeRejection,
@@ -120,7 +120,17 @@
   let currentCamera = $state<Camera | undefined>(undefined);
   let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
   let eraserTrailSvgPath = $state("");
-  // let stickyStartPoint: { x: number; y: number } | null = null; // TODO: Implement when sticky notes are supported
+  let stickyStartPoint: { x: number; y: number } | null = null;
+  /**
+   * What the current eraser sweep has dimmed, and how see-through each one was before.
+   *
+   * A plain Map rather than a `SvelteMap`: nothing renders from it. The fading is done by
+   * patching the elements themselves, so the canvas already shows the change, and this is
+   * only the record needed to put them back if the sweep is cancelled. Making it reactive
+   * would suggest the markup depends on it, which is the thing a later reader would then
+   * have to disprove.
+   */
+  // eslint-disable-next-line svelte/prefer-svelte-reactivity
   const elementsPendingErase = new Map<string, { element: DrawElement; originalOpacity: number }>();
   const eraserTrail = new EraserTrail({
     decayTime: 220,
@@ -145,7 +155,7 @@
   let pending: Camera | null = null;
   // The tool's cursor is the floor; the engine's hover answer wins when it has one, and
   // it only ever has one while the pointer is actually over the canvas.
-  const toolCursor = $derived(cursorForTool(tool === "sticky" ? "rectangle" : tool));
+  const toolCursor = $derived(cursorForTool(tool));
 
   function syncStyle(source: DrawEngine | null): void {
     if (!source) return;
@@ -194,7 +204,7 @@
   function pickGrid(patch: Partial<GridPreference>): void {
     grid = { ...grid, ...patch };
     persistGridPreference(typeof localStorage === "undefined" ? undefined : localStorage, grid);
-    // engine?.setGrid(grid); // TODO: Implement when engine supports setGrid
+    engine?.setGrid(grid);
   }
 
   function pickCanvasBackground(color: string): void {
@@ -204,7 +214,7 @@
   }
 
   let canvasHost: HTMLDivElement | undefined = $state();
-  // let imageInput: HTMLInputElement | undefined = $state(); // TODO: Implement when image tool is supported
+  let imageInput: HTMLInputElement | undefined = $state();
   /**
    * Why the last image was refused, if it was.
    *
@@ -231,7 +241,7 @@
    * does only what a browser must: check the file is one we can read, decode it, and
    * report the natural size.
    */
-  async function placeImageFile(file: File, _at: { x: number; y: number }): Promise<void> {
+  async function placeImageFile(file: File, at: { x: number; y: number }): Promise<void> {
     const rejection = rejectImageFile(file);
     if (rejection) {
       notify(describeRejection(rejection));
@@ -242,7 +252,7 @@
       notify(describeRejection("decode"));
       return;
     }
-    // engine?.insertImage(decoded.dataUrl, decoded.naturalWidth, decoded.naturalHeight, at.x, at.y); // TODO: Implement when engine supports insertImage
+    engine?.insertImage(decoded.dataUrl, decoded.naturalWidth, decoded.naturalHeight, at.x, at.y);
   }
 
   function viewportCentre(): { x: number; y: number } {
@@ -287,12 +297,12 @@
    * both ways in behave the same — pressing 9 used to set the tool and then sit there,
    * because only the button knew what the tool was for.
    */
-  // function openImagePicker(): void { // TODO: Implement when image tool is supported
-  //   imageDropAt = null;
-  //   imageInput?.click();
-  // }
+  function openImagePicker(): void {
+    imageDropAt = null;
+    imageInput?.click();
+  }
 
-  let showEmbed = $state(false); // TODO: Implement when embed is supported
+  let showEmbed = $state(false);
   /**
    * The live frames, in screen pixels, as the engine reports them.
    *
@@ -300,29 +310,29 @@
    * DOM element sitting over the canvas and has to keep up with the rectangle drawn
    * under it.
    */
-  // let embedFrames = $state.raw<EmbedFrame[]>([]); // TODO: Implement when embed is supported
+  let embedFrames = $state.raw<EmbedFrame[]>([]);
 
-  function refreshEmbedFrames(): void { // TODO: Implement when embed is supported
-    // embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : []; // TODO: Implement when engine supports embedFramesJson
-    // embedFrames = [];
+  function refreshEmbedFrames(): void {
+    embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : [];
   }
 
-  // function insertEmbed(url: string): void { // TODO: Implement when embed is supported
-  //   const at = viewportCentre();
-  //   // engine?.insertEmbed(url, at.x, at.y); // TODO: Implement when engine supports insertEmbed
-  //   refreshEmbedFrames();
-  //   handleToolSelect("select");
-  // }
+  function insertEmbed(url: string): void {
+    const at = viewportCentre();
+    engine?.insertEmbed(url, at.x, at.y);
+    refreshEmbedFrames();
+    handleToolSelect("select");
+  }
 
   function handleToolSelect(next: ExtendedTool): void {
     if (next === "sticky") {
+      // The sticky note is the host's own tool, not one the engine knows: the engine
+      // stays on "select" and this component watches the pointer for the placement
+      // gesture. `tool` is what the toolbar highlights, so it keeps the sticky.
       tool = "sticky";
       engine?.setTool("select");
     } else {
       tool = next;
-      if (next !== "image" && next !== "embed" && next !== "frame" && next !== "autoshape" && next !== "laser" && next !== "lasso") {
-        engine?.setTool(next as DrawTool);
-      }
+      engine?.setTool(next);
       // Deliberately NOT calling setArrowheads here. It mutates the *current
       // selection*, and after drawing a shape that selection is the shape you just
       // drew — so picking the line tool silently stripped the head off the arrow
@@ -333,177 +343,184 @@
     }
   }
 
-  let lastEraserPoint: { x: number; y: number } | null = null; // TODO: Implement when eraser is supported
+  let lastEraserPoint: { x: number; y: number } | null = null;
 
-  // function checkEraserHit(sx: number, sy: number): void { // TODO: Implement when eraser is supported
-  //   if (!engine) return;
-  //   const hit = engine.hitTest(sx, sy, 12);
-  //   if (!hit) return;
+  /**
+   * Dim whatever the eraser just passed over, without deleting it yet.
+   *
+   * Excalidraw's eraser is a two-stage gesture: everything the stroke touches fades to
+   * near-transparent, and only releasing commits the deletion. That is what makes it
+   * safe to sweep — you can see what you are about to lose and still back out with
+   * Escape. The original opacity is remembered per element so backing out restores it.
+   *
+   * `applyRemotePatch` rather than a normal edit because this must not push history:
+   * the undo stack should hold one deletion, not one entry per element brushed past.
+   */
+  function checkEraserHit(sx: number, sy: number): void {
+    if (!engine) return;
+    const hit = engine.hitTest(sx, sy, 12);
+    if (!hit) return;
+    if (elementsPendingErase.has(hit.id)) return;
 
-  //   if (elementsPendingErase.has(hit.id)) return;
+    // Erasing one part of a composite erases the whole of it: a group goes together, and
+    // a label goes with its container rather than being orphaned in mid-air.
+    let toDim: DrawElement[] = [hit];
+    try {
+      const parsed = JSON.parse(engine.exportJson());
+      const elements: DrawElement[] = Array.isArray(parsed?.elements) ? parsed.elements : [];
+      if (hit.groupId) {
+        const grouped = elements.filter((el) => el.groupId === hit.groupId && !el.isDeleted);
+        if (grouped.length > 0) toDim = grouped;
+      } else {
+        const boundTexts = elements.filter((el) => el.containerId === hit.id && !el.isDeleted);
+        if (boundTexts.length > 0) toDim = [...toDim, ...boundTexts];
+        if (hit.containerId) {
+          const container = elements.find((el) => el.id === hit.containerId && !el.isDeleted);
+          if (container) toDim = [...toDim, container];
+        }
+      }
+    } catch {
+      // A scene we cannot parse still erases what was hit; it just does not extend the
+      // selection to the rest of the group.
+    }
 
-  //   let toDim: DrawElement[] = [hit];
-  //   try {
-  //     const parsed = JSON.parse(engine.exportJson());
-  //     const elements: DrawElement[] = Array.isArray(parsed?.elements) ? parsed.elements : [];
-  //     if (hit.groupId) {
-  //       const grouped = elements.filter((el) => el.groupId === hit.groupId && !el.isDeleted);
-  //       if (grouped.length > 0) toDim = grouped;
-  //     } else {
-  //       const boundTexts = elements.filter((el) => el.containerId === hit.id && !el.isDeleted);
-  //       if (boundTexts.length > 0) toDim = [...toDim, ...boundTexts];
-  //       if (hit.containerId) {
-  //         const container = elements.find((el) => el.id === hit.containerId && !el.isDeleted);
-  //         if (container) toDim = [...toDim, container];
-  //       }
-  //     }
-  //   } catch {
-  //     // Fallback to hit element only
-  //   }
+    const patchElements: DrawElement[] = [];
+    for (const el of toDim) {
+      if (!elementsPendingErase.has(el.id)) {
+        elementsPendingErase.set(el.id, { element: el, originalOpacity: el.opacity });
+        patchElements.push({
+          ...el,
+          opacity: Math.min(el.opacity, 20),
+          version: el.version + 1,
+          versionNonce: Math.floor(Math.random() * 1_000_000_000),
+        });
+      }
+    }
 
-  //   const patchElements: DrawElement[] = [];
-  //   for (const el of toDim) {
-  //     if (!elementsPendingErase.has(el.id)) {
-  //       elementsPendingErase.set(el.id, { element: el, originalOpacity: el.opacity });
-  //       patchElements.push({
-  //         ...el,
-  //         opacity: Math.min(el.opacity, 20),
-  //         version: el.version + 1,
-  //         versionNonce: Math.floor(Math.random() * 1_000_000_000),
-  //       });
-  //     }
-  //   }
+    if (patchElements.length > 0) {
+      engine.applyRemotePatch(
+        JSON.stringify({ type: "osidraw", version: 1, elements: patchElements }),
+      );
+    }
+  }
 
-  //   if (patchElements.length > 0) {
-  //     engine.applyRemotePatch(
-  //       JSON.stringify({
-  //         type: "osidraw",
-  //         version: 1,
-  //         elements: patchElements,
-  //       }),
-  //     );
-  //   }
-  // }
+  /** Back out of an eraser sweep: put every dimmed element back as it was. */
+  function cancelPendingEraser(): void {
+    if (elementsPendingErase.size === 0 || !engine) return;
+    const restored = Array.from(elementsPendingErase.values()).map(
+      ({ element, originalOpacity }) => ({
+        ...element,
+        opacity: originalOpacity,
+        // +2 because the dimming patch already spent +1; a lower version would lose to
+        // it under last-writer-wins and the element would stay faded.
+        version: element.version + 2,
+        versionNonce: Math.floor(Math.random() * 1_000_000_000),
+      }),
+    );
+    elementsPendingErase.clear();
+    engine.applyRemotePatch(JSON.stringify({ type: "osidraw", version: 1, elements: restored }));
+  }
 
-  // function cancelPendingEraser(): void { // TODO: Implement when eraser is supported
-  //   if (elementsPendingErase.size > 0 && engine) {
-  //     const restored = Array.from(elementsPendingErase.values()).map(({ element, originalOpacity }) => ({
-  //       ...element,
-  //       opacity: originalOpacity,
-  //       version: element.version + 2,
-  //       versionNonce: Math.floor(Math.random() * 1_000_000_000),
-  //     }));
-  //     elementsPendingErase.clear();
-  //     engine.applyRemotePatch(
-  //       JSON.stringify({
-  //         type: "osidraw",
-  //         version: 1,
-  //         elements: restored,
-  //       }),
-  //     );
-  //   }
-  // }
+  /** Returning `true` claims the gesture, so the engine does not also act on it. */
+  function handleCanvasPointerDown(point: { x: number; y: number }): boolean | void {
+    if (tool === "eraser") {
+      lastEraserPoint = { x: point.x, y: point.y };
+      eraserTrail.start(point.x, point.y);
+      elementsPendingErase.clear();
+      checkEraserHit(point.x, point.y);
+      return true;
+    }
+    if (tool === "sticky") {
+      stickyStartPoint = { x: point.x, y: point.y };
+      return true;
+    }
+  }
 
-  // function handleCanvasPointerDown(point: { x: number; y: number }, _event: PointerEvent): boolean | void { // TODO: Implement when DrawCanvas supports onPointerDown
-  //   if (tool === "eraser") {
-  //     lastEraserPoint = { x: point.x, y: point.y };
-  //     eraserTrail.start(point.x, point.y);
-  //     elementsPendingErase.clear();
-  //     checkEraserHit(point.x, point.y);
-  //     return true;
-  //   } else if (tool === "sticky") {
-  //     stickyStartPoint = { x: point.x, y: point.y };
-  //     return true;
-  //   }
-  // }
+  function handleCanvasPointerMove(point: { x: number; y: number }): void {
+    if (tool !== "eraser") return;
+    eraserTrail.addPoint(point.x, point.y);
+    if (lastEraserPoint) {
+      // Sample along the segment, not just at its ends. A fast sweep produces pointer
+      // events tens of pixels apart, and testing only those would skip straight over
+      // anything thinner than the gap between them.
+      const dx = point.x - lastEraserPoint.x;
+      const dy = point.y - lastEraserPoint.y;
+      const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 8));
+      for (let i = 1; i <= steps; i++) {
+        checkEraserHit(lastEraserPoint.x + dx * (i / steps), lastEraserPoint.y + dy * (i / steps));
+      }
+    } else {
+      checkEraserHit(point.x, point.y);
+    }
+    lastEraserPoint = { x: point.x, y: point.y };
+  }
 
-  // function handleCanvasPointerMove(point: { x: number; y: number }, _event: PointerEvent): void { // TODO: Implement when DrawCanvas supports onPointerMove
-  //   if (tool === "eraser") {
-  //     eraserTrail.addPoint(point.x, point.y);
-  //     if (lastEraserPoint) {
-  //       const dx = point.x - lastEraserPoint.x;
-  //       const dy = point.y - lastEraserPoint.y;
-  //       const dist = Math.hypot(dx, dy);
-  //       const steps = Math.max(1, Math.ceil(dist / 8));
-  //       for (let i = 1; i <= steps; i++) {
-  //         const ix = lastEraserPoint.x + dx * (i / steps);
-  //         const iy = lastEraserPoint.y + dy * (i / steps);
-  //         checkEraserHit(ix, iy);
-  //       }
-  //     } else {
-  //       checkEraserHit(point.x, point.y);
-  //     }
-  //     lastEraserPoint = { x: point.x, y: point.y };
-  //   }
-  // }
+  function handleCanvasPointerUp(point: { x: number; y: number }): void {
+    if (tool === "eraser") {
+      lastEraserPoint = null;
+      eraserTrail.stop();
+      if (elementsPendingErase.size > 0 && engine) {
+        const ids = Array.from(elementsPendingErase.keys());
+        elementsPendingErase.clear();
+        engine.select(ids);
+        // One history entry for the whole sweep, which is what the gesture was.
+        engine.deleteSelection();
+      }
+      return;
+    }
 
-  // function handleCanvasPointerUp(point: { x: number; y: number }, _event: PointerEvent): void { // TODO: Implement when DrawCanvas supports onPointerUp
-  //   if (tool === "eraser") {
-  //     lastEraserPoint = null;
-  //     eraserTrail.stop();
-  //     if (elementsPendingErase.size > 0 && engine) {
-  //       const ids = Array.from(elementsPendingErase.keys());
-  //       elementsPendingErase.clear();
-  //       engine.select(ids);
-  //       engine.deleteSelection();
-  //     }
-  //   } else if (tool === "sticky" && stickyStartPoint && engine) {
-  //     const start = stickyStartPoint;
-  //     stickyStartPoint = null;
+    if (tool !== "sticky" || !stickyStartPoint || !engine) return;
+    const start = stickyStartPoint;
+    stickyStartPoint = null;
 
-  //     const dx = Math.abs(point.x - start.x);
-  //     const dy = Math.abs(point.y - start.y);
-  //     const worldStart = engine.screenToWorld(start.x, start.y);
-  //     const worldEnd = engine.screenToWorld(point.x, point.y);
+    const worldStart = engine.screenToWorld(start.x, start.y);
+    const worldEnd = engine.screenToWorld(point.x, point.y);
 
-  //     let x: number;
-  //     let y: number;
-  //     let w = DEFAULT_STICKY_NOTE_SIZE;
-  //     let h = DEFAULT_STICKY_NOTE_SIZE;
+    let x: number;
+    let y: number;
+    let w = DEFAULT_STICKY_NOTE_SIZE;
+    let h = DEFAULT_STICKY_NOTE_SIZE;
 
-  //     if (dx > 10 || dy > 10) {
-  //       x = Math.min(worldStart.x, worldEnd.x);
-  //       y = Math.min(worldStart.y, worldEnd.y);
-  //       w = Math.max(Math.abs(worldEnd.x - worldStart.x), 100);
-  //       h = Math.max(Math.abs(worldEnd.y - worldStart.y), 100);
-  //     } else {
-  //       x = worldEnd.x - w / 2;
-  //       y = worldEnd.y - h / 2;
-  //     }
+    // A drag sizes the note; a click drops a default one centred on the pointer. The
+    // 10px threshold is what separates the two — below it the "drag" is just a shaky
+    // click and sizing the note from it would produce a sliver.
+    if (Math.abs(point.x - start.x) > 10 || Math.abs(point.y - start.y) > 10) {
+      x = Math.min(worldStart.x, worldEnd.x);
+      y = Math.min(worldStart.y, worldEnd.y);
+      w = Math.max(Math.abs(worldEnd.x - worldStart.x), 100);
+      h = Math.max(Math.abs(worldEnd.y - worldStart.y), 100);
+    } else {
+      x = worldEnd.x - w / 2;
+      y = worldEnd.y - h / 2;
+    }
 
-  //     const [shadow, note, date, text] = createStickyNote(x, y, "", "yellow", w, h);
-  //     engine.pasteJson(
-  //       JSON.stringify({ type: "osidraw", version: 1, elements: [shadow, note, date, text] }),
-  //       {
-  //         x: x + w / 2,
-  //         y: y + h / 2,
-  //       },
-  //     );
+    const [shadow, note, date, text] = createStickyNote(x, y, "", "yellow", w, h);
+    engine.pasteJson(
+      JSON.stringify({ type: "osidraw", version: 1, elements: [shadow, note, date, text] }),
+      {
+        x: x + w / 2,
+        y: y + h / 2,
+      },
+    );
 
-  //     if (!toolLocked) {
-  //       tool = "select";
-  //       engine.setTool("select");
-  //     }
+    if (!toolLocked) {
+      tool = "select";
+      engine.setTool("select");
+    }
 
-  //     // Automatically edit the text of the newly placed sticky note
-  //     const selected = engine.getSelectedElements();
-  //     const noteEl = selected.find((el) => el.boundTextId);
-  //     if (noteEl) {
-  //       engine.select([noteEl.id]);
-  //       engine.editSelectedText();
-  //     } else {
-  //       const textEl = selected.find((el) => el.type === "text" && el.containerId);
-  //       if (textEl) {
-  //         engine.select([textEl.id]);
-  //         engine.editSelectedText();
-  //       }
-  //     }
-  //   }
-  // }
+    // Drop straight into typing: a sticky note with nothing on it is never the goal.
+    const selected = engine.getSelectedElements();
+    const noteEl = selected.find((el) => el.boundTextId);
+    const textEl = noteEl ?? selected.find((el) => el.type === "text" && el.containerId);
+    if (textEl) {
+      engine.select([textEl.id]);
+      engine.editSelectedText();
+    }
+  }
 
   function handleSceneChange(json: string): void {
     onSceneChange?.(json);
-    // refreshEmbedFrames(); // TODO: Implement when embed is supported
+    refreshEmbedFrames();
     if (!realtime) return;
     try {
       const data = JSON.parse(json);
@@ -600,7 +617,7 @@
       contentVisible = engine?.contentInView() ?? true;
       // An `<iframe>` is a real element over the canvas; it has to keep up with the
       // rectangle drawn under it or it slides away as soon as anyone pans.
-      // refreshEmbedFrames(); // TODO: Implement when embed is supported
+      refreshEmbedFrames();
     });
   }
 
@@ -707,7 +724,11 @@
           new Blob([engine.exportJson()], { type: "application/json" }),
         );
       }
-    } else if (!mod && (event.key === "9" || key === "n")) {
+    } else if (!mod && key === "n") {
+      // "N" only. 9 is the image tool's, both in the engine's keymap and on the toolbar,
+      // and claiming it here did not take it away — `preventDefault` does not stop the
+      // engine's own listener, so 9 selected the sticky note and opened the image picker
+      // in the same keystroke.
       event.preventDefault();
       handleToolSelect("sticky");
     } else if (mod && event.key === "'") {
@@ -776,17 +797,19 @@
       {onCameraChange}
       onReady={(next) => {
         engine = next;
-        // next.setGrid(grid); // TODO: Implement when engine supports setGrid
+        next.setGrid(grid);
         syncStyle(next);
         onReady?.(next);
       }}
       onToolChange={(next: DrawTool) => {
+        // The sticky note is a host tool that parks the engine on "select". Without this
+        // guard the engine's own tool change would immediately drop the toolbar back to
+        // select, and the sticky would look unselectable.
         if (tool === "sticky" && next === "select") return;
         tool = next;
-        // if (next === "image") openImagePicker(); // TODO: Implement when engine supports image tool
-        // if (next === "embed") showEmbed = true; // TODO: Implement when engine supports embed tool
+        if (next === "image") openImagePicker();
+        if (next === "embed") showEmbed = true;
         syncStyle(engine);
-      }}
       }}
       onSelectionChange={(ids) => {
         selectedCount = ids.length;
@@ -811,9 +834,9 @@
       onToolLockChange={(locked) => {
         toolLocked = locked;
       }}
-      // onPointerDown={handleCanvasPointerDown} // TODO: Implement when DrawCanvas supports onPointerDown
-      // onPointerMove={handleCanvasPointerMove} // TODO: Implement when DrawCanvas supports onPointerMove
-      // onPointerUp={handleCanvasPointerUp} // TODO: Implement when DrawCanvas supports onPointerUp
+      onPointerDown={handleCanvasPointerDown}
+      onPointerMove={handleCanvasPointerMove}
+      onPointerUp={handleCanvasPointerUp}
     />
     {#if eraserTrailSvgPath}
       <svg class="eraser-trail-canvas" aria-hidden="true">
@@ -861,8 +884,7 @@
     <p class="image-notice" role="status">{imageNotice}</p>
   {/if}
 
-  {#if false && showEmbed}
-    <!-- TODO: Implement when embed is supported -->
+  {#if showEmbed}
     <DrawEmbedModal
       {engine}
       onInsert={insertEmbed}
@@ -870,8 +892,7 @@
         showEmbed = false;
         // Cancelling leaves the tool selected with nothing to do, which reads as the
         // board having stopped responding.
-        // if (tool === "embed") handleToolSelect("select"); // TODO: Implement when embed tool is supported
-        handleToolSelect("select");
+        if (tool === "embed") handleToolSelect("select");
       }}
     />
   {/if}
