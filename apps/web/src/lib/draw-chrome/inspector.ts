@@ -88,6 +88,19 @@ export const EDGES: Array<{ label: string; value: number | null }> = [
   { label: "Round", value: 8 },
 ];
 
+/**
+ * Grid spacings offered in the menu, in world units.
+ *
+ * 20 is Excalidraw's default; the rest are halves and doubles of it, so a drawing made
+ * on one spacing stays aligned on another.
+ */
+export const GRID_SIZES: Array<{ label: string; value: number }> = [
+  { label: "10", value: 10 },
+  { label: "20", value: 20 },
+  { label: "40", value: 40 },
+  { label: "80", value: 80 },
+];
+
 export const FILL_STYLES: Array<{ label: string; value: FillStyle }> = [
   { label: "Hachure", value: "hachure" },
   { label: "Cross", value: "cross-hatch" },
