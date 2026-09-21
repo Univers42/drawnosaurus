@@ -22,6 +22,7 @@ const CROSSHAIR_TOOLS = new Set<ExtendedTool>([
   "laser",
   "frame",
   "autoshape",
+  "bucketfill",
   "sticky",
 ]);
 

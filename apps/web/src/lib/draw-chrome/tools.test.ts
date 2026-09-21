@@ -28,6 +28,7 @@ describe("DRAW_TOOLS", () => {
       "frame",
       "embed",
       "autoshape",
+      "bucketfill",
       "laser",
       "lasso",
       "sticky",

@@ -56,6 +56,7 @@ export const EXTRA_TOOLS: readonly ToolDef[] = [
   { tool: "frame", label: "Frame", hotkey: "F", icon: "frame" },
   { tool: "embed", label: "Embed web page", hotkey: "W", icon: "embed" },
   { tool: "autoshape", label: "Draw to shape", hotkey: "G", icon: "autoshape" },
+  { tool: "bucketfill", label: "Bucket fill", hotkey: "B", icon: "bucketfill" },
   { tool: "laser", label: "Laser pointer", hotkey: "K", icon: "laser" },
   { tool: "lasso", label: "Lasso", hotkey: "S", icon: "lasso" },
   // "N" for note. Excalidraw's 9 is the image tool, and a sticky note is ours rather
