@@ -319,6 +319,20 @@
         tool = "select";
         engine.setTool("select");
       }
+
+      // Automatically edit the text of the newly placed sticky note
+      const selected = engine.getSelectedElements();
+      const noteEl = selected.find((el) => el.boundTextId);
+      if (noteEl) {
+        engine.select([noteEl.id]);
+        engine.editSelectedText();
+      } else {
+        const textEl = selected.find((el) => el.type === "text" && el.containerId);
+        if (textEl) {
+          engine.select([textEl.id]);
+          engine.editSelectedText();
+        }
+      }
     }
   }
 
@@ -523,6 +537,9 @@
           new Blob([engine.exportJson()], { type: "application/json" }),
         );
       }
+    } else if (!mod && (event.key === "9" || key === "n")) {
+      event.preventDefault();
+      handleToolSelect("sticky");
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
@@ -575,6 +592,7 @@
         onReady?.(next);
       }}
       onToolChange={(next: DrawTool) => {
+        if (tool === "sticky" && next === "select") return;
         tool = next;
       }}
       onSelectionChange={(ids) => {
