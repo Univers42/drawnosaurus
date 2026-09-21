@@ -10,9 +10,18 @@ export interface ToolDef {
   icon: IconName;
 }
 
+/**
+ * The tools on the bar itself: the ones you reach for constantly.
+ *
+ * This list is short on purpose. Every tool added to it makes every *other* tool harder
+ * to hit, because the bar is a row of identical squares and finding one in it is a
+ * scanning problem — and past a point the row stops fitting on a laptop screen at all,
+ * which is what happened here: the last few were simply off the end.
+ *
+ * Excalidraw's split, and for the same reason.
+ */
 export const DRAW_TOOLS: readonly ToolDef[] = [
   { tool: "select", label: "Select", hotkey: "1", icon: "select" },
-  { tool: "lasso", label: "Lasso", hotkey: "S", icon: "lasso" },
   { tool: "hand", label: "Pan", hotkey: "H", icon: "hand" },
   { tool: "rectangle", label: "Rectangle", hotkey: "2", icon: "rectangle" },
   { tool: "diamond", label: "Diamond", hotkey: "3", icon: "diamond" },
@@ -21,13 +30,40 @@ export const DRAW_TOOLS: readonly ToolDef[] = [
   { tool: "line", label: "Line", hotkey: "6", icon: "line" },
   { tool: "freedraw", label: "Draw", hotkey: "7", icon: "freedraw" },
   { tool: "text", label: "Text", hotkey: "8", icon: "text" },
-  // "N" for note. Excalidraw's 9 is the image tool, and a sticky note is ours rather
-  // than theirs, so it is the one that yields the digit.
-  { tool: "sticky", label: "Sticky Note", hotkey: "N", icon: "sticky" },
-  { tool: "image", label: "Insert image", hotkey: "9", icon: "image" },
   { tool: "eraser", label: "Eraser", hotkey: "0", icon: "eraser" },
-  { tool: "laser", label: "Laser pointer", hotkey: "K", icon: "laser" },
+];
+
+/**
+ * The tools behind the "more tools" button, after the divider.
+ *
+ * Not lesser tools — a frame or a laser is as real as a rectangle — but occasional ones,
+ * reached deliberately rather than by reflex. Each still has its own shortcut and the
+ * shortcut does not go through this menu at all: the engine owns the keymap, so every
+ * one of these is one key away whether the menu is open, closed or never discovered.
+ *
+ * Excalidraw's dropdown holds exactly these, which is where the order comes from.
+ */
+export const EXTRA_TOOLS: readonly ToolDef[] = [
+  { tool: "image", label: "Insert image", hotkey: "9", icon: "image" },
   { tool: "frame", label: "Frame", hotkey: "F", icon: "frame" },
   { tool: "embed", label: "Embed web page", hotkey: "W", icon: "embed" },
   { tool: "autoshape", label: "Draw to shape", hotkey: "G", icon: "autoshape" },
+  { tool: "laser", label: "Laser pointer", hotkey: "K", icon: "laser" },
+  { tool: "lasso", label: "Lasso", hotkey: "S", icon: "lasso" },
+  // "N" for note. Excalidraw's 9 is the image tool, and a sticky note is ours rather
+  // than theirs, so it is the one that yields the digit.
+  { tool: "sticky", label: "Sticky Note", hotkey: "N", icon: "sticky" },
 ];
+
+/** Every tool, wherever it lives. */
+export const ALL_TOOL_DEFS: readonly ToolDef[] = [...DRAW_TOOLS, ...EXTRA_TOOLS];
+
+/** Whether a tool lives behind the "more tools" button. */
+export function isExtraTool(tool: ExtendedTool): boolean {
+  return EXTRA_TOOLS.some((entry) => entry.tool === tool);
+}
+
+/** The definition for a tool, wherever it lives. */
+export function toolDef(tool: ExtendedTool): ToolDef | undefined {
+  return ALL_TOOL_DEFS.find((entry) => entry.tool === tool);
+}
