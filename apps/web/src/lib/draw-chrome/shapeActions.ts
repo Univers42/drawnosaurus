@@ -53,6 +53,26 @@ const canHaveArrowheads = (kind: Kind): boolean => asElementKind(kind) === "arro
 const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
 
 /**
+ * Everything that can be made see-through.
+ *
+ * Written as an allow-list rather than as "not a frame", because these predicates are
+ * also asked about the *active tool* — and `select`, `hand` and `eraser` are not frames
+ * either, so a deny-list would answer yes for all of them.
+ */
+const hasOpacity = (kind: Kind): boolean =>
+  [
+    "rectangle",
+    "ellipse",
+    "diamond",
+    "line",
+    "arrow",
+    "freedraw",
+    "text",
+    "image",
+    "embed",
+  ].includes(asElementKind(kind));
+
+/**
  * Tools that create something, as opposed to selecting, panning or erasing.
  *
  * The lasso is a *selection* tool despite being drawn: Excalidraw's
@@ -60,7 +80,23 @@ const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
  * for a stroke colour or a fill style to act on while you are choosing what to act on.
  */
 export const isDrawingTool = (tool: ExtendedTool): boolean =>
-  tool !== "select" && tool !== "lasso" && tool !== "hand" && tool !== "eraser";
+  tool !== "select" &&
+  tool !== "lasso" &&
+  tool !== "hand" &&
+  tool !== "eraser" &&
+  // The laser leaves nothing behind, so there is nothing for a style to apply to. A
+  // panel of stroke widths hanging over the board while you present is noise.
+  tool !== "laser" &&
+  // A frame has a fixed appearance — Excalidraw's shape actions exclude frames
+  // entirely — so there is nothing to offer while the frame tool is active either.
+  tool !== "frame" &&
+  // The image tool opens a file picker and is gone again; a panel that flashes up for
+  // the length of a dialog is noise. A *selected* image still shows one, because that
+  // is driven by the selection rather than by the tool.
+  tool !== "image" &&
+  // Same as the image tool: it opens a dialog and is gone. A *selected* embed still
+  // shows a panel, because that is driven by the selection.
+  tool !== "embed";
 
 /** Whether a colour paints nothing, so a fill style would have nothing to apply to. */
 export const isTransparent = (color: string): boolean => {
@@ -124,7 +160,7 @@ export function getShapeActions(
     roundness: forToolOrSelection(canChangeRoundness),
     arrowheads: forToolOrSelection(canHaveArrowheads),
     text: activeTool === "text" || selected.some((element) => isTextKind(element.type)),
-    opacity: true,
+    opacity: forToolOrSelection(hasOpacity),
     layers: hasSelection,
     mirror: hasSelection,
     group: hasSelection,

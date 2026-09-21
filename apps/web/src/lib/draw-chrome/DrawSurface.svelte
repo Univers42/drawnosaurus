@@ -30,6 +30,15 @@
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote } from "../notes/stickyNotes.ts";
+  import { parseEmbedFrames, sandboxFor, frameStyle, type EmbedFrame } from "./embed.ts";
+  import DrawEmbedModal from "./DrawEmbedModal.svelte";
+  import {
+    IMAGE_ACCEPT,
+    describeRejection,
+    imagesFrom,
+    readImageFile,
+    rejectImageFile,
+  } from "./imageFile.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
@@ -182,6 +191,116 @@
     applyTheme();
   }
 
+  let canvasHost: HTMLDivElement | undefined = $state();
+  let imageInput: HTMLInputElement | undefined = $state();
+  /**
+   * Why the last image was refused, if it was.
+   *
+   * Shown rather than swallowed: a file that simply does not appear looks like the board
+   * is broken, and the person who dropped it has no way to tell whether it was too big,
+   * the wrong kind, or corrupt. Cleared on a timer so it does not become furniture.
+   */
+  let imageNotice = $state<string | null>(null);
+  let imageNoticeTimer = 0;
+
+  function notify(message: string): void {
+    imageNotice = message;
+    if (typeof window === "undefined") return;
+    clearTimeout(imageNoticeTimer);
+    imageNoticeTimer = window.setTimeout(() => (imageNotice = null), 5000);
+  }
+  /** Where a dropped image should land; a picked one lands in the middle of the view. */
+  let imageDropAt: { x: number; y: number } | null = null;
+
+  /**
+   * Decode a file and hand it to the engine.
+   *
+   * Everything about *where* and *how big* is the engine's — see `insertImage` — so this
+   * does only what a browser must: check the file is one we can read, decode it, and
+   * report the natural size.
+   */
+  async function placeImageFile(file: File, at: { x: number; y: number }): Promise<void> {
+    const rejection = rejectImageFile(file);
+    if (rejection) {
+      notify(describeRejection(rejection));
+      return;
+    }
+    const decoded = await readImageFile(file);
+    if (!decoded) {
+      notify(describeRejection("decode"));
+      return;
+    }
+    engine?.insertImage(decoded.dataUrl, decoded.naturalWidth, decoded.naturalHeight, at.x, at.y);
+  }
+
+  function viewportCentre(): { x: number; y: number } {
+    const rect = canvasHost?.getBoundingClientRect();
+    return rect ? { x: rect.width / 2, y: rect.height / 2 } : { x: 0, y: 0 };
+  }
+
+  async function onImageChosen(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    // Cleared before any await: picking the same file twice in a row fires no `change`
+    // event unless the value is reset, so the second attempt would silently do nothing.
+    input.value = "";
+    const at = imageDropAt ?? viewportCentre();
+    imageDropAt = null;
+    if (file) await placeImageFile(file, at);
+    // The picker is the whole gesture; there is nothing to stay in the mode for.
+    handleToolSelect("select");
+  }
+
+  async function onCanvasDrop(event: DragEvent): Promise<void> {
+    const files = imagesFrom(Array.from(event.dataTransfer?.files ?? []));
+    if (files.length === 0) return;
+    event.preventDefault();
+    const rect = canvasHost?.getBoundingClientRect();
+    const at = rect
+      ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
+      : viewportCentre();
+    // Dropped where they were dropped: several files stack from that point rather than
+    // landing on top of one another, because the engine centres each on the point it is
+    // given.
+    for (const [index, file] of files.entries()) {
+      await placeImageFile(file, { x: at.x + index * 24, y: at.y + index * 24 });
+    }
+  }
+
+  /**
+   * Choosing the image tool *is* the gesture.
+   *
+   * Excalidraw opens the picker straight away rather than waiting for a click on the
+   * canvas. Hung off the engine's tool change rather than off the toolbar button so that
+   * both ways in behave the same — pressing 9 used to set the tool and then sit there,
+   * because only the button knew what the tool was for.
+   */
+  function openImagePicker(): void {
+    imageDropAt = null;
+    imageInput?.click();
+  }
+
+  let showEmbed = $state(false);
+  /**
+   * The live frames, in screen pixels, as the engine reports them.
+   *
+   * Recomputed whenever the camera or the scene moves, because an `<iframe>` is a real
+   * DOM element sitting over the canvas and has to keep up with the rectangle drawn
+   * under it.
+   */
+  let embedFrames = $state.raw<EmbedFrame[]>([]);
+
+  function refreshEmbedFrames(): void {
+    embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : [];
+  }
+
+  function insertEmbed(url: string): void {
+    const at = viewportCentre();
+    engine?.insertEmbed(url, at.x, at.y);
+    refreshEmbedFrames();
+    handleToolSelect("select");
+  }
+
   function handleToolSelect(next: ExtendedTool): void {
     if (next === "sticky") {
       if (engine && typeof window !== "undefined") {
@@ -206,6 +325,7 @@
 
   function handleSceneChange(json: string): void {
     onSceneChange?.(json);
+    refreshEmbedFrames();
     if (!realtime) return;
     try {
       const data = JSON.parse(json);
@@ -298,6 +418,9 @@
       if (!latest) return;
       zoom = zoomPercent(latest.scale);
       contentVisible = engine?.contentInView() ?? true;
+      // An `<iframe>` is a real element over the canvas; it has to keep up with the
+      // rectangle drawn under it or it slides away as soon as anyone pans.
+      refreshEmbedFrames();
     });
   }
 
@@ -447,7 +570,12 @@
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
+    bind:this={canvasHost}
     class="canvas-host"
+    ondragover={(event) => {
+      if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) event.preventDefault();
+    }}
+    ondrop={onCanvasDrop}
     onmousemove={onCanvasPointerMove}
     onmouseleave={onCanvasPointerLeave}
     onpointerdowncapture={() => (dragging = true)}
@@ -469,6 +597,8 @@
       }}
       onToolChange={(next: DrawTool) => {
         tool = next;
+        if (next === "image") openImagePicker();
+        if (next === "embed") showEmbed = true;
       }}
       onSelectionChange={(ids) => {
         selectedCount = ids.length;
@@ -495,6 +625,55 @@
       }}
     />
   </div>
+
+  <!--
+    Off-screen rather than `display: none`: a hidden input cannot be opened by script in
+    some browsers, and this one is only ever opened by script.
+  -->
+  <input
+    bind:this={imageInput}
+    class="sr-only"
+    type="file"
+    accept={IMAGE_ACCEPT}
+    aria-label="Insert image"
+    onchange={onImageChosen}
+  />
+
+  <!--
+    Live pages, over the canvas. `pointer-events` is off while a drag is in progress so
+    that dragging an embed moves the element rather than being swallowed by the page
+    inside it — the frame is content, but the board still owns the gesture.
+  -->
+  {#each embedFrames as frame (frame.id)}
+    <iframe
+      title="Embedded page"
+      src={frame.url}
+      sandbox={sandboxFor(frame)}
+      referrerpolicy="no-referrer"
+      loading="lazy"
+      allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+      class="embed-frame"
+      class:inert={dragging}
+      style={frameStyle(frame)}
+    ></iframe>
+  {/each}
+
+  {#if imageNotice}
+    <p class="image-notice" role="status">{imageNotice}</p>
+  {/if}
+
+  {#if showEmbed}
+    <DrawEmbedModal
+      {engine}
+      onInsert={insertEmbed}
+      onClose={() => {
+        showEmbed = false;
+        // Cancelling leaves the tool selected with nothing to do, which reads as the
+        // board having stopped responding.
+        if (tool === "embed") handleToolSelect("select");
+      }}
+    />
+  {/if}
 
   <PeerCursors {peers} camera={currentCamera} />
 

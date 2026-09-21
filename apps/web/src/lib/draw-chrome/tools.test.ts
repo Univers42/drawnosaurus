@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toolForKey } from "@osionos/draw-engine/tools";
+import { ICONS } from "./icons.ts";
 import { DRAW_TOOLS } from "./tools.ts";
 
 describe("DRAW_TOOLS", () => {
@@ -17,8 +18,21 @@ describe("DRAW_TOOLS", () => {
       "freedraw",
       "text",
       "sticky",
+      "image",
       "eraser",
+      "laser",
+      "frame",
+      "embed",
     ]);
+  });
+
+  it("gives every tool an icon that exists", () => {
+    // A missing icon renders as an empty button, which reads as a disabled tool rather
+    // than as a mistake — so it is the kind of thing that ships.
+    for (const entry of DRAW_TOOLS) {
+      expect(ICONS[entry.icon], `${entry.label}`).toBeDefined();
+      expect(ICONS[entry.icon].length, `${entry.label} has an empty icon`).toBeGreaterThan(0);
+    }
   });
 
   it("gives every tool a unique hotkey", () => {

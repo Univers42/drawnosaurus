@@ -106,3 +106,49 @@
   position: absolute;
   inset: 0;
 }
+
+/* Visually gone but still operable. A file input hidden with `display: none` cannot be
+   opened by script in every browser, and this one is only ever opened by script. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Why an image was refused. Above the canvas and clear of the toolbars, so it is read
+   rather than discovered. */
+.image-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 5rem;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 0.5rem 0.875rem;
+  max-width: min(32rem, calc(100% - 2rem));
+  border-radius: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+  font-size: 0.8125rem;
+  color: var(--text);
+  /* It reports; it is not something to aim at. */
+  pointer-events: none;
+}
+
+/* A live page framed on the board. Positioned by the engine in screen pixels, so it
+   tracks the rectangle drawn under it through every pan and zoom. */
+.embed-frame {
+  border: 1px solid var(--line);
+  border-radius: 0.25rem;
+  background: var(--surface);
+  z-index: 1;
+}
+
+/* While a drag is in progress the board owns the gesture, not the page inside the
+   frame — otherwise dragging an embed scrolls its contents instead of moving it. */
+.embed-frame.inert {
+  pointer-events: none;
+}
