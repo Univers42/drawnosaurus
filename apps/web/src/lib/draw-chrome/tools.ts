@@ -12,6 +12,7 @@ export interface ToolDef {
 
 export const DRAW_TOOLS: readonly ToolDef[] = [
   { tool: "select", label: "Select", hotkey: "1", icon: "select" },
+  { tool: "lasso", label: "Lasso", hotkey: "S", icon: "lasso" },
   { tool: "hand", label: "Pan", hotkey: "H", icon: "hand" },
   { tool: "rectangle", label: "Rectangle", hotkey: "2", icon: "rectangle" },
   { tool: "diamond", label: "Diamond", hotkey: "3", icon: "diamond" },

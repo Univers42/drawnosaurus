@@ -147,3 +147,17 @@ describe("the active tool preconfigures", () => {
     expect(sticky.roundness).toBe(true);
   });
 });
+
+describe("the lasso is a selection tool, not a drawing one", () => {
+  it("shows no style panel on its own", () => {
+    // Excalidraw's `showSelectedShapeActions` excludes `lasso` alongside `selection`:
+    // there is nothing for a stroke colour to act on while you are still choosing what
+    // to act on. It also means the panel cannot sit under the loop you are drawing.
+    expect(isDrawingTool("lasso")).toBe(false);
+    expect(actions("lasso").visible).toBe(false);
+  });
+
+  it("still shows one once the loop has caught something", () => {
+    expect(actions("lasso", [el("rectangle")]).visible).toBe(true);
+  });
+});
