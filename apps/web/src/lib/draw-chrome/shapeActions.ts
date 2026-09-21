@@ -27,8 +27,10 @@ type Kind = DrawElementType | ExtendedTool;
  * what it will draw, and answering as a rectangle offers every control it might need —
  * better than offering none for a tool that genuinely draws.
  */
-const asElementKind = (kind: Kind): Kind =>
-  kind === "sticky" || kind === "autoshape" ? "rectangle" : kind;
+const asElementKind = (kind: Kind): DrawElementType => {
+  if (kind === "sticky" || kind === "autoshape" || kind === "image" || kind === "embed" || kind === "frame" || kind === "laser" || kind === "lasso") return "rectangle";
+  return kind as DrawElementType;
+};
 
 const hasBackground = (kind: Kind): boolean =>
   ["rectangle", "ellipse", "diamond", "line", "freedraw"].includes(asElementKind(kind));

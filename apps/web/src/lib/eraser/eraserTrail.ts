@@ -103,8 +103,13 @@ export class EraserTrail {
     // Prune expired points
     const cutoff = now - this.decayTime;
     let firstValid = 0;
-    while (firstValid < this.points.length && this.points[firstValid].time < cutoff) {
-      firstValid++;
+    while (firstValid < this.points.length) {
+      const point = this.points[firstValid];
+      if (point && point.time < cutoff) {
+        firstValid++;
+      } else {
+        break;
+      }
     }
     if (firstValid > 0) {
       this.points.splice(0, firstValid);
@@ -133,6 +138,7 @@ export class EraserTrail {
 
     if (len === 1) {
       const p = this.points[0];
+      if (!p) return "";
       const age = now - p.time;
       const t = Math.max(0, 1 - age / this.decayTime);
       const r = (this.size / 2) * Math.sin((t * Math.PI) / 2);
@@ -145,6 +151,7 @@ export class EraserTrail {
 
     for (let i = 0; i < len; i++) {
       const cur = this.points[i];
+      if (!cur) continue;
       const age = now - cur.time;
       const t = Math.max(0, 1 - age / this.decayTime);
       // Head-to-tail tapering and time decay
@@ -158,17 +165,23 @@ export class EraserTrail {
       let dy = 0;
       if (i === 0) {
         const next = this.points[1];
-        dx = next.x - cur.x;
-        dy = next.y - cur.y;
+        if (next) {
+          dx = next.x - cur.x;
+          dy = next.y - cur.y;
+        }
       } else if (i === len - 1) {
         const prev = this.points[len - 2];
-        dx = cur.x - prev.x;
-        dy = cur.y - prev.y;
+        if (prev) {
+          dx = cur.x - prev.x;
+          dy = cur.y - prev.y;
+        }
       } else {
         const prev = this.points[i - 1];
         const next = this.points[i + 1];
-        dx = next.x - prev.x;
-        dy = next.y - prev.y;
+        if (prev && next) {
+          dx = next.x - prev.x;
+          dy = next.y - prev.y;
+        }
       }
 
       const dist = Math.hypot(dx, dy) || 1;
@@ -183,6 +196,7 @@ export class EraserTrail {
 
     // Build the outline: left forward, rounded cap at head, right backward
     const head = this.points[len - 1];
+    if (!head) return "";
     const headAge = now - head.time;
     const headT = Math.max(0, 1 - headAge / this.decayTime);
     const headR = (this.size / 2) * Math.sin((headT * Math.PI) / 2);
@@ -190,26 +204,29 @@ export class EraserTrail {
     const outline: { x: number; y: number }[] = [...left];
 
     // Semicircle cap around head
-    if (headR >= 0.5) {
+    if (headR >= 0.5 && head) {
       const lastL = left[left.length - 1];
       const lastR = right[right.length - 1];
-      const angleL = Math.atan2(lastL.y - head.y, lastL.x - head.x);
-      let angleR = Math.atan2(lastR.y - head.y, lastR.x - head.x);
-      // Ensure clockwise rotation from L to R
-      while (angleR < angleL) angleR += Math.PI * 2;
-      const steps = 6;
-      for (let s = 1; s < steps; s++) {
-        const theta = angleL + ((angleR - angleL) * s) / steps;
-        outline.push({
-          x: head.x + Math.cos(theta) * headR,
-          y: head.y + Math.sin(theta) * headR,
-        });
+      if (lastL && lastR) {
+        const angleL = Math.atan2(lastL.y - head.y, lastL.x - head.x);
+        let angleR = Math.atan2(lastR.y - head.y, lastR.x - head.x);
+        // Ensure clockwise rotation from L to R
+        while (angleR < angleL) angleR += Math.PI * 2;
+        const steps = 6;
+        for (let s = 1; s < steps; s++) {
+          const theta = angleL + ((angleR - angleL) * s) / steps;
+          outline.push({
+            x: head.x + Math.cos(theta) * headR,
+            y: head.y + Math.sin(theta) * headR,
+          });
+        }
       }
     }
 
     // Right contour backwards
     for (let i = right.length - 1; i >= 0; i--) {
-      outline.push(right[i]);
+      const point = right[i];
+      if (point) outline.push(point);
     }
 
     return smoothOutlinePath(outline);
@@ -223,10 +240,14 @@ export function smoothOutlinePath(points: { x: number; y: number }[]): string {
   const len = points.length;
   if (len < 3) return "";
 
-  let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+  const first = points[0];
+  if (!first) return "";
+
+  let d = `M ${first.x.toFixed(1)},${first.y.toFixed(1)}`;
   for (let i = 0; i < len; i++) {
     const cur = points[i];
     const next = points[(i + 1) % len];
+    if (!cur || !next) continue;
     const midX = (cur.x + next.x) / 2;
     const midY = (cur.y + next.y) / 2;
     d += ` Q ${cur.x.toFixed(1)},${cur.y.toFixed(1)} ${midX.toFixed(1)},${midY.toFixed(1)}`;

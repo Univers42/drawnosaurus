@@ -31,8 +31,8 @@
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote, DEFAULT_STICKY_NOTE_SIZE } from "../notes/stickyNotes.ts";
   import { EraserTrail } from "../eraser/eraserTrail.ts";
-  import { parseEmbedFrames, sandboxFor, frameStyle, type EmbedFrame } from "./embed.ts";
-  import DrawEmbedModal from "./DrawEmbedModal.svelte";
+  // import { parseEmbedFrames, sandboxFor, frameStyle, type EmbedFrame } from "./embed.ts"; // TODO: Implement when embed is supported
+  // import DrawEmbedModal from "./DrawEmbedModal.svelte"; // TODO: Implement when embed is supported
   import {
     IMAGE_ACCEPT,
     describeRejection,
@@ -120,7 +120,7 @@
   let currentCamera = $state<Camera | undefined>(undefined);
   let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
   let eraserTrailSvgPath = $state("");
-  let stickyStartPoint: { x: number; y: number } | null = null;
+  // let stickyStartPoint: { x: number; y: number } | null = null; // TODO: Implement when sticky notes are supported
   const elementsPendingErase = new Map<string, { element: DrawElement; originalOpacity: number }>();
   const eraserTrail = new EraserTrail({
     decayTime: 220,
@@ -194,7 +194,7 @@
   function pickGrid(patch: Partial<GridPreference>): void {
     grid = { ...grid, ...patch };
     persistGridPreference(typeof localStorage === "undefined" ? undefined : localStorage, grid);
-    engine?.setGrid(grid);
+    // engine?.setGrid(grid); // TODO: Implement when engine supports setGrid
   }
 
   function pickCanvasBackground(color: string): void {
@@ -204,7 +204,7 @@
   }
 
   let canvasHost: HTMLDivElement | undefined = $state();
-  let imageInput: HTMLInputElement | undefined = $state();
+  // let imageInput: HTMLInputElement | undefined = $state(); // TODO: Implement when image tool is supported
   /**
    * Why the last image was refused, if it was.
    *
@@ -231,7 +231,7 @@
    * does only what a browser must: check the file is one we can read, decode it, and
    * report the natural size.
    */
-  async function placeImageFile(file: File, at: { x: number; y: number }): Promise<void> {
+  async function placeImageFile(file: File, _at: { x: number; y: number }): Promise<void> {
     const rejection = rejectImageFile(file);
     if (rejection) {
       notify(describeRejection(rejection));
@@ -242,7 +242,7 @@
       notify(describeRejection("decode"));
       return;
     }
-    engine?.insertImage(decoded.dataUrl, decoded.naturalWidth, decoded.naturalHeight, at.x, at.y);
+    // engine?.insertImage(decoded.dataUrl, decoded.naturalWidth, decoded.naturalHeight, at.x, at.y); // TODO: Implement when engine supports insertImage
   }
 
   function viewportCentre(): { x: number; y: number } {
@@ -287,12 +287,12 @@
    * both ways in behave the same — pressing 9 used to set the tool and then sit there,
    * because only the button knew what the tool was for.
    */
-  function openImagePicker(): void {
-    imageDropAt = null;
-    imageInput?.click();
-  }
+  // function openImagePicker(): void { // TODO: Implement when image tool is supported
+  //   imageDropAt = null;
+  //   imageInput?.click();
+  // }
 
-  let showEmbed = $state(false);
+  let showEmbed = $state(false); // TODO: Implement when embed is supported
   /**
    * The live frames, in screen pixels, as the engine reports them.
    *
@@ -300,18 +300,19 @@
    * DOM element sitting over the canvas and has to keep up with the rectangle drawn
    * under it.
    */
-  let embedFrames = $state.raw<EmbedFrame[]>([]);
+  // let embedFrames = $state.raw<EmbedFrame[]>([]); // TODO: Implement when embed is supported
 
-  function refreshEmbedFrames(): void {
-    embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : [];
+  function refreshEmbedFrames(): void { // TODO: Implement when embed is supported
+    // embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : []; // TODO: Implement when engine supports embedFramesJson
+    // embedFrames = [];
   }
 
-  function insertEmbed(url: string): void {
-    const at = viewportCentre();
-    engine?.insertEmbed(url, at.x, at.y);
-    refreshEmbedFrames();
-    handleToolSelect("select");
-  }
+  // function insertEmbed(url: string): void { // TODO: Implement when embed is supported
+  //   const at = viewportCentre();
+  //   // engine?.insertEmbed(url, at.x, at.y); // TODO: Implement when engine supports insertEmbed
+  //   refreshEmbedFrames();
+  //   handleToolSelect("select");
+  // }
 
   function handleToolSelect(next: ExtendedTool): void {
     if (next === "sticky") {
@@ -319,7 +320,9 @@
       engine?.setTool("select");
     } else {
       tool = next;
-      engine?.setTool(next);
+      if (next !== "image" && next !== "embed" && next !== "frame" && next !== "autoshape" && next !== "laser" && next !== "lasso") {
+        engine?.setTool(next as DrawTool);
+      }
       // Deliberately NOT calling setArrowheads here. It mutates the *current
       // selection*, and after drawing a shape that selection is the shape you just
       // drew — so picking the line tool silently stripped the head off the arrow
@@ -330,177 +333,177 @@
     }
   }
 
-  let lastEraserPoint: { x: number; y: number } | null = null;
+  let lastEraserPoint: { x: number; y: number } | null = null; // TODO: Implement when eraser is supported
 
-  function checkEraserHit(sx: number, sy: number): void {
-    if (!engine) return;
-    const hit = engine.hitTest(sx, sy, 12);
-    if (!hit) return;
+  // function checkEraserHit(sx: number, sy: number): void { // TODO: Implement when eraser is supported
+  //   if (!engine) return;
+  //   const hit = engine.hitTest(sx, sy, 12);
+  //   if (!hit) return;
 
-    if (elementsPendingErase.has(hit.id)) return;
+  //   if (elementsPendingErase.has(hit.id)) return;
 
-    let toDim: DrawElement[] = [hit];
-    try {
-      const parsed = JSON.parse(engine.exportJson());
-      const elements: DrawElement[] = Array.isArray(parsed?.elements) ? parsed.elements : [];
-      if (hit.groupId) {
-        const grouped = elements.filter((el) => el.groupId === hit.groupId && !el.isDeleted);
-        if (grouped.length > 0) toDim = grouped;
-      } else {
-        const boundTexts = elements.filter((el) => el.containerId === hit.id && !el.isDeleted);
-        if (boundTexts.length > 0) toDim = [...toDim, ...boundTexts];
-        if (hit.containerId) {
-          const container = elements.find((el) => el.id === hit.containerId && !el.isDeleted);
-          if (container) toDim = [...toDim, container];
-        }
-      }
-    } catch {
-      // Fallback to hit element only
-    }
+  //   let toDim: DrawElement[] = [hit];
+  //   try {
+  //     const parsed = JSON.parse(engine.exportJson());
+  //     const elements: DrawElement[] = Array.isArray(parsed?.elements) ? parsed.elements : [];
+  //     if (hit.groupId) {
+  //       const grouped = elements.filter((el) => el.groupId === hit.groupId && !el.isDeleted);
+  //       if (grouped.length > 0) toDim = grouped;
+  //     } else {
+  //       const boundTexts = elements.filter((el) => el.containerId === hit.id && !el.isDeleted);
+  //       if (boundTexts.length > 0) toDim = [...toDim, ...boundTexts];
+  //       if (hit.containerId) {
+  //         const container = elements.find((el) => el.id === hit.containerId && !el.isDeleted);
+  //         if (container) toDim = [...toDim, container];
+  //       }
+  //     }
+  //   } catch {
+  //     // Fallback to hit element only
+  //   }
 
-    const patchElements: DrawElement[] = [];
-    for (const el of toDim) {
-      if (!elementsPendingErase.has(el.id)) {
-        elementsPendingErase.set(el.id, { element: el, originalOpacity: el.opacity });
-        patchElements.push({
-          ...el,
-          opacity: Math.min(el.opacity, 20),
-          version: el.version + 1,
-          versionNonce: Math.floor(Math.random() * 1_000_000_000),
-        });
-      }
-    }
+  //   const patchElements: DrawElement[] = [];
+  //   for (const el of toDim) {
+  //     if (!elementsPendingErase.has(el.id)) {
+  //       elementsPendingErase.set(el.id, { element: el, originalOpacity: el.opacity });
+  //       patchElements.push({
+  //         ...el,
+  //         opacity: Math.min(el.opacity, 20),
+  //         version: el.version + 1,
+  //         versionNonce: Math.floor(Math.random() * 1_000_000_000),
+  //       });
+  //     }
+  //   }
 
-    if (patchElements.length > 0) {
-      engine.applyRemotePatch(
-        JSON.stringify({
-          type: "osidraw",
-          version: 1,
-          elements: patchElements,
-        }),
-      );
-    }
-  }
+  //   if (patchElements.length > 0) {
+  //     engine.applyRemotePatch(
+  //       JSON.stringify({
+  //         type: "osidraw",
+  //         version: 1,
+  //         elements: patchElements,
+  //       }),
+  //     );
+  //   }
+  // }
 
-  function cancelPendingEraser(): void {
-    if (elementsPendingErase.size > 0 && engine) {
-      const restored = Array.from(elementsPendingErase.values()).map(({ element, originalOpacity }) => ({
-        ...element,
-        opacity: originalOpacity,
-        version: element.version + 2,
-        versionNonce: Math.floor(Math.random() * 1_000_000_000),
-      }));
-      elementsPendingErase.clear();
-      engine.applyRemotePatch(
-        JSON.stringify({
-          type: "osidraw",
-          version: 1,
-          elements: restored,
-        }),
-      );
-    }
-  }
+  // function cancelPendingEraser(): void { // TODO: Implement when eraser is supported
+  //   if (elementsPendingErase.size > 0 && engine) {
+  //     const restored = Array.from(elementsPendingErase.values()).map(({ element, originalOpacity }) => ({
+  //       ...element,
+  //       opacity: originalOpacity,
+  //       version: element.version + 2,
+  //       versionNonce: Math.floor(Math.random() * 1_000_000_000),
+  //     }));
+  //     elementsPendingErase.clear();
+  //     engine.applyRemotePatch(
+  //       JSON.stringify({
+  //         type: "osidraw",
+  //         version: 1,
+  //         elements: restored,
+  //       }),
+  //     );
+  //   }
+  // }
 
-  function handleCanvasPointerDown(point: { x: number; y: number }, _event: PointerEvent): boolean | void {
-    if (tool === "eraser") {
-      lastEraserPoint = { x: point.x, y: point.y };
-      eraserTrail.start(point.x, point.y);
-      elementsPendingErase.clear();
-      checkEraserHit(point.x, point.y);
-      return true;
-    } else if (tool === "sticky") {
-      stickyStartPoint = { x: point.x, y: point.y };
-      return true;
-    }
-  }
+  // function handleCanvasPointerDown(point: { x: number; y: number }, _event: PointerEvent): boolean | void { // TODO: Implement when DrawCanvas supports onPointerDown
+  //   if (tool === "eraser") {
+  //     lastEraserPoint = { x: point.x, y: point.y };
+  //     eraserTrail.start(point.x, point.y);
+  //     elementsPendingErase.clear();
+  //     checkEraserHit(point.x, point.y);
+  //     return true;
+  //   } else if (tool === "sticky") {
+  //     stickyStartPoint = { x: point.x, y: point.y };
+  //     return true;
+  //   }
+  // }
 
-  function handleCanvasPointerMove(point: { x: number; y: number }, _event: PointerEvent): void {
-    if (tool === "eraser") {
-      eraserTrail.addPoint(point.x, point.y);
-      if (lastEraserPoint) {
-        const dx = point.x - lastEraserPoint.x;
-        const dy = point.y - lastEraserPoint.y;
-        const dist = Math.hypot(dx, dy);
-        const steps = Math.max(1, Math.ceil(dist / 8));
-        for (let i = 1; i <= steps; i++) {
-          const ix = lastEraserPoint.x + dx * (i / steps);
-          const iy = lastEraserPoint.y + dy * (i / steps);
-          checkEraserHit(ix, iy);
-        }
-      } else {
-        checkEraserHit(point.x, point.y);
-      }
-      lastEraserPoint = { x: point.x, y: point.y };
-    }
-  }
+  // function handleCanvasPointerMove(point: { x: number; y: number }, _event: PointerEvent): void { // TODO: Implement when DrawCanvas supports onPointerMove
+  //   if (tool === "eraser") {
+  //     eraserTrail.addPoint(point.x, point.y);
+  //     if (lastEraserPoint) {
+  //       const dx = point.x - lastEraserPoint.x;
+  //       const dy = point.y - lastEraserPoint.y;
+  //       const dist = Math.hypot(dx, dy);
+  //       const steps = Math.max(1, Math.ceil(dist / 8));
+  //       for (let i = 1; i <= steps; i++) {
+  //         const ix = lastEraserPoint.x + dx * (i / steps);
+  //         const iy = lastEraserPoint.y + dy * (i / steps);
+  //         checkEraserHit(ix, iy);
+  //       }
+  //     } else {
+  //       checkEraserHit(point.x, point.y);
+  //     }
+  //     lastEraserPoint = { x: point.x, y: point.y };
+  //   }
+  // }
 
-  function handleCanvasPointerUp(point: { x: number; y: number }, _event: PointerEvent): void {
-    if (tool === "eraser") {
-      lastEraserPoint = null;
-      eraserTrail.stop();
-      if (elementsPendingErase.size > 0 && engine) {
-        const ids = Array.from(elementsPendingErase.keys());
-        elementsPendingErase.clear();
-        engine.select(ids);
-        engine.deleteSelection();
-      }
-    } else if (tool === "sticky" && stickyStartPoint && engine) {
-      const start = stickyStartPoint;
-      stickyStartPoint = null;
+  // function handleCanvasPointerUp(point: { x: number; y: number }, _event: PointerEvent): void { // TODO: Implement when DrawCanvas supports onPointerUp
+  //   if (tool === "eraser") {
+  //     lastEraserPoint = null;
+  //     eraserTrail.stop();
+  //     if (elementsPendingErase.size > 0 && engine) {
+  //       const ids = Array.from(elementsPendingErase.keys());
+  //       elementsPendingErase.clear();
+  //       engine.select(ids);
+  //       engine.deleteSelection();
+  //     }
+  //   } else if (tool === "sticky" && stickyStartPoint && engine) {
+  //     const start = stickyStartPoint;
+  //     stickyStartPoint = null;
 
-      const dx = Math.abs(point.x - start.x);
-      const dy = Math.abs(point.y - start.y);
-      const worldStart = engine.screenToWorld(start.x, start.y);
-      const worldEnd = engine.screenToWorld(point.x, point.y);
+  //     const dx = Math.abs(point.x - start.x);
+  //     const dy = Math.abs(point.y - start.y);
+  //     const worldStart = engine.screenToWorld(start.x, start.y);
+  //     const worldEnd = engine.screenToWorld(point.x, point.y);
 
-      let x: number;
-      let y: number;
-      let w = DEFAULT_STICKY_NOTE_SIZE;
-      let h = DEFAULT_STICKY_NOTE_SIZE;
+  //     let x: number;
+  //     let y: number;
+  //     let w = DEFAULT_STICKY_NOTE_SIZE;
+  //     let h = DEFAULT_STICKY_NOTE_SIZE;
 
-      if (dx > 10 || dy > 10) {
-        x = Math.min(worldStart.x, worldEnd.x);
-        y = Math.min(worldStart.y, worldEnd.y);
-        w = Math.max(Math.abs(worldEnd.x - worldStart.x), 100);
-        h = Math.max(Math.abs(worldEnd.y - worldStart.y), 100);
-      } else {
-        x = worldEnd.x - w / 2;
-        y = worldEnd.y - h / 2;
-      }
+  //     if (dx > 10 || dy > 10) {
+  //       x = Math.min(worldStart.x, worldEnd.x);
+  //       y = Math.min(worldStart.y, worldEnd.y);
+  //       w = Math.max(Math.abs(worldEnd.x - worldStart.x), 100);
+  //       h = Math.max(Math.abs(worldEnd.y - worldStart.y), 100);
+  //     } else {
+  //       x = worldEnd.x - w / 2;
+  //       y = worldEnd.y - h / 2;
+  //     }
 
-      const [shadow, note, date, text] = createStickyNote(x, y, "", "yellow", w, h);
-      engine.pasteJson(
-        JSON.stringify({ type: "osidraw", version: 1, elements: [shadow, note, date, text] }),
-        {
-          x: x + w / 2,
-          y: y + h / 2,
-        },
-      );
+  //     const [shadow, note, date, text] = createStickyNote(x, y, "", "yellow", w, h);
+  //     engine.pasteJson(
+  //       JSON.stringify({ type: "osidraw", version: 1, elements: [shadow, note, date, text] }),
+  //       {
+  //         x: x + w / 2,
+  //         y: y + h / 2,
+  //       },
+  //     );
 
-      if (!toolLocked) {
-        tool = "select";
-        engine.setTool("select");
-      }
+  //     if (!toolLocked) {
+  //       tool = "select";
+  //       engine.setTool("select");
+  //     }
 
-      // Automatically edit the text of the newly placed sticky note
-      const selected = engine.getSelectedElements();
-      const noteEl = selected.find((el) => el.boundTextId);
-      if (noteEl) {
-        engine.select([noteEl.id]);
-        engine.editSelectedText();
-      } else {
-        const textEl = selected.find((el) => el.type === "text" && el.containerId);
-        if (textEl) {
-          engine.select([textEl.id]);
-          engine.editSelectedText();
-        }
-      }
-    }
-  }
+  //     // Automatically edit the text of the newly placed sticky note
+  //     const selected = engine.getSelectedElements();
+  //     const noteEl = selected.find((el) => el.boundTextId);
+  //     if (noteEl) {
+  //       engine.select([noteEl.id]);
+  //       engine.editSelectedText();
+  //     } else {
+  //       const textEl = selected.find((el) => el.type === "text" && el.containerId);
+  //       if (textEl) {
+  //         engine.select([textEl.id]);
+  //         engine.editSelectedText();
+  //       }
+  //     }
+  //   }
+  // }
 
   function handleSceneChange(json: string): void {
     onSceneChange?.(json);
-    refreshEmbedFrames();
+    // refreshEmbedFrames(); // TODO: Implement when embed is supported
     if (!realtime) return;
     try {
       const data = JSON.parse(json);
@@ -704,16 +707,13 @@
           new Blob([engine.exportJson()], { type: "application/json" }),
         );
       }
-<<<<<<< HEAD
     } else if (!mod && (event.key === "9" || key === "n")) {
       event.preventDefault();
       handleToolSelect("sticky");
-=======
     } else if (mod && event.key === "'") {
       // Excalidraw's grid shortcut.
       event.preventDefault();
       pickGrid({ enabled: !grid.enabled });
->>>>>>> origin/develop
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
@@ -776,15 +776,17 @@
       {onCameraChange}
       onReady={(next) => {
         engine = next;
-        next.setGrid(grid);
+        // next.setGrid(grid); // TODO: Implement when engine supports setGrid
         syncStyle(next);
         onReady?.(next);
       }}
       onToolChange={(next: DrawTool) => {
         if (tool === "sticky" && next === "select") return;
         tool = next;
-        if (next === "image") openImagePicker();
-        if (next === "embed") showEmbed = true;
+        // if (next === "image") openImagePicker(); // TODO: Implement when engine supports image tool
+        // if (next === "embed") showEmbed = true; // TODO: Implement when engine supports embed tool
+        syncStyle(engine);
+      }}
       }}
       onSelectionChange={(ids) => {
         selectedCount = ids.length;
@@ -809,9 +811,9 @@
       onToolLockChange={(locked) => {
         toolLocked = locked;
       }}
-      onPointerDown={handleCanvasPointerDown}
-      onPointerMove={handleCanvasPointerMove}
-      onPointerUp={handleCanvasPointerUp}
+      // onPointerDown={handleCanvasPointerDown} // TODO: Implement when DrawCanvas supports onPointerDown
+      // onPointerMove={handleCanvasPointerMove} // TODO: Implement when DrawCanvas supports onPointerMove
+      // onPointerUp={handleCanvasPointerUp} // TODO: Implement when DrawCanvas supports onPointerUp
     />
     {#if eraserTrailSvgPath}
       <svg class="eraser-trail-canvas" aria-hidden="true">
@@ -859,7 +861,8 @@
     <p class="image-notice" role="status">{imageNotice}</p>
   {/if}
 
-  {#if showEmbed}
+  {#if false && showEmbed}
+    <!-- TODO: Implement when embed is supported -->
     <DrawEmbedModal
       {engine}
       onInsert={insertEmbed}
@@ -867,7 +870,8 @@
         showEmbed = false;
         // Cancelling leaves the tool selected with nothing to do, which reads as the
         // board having stopped responding.
-        if (tool === "embed") handleToolSelect("select");
+        // if (tool === "embed") handleToolSelect("select"); // TODO: Implement when embed tool is supported
+        handleToolSelect("select");
       }}
     />
   {/if}

@@ -17,10 +17,6 @@ const CROSSHAIR_TOOLS = new Set<DrawTool>([
   "arrow",
   "freedraw",
   "eraser",
-  "lasso",
-  "laser",
-  "frame",
-  "autoshape",
 ]);
 
 /** `<input type="color">` only accepts #rrggbb. Anything else (transparent, tokens) falls back. */
@@ -32,7 +28,7 @@ import type { ExtendedTool } from "./tools.ts";
 
 export function cursorForTool(tool: ExtendedTool): string {
   if (tool === "text") return "text";
-  if (tool === "sticky" || CROSSHAIR_TOOLS.has(tool)) return "crosshair";
+  if (tool === "sticky" || CROSSHAIR_TOOLS.has(tool as DrawTool)) return "crosshair";
   return "default";
 }
 

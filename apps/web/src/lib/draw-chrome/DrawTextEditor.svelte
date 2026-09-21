@@ -20,7 +20,8 @@
   let originalText = "";
   let finished = false;
 
-  const isContainer = $derived(Boolean(request.containerId));
+  // const isContainer = $derived(Boolean(request.containerId)); // TODO: Implement when TextEditRequest supports containerId
+  const isContainer = $derived(false);
 
   onMount(() => {
     originalText = request.text;
@@ -38,12 +39,12 @@
     node.style.height = "auto";
     node.style.height = `${Math.max(node.scrollHeight, fontSizePx * 1.3)}px`;
 
-    if (isContainer && request.width) {
-      node.style.width = `${request.width}px`;
-    } else {
+    // if (isContainer && request.width) { // TODO: Implement when TextEditRequest supports width
+    //   node.style.width = `${request.width}px`;
+    // } else {
       const measured = engine.measureText(value, fontSizePx).width;
       node.style.width = `${Math.max(measured + CHROME_PX, 60)}px`;
-    }
+    // }
   }
 
   function finish(): void {
