@@ -600,7 +600,7 @@
       contentVisible = engine?.contentInView() ?? true;
       // An `<iframe>` is a real element over the canvas; it has to keep up with the
       // rectangle drawn under it or it slides away as soon as anyone pans.
-      refreshEmbedFrames();
+      // refreshEmbedFrames(); // TODO: Implement when embed is supported
     });
   }
 
