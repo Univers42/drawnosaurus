@@ -4,6 +4,7 @@
   import { DARK_THEME, DEFAULT_ELEMENT_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
+    DrawElement,
     DrawElementStyle,
     DrawTheme,
     DrawTool,
@@ -36,6 +37,7 @@
   import { downloadBlob } from "./download.ts";
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
+  import { getShapeActions } from "./shapeActions.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
   import DrawModals from "./DrawModals.svelte";
@@ -70,6 +72,37 @@
   let tool = $state<ExtendedTool>("select");
   let toolLocked = $state(false);
   let selectedCount = $state(0);
+  /** The selected elements, so the panel can decide which controls apply. */
+  let selection = $state.raw<DrawElement[]>([]);
+
+  /**
+   * Whether a pointer gesture is in flight on the canvas.
+   *
+   * The panel's visibility is frozen while one is, which is what stops it appearing
+   * mid-drag. Clicking an unselected element selects it *and* starts moving it in the
+   * same gesture, so without this the panel pops in under the cursor the instant you
+   * start to drag, and pops out again if you drag a marquee across empty space.
+   *
+   * Set on the **capture** phase. The canvas handles `pointerdown` and changes the
+   * selection before the event bubbles this far, so a bubble-phase listener sets the
+   * flag a beat too late and the panel has already appeared.
+   */
+  let dragging = $state(false);
+
+  /**
+   * Whether the style panel is on screen.
+   *
+   * Excalidraw's `showSelectedShapeActions`: a drawing tool is active, so defaults can
+   * be set before drawing, or something is selected. Held still during a drag — a panel
+   * already open stays open, and one that was closed does not appear until the gesture
+   * finishes.
+   */
+  let panelVisible = $state(false);
+
+  $effect(() => {
+    const want = getShapeActions(tool, selection, activeStyle.backgroundColor).visible;
+    if (!dragging) panelVisible = want;
+  });
   let activeStyle = $state<DrawElementStyle>(DEFAULT_ELEMENT_STYLE);
   let textEdit = $state<TextEditRequest | null>(null);
   let zoom = $state(100);
@@ -413,7 +446,14 @@
   </DrawHeader>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="canvas-host" onmousemove={onCanvasPointerMove} onmouseleave={onCanvasPointerLeave}>
+  <div
+    class="canvas-host"
+    onmousemove={onCanvasPointerMove}
+    onmouseleave={onCanvasPointerLeave}
+    onpointerdowncapture={() => (dragging = true)}
+    onpointerup={() => (dragging = false)}
+    onpointercancel={() => (dragging = false)}
+  >
     <DrawCanvas
       {scene}
       {theme}
@@ -432,6 +472,7 @@
       }}
       onSelectionChange={(ids) => {
         selectedCount = ids.length;
+        selection = engine?.getSelectedElements() ?? [];
         syncStyle(engine);
       }}
       onRequestTextEdit={(request) => {
@@ -468,20 +509,24 @@
     }}
   />
 
-  <DrawInspector
-    style={activeStyle}
-    {selectedCount}
-    {engine}
-    {themeMode}
-    onApply={(patch) => {
-      if (selectedCount > 0) {
-        engine?.applyStyle(patch);
-      } else {
-        engine?.setNextStyle(patch);
-      }
-      syncStyle(engine);
-    }}
-  />
+  {#if panelVisible}
+    <DrawInspector
+      style={activeStyle}
+      {selectedCount}
+      {selection}
+      {tool}
+      {engine}
+      {themeMode}
+      onApply={(patch) => {
+        if (selectedCount > 0) {
+          engine?.applyStyle(patch);
+        } else {
+          engine?.setNextStyle(patch);
+        }
+        syncStyle(engine);
+      }}
+    />
+  {/if}
 
   <DrawZoomBar {engine} {zoom} {contentVisible} />
 
