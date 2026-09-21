@@ -75,14 +75,79 @@
     saver.dispose();
   });
 
+  /**
+   * Applies what the engine reports, which is usually only what changed.
+   *
+   * The engine used to hand over the entire scene as JSON on every mutation. At 20k
+   * elements that was ~9.8MB and ~60ms per shape drawn — the cost of drawing one
+   * rectangle grew with the size of the board. It now sends a delta for the common
+   * path and the full scene only for the structural changes a delta cannot describe
+   * (a z-order command, a hard delete, an undo).
+   */
   function onSceneChange(json: string): void {
-    const elements = elementsFromJson(json);
-    if (elements === null) return;
-    live = elements;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      return;
+    }
+
+    if (isDelta(parsed)) {
+      applyDelta(parsed);
+    } else {
+      const elements = elementsFromJson(json);
+      if (elements === null) return;
+      live = elements;
+    }
+
+    // The draft cache is written from `live` rather than from the payload, which is no
+    // longer the whole scene.
     if (typeof localStorage !== "undefined" && slug) {
-      localStorage.setItem(`${LOCAL_STORAGE_PREFIX}${slug}`, json);
+      localStorage.setItem(
+        `${LOCAL_STORAGE_PREFIX}${slug}`,
+        JSON.stringify({ type: "osidraw", version: 1, elements: live }),
+      );
     }
     saver.notify();
+  }
+
+  interface SceneDelta {
+    type: "osidraw-delta";
+    updated: DrawElement[];
+    removed: string[];
+  }
+
+  const isDelta = (value: unknown): value is SceneDelta =>
+    typeof value === "object" &&
+    value !== null &&
+    (value as { type?: unknown }).type === "osidraw-delta";
+
+  function applyDelta(delta: SceneDelta): void {
+    // Plain objects rather than Map/Set: these are function-local lookups, not
+    // reactive state, and Svelte's lint rightly steers reactive collections elsewhere.
+    const removed: Record<string, true> = {};
+    for (const id of delta.removed) removed[id] = true;
+
+    const pending: Record<string, DrawElement> = {};
+    for (const element of delta.updated) pending[element.id] = element;
+
+    // Rebuilt in place so z-order is preserved: the engine only sends a delta when the
+    // order has not changed, so position in this array still means what it did.
+    const next: DrawElement[] = [];
+    for (const element of live) {
+      if (removed[element.id]) continue;
+      const replacement = pending[element.id];
+      if (replacement) {
+        next.push(replacement);
+        delete pending[element.id];
+      } else {
+        next.push(element);
+      }
+    }
+    // Whatever is left is new, and new elements go on top.
+    for (const element of Object.values(pending)) next.push(element);
+
+    live = next;
   }
 </script>
 
