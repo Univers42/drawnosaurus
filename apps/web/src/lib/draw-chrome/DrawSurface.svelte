@@ -72,7 +72,9 @@
   let realtime: RealtimeChannel<StampedElement> | null = null;
   let raf = 0;
   let pending: Camera | null = null;
-  const cursor = $derived(cursorForTool(tool === "sticky" ? "rectangle" : tool));
+  // The tool's cursor is the floor; the engine's hover answer wins when it has one, and
+  // it only ever has one while the pointer is actually over the canvas.
+  const toolCursor = $derived(cursorForTool(tool === "sticky" ? "rectangle" : tool));
 
   function syncStyle(source: DrawEngine | null): void {
     if (!source) return;
@@ -214,24 +216,41 @@
   let cursorPending: { x: number; y: number } | null = null;
   let lastSent = { x: Number.NaN, y: Number.NaN };
 
-  function onCanvasPointerMove(e: MouseEvent): void {
-    if (!realtime || !currentCamera) return;
+  // What the pointer is over, asked of the engine rather than guessed from the tool.
+  //
+  // The canvas is a single element, so the cursor is the only way to say that this pixel
+  // resizes and that one moves. Without it the difference is discovered by dragging,
+  // which is how a resize that was meant to be a move happens.
+  let hoverCursor = $state<string | null>(null);
+  let hoverPending: { x: number; y: number } | null = null;
 
+  function onCanvasPointerMove(e: MouseEvent): void {
     const target = e.currentTarget as HTMLElement | null;
     if (!target) return;
     const rect = target.getBoundingClientRect();
     const sx = e.clientX - rect.left;
     const sy = e.clientY - rect.top;
 
-    // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
-    cursorPending = {
-      x: (sx - currentCamera.x) / currentCamera.scale,
-      y: (sy - currentCamera.y) / currentCamera.scale,
-    };
+    hoverPending = { x: sx, y: sy };
+
+    if (realtime && currentCamera) {
+      // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
+      cursorPending = {
+        x: (sx - currentCamera.x) / currentCamera.scale,
+        y: (sy - currentCamera.y) / currentCamera.scale,
+      };
+    }
 
     if (cursorRaf) return;
     cursorRaf = requestAnimationFrame(() => {
       cursorRaf = 0;
+
+      // One hover query per frame, not per raw mousemove — a high-polling mouse emits
+      // several times more events than there are frames to show them in.
+      const at = hoverPending;
+      hoverPending = null;
+      if (at && engine) hoverCursor = engine.hoverCursor(at.x, at.y);
+
       const next = cursorPending;
       cursorPending = null;
       if (!next || !realtime) return;
@@ -240,10 +259,14 @@
       realtime.sendCursor(next.x, next.y);
     });
   }
+
+  function onCanvasPointerLeave(): void {
+    hoverCursor = null;
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="draw-chrome" style:cursor>
+<div class="draw-chrome" style:cursor={hoverCursor ?? toolCursor}>
   <DrawHeader
     {title}
     {status}
@@ -253,7 +276,7 @@
   />
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="canvas-host" onmousemove={onCanvasPointerMove}>
+  <div class="canvas-host" onmousemove={onCanvasPointerMove} onmouseleave={onCanvasPointerLeave}>
     <DrawCanvas
       {scene}
       {theme}
