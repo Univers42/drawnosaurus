@@ -13,6 +13,7 @@ export type IconName =
   | "text"
   | "sticky"
   | "eraser"
+  | "laser"
   | "undo"
   | "redo"
   | "sendToBack"
@@ -106,6 +107,23 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     },
     { tag: "path", d: "M22 21H7" },
     { tag: "path", d: "m5 11 9 9" },
+  ],
+  // Excalidraw's `laserPointerToolIcon`, scaled from their 20-unit grid to our 24 (x1.2)
+  // and left unrotated — theirs carries a `rotate(90)` on a wrapping <g>, which our icon
+  // nodes have no way to express. A pointer body with the beam breaking up at its tip.
+  laser: [
+    {
+      tag: "path",
+      d: "m11.57 16.43 9.33-9.33a2.83 2.83 0 0 0-4-4l-9.33 9.33L9.6 14.4l1.97 2.03Z",
+    },
+    { tag: "path", d: "m15.9 4.1 4 4" },
+    { tag: "path", d: "M12 12l2.4-2.4" },
+    { tag: "path", d: "M6 18l3.6-3.6" },
+    { tag: "path", d: "M2.59 21.47l1.2-1.2" },
+    { tag: "path", d: "M6.54 22.84l-.17-1.69" },
+    { tag: "path", d: "M2.85 14.26l1.04 1.34" },
+    { tag: "path", d: "M10.03 20.73l-1.44-.91" },
+    { tag: "path", d: "M1.14 17.58l1.69.16" },
   ],
   undo: [
     { tag: "path", d: "M3 7v6h6" },

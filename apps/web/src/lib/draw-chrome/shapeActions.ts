@@ -60,7 +60,13 @@ const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
  * for a stroke colour or a fill style to act on while you are choosing what to act on.
  */
 export const isDrawingTool = (tool: ExtendedTool): boolean =>
-  tool !== "select" && tool !== "lasso" && tool !== "hand" && tool !== "eraser";
+  tool !== "select" &&
+  tool !== "lasso" &&
+  tool !== "hand" &&
+  tool !== "eraser" &&
+  // The laser leaves nothing behind, so there is nothing for a style to apply to. A
+  // panel of stroke widths hanging over the board while you present is noise.
+  tool !== "laser";
 
 /** Whether a colour paints nothing, so a fill style would have nothing to apply to. */
 export const isTransparent = (color: string): boolean => {

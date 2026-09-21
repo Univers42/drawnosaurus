@@ -31,7 +31,7 @@ describe("panel visibility", () => {
   });
 
   it("stays hidden for the tools that create nothing", () => {
-    for (const tool of ["select", "hand", "eraser"] as const) {
+    for (const tool of ["select", "hand", "eraser", "lasso", "laser"] as const) {
       expect(actions(tool).visible, tool).toBe(false);
       expect(isDrawingTool(tool), tool).toBe(false);
     }
@@ -159,5 +159,21 @@ describe("the lasso is a selection tool, not a drawing one", () => {
 
   it("still shows one once the loop has caught something", () => {
     expect(actions("lasso", [el("rectangle")]).visible).toBe(true);
+  });
+});
+
+describe("the laser draws nothing, so it styles nothing", () => {
+  it("shows no style panel", () => {
+    // A laser mark never becomes an element, so every control in the panel would be
+    // setting a property of something that will not exist. Excalidraw hides the panel
+    // for `laser` for the same reason.
+    expect(isDrawingTool("laser")).toBe(false);
+    expect(actions("laser").visible).toBe(false);
+  });
+
+  it("does show one if something was already selected", () => {
+    // Picking up the laser mid-edit should not discard the selection you were working
+    // on, so the panel stays for as long as that selection does.
+    expect(actions("laser", [el("rectangle")]).visible).toBe(true);
   });
 });

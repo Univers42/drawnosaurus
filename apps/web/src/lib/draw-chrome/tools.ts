@@ -23,4 +23,5 @@ export const DRAW_TOOLS: readonly ToolDef[] = [
   { tool: "text", label: "Text", hotkey: "8", icon: "text" },
   { tool: "sticky", label: "Sticky Note", hotkey: "9", icon: "sticky" },
   { tool: "eraser", label: "Eraser", hotkey: "0", icon: "eraser" },
+  { tool: "laser", label: "Laser pointer", hotkey: "K", icon: "laser" },
 ];
