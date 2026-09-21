@@ -16,10 +16,13 @@
   import {
     persistCanvasBackground,
     persistThemePreference,
+    persistGridPreference,
     readCanvasBackground,
+    readGridPreference,
     readThemePreference,
     resolveThemeMode,
     themeFromCss,
+    type GridPreference,
     type ThemeMode,
     type ThemePreference,
   } from "./theme.ts";
@@ -62,6 +65,7 @@
   let themeMode = $state<ThemeMode>("light");
   let themePreference = $state<ThemePreference>("light");
   let canvasBackground = $state<string | null>(null);
+  let grid = $state<GridPreference>({ enabled: false, size: 20, step: 5, snap: true });
   let ink = $state("#1e1e1e");
   let tool = $state<ExtendedTool>("select");
   let toolLocked = $state(false);
@@ -133,6 +137,12 @@
     applyTheme();
   }
 
+  function pickGrid(patch: Partial<GridPreference>): void {
+    grid = { ...grid, ...patch };
+    persistGridPreference(typeof localStorage === "undefined" ? undefined : localStorage, grid);
+    engine?.setGrid(grid);
+  }
+
   function pickCanvasBackground(color: string): void {
     canvasBackground = color;
     persistCanvasBackground(typeof localStorage === "undefined" ? undefined : localStorage, color);
@@ -189,6 +199,7 @@
     // them. Reading first would hand the engine a white canvas under dark chrome.
     themePreference = readThemePreference(localStorage);
     canvasBackground = readCanvasBackground(localStorage);
+    grid = readGridPreference(localStorage);
     themeMode = resolveThemeMode(themePreference, systemPrefersDark());
     document.documentElement.classList.toggle("dark", themeMode === "dark");
 
@@ -358,6 +369,10 @@
           new Blob([engine.exportJson()], { type: "application/json" }),
         );
       }
+    } else if (mod && event.key === "'") {
+      // Excalidraw's grid shortcut.
+      event.preventDefault();
+      pickGrid({ enabled: !grid.enabled });
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
@@ -383,8 +398,10 @@
           {engine}
           {themePreference}
           {canvasBackground}
+          {grid}
           onPickTheme={pickTheme}
           onPickCanvasBackground={pickCanvasBackground}
+          onPickGrid={pickGrid}
           onOpenExport={() => (showExport = true)}
           onOpenMermaid={() => (showMermaid = true)}
           onOpenShare={() => (showShare = true)}
@@ -406,6 +423,7 @@
       {onCameraChange}
       onReady={(next) => {
         engine = next;
+        next.setGrid(grid);
         syncStyle(next);
         onReady?.(next);
       }}
