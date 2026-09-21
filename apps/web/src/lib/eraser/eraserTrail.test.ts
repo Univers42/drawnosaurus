@@ -45,7 +45,12 @@ describe("EraserTrail", () => {
   it("smoothOutlinePath handles small point sets gracefully", () => {
     expect(smoothOutlinePath([])).toBe("");
     expect(smoothOutlinePath([{ x: 1, y: 1 }])).toBe("");
-    expect(smoothOutlinePath([{ x: 1, y: 1 }, { x: 2, y: 2 }])).toBe("");
+    expect(
+      smoothOutlinePath([
+        { x: 1, y: 1 },
+        { x: 2, y: 2 },
+      ]),
+    ).toBe("");
 
     const triangle = [
       { x: 0, y: 0 },

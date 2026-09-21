@@ -26,11 +26,13 @@ type Kind = DrawElementType | ExtendedTool;
  * A sticky note is a rectangle carrying a label. The auto-shape tool does not know yet
  * what it will draw, and answering as a rectangle offers every control it might need —
  * better than offering none for a tool that genuinely draws.
+ *
+ * Only these two. The laser and the lasso leave no element behind, and an image, an embed
+ * or a frame takes none of the stroke and fill styling, so mapping any of them to a
+ * rectangle would offer a background and a fill style that do nothing.
  */
-const asElementKind = (kind: Kind): DrawElementType => {
-  if (kind === "sticky" || kind === "autoshape" || kind === "image" || kind === "embed" || kind === "frame" || kind === "laser" || kind === "lasso") return "rectangle";
-  return kind as DrawElementType;
-};
+const asElementKind = (kind: Kind): Kind =>
+  kind === "sticky" || kind === "autoshape" ? "rectangle" : kind;
 
 const hasBackground = (kind: Kind): boolean =>
   ["rectangle", "ellipse", "diamond", "line", "freedraw"].includes(asElementKind(kind));

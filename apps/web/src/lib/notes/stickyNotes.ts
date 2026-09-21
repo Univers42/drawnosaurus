@@ -21,10 +21,7 @@ export const STICKY_PALETTES: Record<StickyColor, StickyPalette> = {
 
 export const DEFAULT_STICKY_NOTE_SIZE = 220;
 
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function getStickyNoteDateLabel(timestamp = Date.now()): string {
   const d = new Date(timestamp);

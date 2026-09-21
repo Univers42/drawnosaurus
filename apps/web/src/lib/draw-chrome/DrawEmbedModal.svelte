@@ -11,11 +11,11 @@
   import { ALLOWED_EMBED_HOSTS } from "./embed.ts";
 
   let {
-    // engine, // TODO: Implement when embed is supported
+    engine,
     onInsert,
     onClose,
   }: {
-    // engine: DrawEngine | null; // TODO: Implement when embed is supported
+    engine: DrawEngine | null;
     onInsert: (url: string) => void;
     onClose: () => void;
   } = $props();
@@ -23,8 +23,7 @@
   let link = $state("");
 
   /** What the engine makes of what has been typed so far. */
-  // const resolved = $derived(link.trim() ? (engine?.resolveEmbed(link.trim()) ?? null) : null); // TODO: Implement when engine supports resolveEmbed
-  const resolved = $derived(null);
+  const resolved = $derived(link.trim() ? (engine?.resolveEmbed(link.trim()) ?? null) : null);
   const rejected = $derived(link.trim().length > 0 && resolved === null);
 
   function handleInsert(): void {
