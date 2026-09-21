@@ -724,7 +724,11 @@
           new Blob([engine.exportJson()], { type: "application/json" }),
         );
       }
-    } else if (!mod && (event.key === "9" || key === "n")) {
+    } else if (!mod && key === "n") {
+      // "N" only. 9 is the image tool's, both in the engine's keymap and on the toolbar,
+      // and claiming it here did not take it away — `preventDefault` does not stop the
+      // engine's own listener, so 9 selected the sticky note and opened the image picker
+      // in the same keystroke.
       event.preventDefault();
       handleToolSelect("sticky");
     } else if (mod && event.key === "'") {
