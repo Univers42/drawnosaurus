@@ -31,7 +31,7 @@ describe("panel visibility", () => {
   });
 
   it("stays hidden for the tools that create nothing", () => {
-    for (const tool of ["select", "hand", "eraser", "lasso", "laser"] as const) {
+    for (const tool of ["select", "hand", "eraser", "lasso", "laser", "frame"] as const) {
       expect(actions(tool).visible, tool).toBe(false);
       expect(isDrawingTool(tool), tool).toBe(false);
     }
@@ -175,5 +175,37 @@ describe("the laser draws nothing, so it styles nothing", () => {
     // Picking up the laser mid-edit should not discard the selection you were working
     // on, so the panel stays for as long as that selection does.
     expect(actions("laser", [el("rectangle")]).visible).toBe(true);
+  });
+});
+
+describe("a frame has a fixed appearance, so it styles nothing", () => {
+  it("offers a selected frame actions but no style controls", () => {
+    // A frame is always the same grey at the same weight, so every appearance control
+    // answers no — Excalidraw excludes frames from those for the same reason. What does
+    // still apply is everything about the frame as an object: send it to back, flip it,
+    // group it. So the panel appears, carrying only those.
+    const actions = getShapeActions("select", [el("frame")], "transparent");
+    expect(actions.strokeColor).toBe(false);
+    expect(actions.backgroundColor).toBe(false);
+    expect(actions.strokeWidth).toBe(false);
+    expect(actions.roundness).toBe(false);
+    expect(actions.opacity).toBe(false);
+
+    expect(actions.visible).toBe(true);
+    expect(actions.layers).toBe(true);
+    expect(actions.mirror).toBe(true);
+  });
+
+  it("offers nothing at all while the frame tool is active with an empty board", () => {
+    const actions = getShapeActions("frame", [], "transparent");
+    expect(actions.visible).toBe(false);
+  });
+
+  it("still shows one when a frame is selected alongside something stylable", () => {
+    // The controls act on what they can. Hiding the panel because one member of the
+    // selection has no stroke colour would make a mixed selection unstylable.
+    const actions = getShapeActions("select", [el("frame"), el("rectangle")], "transparent");
+    expect(actions.visible).toBe(true);
+    expect(actions.strokeColor).toBe(true);
   });
 });

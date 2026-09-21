@@ -14,6 +14,7 @@ export type IconName =
   | "sticky"
   | "eraser"
   | "laser"
+  | "frame"
   | "undo"
   | "redo"
   | "sendToBack"
@@ -124,6 +125,14 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "path", d: "M2.85 14.26l1.04 1.34" },
     { tag: "path", d: "M10.03 20.73l-1.44-.91" },
     { tag: "path", d: "M1.14 17.58l1.69.16" },
+  ],
+  // Excalidraw's `frameToolIcon`: two horizontal rules crossing two vertical ones, the
+  // crop marks a frame is. Deliberately not a plain rectangle — that is the shape tool.
+  frame: [
+    { tag: "path", d: "M4 7h16" },
+    { tag: "path", d: "M4 17h16" },
+    { tag: "path", d: "M7 4v16" },
+    { tag: "path", d: "M17 4v16" },
   ],
   undo: [
     { tag: "path", d: "M3 7v6h6" },

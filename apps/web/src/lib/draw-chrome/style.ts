@@ -19,6 +19,7 @@ const CROSSHAIR_TOOLS = new Set<DrawTool>([
   "eraser",
   "lasso",
   "laser",
+  "frame",
 ]);
 
 /** `<input type="color">` only accepts #rrggbb. Anything else (transparent, tokens) falls back. */

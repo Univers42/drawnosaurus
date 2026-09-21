@@ -53,6 +53,26 @@ const canHaveArrowheads = (kind: Kind): boolean => asElementKind(kind) === "arro
 const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
 
 /**
+ * Everything that can be made see-through.
+ *
+ * Written as an allow-list rather than as "not a frame", because these predicates are
+ * also asked about the *active tool* — and `select`, `hand` and `eraser` are not frames
+ * either, so a deny-list would answer yes for all of them.
+ */
+const hasOpacity = (kind: Kind): boolean =>
+  [
+    "rectangle",
+    "ellipse",
+    "diamond",
+    "line",
+    "arrow",
+    "freedraw",
+    "text",
+    "image",
+    "embed",
+  ].includes(asElementKind(kind));
+
+/**
  * Tools that create something, as opposed to selecting, panning or erasing.
  *
  * The lasso is a *selection* tool despite being drawn: Excalidraw's
@@ -66,7 +86,10 @@ export const isDrawingTool = (tool: ExtendedTool): boolean =>
   tool !== "eraser" &&
   // The laser leaves nothing behind, so there is nothing for a style to apply to. A
   // panel of stroke widths hanging over the board while you present is noise.
-  tool !== "laser";
+  tool !== "laser" &&
+  // A frame has a fixed appearance — Excalidraw's shape actions exclude frames
+  // entirely — so there is nothing to offer while the frame tool is active either.
+  tool !== "frame";
 
 /** Whether a colour paints nothing, so a fill style would have nothing to apply to. */
 export const isTransparent = (color: string): boolean => {
@@ -130,7 +153,7 @@ export function getShapeActions(
     roundness: forToolOrSelection(canChangeRoundness),
     arrowheads: forToolOrSelection(canHaveArrowheads),
     text: activeTool === "text" || selected.some((element) => isTextKind(element.type)),
-    opacity: true,
+    opacity: forToolOrSelection(hasOpacity),
     layers: hasSelection,
     mirror: hasSelection,
     group: hasSelection,
