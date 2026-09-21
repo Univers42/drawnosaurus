@@ -30,6 +30,8 @@
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote } from "../notes/stickyNotes.ts";
+  import { parseEmbedFrames, sandboxFor, frameStyle, type EmbedFrame } from "./embed.ts";
+  import DrawEmbedModal from "./DrawEmbedModal.svelte";
   import {
     IMAGE_ACCEPT,
     describeRejection,
@@ -278,6 +280,27 @@
     imageInput?.click();
   }
 
+  let showEmbed = $state(false);
+  /**
+   * The live frames, in screen pixels, as the engine reports them.
+   *
+   * Recomputed whenever the camera or the scene moves, because an `<iframe>` is a real
+   * DOM element sitting over the canvas and has to keep up with the rectangle drawn
+   * under it.
+   */
+  let embedFrames = $state.raw<EmbedFrame[]>([]);
+
+  function refreshEmbedFrames(): void {
+    embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : [];
+  }
+
+  function insertEmbed(url: string): void {
+    const at = viewportCentre();
+    engine?.insertEmbed(url, at.x, at.y);
+    refreshEmbedFrames();
+    handleToolSelect("select");
+  }
+
   function handleToolSelect(next: ExtendedTool): void {
     if (next === "sticky") {
       if (engine && typeof window !== "undefined") {
@@ -302,6 +325,7 @@
 
   function handleSceneChange(json: string): void {
     onSceneChange?.(json);
+    refreshEmbedFrames();
     if (!realtime) return;
     try {
       const data = JSON.parse(json);
@@ -394,6 +418,9 @@
       if (!latest) return;
       zoom = zoomPercent(latest.scale);
       contentVisible = engine?.contentInView() ?? true;
+      // An `<iframe>` is a real element over the canvas; it has to keep up with the
+      // rectangle drawn under it or it slides away as soon as anyone pans.
+      refreshEmbedFrames();
     });
   }
 
@@ -571,6 +598,7 @@
       onToolChange={(next: DrawTool) => {
         tool = next;
         if (next === "image") openImagePicker();
+        if (next === "embed") showEmbed = true;
       }}
       onSelectionChange={(ids) => {
         selectedCount = ids.length;
@@ -611,8 +639,40 @@
     onchange={onImageChosen}
   />
 
+  <!--
+    Live pages, over the canvas. `pointer-events` is off while a drag is in progress so
+    that dragging an embed moves the element rather than being swallowed by the page
+    inside it — the frame is content, but the board still owns the gesture.
+  -->
+  {#each embedFrames as frame (frame.id)}
+    <iframe
+      title="Embedded page"
+      src={frame.url}
+      sandbox={sandboxFor(frame)}
+      referrerpolicy="no-referrer"
+      loading="lazy"
+      allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+      class="embed-frame"
+      class:inert={dragging}
+      style={frameStyle(frame)}
+    ></iframe>
+  {/each}
+
   {#if imageNotice}
     <p class="image-notice" role="status">{imageNotice}</p>
+  {/if}
+
+  {#if showEmbed}
+    <DrawEmbedModal
+      {engine}
+      onInsert={insertEmbed}
+      onClose={() => {
+        showEmbed = false;
+        // Cancelling leaves the tool selected with nothing to do, which reads as the
+        // board having stopped responding.
+        if (tool === "embed") handleToolSelect("select");
+      }}
+    />
   {/if}
 
   <PeerCursors {peers} camera={currentCamera} />
