@@ -28,4 +28,5 @@ export const DRAW_TOOLS: readonly ToolDef[] = [
   { tool: "eraser", label: "Eraser", hotkey: "0", icon: "eraser" },
   { tool: "laser", label: "Laser pointer", hotkey: "K", icon: "laser" },
   { tool: "frame", label: "Frame", hotkey: "F", icon: "frame" },
+  { tool: "embed", label: "Embed web page", hotkey: "W", icon: "embed" },
 ];

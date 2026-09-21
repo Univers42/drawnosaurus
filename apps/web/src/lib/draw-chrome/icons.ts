@@ -16,6 +16,7 @@ export type IconName =
   | "laser"
   | "frame"
   | "image"
+  | "embed"
   | "undo"
   | "redo"
   | "sendToBack"
@@ -141,6 +142,13 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "rect", x: "3", y: "3", width: "18", height: "18", rx: "2" },
     { tag: "circle", cx: "8.5", cy: "8.5", r: "1.5" },
     { tag: "path", d: "m21 15-4.5-4.5L9 18" },
+  ],
+  // A globe: a circle with a meridian and two parallels, which reads as "the web"
+  // rather than as any particular site.
+  embed: [
+    { tag: "circle", cx: "12", cy: "12", r: "9" },
+    { tag: "path", d: "M3 12h18" },
+    { tag: "path", d: "M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18" },
   ],
   undo: [
     { tag: "path", d: "M3 7v6h6" },
