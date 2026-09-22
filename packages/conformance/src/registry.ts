@@ -1,0 +1,786 @@
+import type { ChecklistItem } from "./checklist.ts";
+
+/**
+ * What covers each line of `prompt/*.md`, or why nothing does yet.
+ *
+ * There are north of a thousand items across the two documents, so this is a list of
+ * *rules* rather than a line-per-line table. A rule matches by section and optionally by
+ * the item's text; the first one that matches wins. Every item must match some rule —
+ * `conformance.test.ts` fails on anything that does not — so when the documents grow, the
+ * new lines are a failing test rather than a silent omission.
+ *
+ * The honesty of this file rests on two checks rather than on good intentions:
+ *
+ *  - every file named in `tests` must exist and contain at least one test, so a rule
+ *    cannot claim coverage that was renamed away or never written;
+ *  - `gap` is a status, not an absence. An unimplemented feature is counted and printed,
+ *    which is the difference between a roadmap and a blind spot.
+ */
+
+export type Status = "covered" | "gap" | "out-of-scope";
+
+export interface Rule {
+  /** Matched against `ChecklistItem.section`. */
+  section: string | RegExp;
+  /** Narrows to items whose text matches, so a mixed section can be split. */
+  text?: RegExp;
+  status: Status;
+  /** Repo-relative test files. Required for `covered`, verified to exist. */
+  tests?: readonly string[];
+  /** Required for `gap` and `out-of-scope`: what is missing, or why it is not ours. */
+  why?: string;
+}
+
+const ENGINE = "engine/crates/draw-engine/tests";
+const WEB = "apps/web/src/lib";
+
+/**
+ * Order matters: the first matching rule wins, so narrow `text` rules come before the
+ * section rule they carve out of.
+ */
+export const RULES: readonly Rule[] = [
+  // ---------------------------------------------------------------- shortcuts
+  {
+    section: "⚡ Essential shortcuts",
+    text: /Sticky note/,
+    status: "covered",
+    tests: [`${WEB}/notes/stickyNotes.test.ts`, `${WEB}/draw-chrome/tools.test.ts`],
+  },
+  {
+    section: "⚡ Essential shortcuts",
+    text: /keyboard shortcuts \/ Help/,
+    status: "covered",
+    tests: ["apps/web/src/lib/draw-chrome/menu.test.ts"],
+  },
+  {
+    section: "⚡ Essential shortcuts",
+    text: /`I` — Image/,
+    status: "out-of-scope",
+    why: "The cheat sheet is wrong here. Excalidraw's own TOOLS table gives the image tool a digit and no letter, and the oracle is what this project is held to — see ci_shortcuts.rs.",
+  },
+  {
+    section: "⚡ Essential shortcuts",
+    status: "covered",
+    tests: [`${ENGINE}/ci_shortcuts.rs`, "e2e/shortcuts.spec.ts"],
+  },
+  {
+    section: "🧭 Navigation & canvas",
+    text: /Page Up|Page Down/,
+    status: "gap",
+    why: "No page-scroll keys. The camera can pan, so this is a keymap entry rather than new behaviour.",
+  },
+  {
+    section: "🧭 Navigation & canvas",
+    text: /Zoom to selection|viewport mode/,
+    status: "gap",
+    why: "Shift+2 and Shift+3. `fit_bounds` already does the maths; what is missing is fitting to the selection's bounds rather than the scene's.",
+  },
+  {
+    section: "🧭 Navigation & canvas",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_zoom_wheel.rs`,
+      `${ENGINE}/ci_camera.rs`,
+      "engine/src/host/wheel.test.ts",
+      "e2e/zoom.spec.ts",
+      "e2e/shortcuts.spec.ts",
+    ],
+  },
+  {
+    section: "Shapes",
+    text: /disable snapping/,
+    status: "gap",
+    why: "Holding ctrl/cmd to bypass snapping mid-drag. `snap_move` exists and is tested; the modifier is not threaded through the pointer path.",
+  },
+  {
+    section: "Shapes",
+    status: "covered",
+    tests: [`${ENGINE}/ci_pointer.rs`, `${ENGINE}/ci_snapping.rs`, `${ENGINE}/ci_grid.rs`],
+  },
+  {
+    section: "Lines & arrows",
+    text: /Cycle\/change arrow type|fixed point/,
+    status: "gap",
+    why: "Arrow-type cycling and Alt-to-bind-at-a-fixed-point both need the elbow-arrow work; `fixed_point` is carried on the binding struct but nothing sets it.",
+  },
+  {
+    section: "Lines & arrows",
+    status: "covered",
+    tests: [`${ENGINE}/ci_linear_anchor.rs`, `${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_pointer.rs`],
+  },
+  {
+    section: "🖱️ Selection",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_selection.rs`,
+      `${ENGINE}/ci_edit.rs`,
+      `${ENGINE}/ci_history.rs`,
+      "engine/src/host/keys.test.ts",
+      "e2e/shortcuts.spec.ts",
+    ],
+  },
+  {
+    section: "🎯 Advanced selection tricks",
+    text: /Deep-select|deep-select|deep selection|containers\/frames/,
+    status: "gap",
+    why: "Alt+click to reach an element underneath another. Hit-testing returns the topmost hit only; there is no depth cursor.",
+  },
+  {
+    section: "🎯 Advanced selection tricks",
+    status: "covered",
+    tests: [`${ENGINE}/ci_text.rs`, `${ENGINE}/ci_hover.rs`],
+  },
+  {
+    section: "🔤 Text",
+    text: /Mermaid/,
+    status: "covered",
+    tests: [`${WEB}/mermaid/mermaid.test.ts`],
+  },
+  {
+    section: "🔤 Text",
+    text: /wrap text where appropriate/,
+    status: "gap",
+    why: "Text wrapping for bound labels, carried over from issue #4. Needs real text measurement first.",
+  },
+  { section: "🔤 Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
+  {
+    section: "📐 Alignment & distribution",
+    text: /bypass snapping/,
+    status: "gap",
+    why: "Same missing modifier as the shape tools — see the Shapes rule above.",
+  },
+  {
+    section: "📐 Alignment & distribution",
+    status: "covered",
+    tests: [`${ENGINE}/ci_edit.rs`, `${ENGINE}/ci_snapping.rs`],
+  },
+  {
+    section: "🗂️ Layers / ordering",
+    text: /Lock element|Unlock element/,
+    status: "gap",
+    why: "No locked state on an element. The schema has no field for it, so this is a model change before it is a UI one.",
+  },
+  {
+    section: "🗂️ Layers / ordering",
+    status: "covered",
+    tests: [`${ENGINE}/ci_edit.rs`, "engine/src/host/keys.test.ts"],
+  },
+  {
+    section: "🔒 Locking",
+    status: "gap",
+    why: "No locked state on an element — a schema change first, then hit-testing and selection have to honour it.",
+  },
+  {
+    section: "🖼️ Images",
+    text: /crop|Crop/,
+    status: "gap",
+    why: "No crop mode. Images resize and move; cropping needs a second rect on the element and a mode in the interaction state machine.",
+  },
+  {
+    section: "🖼️ Images",
+    status: "covered",
+    tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`],
+  },
+  {
+    section: "🧩 Frames",
+    text: /Rename|Export frames/,
+    status: "gap",
+    why: "Frames carry a name and render it, but nothing edits it, and export has no per-frame mode.",
+  },
+  { section: "🧩 Frames", status: "covered", tests: [`${ENGINE}/ci_frame.rs`] },
+  {
+    section: "🔗 Element linking",
+    status: "gap",
+    why: "No link on an element. Schema field, inspector row, click handling and export preservation, in that order.",
+  },
+  {
+    section: "➡️ Advanced arrows",
+    text: /[Ee]lbow|cardinality/,
+    status: "gap",
+    why: "Elbow arrows are a milestone of their own: orthogonal routing plus the fixedPoint binding mode. Cardinality arrowheads wait on it.",
+  },
+  {
+    section: "➡️ Advanced arrows",
+    text: /label/,
+    status: "gap",
+    why: "Arrow labels. Bound labels exist for shapes (`layout_label`); an arrow needs its own along-the-path placement.",
+  },
+  {
+    section: "➡️ Advanced arrows",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_binding.rs`,
+      `${ENGINE}/ci_binding_overlap.rs`,
+      `${ENGINE}/ci_linear_anchor.rs`,
+      `${ENGINE}/ci_style.rs`,
+    ],
+  },
+  {
+    section: "🔄 Flowcharts",
+    status: "gap",
+    why: "No flowchart mode: node creation from a shape, keyboard navigation between nodes, and automatic bound-arrow connection. Bindings and shapes underneath it are done.",
+  },
+  {
+    section: "🧠 Autoshape / Smart drawing",
+    status: "covered",
+    tests: [`${ENGINE}/ci_recognize.rs`],
+  },
+  {
+    section: "🪣 Bucket fill",
+    status: "covered",
+    tests: [`${ENGINE}/ci_bucket_fill.rs`, "e2e/bucket.spec.ts"],
+  },
+  {
+    section: "📝 Sticky notes",
+    status: "covered",
+    tests: [`${WEB}/notes/stickyNotes.test.ts`, "e2e/shortcuts.spec.ts"],
+  },
+  {
+    section: "🔴 Laser pointer",
+    text: /[Cc]ollaborator/,
+    status: "gap",
+    why: "The laser is local. Broadcasting it needs a transient channel — it must not go through the scene, which is what the realtime patch path carries.",
+  },
+  { section: "🔴 Laser pointer", status: "covered", tests: [`${ENGINE}/ci_laser.rs`] },
+  {
+    section: "✋ Hand / panning",
+    status: "covered",
+    tests: [`${ENGINE}/ci_pointer.rs`, "e2e/shortcuts.spec.ts"],
+  },
+  {
+    section: "🧱 Web embeds",
+    status: "covered",
+    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`],
+  },
+  {
+    section: "🧙 Magic Frame / Wireframe → Code",
+    status: "out-of-scope",
+    why: "A hosted AI service, not an engine feature. Nothing in the motor can implement it.",
+  },
+  {
+    section: "🧜 Mermaid",
+    status: "covered",
+    tests: [`${WEB}/mermaid/mermaid.test.ts`],
+  },
+  {
+    section: "🤖 AI / diagram generation",
+    status: "out-of-scope",
+    why: "A hosted AI service. The Mermaid import it would feed is implemented and tested.",
+  },
+  {
+    section: "🔎 Search",
+    status: "gap",
+    why: "No scene search. Needs a text index over elements, result navigation and a highlight pass in the interactive layer.",
+  },
+  {
+    section: "⚡ Command Palette",
+    status: "gap",
+    why: "No command palette, and the prerequisite is the action registry from design.md §28 — commands have to be addressable by name before anything can list them.",
+  },
+  {
+    section: "🔲 Grid",
+    text: /custom grid spacing|disable snapping/,
+    status: "gap",
+    why: "Grid size and step are in the model and settable, but no UI exposes them, and the bypass modifier is not threaded through the drag path.",
+  },
+  {
+    section: "🔲 Grid",
+    status: "covered",
+    tests: [`${ENGINE}/ci_grid.rs`, "e2e/shortcuts.spec.ts"],
+  },
+  {
+    section: "🌙 Interface modes",
+    text: /Zen mode|zen/i,
+    status: "gap",
+    why: "No zen mode. It is a host concern — hide the chrome — and needs nothing from the engine.",
+  },
+  {
+    section: "🌙 Interface modes",
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/theme.test.ts`],
+  },
+  {
+    section: "📊 Stats / element information",
+    status: "gap",
+    why: "No stats panel. The numbers all exist on the element; this is an inspector surface and an edit path for them.",
+  },
+  {
+    section: "📚 Library",
+    status: "gap",
+    why: "No library. Needs item storage, preview rendering, id regeneration on insert and group preservation.",
+  },
+  {
+    section: "📋 Clipboard tricks",
+    text: /PNG|SVG|Google Docs|single element/,
+    status: "gap",
+    why: "Copy-as-image and rich external paste. SVG export exists (ci_export.rs) but is not wired to the clipboard.",
+  },
+  {
+    section: "📋 Clipboard tricks",
+    status: "covered",
+    tests: [`${ENGINE}/ci_edit.rs`, "engine/src/host/keys.test.ts"],
+  },
+  {
+    section: "💾 Files",
+    text: /PNG|read-only link/,
+    status: "gap",
+    why: "No PNG export and no read-only share link. SVG and JSON are done.",
+  },
+  {
+    section: "💾 Files",
+    status: "covered",
+    tests: [`${ENGINE}/ci_export.rs`, `${ENGINE}/ci_persistence.rs`],
+  },
+  {
+    section: "🔍 Export tricks",
+    text: /PNG/,
+    status: "gap",
+    why: "No PNG export path. Planned as a server-side raster so it does not depend on a browser canvas.",
+  },
+  {
+    section: "🔍 Export tricks",
+    text: /frames/,
+    status: "gap",
+    why: "No per-frame export mode.",
+  },
+  { section: "🔍 Export tricks", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
+  {
+    section: "👥 Collaboration",
+    text: /Follow another|undo\/redo/,
+    status: "gap",
+    why: "Follow-mode and multiplayer-aware history. Presence, cursors and last-write-wins element sync are done.",
+  },
+  {
+    section: "👥 Collaboration",
+    status: "covered",
+    tests: [`${WEB}/realtime/realtime.test.ts`, `${ENGINE}/ci_remote_patch.rs`],
+  },
+
+  // ------------------------------------------------- shortkey.md, closing sections
+  {
+    section:
+      /^(🧪 Hidden|⭐ Muscle-memory|🚀 High-productivity|Fast diagramming|Architecture diagrams|UI wireframing|Presentations|Brainstorming|🧠 "I don't remember|🔥 Current-feature)/,
+    status: "out-of-scope",
+    why: "A recap of features listed earlier in the same document, or a workflow made of them. Classified where each feature is first named rather than twice.",
+  },
+
+  // ---------------------------------------------------------------- design.md
+  {
+    section: "1. Core architecture",
+    text: /locked state|custom data|library|visibility/i,
+    status: "gap",
+    why: "Four fields the element schema does not carry yet: locked, customData, library membership, explicit visibility.",
+  },
+  {
+    section: "1. Core architecture",
+    text: /Collaboration state|Sidebar state|Modal\/menu state/,
+    status: "gap",
+    why: "Host-side editor state that lives in Svelte rather than in the engine, and is not covered by a test.",
+  },
+  {
+    section: "1. Core architecture",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_persistence.rs`,
+      `${ENGINE}/ci_style.rs`,
+      `${ENGINE}/ci_edit.rs`,
+      "packages/contract/tests/element.test.ts",
+    ],
+  },
+  {
+    section: "2. Element system",
+    status: "covered",
+    tests: ["packages/contract/tests/element.test.ts", `${ENGINE}/ci_persistence.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /Lock/,
+    status: "gap",
+    why: "No locked state — see the Locking rule.",
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_pointer.rs`,
+      `${ENGINE}/ci_selection.rs`,
+      `${ENGINE}/ci_handles.rs`,
+      `${ENGINE}/ci_hit_rotated.rs`,
+      `${ENGINE}/ci_geometry.rs`,
+      `${ENGINE}/ci_style.rs`,
+    ],
+  },
+  {
+    section: "6. Line",
+    status: "covered",
+    tests: [`${ENGINE}/ci_linear_anchor.rs`, `${ENGINE}/ci_snapping.rs`, `${ENGINE}/ci_binding.rs`],
+  },
+  {
+    section: "7. Arrow",
+    text: /[Ee]lbow|label/,
+    status: "gap",
+    why: "Elbow arrows and arrow labels — see the Advanced arrows rules.",
+  },
+  {
+    section: "7. Arrow",
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_linear_anchor.rs`, `${ENGINE}/ci_style.rs`],
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /[Pp]ressure|stylus|[Pp]alm|[Tt]ouch|[Ss]tabiliz|[Ss]moothing|interpolation|pen vs/,
+    status: "gap",
+    why: "No perfect-freehand pipeline: pressure, stabilisation and variable width all come with it, and so does pen/touch discrimination.",
+  },
+  {
+    section: "8. Freedraw / pencil",
+    status: "covered",
+    tests: [`${ENGINE}/ci_pointer.rs`, `${ENGINE}/ci_recognize.rs`, `${ENGINE}/ci_history.rs`],
+  },
+  {
+    section: "9. Text",
+    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Wrapping|Fixed-width|Font family|[Aa]lignment|inside arrows/,
+    status: "gap",
+    why: "Text formatting beyond size and colour, and wrapping. All of it waits on real font metrics — vendored fonts gated on document.fonts.ready, which is risk R1 in the milestone plan.",
+  },
+  { section: "9. Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
+  {
+    section: "10. Images",
+    text: /Crop|Replace image|Broken-image|WebP/,
+    status: "gap",
+    why: "Cropping, replacement and a broken-image state. Decode currently accepts what the browser accepts, which is not asserted per format.",
+  },
+  {
+    section: "10. Images",
+    status: "covered",
+    tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`],
+  },
+  {
+    section: "11. Sticky notes",
+    status: "covered",
+    tests: [`${WEB}/notes/stickyNotes.test.ts`],
+  },
+  {
+    section: "12. Frames",
+    text: /Rename|Export frame|Frame navigation/,
+    status: "gap",
+    why: "See the Frames rule: naming is stored and drawn but not editable, and export has no frame mode.",
+  },
+  { section: "12. Frames", status: "covered", tests: [`${ENGINE}/ci_frame.rs`] },
+  {
+    section: "13. Embeds",
+    text: /Lock|Loading state|Error state|Export fallback|View-only/,
+    status: "gap",
+    why: "Embed lifecycle states. URL recognition, the allow-list and geometry are done.",
+  },
+  {
+    section: "13. Embeds",
+    status: "covered",
+    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`],
+  },
+  {
+    section: "14. Selection engine",
+    text: /locked/i,
+    status: "gap",
+    why: "No locked state — see the Locking rule.",
+  },
+  {
+    section: "14. Selection engine",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_selection.rs`,
+      `${ENGINE}/ci_lasso.rs`,
+      `${ENGINE}/ci_handles.rs`,
+      `${ENGINE}/ci_hit_fill.rs`,
+    ],
+  },
+  {
+    section: "15. Transform engine",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_selection.rs`,
+      `${ENGINE}/ci_handles.rs`,
+      `${ENGINE}/ci_hit_rotated.rs`,
+      `${ENGINE}/ci_binding.rs`,
+      `${ENGINE}/ci_history.rs`,
+    ],
+  },
+  {
+    section: "16. Grouping",
+    text: /Nested|Enter group|Exit group/,
+    status: "gap",
+    why: "Groups are flat: an element carries group ids but nothing walks a hierarchy or enters one.",
+  },
+  { section: "16. Grouping", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
+  { section: "17. Z-order", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
+  {
+    section: "18. Binding system",
+    text: /priority|suggestion|visuali/i,
+    status: "gap",
+    why: "The binding *highlight* — Excalidraw strokes the candidate's own outline before you drop. Geometry is done; this is a pass in the interactive layer.",
+  },
+  {
+    section: "18. Binding system",
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_binding_overlap.rs`],
+  },
+  {
+    section: "19. Snapping",
+    text: /Equal spacing|Configurable increments|Configurable grid|Connection points/,
+    status: "gap",
+    why: "Equal-spacing guides and configurable increments. Edge, centre, midpoint and 45° snapping are done.",
+  },
+  {
+    section: "19. Snapping",
+    status: "covered",
+    tests: [`${ENGINE}/ci_snapping.rs`, `${ENGINE}/ci_grid.rs`],
+  },
+  {
+    section: "20. Fill and stroke system",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_style.rs`,
+      `${ENGINE}/ci_style_patch.rs`,
+      `${ENGINE}/ci_render_drawable.rs`,
+      `${WEB}/draw-chrome/inspector.test.ts`,
+    ],
+  },
+  {
+    section: "21. Rough / hand-drawn renderer",
+    status: "covered",
+    tests: [`${ENGINE}/ci_render_drawable.rs`, `${ENGINE}/ci_export.rs`],
+  },
+  {
+    section: "22. Canvas navigation",
+    text: /Pinch|Touch pan|Zoom to selection/,
+    status: "gap",
+    why: "Pinch and touch pan need the gesture work in §23; zoom-to-selection is a small addition to fit_bounds.",
+  },
+  {
+    section: "22. Canvas navigation",
+    status: "covered",
+    tests: [`${ENGINE}/ci_camera.rs`, `${ENGINE}/ci_zoom_wheel.rs`, "e2e/zoom.spec.ts"],
+  },
+  {
+    section: "23. Touch / mobile",
+    status: "gap",
+    why: "Pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout.",
+  },
+  {
+    section: "24. Eraser",
+    status: "covered",
+    tests: [
+      `${WEB}/eraser/eraserTrail.test.ts`,
+      `${ENGINE}/ci_pointer.rs`,
+      `${ENGINE}/ci_history.rs`,
+    ],
+  },
+  {
+    section: "25. Laser pointer",
+    text: /[Cc]ollaboration/,
+    status: "gap",
+    why: "The laser is local — see the Laser pointer rule.",
+  },
+  { section: "25. Laser pointer", status: "covered", tests: [`${ENGINE}/ci_laser.rs`] },
+  {
+    section: "26. Autoshape / flowchart logic",
+    text: /[Ff]lowchart|connection points|Automatic arrow/,
+    status: "gap",
+    why: "No flowchart mode — see the Flowcharts rule.",
+  },
+  {
+    section: "26. Autoshape / flowchart logic",
+    status: "covered",
+    tests: [`${ENGINE}/ci_recognize.rs`],
+  },
+  {
+    section: "27. Keyboard system",
+    text: /Tab/,
+    status: "gap",
+    why: "Tab does nothing on the canvas. It is the flowchart navigation key, so it waits on that.",
+  },
+  {
+    section: "27. Keyboard system",
+    status: "covered",
+    tests: [`${ENGINE}/ci_shortcuts.rs`, "engine/src/host/keys.test.ts", "e2e/shortcuts.spec.ts"],
+  },
+  {
+    section: "28. Command/action architecture",
+    status: "gap",
+    why: "The engine exposes methods, not named actions. Nothing addressable by name means no command palette and no single place a shortcut, a menu item and a button agree on — design.md is right that this is the load-bearing one.",
+  },
+  {
+    section: "29. Undo / redo",
+    text: /Branch|Collaboration-aware|Text editing transactions/,
+    status: "gap",
+    why: "History is a linear snapshot stack. Branching and collaboration-aware history need the operation model from §41.",
+  },
+  { section: "29. Undo / redo", status: "covered", tests: [`${ENGINE}/ci_history.rs`] },
+  {
+    section: "30. Clipboard",
+    text: /Image paste|External paste|image\/png|text\/html/,
+    status: "gap",
+    why: "Internal copy/paste round-trips with id regeneration; rich external formats do not.",
+  },
+  { section: "30. Clipboard", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
+  {
+    section: "31. Persistence",
+    text: /IndexedDB|crash recovery|localStorage preferences/,
+    status: "gap",
+    why: "Autosave goes to the API and a localStorage draft is the fallback; there is no IndexedDB store and no crash-recovery prompt.",
+  },
+  {
+    section: "31. Persistence",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_persistence.rs`,
+      `${WEB}/autosave/autosaver.test.ts`,
+      `${WEB}/autosave/sceneDiff.test.ts`,
+    ],
+  },
+  {
+    section: "32. Export",
+    text: /PNG|Clipboard image|Selection → image|Whole canvas → image|Scale|[Ff]rame export|Frame export|Fonts/,
+    status: "gap",
+    why: "No raster export path at all — see the Export tricks rule.",
+  },
+  { section: "32. Export", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
+  {
+    section: "33. Libraries",
+    status: "gap",
+    why: "No library — see the Library rule.",
+  },
+  {
+    section: "34. Menus",
+    text: /Command palette|Search commands|Keyboard navigation|Execute actions|Shortcut display|Link|Add to library|Properties/,
+    status: "gap",
+    why: "The command palette and the menu entries that depend on features not built yet (links, library, a stats panel).",
+  },
+  {
+    section: "34. Menus",
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/menu.test.ts`, `${WEB}/draw-chrome/shapeActions.test.ts`],
+  },
+  {
+    section: "35. Properties panel",
+    text: /Font picker|Links/,
+    status: "gap",
+    why: "Per-element font family needs vendored fonts (risk R1); links need the schema field.",
+  },
+  {
+    section: "35. Properties panel",
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/inspector.test.ts`, `${ENGINE}/ci_style_patch.rs`],
+  },
+  {
+    section: "36. Links",
+    status: "gap",
+    why: "No link on an element — see the Element linking rule.",
+  },
+  { section: "37. Search", status: "gap", why: "No scene search — see the Search rule." },
+  {
+    section: "38. Grid",
+    text: /Export exclusion|Grid step|Zoom-dependent/,
+    status: "gap",
+    why: "Grid step is modelled but not exposed, rendering does not thin with zoom, and export does not explicitly exclude the grid.",
+  },
+  { section: "38. Grid", status: "covered", tests: [`${ENGINE}/ci_grid.rs`] },
+  {
+    section: "39. Dark mode / themes",
+    text: /Export theme|Collaboration colors/,
+    status: "gap",
+    why: "Export always uses the light palette, and collaborator colours are assigned but not themed.",
+  },
+  {
+    section: "39. Dark mode / themes",
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/theme.test.ts`, `${ENGINE}/ci_export.rs`],
+  },
+  {
+    section: "40. Collaboration",
+    text: /Follow user|Offline queue|Reconnection|Remote selections|Active tool|Connection state|User list/,
+    status: "gap",
+    why: "Presence beyond cursors, and the offline/reconnect path. Element sync and last-write-wins are done.",
+  },
+  {
+    section: "40. Collaboration",
+    status: "covered",
+    tests: [`${WEB}/realtime/realtime.test.ts`, `${ENGINE}/ci_remote_patch.rs`],
+  },
+  {
+    section: "42. Rendering engine",
+    text: /Draw cursors|Draw snap guides|Clip frames|Optimize redraws|Draw bindings/,
+    status: "gap",
+    why: "Snap guides, binding highlights and frame clipping are computed but not drawn, and there is no dirty-rect or tile cache yet.",
+  },
+  {
+    section: "42. Rendering engine",
+    status: "covered",
+    tests: [`${ENGINE}/ci_render_drawable.rs`, `${ENGINE}/ci_export.rs`, `${ENGINE}/ci_grid.rs`],
+  },
+  {
+    section: "43. Hit-testing engine",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_hit_fill.rs`,
+      `${ENGINE}/ci_hit_rotated.rs`,
+      `${ENGINE}/ci_selection.rs`,
+      `${ENGINE}/ci_frame.rs`,
+    ],
+  },
+  {
+    section: "44. Geometry engine",
+    status: "covered",
+    tests: [`${ENGINE}/ci_geometry.rs`, `${ENGINE}/ci_math.rs`, `${ENGINE}/ci_camera.rs`],
+  },
+  {
+    section: "48. Accessibility",
+    text: /High contrast|Reduced motion|Screen-reader|focus trap|Focus management/,
+    status: "gap",
+    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited.",
+  },
+  {
+    section: "48. Accessibility",
+    status: "covered",
+    tests: ["e2e/shortcuts.spec.ts", `${WEB}/draw-chrome/menu.test.ts`],
+  },
+  {
+    section: "49. Performance",
+    status: "gap",
+    why: "No spatial index, no dirty rectangles, no shape cache and no benchmark suite. The milestone plan costs these; nothing measures them today.",
+  },
+  {
+    section: "51. Testing matrix",
+    text: /Export|Copy|Paste/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export.rs`, `${ENGINE}/ci_edit.rs`],
+  },
+  {
+    section: "51. Testing matrix",
+    text: /modifier|Shift|Alt|Cmd|None/,
+    status: "gap",
+    why: "No systematic modifier sweep. Individual modifiers are tested where they matter; the cross-product is not.",
+  },
+  {
+    section: "51. Testing matrix",
+    status: "covered",
+    tests: [`${ENGINE}/ci_pointer.rs`, `${ENGINE}/ci_selection.rs`, `${ENGINE}/ci_history.rs`],
+  },
+  {
+    section: "53. Recommended implementation order",
+    status: "out-of-scope",
+    why: "A phasing plan for the sections above, not features of its own. Each line is classified where the feature is named.",
+  },
+];
+
+/** The first rule that matches, or `undefined` when the item is unaccounted for. */
+export function ruleFor(item: ChecklistItem): Rule | undefined {
+  return RULES.find((rule) => {
+    const sectionMatches =
+      typeof rule.section === "string"
+        ? rule.section === item.section
+        : rule.section.test(item.section);
+    if (!sectionMatches) return false;
+    return rule.text ? rule.text.test(item.text) : true;
+  });
+}

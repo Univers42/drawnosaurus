@@ -1,0 +1,19 @@
+{
+  "name": "@drawnosaurus/conformance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Holds every line of prompt/*.md to a named test or a recorded gap, so feature coverage is a checked fact rather than a claim.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
