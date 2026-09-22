@@ -54,6 +54,7 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
+  import { NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
   import DrawModals from "./DrawModals.svelte";
@@ -864,6 +865,7 @@
         selection = engine?.getSelectedElements() ?? [];
         syncStyle(engine);
       }}
+      onNotice={(notice) => notify(NOTICE_TEXT[notice])}
       onRequestTextEdit={(request) => {
         textEdit = request;
       }}

@@ -29,6 +29,8 @@ declare global {
       getSelection(): string[];
       getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
       setGrid(grid: { enabled?: boolean }): void;
+      /** Replaces the whole scene — used to place geometry too small to draw by hand. */
+      loadScene(json: string): void;
     };
   }
 }
@@ -39,6 +41,13 @@ export interface SceneElement {
   type: string;
   isDeleted?: boolean;
   backgroundColor?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  angle?: number;
+  /** Point-based kinds only — a line, an arrow or a freehand stroke. */
+  points?: [number, number][];
 }
 
 /** Every `PATCH /v1/**` body the page has sent, in order, per page. */
@@ -214,6 +223,41 @@ export async function dispatchWheelAt(
     },
     { at, delta, modifiers, box },
   );
+}
+
+/**
+ * How much of the canvas is not the flat background colour, as a fraction of its pixels.
+ *
+ * `layer.spec.ts` compares whole frames for equality, which is the sharper test when both
+ * frames exist. This answers a blunter question that equality cannot: is there anything
+ * on the board at all. A layer bug that blits an empty canvas over the screen leaves a
+ * frame that is perfectly self-consistent and completely blank, and the number that
+ * catches it is this one going to zero.
+ *
+ * The background is sampled from the top-left pixel rather than assumed, so it holds in
+ * either theme. The tolerance of 12 per channel ignores the grid, which is a few per cent
+ * off the background and would otherwise read as content.
+ */
+export function canvasInk(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const canvas = document.querySelector("canvas");
+    if (!canvas) throw new Error("no canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const background = [data[0]!, data[1]!, data[2]!];
+    let ink = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (
+        Math.abs(data[i]! - background[0]!) > 12 ||
+        Math.abs(data[i + 1]! - background[1]!) > 12 ||
+        Math.abs(data[i + 2]! - background[2]!) > 12
+      ) {
+        ink += 1;
+      }
+    }
+    return ink / (width * height);
+  });
 }
 
 /** Puts the camera back at 100% and the origin, so a step can be measured from a known place. */
