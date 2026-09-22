@@ -79,6 +79,7 @@
   style:color={request.color}
   style:font-size={`${fontSizePx}px`}
   style:font-family={engine.fontFamily()}
+  style:text-align={request.textAlign}
   oninput={(event) => {
     value = event.currentTarget.value;
     autoResize();
@@ -120,7 +121,10 @@
   }
 
   textarea.container-text {
-    text-align: center;
+    /* No `text-align` here: it comes from the request, which carries the element's
+       resolved alignment. Hard-coding centre for bound text is what the painter used to
+       do, and it is exactly the assumption this feature removes — a right-aligned label
+       would have been typed centred and jumped right the moment the edit was committed. */
     white-space: pre-wrap;
     word-break: break-word;
   }

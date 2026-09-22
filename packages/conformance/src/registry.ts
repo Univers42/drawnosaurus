@@ -433,11 +433,21 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_pointer.rs`, `${ENGINE}/ci_recognize.rs`, `${ENGINE}/ci_history.rs`],
   },
+  // Both alignments, carved out of the gap below. They were listed with the rest of text
+  // formatting as waiting on font metrics, which turned out to be true of the others but
+  // not of these: alignment is where the anchor goes and where the label sits, and both
+  // are arithmetic over a width the engine already measures.
   {
     section: "9. Text",
-    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Wrapping|Fixed-width|Font family|[Aa]lignment|inside arrows/,
+    text: /[Aa]lignment/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_align.rs`, "e2e/textAlign.spec.ts"],
+  },
+  {
+    section: "9. Text",
+    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Wrapping|Fixed-width|Font family|inside arrows/,
     status: "gap",
-    why: "Text formatting beyond size and colour, and wrapping. All of it waits on real font metrics — vendored fonts gated on document.fonts.ready, which is risk R1 in the milestone plan.",
+    why: "Bold, italic, letter spacing, line height and per-element font family. These do wait on real font metrics — vendored faces gated on document.fonts.ready, risk R1 — because each changes how wide a glyph is, and measuring before the face loads mis-sizes every text element permanently.",
   },
   { section: "9. Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
