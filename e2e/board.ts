@@ -157,6 +157,63 @@ export function stepRatio(before: number, after: number): number {
   return after > before ? after / before : before / after;
 }
 
+/** `WheelEvent.deltaMode`: the unit `deltaY` is counted in. */
+export const DELTA_PIXEL = 0;
+export const DELTA_LINE = 1;
+export const DELTA_PAGE = 2;
+
+/**
+ * One wheel event with an explicit `deltaMode`, dispatched rather than driven.
+ *
+ * The one exception to this file's rule that input is real, and it is forced.
+ * `deltaMode` says which unit `deltaY` is counted in, and Chromium only ever reports
+ * PIXEL: the unit is decided by the platform's wheel handling long before the page, so
+ * no CDP call, device emulation or flag makes it send LINE. Firefox reports LINE for a
+ * mouse wheel on Windows and Linux, so the unit the handler must cope with is one the
+ * browser this suite runs cannot produce.
+ *
+ * A dispatched event still exercises the real branch — the listener reads `deltaMode`
+ * off the event it is handed, and does not check `isTrusted`. What it cannot prove is
+ * that Firefox sends what it is documented to send; closing that needs a Firefox
+ * project, which costs a second browser download in CI.
+ */
+export async function dispatchWheelAt(
+  board: Board,
+  at: { x: number; y: number },
+  delta: { x?: number; y?: number; mode: number },
+  modifiers: { ctrl?: boolean; shift?: boolean } = {},
+): Promise<void> {
+  const { page, box } = board;
+  await page.evaluate(
+    ({ at, delta, modifiers, box }) => {
+      const canvas = document.querySelector("canvas");
+      if (!canvas) throw new Error("no canvas to dispatch on");
+      canvas.dispatchEvent(
+        new WheelEvent("wheel", {
+          deltaX: delta.x ?? 0,
+          deltaY: delta.y ?? 0,
+          deltaMode: delta.mode,
+          ctrlKey: modifiers.ctrl ?? false,
+          shiftKey: modifiers.shift ?? false,
+          clientX: box.x + at.x,
+          clientY: box.y + at.y,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    },
+    { at, delta, modifiers, box },
+  );
+}
+
+/** Puts the camera back at 100% and the origin, so a step can be measured from a known place. */
+export async function resetCamera(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const engine = window.__drawEngine!;
+    engine.zoomAt(0, 0, 1 / engine.camera.scale);
+  });
+}
+
 /**
  * Chooses a tool by its label on the toolbar, opening the more-tools menu when it lives
  * there.

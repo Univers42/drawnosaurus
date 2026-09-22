@@ -78,6 +78,7 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_navigate.rs`,
       "engine/src/host/wheel.test.ts",
       "e2e/zoom.spec.ts",
+      "e2e/wheelDeltaMode.spec.ts",
       "e2e/shortcuts.spec.ts",
     ],
   },
