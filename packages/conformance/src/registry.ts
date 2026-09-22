@@ -747,7 +747,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "49. Performance",
     status: "gap",
-    why: "No spatial index, no dirty rectangles, no shape cache and no benchmark suite. The milestone plan costs these; nothing measures them today.",
+    why: "Still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. Nothing here is *guarded* until a regression breaks a build, which needs thresholds in CI. Missing outright: a spatial index, dirty rectangles, and offscreen and image caches.",
   },
   {
     section: "51. Testing matrix",
