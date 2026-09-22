@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { camera, openBoard, shownZoomPercent, stepRatio, wheelAt } from "./board.ts";
+import { camera, openBoard, resetCamera, shownZoomPercent, stepRatio, wheelAt } from "./board.ts";
 
 /**
  * Wheel zoom, through a real browser and a real wheel.
@@ -79,6 +79,34 @@ test.describe("wheel zoom", () => {
     // per notch and hit the 30× ceiling on the fourth.
     expect(previous).toBeGreaterThan(3.0);
     expect(previous).toBeLessThan(3.3);
+  });
+
+  test("a hi-res wheel lands where a plain one does for the same distance", async ({ page }) => {
+    // The bug this suite could not see, because `page.mouse.wheel()` sends exactly ONE
+    // event per call and every spec here called it once per gesture.
+    //
+    // A plain mouse reports a notch as one event of 100. A high-resolution or
+    // smooth-scroll wheel reports the same physical notch as a dozen-odd small events.
+    // While the clamp and the notch were the same constant, every event of 10 or more
+    // was a whole notch, so the hi-res wheel zoomed 1.1^14 = 3.8x per flick — reported
+    // as 10% to 38% to 144%, and 100% to 26% going the other way.
+    //
+    // Real CDP input on both sides, ten events against one, same 100px total.
+    const board = await openBoard(page);
+    const middle = { x: board.box.width / 2, y: board.box.height / 2 };
+
+    await wheelAt(board, middle, { y: -NOTCH }, { ctrl: true });
+    const plainMouse = (await camera(page)).scale;
+    expect(plainMouse).toBeCloseTo(1.1, 5);
+
+    await resetCamera(page);
+
+    for (let event = 0; event < 10; event += 1) {
+      await wheelAt(board, middle, { y: -NOTCH / 10 }, { ctrl: true });
+    }
+
+    // Before the fix this reached 2.59 (1.1^10) against the plain mouse's 1.1.
+    expect((await camera(page)).scale).toBeCloseTo(plainMouse, 4);
   });
 
   test("a small trackpad nudge is a small step, not a full notch", async ({ page }) => {
