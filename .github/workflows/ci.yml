@@ -40,6 +40,21 @@ jobs:
           find scripts -type f -name '*.sh' -print0 \
             | xargs -0 --no-run-if-empty shellcheck -S error
 
+  wasm-freshness:
+    name: Stale WASM cannot ship
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Needs the crate on disk to point `make -n` at, but builds nothing: the
+      # question is whether the dependency graph would rebuild engine/pkg after the
+      # crate changes, and answering it must not cost a WASM build.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: A change to the crate must rebuild engine/pkg
+        run: bash scripts/assert-wasm-freshness.sh
+
   wasm:
     name: Build engine WASM
     runs-on: ubuntu-latest

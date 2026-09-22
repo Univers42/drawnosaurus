@@ -68,10 +68,25 @@ wasm: submodules ## Build engine/pkg from the Rust crate (required before web bu
 	$(RUN) $(RUN_AS_HOST) wasm
 	@echo -e "$(GREEN)✔ engine/pkg built$(RESET)"
 
-# Order-only-style guard for the targets that merely *consume* engine/pkg: build it
-# when it is missing, leave it alone when it is there. `wasm` stays the way to force
-# a rebuild after touching the crate.
-$(ENGINE_PKG):
+# Everything the WASM is built from. Found rather than listed, so a new module cannot
+# be left out of the list and quietly stop triggering a rebuild.
+ENGINE_CRATE_SRC := $(shell find engine/crates engine/Cargo.toml engine/Cargo.lock \
+	-name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' 2>/dev/null)
+
+# Rebuild engine/pkg when it is missing OR older than the crate it came from.
+#
+# It used to have no prerequisites at all, which meant "build it if absent" and nothing
+# more: after a change to the crate — or a `git pull` that brought one — every target
+# that merely consumes the pkg (`up`, `dev`, `build`, `typecheck`, `test-e2e`) went on
+# serving the previous build. That failure is silent and total. The zoom was fixed in
+# camera.rs and the browser kept running the old `exp(-delta * 0.01)`, so the bug was
+# reported against a tree that no longer contained it, and `make up` could not talk
+# anyone out of it.
+#
+# The cost of getting this wrong the other way is one unnecessary 46s rebuild — a fresh
+# checkout stamps source mtimes at checkout time, which can land newer than a pkg
+# restored from a cache. That is the right side to err on.
+$(ENGINE_PKG): $(ENGINE_CRATE_SRC)
 	@$(MAKE) --no-print-directory wasm
 
 install: ## Install workspace dependencies
