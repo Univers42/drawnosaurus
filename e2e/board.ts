@@ -31,6 +31,7 @@ declare global {
       setGrid(grid: { enabled?: boolean }): void;
       /** Replaces the whole scene — used to place geometry too small to draw by hand. */
       loadScene(json: string): void;
+      groupSelection(): void;
     };
   }
 }
@@ -46,6 +47,8 @@ export interface SceneElement {
   width: number;
   height: number;
   angle?: number;
+  groupId?: string | null;
+  frameId?: string | null;
   /** Point-based kinds only — a line, an arrow or a freehand stroke. */
   points?: [number, number][];
 }

@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import {
   activeTool,
+  focusBoard,
   elementKinds,
   openBoard,
   patchedElements,
@@ -363,5 +364,53 @@ test.describe("the paint behaves like a shape", () => {
 
     const after = (await sceneElements(page)).find((el) => el.type === "line")!;
     expect(after.points![1]).not.toEqual(before.points![1]);
+  });
+});
+
+test.describe("what the paint belongs to", () => {
+  /**
+   * A fill is its own element and nothing links it back to the shape it was traced from.
+   * That is the design — a region is frequently not a shape at all, so most regions
+   * cannot be expressed as any element's background, and moving the shape leaves the
+   * paint behind.
+   *
+   * Frame and group are the two exceptions, and they are membership rather than a link:
+   * the paint joins whatever its region already belonged to. They are the only places a
+   * fill travels with what it was painted inside, and without them paint inside a frame
+   * is abandoned the moment the frame moves.
+   */
+  test("paint joins its owner's group, and moves when the group moves", async ({ page }) => {
+    const board = await openBoard(page);
+    await drawRectangle(page, board);
+    // A second shape, so the group is a real one rather than a group of one.
+    await pickTool(page, "Rectangle");
+    await page.mouse.move(board.box.x + 950, board.box.y + 240);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + 1100, board.box.y + 380, { steps: 6 });
+    await page.mouse.up();
+
+    await pickTool(page, "Select");
+    await focusBoard(board);
+    await page.keyboard.press("Control+a");
+    await page.evaluate(() => window.__drawEngine!.groupSelection());
+
+    await fillAt(page, board, INSIDE);
+    const paint = (await sceneElements(page)).find((el) => el.type === "line")!;
+    const shape = (await sceneElements(page)).find((el) => el.type === "rectangle")!;
+    expect(paint.groupId, "the paint is in the same group as the region it fills").toBe(
+      shape.groupId,
+    );
+    expect(paint.groupId).toBeTruthy();
+
+    // Dragging the *other* member of the group must carry the paint along with it.
+    await pickTool(page, "Select");
+    await page.mouse.move(board.box.x + 1025, board.box.y + 240);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + 1055, board.box.y + 280, { steps: 6 });
+    await page.mouse.up();
+
+    const moved = (await sceneElements(page)).find((el) => el.id === paint.id)!;
+    expect(moved.x).toBeCloseTo(paint.x + 30, 0);
+    expect(moved.y).toBeCloseTo(paint.y + 40, 0);
   });
 });
