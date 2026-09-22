@@ -14,8 +14,22 @@ export type ExtendedTool = DrawTool | "sticky";
 export interface ToolDef {
   tool: ExtendedTool;
   label: string;
+  /** The bare key, without a modifier. `shift` carries the modifier separately. */
   hotkey: string;
+  /** Set only for autoshape, the one tool Excalidraw reaches with a chord. */
+  shift?: boolean;
   icon: IconName;
+}
+
+/**
+ * The shortcut as a person reads it: `⇧X`, or just the key.
+ *
+ * Kept apart from `hotkey` because the badge and the keymap want different things — the
+ * keymap needs the key and the modifier as separate values, and printing `⇧X` into a
+ * lookup would find nothing.
+ */
+export function hotkeyLabel(entry: ToolDef): string {
+  return entry.shift ? `⇧${entry.hotkey}` : entry.hotkey;
 }
 
 /**
@@ -55,7 +69,9 @@ export const EXTRA_TOOLS: readonly ToolDef[] = [
   { tool: "image", label: "Insert image", hotkey: "9", icon: "image" },
   { tool: "frame", label: "Frame", hotkey: "F", icon: "frame" },
   { tool: "embed", label: "Embed web page", hotkey: "W", icon: "embed" },
-  { tool: "autoshape", label: "Draw to shape", hotkey: "G", icon: "autoshape" },
+  // Shift+X, Excalidraw's own: autoshape is the shifted freedraw key. It used to print
+  // `G`, an invention from when the engine's keymap could not express a modifier.
+  { tool: "autoshape", label: "Draw to shape", hotkey: "X", shift: true, icon: "autoshape" },
   { tool: "bucketfill", label: "Bucket fill", hotkey: "B", icon: "bucketfill" },
   { tool: "laser", label: "Laser pointer", hotkey: "K", icon: "laser" },
   { tool: "lasso", label: "Lasso", hotkey: "S", icon: "lasso" },

@@ -25,6 +25,9 @@ declare global {
       screenToWorld(sx: number, sy: number): { x: number; y: number };
       zoomAt(sx: number, sy: number, factor: number): void;
       exportJson(): string;
+      getTool(): string;
+      getSelection(): string[];
+      getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
     };
   }
 }
@@ -170,6 +173,28 @@ export async function pickTool(page: Page, label: string): Promise<void> {
   }
   await page.getByRole("button", { name: /^More tools/ }).click();
   await page.getByRole("menuitemradio", { name: label, exact: false }).click();
+}
+
+/**
+ * Puts keyboard focus on the board.
+ *
+ * The engine's key listener is on the editor container, not the window, so that a page
+ * embedding the canvas keeps its own shortcuts. Nothing has focused it until something is
+ * clicked, so a spec that starts by pressing a key presses it into the void.
+ */
+export async function focusBoard(board: Board): Promise<void> {
+  const { page, box } = board;
+  await page.mouse.click(box.x + OPEN_CANVAS.right - 20, box.y + OPEN_CANVAS.bottom - 20);
+}
+
+/** The tool the engine currently has active. */
+export function activeTool(page: Page): Promise<string> {
+  return page.evaluate(() => window.__drawEngine!.getTool());
+}
+
+/** The ids the engine currently has selected. */
+export function selection(page: Page): Promise<string[]> {
+  return page.evaluate(() => window.__drawEngine!.getSelection());
 }
 
 /** The elements the engine currently holds, deleted ones excluded. */
