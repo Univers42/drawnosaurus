@@ -113,6 +113,15 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@22.20.2)
 
+  packages/conformance:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.2)
+
   packages/contract:
     dependencies:
       zod:

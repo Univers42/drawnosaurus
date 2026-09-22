@@ -94,6 +94,9 @@ format: ## prettier --check
 test: ## Unit tests (contract, api, web)
 	$(RUN) --no-deps tooling pnpm test
 
+conformance: ## What prompt/*.md asks for, and what covers it
+	$(RUN) --no-deps tooling pnpm --filter @drawnosaurus/conformance test
+
 test-integration: ## API tests against a real MongoDB
 	$(DC) up -d mongo
 	$(RUN) tooling pnpm test:integration
@@ -184,5 +187,5 @@ clean: ## Remove containers, volumes, images, and build output
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
 .PHONY: all help submodules wasm install lock typecheck lint format test \
-	test-integration test-e2e quality verify dev build up down logs shell clean \
+	test-integration test-e2e conformance quality verify dev build up down logs shell clean \
 	oracle oracle-fixtures bench
