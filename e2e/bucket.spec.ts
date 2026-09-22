@@ -54,18 +54,37 @@ async function drawRectangle(page: Page, board: Board): Promise<void> {
  * exactly that shape's inside. A spec about the polygon it makes otherwise has to ask for
  * a region that is not one, and half a rectangle is the smallest such region.
  */
-async function divide(page: Page, board: Board): Promise<void> {
+async function divide(page: Page): Promise<void> {
   const midX = (SHAPE.from.x + SHAPE.to.x) / 2;
   await page.evaluate(
     ({ x, y0, y1 }) => {
       const engine = window.__drawEngine!;
       const file = JSON.parse(engine.exportJson()) as { elements: unknown[] };
       file.elements.push({
-        id: "divider", type: "line", x, y: y0, width: 0, height: y1 - y0, angle: 0,
-        strokeColor: "#1e1e1e", backgroundColor: "transparent", fillStyle: "solid",
-        strokeWidth: 2, strokeStyle: "solid", roughness: 0, opacity: 100, roundness: null,
-        seed: 1, version: 1, versionNonce: 1, updated: 0, isDeleted: false,
-        points: [[0, 0], [0, y1 - y0]],
+        id: "divider",
+        type: "line",
+        x,
+        y: y0,
+        width: 0,
+        height: y1 - y0,
+        angle: 0,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "transparent",
+        fillStyle: "solid",
+        strokeWidth: 2,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        roundness: null,
+        seed: 1,
+        version: 1,
+        versionNonce: 1,
+        updated: 0,
+        isDeleted: false,
+        points: [
+          [0, 0],
+          [0, y1 - y0],
+        ],
       });
       engine.loadScene(JSON.stringify(file));
     },
@@ -180,7 +199,7 @@ test.describe("bucket fill", () => {
     // solid — `shouldTestInside`, `packages/element/src/collision.ts:82-102`.
     const board = await openBoard(page);
     await drawRectangle(page, board);
-    await divide(page, board);
+    await divide(page);
     await fillAt(page, board, LEFT_HALF);
 
     await pickTool(page, "Select");
@@ -191,7 +210,9 @@ test.describe("bucket fill", () => {
     const before = (await sceneElements(page)).find((el) => el.id === picked[0])!;
     await page.mouse.move(board.box.x + LEFT_HALF.x, board.box.y + LEFT_HALF.y);
     await page.mouse.down();
-    await page.mouse.move(board.box.x + LEFT_HALF.x + 60, board.box.y + LEFT_HALF.y + 40, { steps: 6 });
+    await page.mouse.move(board.box.x + LEFT_HALF.x + 60, board.box.y + LEFT_HALF.y + 40, {
+      steps: 6,
+    });
     await page.mouse.up();
     const after = (await sceneElements(page)).find((el) => el.id === picked[0])!;
     expect(after.x).toBeCloseTo(before.x + 60, 0);
@@ -208,7 +229,7 @@ test.describe("bucket fill", () => {
     // fill as a zero-area box and framed board thumbnails on it.
     const board = await openBoard(page);
     await drawRectangle(page, board);
-    await divide(page, board);
+    await divide(page);
     await fillAt(page, board, LEFT_HALF);
 
     const paint = (await sceneElements(page)).find((el) => el.type === "line")!;
@@ -355,7 +376,7 @@ test.describe("the paint behaves like a shape", () => {
     await drawRectangle(page, board);
     // Halved, so the region is one a background cannot express and the bucket still
     // makes a polygon — which is what this group of specs is about.
-    await divide(page, board);
+    await divide(page);
     await fillAt(page, board, LEFT_HALF);
     await pickTool(page, "Select");
     await page.mouse.click(board.box.x + LEFT_HALF.x, board.box.y + LEFT_HALF.y);
@@ -456,7 +477,7 @@ test.describe("what the paint belongs to", () => {
     await page.keyboard.press("Control+a");
     await page.evaluate(() => window.__drawEngine!.groupSelection());
 
-    await divide(page, board);
+    await divide(page);
     await fillAt(page, board, LEFT_HALF);
     const paint = (await sceneElements(page)).find((el) => el.type === "line")!;
     const shape = (await sceneElements(page)).find((el) => el.type === "rectangle")!;
