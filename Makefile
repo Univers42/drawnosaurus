@@ -131,6 +131,18 @@ test-e2e: $(ENGINE_PKG) ## Browser tests (Playwright) — zoom, scroll, bucket f
 	pnpm exec playwright test
 	@echo -e "$(GREEN)✔ e2e green$(RESET)"
 
+# Excalidraw, installed and served from third_party for the parity benchmark. Its yarn
+# cache goes to sgoinfre because $HOME here is a 4.7G disk that is already full.
+parity-deps: oracle ## Install Excalidraw so it can be benchmarked against
+	cd third_party/excalidraw && \
+		YARN_CACHE_FOLDER=/sgoinfre/students/$(USER)/.yarn-cache \
+		corepack yarn install --frozen-lockfile --network-timeout 600000
+	@echo -e "$(GREEN)✔ excalidraw ready to race$(RESET)"
+
+parity: $(ENGINE_PKG) ## Benchmark against Excalidraw, both on localhost
+	pnpm exec playwright test --config perf/playwright.config.ts
+	@echo -e "$(GREEN)✔ parity measured$(RESET)"
+
 verify: quality test-integration ## Everything CI runs
 	@echo -e "$(GREEN)✔ verify green$(RESET)"
 
@@ -202,5 +214,6 @@ clean: ## Remove containers, volumes, images, and build output
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
 .PHONY: all help submodules wasm install lock typecheck lint format test \
-	test-integration test-e2e conformance quality verify dev build up down logs shell clean \
+	test-integration test-e2e conformance parity parity-deps quality verify dev build up \
+	down logs shell clean \
 	oracle oracle-fixtures bench
