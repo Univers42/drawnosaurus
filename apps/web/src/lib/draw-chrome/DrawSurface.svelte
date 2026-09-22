@@ -109,6 +109,19 @@
    */
   let panelVisible = $state(false);
 
+  /**
+   * Hands the live engine to the dev tools and to the browser tests, and only there.
+   *
+   * `import.meta.env.DEV` is folded away at build time, so the property does not exist in
+   * a production bundle — this is a debugging affordance, not an API. It exists because
+   * the alternative for an end-to-end test is to infer the camera from pixels, and a test
+   * that reads pixels fails for reasons that have nothing to do with the camera.
+   */
+  function exposeForDevTools(instance: DrawEngine): void {
+    if (!import.meta.env.DEV) return;
+    (window as unknown as { __drawEngine?: DrawEngine }).__drawEngine = instance;
+  }
+
   $effect(() => {
     const want = getShapeActions(tool, selection, activeStyle.backgroundColor).visible;
     if (!dragging) panelVisible = want;
@@ -799,6 +812,7 @@
         engine = next;
         next.setGrid(grid);
         syncStyle(next);
+        exposeForDevTools(next);
         onReady?.(next);
       }}
       onToolChange={(next: DrawTool) => {

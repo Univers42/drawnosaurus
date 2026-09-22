@@ -102,6 +102,17 @@ quality: $(ENGINE_PKG) ## The gate: typecheck + lint + format + unit tests
 	$(RUN) --no-deps tooling pnpm quality
 	@echo -e "$(GREEN)✔ quality green$(RESET)"
 
+# Runs on the host, not in a container: Playwright ships its own browser build and the
+# image that matches it is a gigabyte, which is a poor trade for a target run by hand.
+# `playwright install` is idempotent — a no-op once the browser is cached.
+#
+# Kept out of `quality` on purpose. That gate runs on every save and has to stay fast;
+# a browser is neither fast nor free of the outside world.
+test-e2e: $(ENGINE_PKG) ## Browser tests (Playwright) — zoom, scroll, bucket fill
+	pnpm exec playwright install --with-deps chromium
+	pnpm exec playwright test
+	@echo -e "$(GREEN)✔ e2e green$(RESET)"
+
 verify: quality test-integration ## Everything CI runs
 	@echo -e "$(GREEN)✔ verify green$(RESET)"
 
@@ -173,5 +184,5 @@ clean: ## Remove containers, volumes, images, and build output
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
 .PHONY: all help submodules wasm install lock typecheck lint format test \
-	test-integration quality verify dev build up down logs shell clean \
+	test-integration test-e2e quality verify dev build up down logs shell clean \
 	oracle oracle-fixtures bench
