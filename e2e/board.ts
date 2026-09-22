@@ -51,6 +51,12 @@ export interface SceneElement {
   frameId?: string | null;
   /** Point-based kinds only — a line, an arrow or a freehand stroke. */
   points?: [number, number][];
+  text?: string;
+  /** Absent means nothing chose one, which the engine resolves from the element's role. */
+  textAlign?: "left" | "center" | "right";
+  verticalAlign?: "top" | "middle" | "bottom";
+  containerId?: string | null;
+  boundTextId?: string | null;
 }
 
 /** Every `PATCH /v1/**` body the page has sent, in order, per page. */
@@ -261,6 +267,54 @@ export function canvasInk(page: Page): Promise<number> {
     }
     return ink / (width * height);
   });
+}
+
+/**
+ * Where the ink inside a region sits horizontally, as a fraction across it.
+ *
+ * `canvasInk` answers "is anything there", which alignment cannot use: moving text from
+ * one side of a shape to the other changes no pixel *count* at all. This answers "where",
+ * as a centre of mass — 0 is hard against the left edge of the region, 1 the right.
+ *
+ * The region is canvas-relative CSS pixels and is converted to the backing store here, so
+ * a caller can name the box it drew without knowing the device pixel ratio. Returns `NaN`
+ * when the region holds no ink, which is a louder failure than a plausible 0.5.
+ */
+export function inkCentroidX(
+  page: Page,
+  region: { left: number; top: number; right: number; bottom: number },
+): Promise<number> {
+  return page.evaluate((area) => {
+    const canvas = document.querySelector("canvas");
+    if (!canvas) throw new Error("no canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    const box = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / box.width;
+    const scaleY = canvas.height / box.height;
+    const x0 = Math.round(area.left * scaleX);
+    const y0 = Math.round(area.top * scaleY);
+    const w = Math.round((area.right - area.left) * scaleX);
+    const h = Math.round((area.bottom - area.top) * scaleY);
+
+    // The same background reference `canvasInk` uses: the top-left of the whole canvas,
+    // which is off the drawing, so it holds in either theme.
+    const corner = ctx.getImageData(0, 0, 1, 1).data;
+    const { data } = ctx.getImageData(x0, y0, w, h);
+    let weighted = 0;
+    let ink = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (
+        Math.abs(data[i]! - corner[0]!) > 12 ||
+        Math.abs(data[i + 1]! - corner[1]!) > 12 ||
+        Math.abs(data[i + 2]! - corner[2]!) > 12
+      ) {
+        weighted += (i / 4) % w;
+        ink += 1;
+      }
+    }
+    return ink === 0 ? Number.NaN : weighted / ink / w;
+  }, region);
 }
 
 /** Puts the camera back at 100% and the origin, so a step can be measured from a known place. */

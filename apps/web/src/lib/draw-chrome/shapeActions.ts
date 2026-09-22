@@ -154,7 +154,7 @@ export interface ShapeActions {
 
 export function getShapeActions(
   activeTool: ExtendedTool,
-  selected: readonly Pick<DrawElement, "type" | "backgroundColor">[],
+  selected: readonly Pick<DrawElement, "type" | "backgroundColor" | "boundTextId">[],
   /** The style that would be applied to the next thing drawn. */
   nextBackgroundColor: string,
 ): ShapeActions {
@@ -187,7 +187,14 @@ export function getShapeActions(
     sloppiness: forToolOrSelection(hasRoughness),
     roundness: forToolOrSelection(canChangeRoundness),
     arrowheads: forToolOrSelection(canHaveArrowheads),
-    text: activeTool === "text" || selected.some((element) => isTextKind(element.type)),
+    // `boundTextId` is not a convenience here. Once a shape has a label the shape is the
+    // only thing you *can* select — clicking it selects the container, and the label is
+    // not separately selectable — so asking only "is a text element selected" makes the
+    // font and alignment controls unreachable for every label on the board, which is the
+    // case they exist for.
+    text:
+      activeTool === "text" ||
+      selected.some((element) => isTextKind(element.type) || Boolean(element.boundTextId)),
     opacity: forToolOrSelection(hasOpacity),
     layers: hasSelection,
     mirror: hasSelection,

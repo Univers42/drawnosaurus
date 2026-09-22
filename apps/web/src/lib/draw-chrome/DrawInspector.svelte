@@ -5,12 +5,15 @@
   import InspectorSwatches from "./InspectorSwatches.svelte";
   import InspectorSegmented from "./InspectorSegmented.svelte";
   import InspectorIconRow from "./InspectorIconRow.svelte";
+  import InspectorIconChoice from "./InspectorIconChoice.svelte";
   import {
     EDGES,
     FILL_STYLES,
     FONT_SIZES,
     SLOPPINESS,
     STROKE_STYLES,
+    TEXT_ALIGNS,
+    VERTICAL_ALIGNS,
     getFillSwatches,
     getStrokeSwatches,
     type ThemeMode,
@@ -140,6 +143,30 @@
         options={FONT_SIZES}
         value={engine?.getFontSize() ?? 20}
         onPick={(v) => engine?.setFontSize(Number(v))}
+      />
+    </InspectorRow>
+  {/if}
+  <!--
+    Alignment, which the spec lists under "Formatting" and the conformance registry
+    recorded as a gap. Both rows read their current value back from the engine rather than
+    from the element: the engine resolves an unset alignment through the element's role,
+    so a label nobody has aligned still shows "centre" — which is where it is drawn.
+  -->
+  {#if can.text && engine}
+    <InspectorRow label="Text align">
+      <InspectorIconChoice
+        ariaLabel="Text alignment"
+        options={TEXT_ALIGNS}
+        value={engine.getTextAlign()}
+        onPick={(v) => engine.setTextAlign(v)}
+      />
+    </InspectorRow>
+    <InspectorRow label="Vertical align">
+      <InspectorIconChoice
+        ariaLabel="Vertical text alignment"
+        options={VERTICAL_ALIGNS}
+        value={engine.getVerticalAlign()}
+        onPick={(v) => engine.setVerticalAlign(v)}
       />
     </InspectorRow>
   {/if}

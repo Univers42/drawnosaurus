@@ -36,6 +36,14 @@ export type IconName =
   | "alignTop"
   | "alignCenterY"
   | "alignBottom"
+  // Separate from the six above, which align *elements* to each other. These are ragged
+  // lines of text: the same word for two different operations, and the panel shows both.
+  | "textAlignLeft"
+  | "textAlignCenter"
+  | "textAlignRight"
+  | "textAlignTop"
+  | "textAlignMiddle"
+  | "textAlignBottom"
   | "distributeX"
   | "distributeY"
   | "zoomIn"
@@ -250,6 +258,43 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "line", x1: "4", y1: "20", x2: "20", y2: "20" },
     { tag: "rect", x: "6", y: "4", width: "4", height: "12", rx: "1" },
     { tag: "rect", x: "14", y: "8", width: "4", height: "8", rx: "1" },
+  ],
+  // Four ragged lines, the way every word processor draws these. The short lines are the
+  // ones that carry the meaning, so they sit on the edge the alignment names.
+  textAlignLeft: [
+    { tag: "line", x1: "4", y1: "6", x2: "20", y2: "6" },
+    { tag: "line", x1: "4", y1: "11", x2: "13", y2: "11" },
+    { tag: "line", x1: "4", y1: "16", x2: "20", y2: "16" },
+    { tag: "line", x1: "4", y1: "21", x2: "13", y2: "21" },
+  ],
+  textAlignCenter: [
+    { tag: "line", x1: "4", y1: "6", x2: "20", y2: "6" },
+    { tag: "line", x1: "8", y1: "11", x2: "16", y2: "11" },
+    { tag: "line", x1: "4", y1: "16", x2: "20", y2: "16" },
+    { tag: "line", x1: "8", y1: "21", x2: "16", y2: "21" },
+  ],
+  textAlignRight: [
+    { tag: "line", x1: "4", y1: "6", x2: "20", y2: "6" },
+    { tag: "line", x1: "11", y1: "11", x2: "20", y2: "11" },
+    { tag: "line", x1: "4", y1: "16", x2: "20", y2: "16" },
+    { tag: "line", x1: "11", y1: "21", x2: "20", y2: "21" },
+  ],
+  // A box with the lines gathered against one edge of it: the box is the shape holding
+  // the label, which is what vertical alignment is about.
+  textAlignTop: [
+    { tag: "rect", x: "3", y: "3", width: "18", height: "18", rx: "2" },
+    { tag: "line", x1: "7", y1: "7", x2: "17", y2: "7" },
+    { tag: "line", x1: "7", y1: "11", x2: "13", y2: "11" },
+  ],
+  textAlignMiddle: [
+    { tag: "rect", x: "3", y: "3", width: "18", height: "18", rx: "2" },
+    { tag: "line", x1: "7", y1: "10", x2: "17", y2: "10" },
+    { tag: "line", x1: "7", y1: "14", x2: "13", y2: "14" },
+  ],
+  textAlignBottom: [
+    { tag: "rect", x: "3", y: "3", width: "18", height: "18", rx: "2" },
+    { tag: "line", x1: "7", y1: "13", x2: "17", y2: "13" },
+    { tag: "line", x1: "7", y1: "17", x2: "13", y2: "17" },
   ],
   distributeX: [
     { tag: "rect", x: "3", y: "8", width: "4", height: "8", rx: "1" },

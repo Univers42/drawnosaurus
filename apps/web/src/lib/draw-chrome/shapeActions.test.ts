@@ -270,3 +270,39 @@ describe("the bucket fill tool", () => {
     expect(actions.text).toBe(false);
   });
 });
+
+describe("a shape carrying a label", () => {
+  /**
+   * The case that made the font and alignment controls unreachable.
+   *
+   * Once a shape has a label, the shape is the only thing you can select: clicking it
+   * selects the container, and the label is not separately selectable. So a predicate
+   * that asks "is a text element selected" answers no for every label on the board —
+   * the exact case the text controls exist for — and the panel offers them only while
+   * the text *tool* happens to be active.
+   */
+  it("offers the text controls", () => {
+    const labelled: Sel & Pick<DrawElement, "boundTextId"> = {
+      type: "rectangle",
+      backgroundColor: "transparent",
+      boundTextId: "el-label",
+    };
+    expect(getShapeActions("select", [labelled], "transparent").text).toBe(true);
+  });
+
+  it("still offers everything a rectangle has", () => {
+    const labelled: Sel & Pick<DrawElement, "boundTextId"> = {
+      type: "rectangle",
+      backgroundColor: "transparent",
+      boundTextId: "el-label",
+    };
+    const shown = getShapeActions("select", [labelled], "transparent");
+    expect(shown.strokeColor).toBe(true);
+    expect(shown.roundness).toBe(true);
+  });
+
+  it("does not offer them for a shape without one", () => {
+    // `boundTextId` absent, and a bare rectangle has no text to format.
+    expect(actions("select", [el("rectangle")]).text).toBe(false);
+  });
+});

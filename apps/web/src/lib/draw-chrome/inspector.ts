@@ -1,4 +1,5 @@
-import type { FillStyle, StrokeStyle } from "@osionos/draw-engine/types";
+import type { FillStyle, StrokeStyle, TextAlign, VerticalAlign } from "@osionos/draw-engine/types";
+import type { IconName } from "./icons.ts";
 
 export type ThemeMode = "light" | "dark";
 
@@ -97,4 +98,24 @@ export const FONT_SIZES: Array<{ label: string; value: number }> = [
   { label: "M", value: 20 },
   { label: "L", value: 28 },
   { label: "XL", value: 36 },
+];
+
+/**
+ * The labels say "text" on purpose.
+ *
+ * The panel already has an Align row — the one that lines *elements* up with each other —
+ * and its buttons are "Align left", "Align top". Naming these the same makes two
+ * different operations indistinguishable to anyone reading the accessible names, which
+ * includes every browser test that selects a control by name.
+ */
+export const TEXT_ALIGNS: Array<{ label: string; icon: IconName; value: TextAlign }> = [
+  { label: "Align text left", icon: "textAlignLeft", value: "left" },
+  { label: "Align text centre", icon: "textAlignCenter", value: "center" },
+  { label: "Align text right", icon: "textAlignRight", value: "right" },
+];
+
+export const VERTICAL_ALIGNS: Array<{ label: string; icon: IconName; value: VerticalAlign }> = [
+  { label: "Align text top", icon: "textAlignTop", value: "top" },
+  { label: "Align text middle", icon: "textAlignMiddle", value: "middle" },
+  { label: "Align text bottom", icon: "textAlignBottom", value: "bottom" },
 ];
