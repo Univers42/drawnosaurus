@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { toolForKey } from "@osionos/draw-engine/tools";
+import { toolForChord, toolForKey } from "@osionos/draw-engine/tools";
 import { ICONS } from "./icons.ts";
-import { ALL_TOOL_DEFS, DRAW_TOOLS, EXTRA_TOOLS, isExtraTool, toolDef } from "./tools.ts";
+import {
+  ALL_TOOL_DEFS,
+  DRAW_TOOLS,
+  EXTRA_TOOLS,
+  hotkeyLabel,
+  isExtraTool,
+  toolDef,
+} from "./tools.ts";
 
 describe("DRAW_TOOLS", () => {
   it("keeps the bar to the tools reached by reflex", () => {
@@ -73,8 +80,29 @@ describe("DRAW_TOOLS", () => {
     // goes to *learn* the key.
     for (const entry of ALL_TOOL_DEFS) {
       if (entry.tool === "sticky") continue;
-      expect(toolForKey(entry.hotkey), `${entry.label} (${entry.hotkey})`).toBe(entry.tool);
+      expect(
+        toolForChord(entry.hotkey, entry.shift ?? false),
+        `${entry.label} (${hotkeyLabel(entry)})`,
+      ).toBe(entry.tool);
     }
+  });
+
+  it("prints the modifier in the badge and keeps it out of the key", () => {
+    // Two different things that look alike. The badge is for a person to read — `⇧X` —
+    // and the hotkey is what gets looked up, so printing the modifier into the lookup
+    // would find nothing. Autoshape is the one tool where they differ.
+    const autoshape = toolDef("autoshape");
+    expect(autoshape?.hotkey).toBe("X");
+    expect(autoshape?.shift).toBe(true);
+    expect(hotkeyLabel(autoshape!)).toBe("⇧X");
+    expect(hotkeyLabel(toolDef("rectangle")!)).toBe("2");
+  });
+
+  it("gives autoshape the shifted freedraw key, not an invented one", () => {
+    // `G` was ours, from when the engine's keymap took a key and no modifier and a chord
+    // could not be expressed. Excalidraw's is Shift+X.
+    expect(toolForChord("x", true)).toBe("autoshape");
+    expect(toolForKey("g")).toBeNull();
   });
 
   it("leaves the sticky note's hotkey to itself", () => {

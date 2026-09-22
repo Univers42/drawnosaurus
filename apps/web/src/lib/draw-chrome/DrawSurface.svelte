@@ -744,8 +744,11 @@
       // in the same keystroke.
       event.preventDefault();
       handleToolSelect("sticky");
-    } else if (mod && event.key === "'") {
-      // Excalidraw's grid shortcut.
+    } else if (mod && event.code === "Quote") {
+      // Excalidraw's grid shortcut, and matched on `code` the way theirs is: `code` is
+      // the physical key, `key` the character it produces. On a layout where that key is
+      // not an apostrophe — AZERTY, QWERTZ, Dvorak — matching the character means the
+      // shortcut is either somewhere else entirely or nowhere at all.
       event.preventDefault();
       pickGrid({ enabled: !grid.enabled });
     } else if (!mod && event.key === "?") {

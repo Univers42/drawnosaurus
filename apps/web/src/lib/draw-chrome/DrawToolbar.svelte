@@ -12,7 +12,14 @@
    * discovered — the menu is for finding them, not for reaching them.
    */
   import Icon from "./Icon.svelte";
-  import { DRAW_TOOLS, EXTRA_TOOLS, isExtraTool, toolDef, type ExtendedTool } from "./tools.ts";
+  import {
+    DRAW_TOOLS,
+    EXTRA_TOOLS,
+    hotkeyLabel,
+    isExtraTool,
+    toolDef,
+    type ExtendedTool,
+  } from "./tools.ts";
 
   let {
     active,
@@ -89,14 +96,14 @@
     <button
       type="button"
       onmousedown={holdFocus}
-      aria-label={`${entry.label} (${entry.hotkey})`}
+      aria-label={`${entry.label} (${hotkeyLabel(entry)})`}
       aria-pressed={active === entry.tool}
-      title={`${entry.label} — ${entry.hotkey}`}
+      title={`${entry.label} — ${hotkeyLabel(entry)}`}
       class:active={active === entry.tool}
       onclick={() => onSelect(entry.tool)}
     >
       <Icon name={entry.icon} size={18} />
-      <span class="hotkey-badge">{entry.hotkey}</span>
+      <span class="hotkey-badge">{hotkeyLabel(entry)}</span>
     </button>
   {/each}
 
@@ -133,7 +140,7 @@
           >
             <Icon name={entry.icon} size={16} />
             <span class="name">{entry.label}</span>
-            <kbd>{entry.hotkey}</kbd>
+            <kbd>{hotkeyLabel(entry)}</kbd>
           </button>
         {/each}
       </div>
