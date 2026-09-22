@@ -69,14 +69,16 @@ test.describe("wheel zoom", () => {
     }
 
     for (const [tick, ratio] of ratios.entries()) {
-      expect(ratio, `tick ${tick} jumped by ${ratio}×`).toBeLessThanOrEqual(1.26);
+      // One notch, plus room for `normalize_zoom`'s six-place rounding. Tight on
+      // purpose: the old 1.26 would have passed a silent return to the linear step.
+      expect(ratio, `tick ${tick} jumped by ${ratio}×`).toBeLessThanOrEqual(1.101);
     }
-    // Twelve notches land near 6.5×: a tenth of the scale each, compounding, and growing
-    // once past 100% where the `log10` amplification starts. The bound is here for the
-    // contrast — the handler this replaced multiplied by `e` per notch and hit the 30×
-    // ceiling on the fourth.
-    expect(previous).toBeGreaterThan(5.5);
-    expect(previous).toBeLessThan(7.5);
+    // Twelve notches land on 1.1¹² = 3.138: the same tenth of the picture each time,
+    // compounding, with no amplification term because a proportional step needs none.
+    // The bound is here for the contrast — the handler this replaced multiplied by `e`
+    // per notch and hit the 30× ceiling on the fourth.
+    expect(previous).toBeGreaterThan(3.0);
+    expect(previous).toBeLessThan(3.3);
   });
 
   test("a small trackpad nudge is a small step, not a full notch", async ({ page }) => {

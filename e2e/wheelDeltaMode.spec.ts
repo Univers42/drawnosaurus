@@ -142,12 +142,12 @@ test.describe("wheel deltaMode", () => {
       );
       const next = (await camera(page)).scale;
       expect(next, `tick ${tick} did not zoom in`).toBeGreaterThan(previous);
-      expect(next / previous, `tick ${tick} jumped`).toBeLessThanOrEqual(1.26);
+      expect(next / previous, `tick ${tick} jumped`).toBeLessThanOrEqual(1.101);
       previous = next;
     }
     // The same window zoom.spec.ts pins for twelve pixel notches, because after
-    // normalisation it is the same gesture.
-    expect(previous).toBeGreaterThan(5.5);
-    expect(previous).toBeLessThan(7.5);
+    // normalisation it is the same gesture: 1.1¹² = 3.138.
+    expect(previous).toBeGreaterThan(3.0);
+    expect(previous).toBeLessThan(3.3);
   });
 });
