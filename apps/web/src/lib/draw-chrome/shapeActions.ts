@@ -34,8 +34,18 @@ type Kind = DrawElementType | ExtendedTool;
 const asElementKind = (kind: Kind): Kind =>
   kind === "sticky" || kind === "autoshape" ? "rectangle" : kind;
 
+/**
+ * `bucketfill` is here as a **tool**, never as an element type — the paint it leaves
+ * behind is a `line`, which is in this list on its own account. Excalidraw carries the
+ * same entry with the same comment (`element/comparisons.ts:12-13`), because a bucket
+ * with no background control is a bucket whose colour cannot be chosen: the panel is
+ * gated row by row on these predicates, so the tool arrived to an empty box and every
+ * fill came out the one hardcoded fallback shade.
+ */
 const hasBackground = (kind: Kind): boolean =>
-  ["rectangle", "ellipse", "diamond", "line", "freedraw"].includes(asElementKind(kind));
+  ["rectangle", "ellipse", "diamond", "line", "freedraw", "bucketfill"].includes(
+    asElementKind(kind),
+  );
 
 const hasFillStyle = hasBackground;
 
@@ -81,6 +91,9 @@ const hasOpacity = (kind: Kind): boolean =>
     "text",
     "image",
     "embed",
+    // The bucket takes the current opacity for the paint it lays down, so the control
+    // has to be reachable while it is the active tool.
+    "bucketfill",
   ].includes(asElementKind(kind));
 
 /**
@@ -159,8 +172,12 @@ export function getShapeActions(
     visible,
     strokeColor: forToolOrSelection(hasStrokeColor),
     backgroundColor: forToolOrSelection(hasBackground),
-    // A fill style only means something once there is a fill to style.
+    // A fill style only means something once there is a fill to style — except for the
+    // bucket, which never paints transparent because it falls back to a real colour when
+    // none is chosen. Without this the fill row is hidden exactly when nothing has been
+    // picked yet, which is every first use of the tool.
     fill:
+      activeTool === "bucketfill" ||
       (hasFillStyle(activeTool) && !isTransparent(nextBackgroundColor)) ||
       selected.some(
         (element) => hasFillStyle(element.type) && !isTransparent(element.backgroundColor),
