@@ -45,6 +45,7 @@ export interface SceneElement {
   y: number;
   width: number;
   height: number;
+  angle?: number;
   /** Point-based kinds only — a line, an arrow or a freehand stroke. */
   points?: [number, number][];
 }

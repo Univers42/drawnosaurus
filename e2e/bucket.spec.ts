@@ -277,3 +277,91 @@ test.describe("bucket fill", () => {
     await expect(status).toHaveText("Couldn't find an enclosed region to fill here.");
   });
 });
+
+test.describe("the paint behaves like a shape", () => {
+  /**
+   * A bucket fill is a closed `line`, and a line used to be grabbed by its points
+   * whatever it had — so selecting the paint produced a circle on every vertex of the
+   * region and no bounding box at all. It could not be resized, could not be turned, and
+   * the circles dragged single corners of the paint away from the outline it was traced
+   * from. Those are the "circles around the perimeter that do nothing useful".
+   *
+   * Excalidraw's rule is a count, not a kind: a linear element gets a bounding box when
+   * `points.length > 2` (`transformHandles.ts:352`), and the point circles appear only
+   * while the line editor is open or the line has exactly two points
+   * (`interactiveScene.ts:1256`).
+   */
+  async function fillARectangle(page: Page, board: Board) {
+    await drawRectangle(page, board);
+    await fillAt(page, board, INSIDE);
+    await pickTool(page, "Select");
+    await page.mouse.click(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
+  }
+
+  /** The paint, and the corner handle that resizes it — eight pixels beyond its box. */
+  async function paintAndHandle(page: Page) {
+    const paint = (await sceneElements(page)).find((el) => el.type === "line")!;
+    return { paint, handle: { x: paint.x + paint.width + 8, y: paint.y + paint.height + 8 } };
+  }
+
+  test("the paint can be resized, and its ring keeps up with its box", async ({ page }) => {
+    const board = await openBoard(page);
+    await fillARectangle(page, board);
+    const { paint, handle } = await paintAndHandle(page);
+
+    // A real drag, in steps. One long jump cannot see the bug this catches: the scale
+    // was taken from the live ring, so every move after the first divided by a span an
+    // earlier move had already stretched, and the paint drifted out from under its box.
+    await page.mouse.move(board.box.x + handle.x, board.box.y + handle.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 6; step += 1) {
+      await page.mouse.move(
+        board.box.x + handle.x + (90 * step) / 6,
+        board.box.y + handle.y + (70 * step) / 6,
+      );
+    }
+    await page.mouse.up();
+
+    const after = (await sceneElements(page)).find((el) => el.type === "line")!;
+    expect(after.width).toBeGreaterThan(paint.width + 50);
+
+    const xs = after.points!.map((p) => p[0]);
+    const ys = after.points!.map((p) => p[1]);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(after.width, 6);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(after.height, 6);
+  });
+
+  test("the paint can be turned", async ({ page }) => {
+    const board = await openBoard(page);
+    await fillARectangle(page, board);
+    const paint = (await sceneElements(page)).find((el) => el.type === "line")!;
+
+    // The rotation handle sits above the top edge, past the frame and the handle ring.
+    const at = { x: paint.x + paint.width / 2, y: paint.y - 34 };
+    await page.mouse.move(board.box.x + at.x, board.box.y + at.y);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + at.x + 90, board.box.y + at.y + 70, { steps: 6 });
+    await page.mouse.up();
+
+    const after = (await sceneElements(page)).find((el) => el.type === "line")!;
+    expect(Math.abs(after.angle ?? 0)).toBeGreaterThan(0.05);
+  });
+
+  test("its corners are still there, behind a double click", async ({ page }) => {
+    // The points are not taken away, only moved out of the common gesture's way — the
+    // same door Excalidraw puts its line editor behind.
+    const board = await openBoard(page);
+    await fillARectangle(page, board);
+    const before = (await sceneElements(page)).find((el) => el.type === "line")!;
+
+    await page.mouse.dblclick(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
+    const corner = { x: before.x + before.points![1]![0], y: before.y + before.points![1]![1] };
+    await page.mouse.move(board.box.x + corner.x, board.box.y + corner.y);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + corner.x + 60, board.box.y + corner.y - 40, { steps: 5 });
+    await page.mouse.up();
+
+    const after = (await sceneElements(page)).find((el) => el.type === "line")!;
+    expect(after.points![1]).not.toEqual(before.points![1]);
+  });
+});
