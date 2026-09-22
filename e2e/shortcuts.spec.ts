@@ -3,6 +3,7 @@ import { expect, test } from "./fixtures.ts";
 import {
   activeTool,
   camera,
+  clickElement,
   focusBoard,
   openBoard,
   OPEN_CANVAS,
@@ -26,12 +27,22 @@ import {
  * own listener.
  */
 
-/** A rectangle drawn by hand, for the shortcuts that need something to act on. */
-async function drawRectangle(page: Page, board: Board): Promise<void> {
+/**
+ * A rectangle drawn by hand, for the shortcuts that need something to act on.
+ *
+ * The tool is picked every time: it reverts to select after each shape unless the lock is
+ * on, so a second call that skipped this would drag a marquee instead of drawing.
+ */
+async function drawRectangle(
+  page: Page,
+  board: Board,
+  from = { x: 520, y: 240 },
+  to = { x: 800, y: 460 },
+): Promise<void> {
   await page.getByRole("button", { name: /^Rectangle \(/ }).click();
-  await page.mouse.move(board.box.x + 520, board.box.y + 240);
+  await page.mouse.move(board.box.x + from.x, board.box.y + from.y);
   await page.mouse.down();
-  await page.mouse.move(board.box.x + 800, board.box.y + 460, { steps: 6 });
+  await page.mouse.move(board.box.x + to.x, board.box.y + to.y, { steps: 6 });
   await page.mouse.up();
 }
 
@@ -218,6 +229,73 @@ test.describe("navigation shortcuts", () => {
     expect(centre.sy).toBeGreaterThan(board.box.height * 0.3);
     expect(centre.sy).toBeLessThan(board.box.height * 0.7);
     expect(after.scale).toBeGreaterThan(0);
+  });
+
+  test("Shift+2 zooms to the selection rather than the board", async ({ page }) => {
+    // The whole point of having it as well as Shift+1: a fit has to hold every shape, so
+    // the one you are working on ends up as small as the furthest stray one allows.
+    const board = await openBoard(page);
+    // Two shapes far apart, so fitting both is much further out than framing one. The
+    // tool reverts to select after each shape unless it is locked, so the second gesture
+    // needs the tool picked again — without that it is a marquee drag, the board holds
+    // one element, and fit and zoom-to-selection agree exactly.
+    await drawRectangle(page, board, { x: 460, y: 190 }, { x: 560, y: 260 });
+    await drawRectangle(page, board, { x: 1000, y: 540 }, { x: 1140, y: 640 });
+    expect(await sceneElements(page)).toHaveLength(2);
+    await focusBoard(board);
+
+    await page.keyboard.press("Shift+Digit1");
+    const fitted = (await camera(page)).scale;
+
+    await page.getByRole("button", { name: /^Select \(/ }).click();
+    await clickElement(board, 0);
+    expect(await selection(page)).toHaveLength(1);
+
+    await page.keyboard.press("Shift+Digit2");
+
+    expect((await camera(page)).scale).toBeGreaterThan(fitted);
+  });
+
+  test("Shift+2 with nothing selected leaves the camera alone", async ({ page }) => {
+    const board = await openBoard(page);
+    await drawRectangle(page, board);
+    await focusBoard(board);
+    await page.keyboard.press("Escape");
+    const before = await camera(page);
+
+    await page.keyboard.press("Shift+Digit2");
+
+    expect(await camera(page)).toEqual(before);
+  });
+
+  test("Page Down moves a screenful, Page Up brings it back", async ({ page }) => {
+    // Paging keeps a strip of the outgoing view, so the two presses are not a whole
+    // viewport each — but down then up has to land exactly where it started, or reading
+    // a long board and coming back leaves you somewhere you did not choose.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    const before = await camera(page);
+
+    await page.keyboard.press("PageDown");
+    const paged = await camera(page);
+    expect(before.y - paged.y).toBeGreaterThan(board.box.height * 0.5);
+    expect(before.y - paged.y).toBeLessThan(board.box.height);
+    expect(paged.x).toBeCloseTo(before.x, 5);
+
+    await page.keyboard.press("PageUp");
+    expect((await camera(page)).y).toBeCloseTo(before.y, 5);
+  });
+
+  test("Shift+Page Down pages sideways", async ({ page }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    const before = await camera(page);
+
+    await page.keyboard.press("Shift+PageDown");
+
+    const after = await camera(page);
+    expect(before.x - after.x).toBeGreaterThan(board.box.width * 0.5);
+    expect(after.y).toBeCloseTo(before.y, 5);
   });
 
   test("Space+drag pans without changing the tool", async ({ page }) => {

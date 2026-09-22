@@ -187,6 +187,29 @@ export async function focusBoard(board: Board): Promise<void> {
   await page.mouse.click(box.x + OPEN_CANVAS.right - 20, box.y + OPEN_CANVAS.bottom - 20);
 }
 
+/**
+ * Clicks the nth element, wherever the camera has put it.
+ *
+ * Two traps, both of which produce an empty selection and no clue why:
+ *
+ * - aiming at the coordinates a shape was *drawn* at only works while the camera has not
+ *   moved, so any spec that zooms or pans first misses;
+ * - a shape with a transparent background — the default — is hit on its *outline* only,
+ *   so the middle of a rectangle is not on it. The top edge is.
+ */
+export async function clickElement(board: Board, index: number): Promise<void> {
+  const at = await board.page.evaluate((which) => {
+    const engine = window.__drawEngine!;
+    const element = JSON.parse(engine.exportJson()).elements[which];
+    const { x, y, scale } = engine.camera;
+    return {
+      x: (element.x + element.width / 2) * scale + x,
+      y: element.y * scale + y,
+    };
+  }, index);
+  await board.page.mouse.click(board.box.x + at.x, board.box.y + at.y);
+}
+
 /** The tool the engine currently has active. */
 export function activeTool(page: Page): Promise<string> {
   return page.evaluate(() => window.__drawEngine!.getTool());

@@ -65,15 +65,9 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🧭 Navigation & canvas",
-    text: /Page Up|Page Down/,
+    text: /viewport mode/,
     status: "gap",
-    why: "No page-scroll keys. The camera can pan, so this is a keymap entry rather than new behaviour.",
-  },
-  {
-    section: "🧭 Navigation & canvas",
-    text: /Zoom to selection|viewport mode/,
-    status: "gap",
-    why: "Shift+2 and Shift+3. `fit_bounds` already does the maths; what is missing is fitting to the selection's bounds rather than the scene's.",
+    why: "Shift+3. Excalidraw uses it for a viewport-relative fit; ours has no separate mode to fit to.",
   },
   {
     section: "🧭 Navigation & canvas",
@@ -81,6 +75,7 @@ export const RULES: readonly Rule[] = [
     tests: [
       `${ENGINE}/ci_zoom_wheel.rs`,
       `${ENGINE}/ci_camera.rs`,
+      `${ENGINE}/ci_navigate.rs`,
       "engine/src/host/wheel.test.ts",
       "e2e/zoom.spec.ts",
       "e2e/shortcuts.spec.ts",
@@ -552,14 +547,19 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "22. Canvas navigation",
-    text: /Pinch|Touch pan|Zoom to selection/,
+    text: /Pinch|Touch pan/,
     status: "gap",
-    why: "Pinch and touch pan need the gesture work in §23; zoom-to-selection is a small addition to fit_bounds.",
+    why: "Pinch and touch pan need the gesture work in §23.",
   },
   {
     section: "22. Canvas navigation",
     status: "covered",
-    tests: [`${ENGINE}/ci_camera.rs`, `${ENGINE}/ci_zoom_wheel.rs`, "e2e/zoom.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_camera.rs`,
+      `${ENGINE}/ci_zoom_wheel.rs`,
+      `${ENGINE}/ci_navigate.rs`,
+      "e2e/zoom.spec.ts",
+    ],
   },
   {
     section: "23. Touch / mobile",
