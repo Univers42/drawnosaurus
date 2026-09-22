@@ -5,6 +5,11 @@ interface LiveParams {
   slug: string;
 }
 
+/**
+ * Blind fan-out for live collaboration. Frames may be AES-GCM sealed client-side;
+ * this route must not parse, log, or decrypt payloads — that is what keeps live
+ * transit end-to-end encrypted when peers share a fragment room key.
+ */
 export function registerLiveRoutes(app: FastifyInstance): void {
   const rooms = new Map<string, Set<WebSocket.WebSocket>>();
 

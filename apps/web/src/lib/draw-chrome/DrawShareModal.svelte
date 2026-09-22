@@ -13,8 +13,10 @@
 
   let copied = $state(false);
 
+  // Prefer the live href so the fragment room key travels with the link. The server
+  // never receives that fragment; without it, a peer cannot decrypt live frames.
   const shareUrl = $derived(
-    typeof window !== "undefined" ? `${window.location.origin}/boards/${slug}` : `/boards/${slug}`,
+    typeof window !== "undefined" ? window.location.href : `/boards/${slug}`,
   );
 
   async function copyLink(): Promise<void> {
@@ -42,7 +44,9 @@
     </div>
 
     <p class="description">
-      Anyone with this link can join this board in real-time, see your cursor, and draw together.
+      Anyone with this link can join in real time. The link includes a secret room key (after
+      <code>#</code>) that never reaches the server, so live cursors and patches stay end-to-end
+      encrypted in transit. Board saves over HTTP are still readable by the server.
     </p>
 
     <div class="link-box">
@@ -166,6 +170,11 @@
     color: var(--muted);
     margin: 0 0 16px;
     line-height: 1.45;
+  }
+
+  .description code {
+    font-size: 12px;
+    color: var(--ink);
   }
 
   .link-box {

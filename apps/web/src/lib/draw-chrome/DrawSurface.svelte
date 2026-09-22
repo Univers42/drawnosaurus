@@ -41,6 +41,7 @@
     rejectImageFile,
   } from "./imageFile.ts";
   import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
+  import { ensureRoomKey, importRoomKey } from "../realtime/roomCrypto.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
   import DrawMainMenu from "./DrawMainMenu.svelte";
@@ -581,28 +582,38 @@
     media.addEventListener("change", onSystemThemeChange);
 
     let unsub: (() => void) | undefined;
+    let liveCancelled = false;
     if (slug) {
-      realtime = new RealtimeChannel(slug);
-      realtime.connect();
-      unsub = realtime.onPeers((list) => {
-        peers = list;
-      });
-      realtime.onRemotePatch((patch) => {
-        if (!engine || !patch.elements?.length) return;
-        // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote
-        // edits through it duplicated every one of them — and because the result was
-        // then broadcast back, two clients grew the board without bound. A four-element
-        // board reached 8,273 elements and three frames a second that way.
-        //
-        // `applyRemotePatch` also emits no scene event, so nothing echoes back to the
-        // peer that sent it.
-        engine.applyRemotePatch(
-          JSON.stringify({ type: "osidraw", version: 1, elements: patch.elements }),
-        );
-      });
+      // Fragment room key never leaves the browser. Mint one if the URL has none so
+      // the share link becomes a capability URL; peers who open the same #room=
+      // derive the same AES key. The API only sees opaque sealed frames.
+      void (async () => {
+        const raw = ensureRoomKey(window.location);
+        const roomKey = await importRoomKey(raw);
+        if (liveCancelled) return;
+        realtime = new RealtimeChannel(slug, roomKey);
+        realtime.connect();
+        unsub = realtime.onPeers((list) => {
+          peers = list;
+        });
+        realtime.onRemotePatch((patch) => {
+          if (!engine || !patch.elements?.length) return;
+          // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote
+          // edits through it duplicated every one of them — and because the result was
+          // then broadcast back, two clients grew the board without bound. A four-element
+          // board reached 8,273 elements and three frames a second that way.
+          //
+          // `applyRemotePatch` also emits no scene event, so nothing echoes back to the
+          // peer that sent it.
+          engine.applyRemotePatch(
+            JSON.stringify({ type: "osidraw", version: 1, elements: patch.elements }),
+          );
+        });
+      })();
     }
 
     return () => {
+      liveCancelled = true;
       media.removeEventListener("change", onSystemThemeChange);
       unsub?.();
       realtime?.disconnect();
