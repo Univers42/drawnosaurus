@@ -24,9 +24,21 @@ declare global {
       readonly camera: Camera;
       screenToWorld(sx: number, sy: number): { x: number; y: number };
       zoomAt(sx: number, sy: number, factor: number): void;
+      exportJson(): string;
     };
   }
 }
+
+/** As much of an element as these specs look at. */
+export interface SceneElement {
+  id: string;
+  type: string;
+  isDeleted?: boolean;
+  backgroundColor?: string;
+}
+
+/** Every `PATCH /v1/**` body the page has sent, in order, per page. */
+const patches = new WeakMap<Page, SceneElement[][]>();
 
 export interface Board {
   page: Page;
@@ -35,6 +47,17 @@ export interface Board {
   box: { x: number; y: number; width: number; height: number };
 }
 
+/**
+ * A region of the canvas with none of the chrome floating over it.
+ *
+ * The toolbar, the inspector and the zoom bar are absolutely positioned *on top of* the
+ * canvas rather than beside it, so a gesture that starts under one of them is swallowed
+ * by a panel and never reaches the engine — with no error, no console warning and an
+ * empty scene at the end. Anything that draws starts inside this. Canvas-relative, at the
+ * 1280×800 viewport the config pins.
+ */
+export const OPEN_CANVAS = { left: 440, top: 170, right: 1160, bottom: 650 } as const;
+
 /** Navigates to a board with the API stubbed out, and waits for the engine to mount. */
 export async function openBoard(page: Page, slug = "e2e"): Promise<Board> {
   // The realtime channel. Left unhandled it fails to connect and reconnects on a timer
@@ -42,12 +65,17 @@ export async function openBoard(page: Page, slug = "e2e"): Promise<Board> {
   // errors in the log that look like the failure when something else goes wrong.
   await page.routeWebSocket(/\/live$/, () => {});
 
+  patches.set(page, []);
+
   await page.route("**/v1/**", async (route) => {
     const url = route.request().url();
     if (route.request().method() !== "GET") {
-      // The autosaver's PATCH. Acknowledged so it never retries — an unacknowledged
-      // patch arms a retry timer, which is background work running under every
-      // assertion in the file.
+      // The autosaver's PATCH: recorded, then acknowledged. Recorded because "did this
+      // reach the server" is a question the engine cannot answer about itself, and it is
+      // where the bucket fill's own bug lived. Acknowledged because an unacknowledged
+      // patch arms a retry timer, which is background work under every later assertion.
+      const body = route.request().postDataJSON() as { elements?: SceneElement[] } | null;
+      patches.get(page)?.push(body?.elements ?? []);
       await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
       return;
     }
@@ -124,4 +152,41 @@ export async function wheelAt(
 /** How far apart two scales are, as a ratio ≥ 1 whichever way the zoom went. */
 export function stepRatio(before: number, after: number): number {
   return after > before ? after / before : before / after;
+}
+
+/**
+ * Chooses a tool by its label on the toolbar, opening the more-tools menu when it lives
+ * there.
+ *
+ * Through the toolbar rather than the hotkey, because the keyboard listener is on the
+ * focused container and a spec that has clicked elsewhere would silently select nothing —
+ * and a spec that silently draws with the wrong tool fails somewhere far from the cause.
+ */
+export async function pickTool(page: Page, label: string): Promise<void> {
+  const onTheBar = page.getByRole("button", { name: new RegExp(`^${label} \\(`) });
+  if ((await onTheBar.count()) > 0) {
+    await onTheBar.first().click();
+    return;
+  }
+  await page.getByRole("button", { name: /^More tools/ }).click();
+  await page.getByRole("menuitemradio", { name: label, exact: false }).click();
+}
+
+/** The elements the engine currently holds, deleted ones excluded. */
+export async function sceneElements(page: Page): Promise<SceneElement[]> {
+  const json = await page.evaluate(() => window.__drawEngine!.exportJson());
+  const file = JSON.parse(json) as { elements?: SceneElement[] };
+  return (file.elements ?? []).filter((element) => !element.isDeleted);
+}
+
+/** Their types, in scene order — which is z-order, back to front. */
+export async function elementKinds(page: Page): Promise<string[]> {
+  return (await sceneElements(page)).map((element) => element.type);
+}
+
+/** Every element the page has sent to the API so far, flattened across patches. */
+export async function patchedElements(page: Page): Promise<SceneElement[]> {
+  // `await` so callers read the same whether or not this ever needs to reach the page.
+  await Promise.resolve();
+  return (patches.get(page) ?? []).flat();
 }
