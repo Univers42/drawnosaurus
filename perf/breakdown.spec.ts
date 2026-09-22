@@ -69,8 +69,11 @@ for (const fill of ["hachure", "solid", "none"] as const) {
         if (i > 0) samples.push(s);
       }
       const r = summarise(samples);
+      const plans = await page.evaluate(() =>
+        (window.__drawEngine as unknown as { paintStats(): Record<string, number> }).paintStats(),
+      );
       console.log(
-        `  fill=${fill.padEnd(8)} ${String(events).padStart(2)} events x (${dx},${dy}) : task ${r.taskMs.toFixed(0)}ms  script ${r.scriptMs.toFixed(1)}ms`,
+        `  fill=${fill.padEnd(8)} task ${r.taskMs.toFixed(0)}ms  script ${r.scriptMs.toFixed(1)}ms  plans ${JSON.stringify(plans)}`,
       );
     }
     await m.detach();

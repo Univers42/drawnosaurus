@@ -28,6 +28,7 @@ declare global {
       getTool(): string;
       getSelection(): string[];
       getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
+      setGrid(grid: { enabled?: boolean }): void;
     };
   }
 }
