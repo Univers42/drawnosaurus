@@ -228,3 +228,45 @@ describe("an image is styled by selection, not by its tool", () => {
     expect(actions.backgroundColor).toBe(false);
   });
 });
+
+describe("the bucket fill tool", () => {
+  // The tool arrived with no entry in any predicate, so every capability came back
+  // false while it was active. The panel is gated on those flags row by row, so it
+  // rendered as an empty box: there was no way to choose the colour to paint with, and
+  // every fill came out the same hardcoded shade. Clicking a filled region a second
+  // time then repainted it that identical shade, which looks exactly like a tool that
+  // does nothing.
+  it("offers a background colour, because that is what it paints with", () => {
+    const actions = getShapeActions("bucketfill", [], "transparent");
+    expect(actions.visible).toBe(true);
+    expect(actions.backgroundColor).toBe(true);
+  });
+
+  it("offers a fill style even when the shared background is transparent", () => {
+    // Excalidraw special-cases exactly this, and says why in situ: "bucket fill never
+    // renders transparent (it falls back to a real color), so its fill style stays
+    // relevant either way" — `shapeActionPredicates.ts:131-135`. Without the special
+    // case the fill row is hidden precisely when nothing has been picked yet, which is
+    // every first use of the tool.
+    expect(getShapeActions("bucketfill", [], "transparent").fill).toBe(true);
+    expect(getShapeActions("bucketfill", [], "#b2f2bb").fill).toBe(true);
+  });
+
+  it("offers opacity", () => {
+    expect(getShapeActions("bucketfill", [], "transparent").opacity).toBe(true);
+  });
+
+  it("offers nothing that paint has no use for", () => {
+    // The paint it leaves behind has no stroke at all, so a stroke colour, width or
+    // dash would be controls that change nothing. `comparisons.ts:19-64` omits
+    // `bucketfill` from every one of them.
+    const actions = getShapeActions("bucketfill", [], "#b2f2bb");
+    expect(actions.strokeColor).toBe(false);
+    expect(actions.strokeWidth).toBe(false);
+    expect(actions.strokeStyle).toBe(false);
+    expect(actions.sloppiness).toBe(false);
+    expect(actions.roundness).toBe(false);
+    expect(actions.arrowheads).toBe(false);
+    expect(actions.text).toBe(false);
+  });
+});

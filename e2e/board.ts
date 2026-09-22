@@ -29,6 +29,8 @@ declare global {
       getSelection(): string[];
       getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
       setGrid(grid: { enabled?: boolean }): void;
+      /** Replaces the whole scene — used to place geometry too small to draw by hand. */
+      loadScene(json: string): void;
     };
   }
 }
@@ -39,6 +41,12 @@ export interface SceneElement {
   type: string;
   isDeleted?: boolean;
   backgroundColor?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Point-based kinds only — a line, an arrow or a freehand stroke. */
+  points?: [number, number][];
 }
 
 /** Every `PATCH /v1/**` body the page has sent, in order, per page. */
