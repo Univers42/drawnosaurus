@@ -96,32 +96,44 @@ export function summarise(samples: Sample[]): Result {
   };
 }
 
+/** The gestures, measured apart so a total cannot hide which one is expensive. */
+export type Gesture = "pan" | "zoom" | "drag";
+
+export const GESTURES: Gesture[] = ["pan", "zoom", "drag"];
+
 /**
- * The scripted gesture both editors are given, identically.
+ * One scripted gesture, given to both editors identically.
  *
  * Wheel events rather than synthesised ones, so each editor's own handler decides what a
  * delta is worth — that decision is part of what is being compared. The pointer stays
  * over the middle of the canvas throughout, well clear of either app's chrome.
+ *
+ * Separated by gesture because they stress different things and a single total says only
+ * that something is slow. A pan moves every element without changing any of them, so a
+ * cached raster stays valid; a zoom changes every element's size on screen, so a renderer
+ * that rasterises per element has to decide whether to redo that work or accept a
+ * stretched bitmap. That decision is most of what is being measured here.
  */
-export async function stressScenario(page: Page, centre: { x: number; y: number }) {
+export function stressScenario(page: Page, centre: { x: number; y: number }, gesture: Gesture) {
   return async () => {
     await page.mouse.move(centre.x, centre.y);
-    // Scroll the board around.
-    for (let i = 0; i < 30; i += 1) {
-      await page.mouse.wheel(20, 30);
+    if (gesture === "pan") {
+      for (let i = 0; i < 30; i += 1) {
+        await page.mouse.wheel(20, 30);
+      }
+      return;
     }
-    // Zoom in and back out, which is the case that cannot be cached away: every element
-    // changes size on screen.
-    await page.keyboard.down("Control");
-    for (let i = 0; i < 10; i += 1) {
-      await page.mouse.wheel(0, -100);
+    if (gesture === "zoom") {
+      await page.keyboard.down("Control");
+      for (let i = 0; i < 10; i += 1) {
+        await page.mouse.wheel(0, -100);
+      }
+      for (let i = 0; i < 10; i += 1) {
+        await page.mouse.wheel(0, 100);
+      }
+      await page.keyboard.up("Control");
+      return;
     }
-    for (let i = 0; i < 10; i += 1) {
-      await page.mouse.wheel(0, 100);
-    }
-    await page.keyboard.up("Control");
-    // And a drag, which repaints on every frame of the gesture.
-    await page.mouse.move(centre.x, centre.y);
     await page.mouse.down();
     for (let i = 1; i <= 20; i += 1) {
       await page.mouse.move(centre.x + i * 8, centre.y + i * 4);

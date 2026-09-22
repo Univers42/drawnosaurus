@@ -1,5 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-import { meter, rendererName, sample, stressScenario, summarise, type Result } from "./measure.ts";
+import {
+  GESTURES,
+  meter,
+  rendererName,
+  sample,
+  stressScenario,
+  summarise,
+  type Gesture,
+  type Result,
+} from "./measure.ts";
 import { buildScene, EXCALIDRAW_APP_STATE, type Shape } from "./scene.ts";
 
 /**
@@ -34,6 +43,7 @@ const CASES: Case[] = [
 
 const report: {
   case: string;
+  gesture: Gesture;
   ours: Result;
   theirs: Result;
 }[] = [];
@@ -90,23 +100,27 @@ async function measure(
   page: Page,
   open: (page: Page, count: number, shape: Shape) => Promise<void>,
   { count, shape }: Case,
-): Promise<Result> {
+): Promise<Record<Gesture, Result>> {
   await open(page, count, shape);
   const box = await page.locator("canvas").first().boundingBox();
   if (!box) throw new Error("no canvas");
   const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 
   const m = await meter(page);
-  const scenario = await stressScenario(page, centre);
-  const samples = [];
-  for (let i = 0; i < REPS; i += 1) {
-    const taken = await sample(m, scenario);
-    // The first pass warms caches on both sides; charging it to either would measure
-    // start-up rather than use.
-    if (i > 0) samples.push(taken);
+  const out = {} as Record<Gesture, Result>;
+  for (const gesture of GESTURES) {
+    const scenario = stressScenario(page, centre, gesture);
+    const samples = [];
+    for (let i = 0; i < REPS; i += 1) {
+      const taken = await sample(m, scenario);
+      // The first pass warms caches on both sides; charging it to either would measure
+      // start-up rather than use.
+      if (i > 0) samples.push(taken);
+    }
+    out[gesture] = summarise(samples);
   }
   await m.detach();
-  return summarise(samples);
+  return out;
 }
 
 test.describe.configure({ mode: "serial" });
@@ -117,13 +131,20 @@ for (const shape of ["small", "big"] as const) {
       test.setTimeout(180_000);
       const ours = await measure(page, openOurs, { count, shape });
       const theirs = await measure(page, openTheirs, { count, shape });
-      report.push({ case: `${count} ${shape}`, ours, theirs });
+      for (const gesture of GESTURES) {
+        report.push({
+          case: `${count} ${shape}`,
+          gesture,
+          ours: ours[gesture],
+          theirs: theirs[gesture],
+        });
+      }
 
       // Not an assertion about who wins — that is what the numbers are for, and a
       // threshold here would turn a measurement into a wish. This only catches a case
       // that failed to load, which would otherwise report as a suspiciously fast zero.
-      expect(ours.taskMs).toBeGreaterThan(0);
-      expect(theirs.taskMs).toBeGreaterThan(0);
+      expect(ours.pan.taskMs).toBeGreaterThan(0);
+      expect(theirs.pan.taskMs).toBeGreaterThan(0);
     });
   }
 }
@@ -141,29 +162,25 @@ test.afterAll(async ({ browser }) => {
     `  renderer: ${renderer}`,
     "  lower is better; median of 4 measured runs after a discarded warm-up",
     "",
-    "  case            ours      excalidraw   ratio",
-    "  ------------------------------------------------",
+    "  case          gesture   ours       excalidraw  verdict",
+    "  ---------------------------------------------------------------",
   ];
   for (const row of report) {
     const ratio = row.theirs.taskMs / row.ours.taskMs;
-    const verdict = ratio > 1 ? `${ratio.toFixed(2)}x faster` : `${(1 / ratio).toFixed(2)}x slower`;
+    const verdict = ratio > 1 ? `${ratio.toFixed(2)}x faster` : `${(1 / ratio).toFixed(2)}x SLOWER`;
     lines.push(
-      `  ${row.case.padEnd(14)}  ${ms(row.ours.taskMs).padEnd(9)} ${ms(row.theirs.taskMs).padEnd(
-        11,
-      )} ${verdict}`,
+      `  ${row.case.padEnd(12)}  ${row.gesture.padEnd(8)}  ${ms(row.ours.taskMs).padEnd(10)} ${ms(
+        row.theirs.taskMs,
+      ).padEnd(11)} ${verdict}`,
     );
   }
   lines.push("");
+  lines.push("  script time only (the rest of `ours` is Canvas2D rasterising):");
   for (const row of report) {
     lines.push(
-      `  ${row.case}: ours script ${ms(row.ours.scriptMs)} / layout ${ms(
-        row.ours.layoutMs,
-      )} / wall ${ms(row.ours.wallMs)}`,
-    );
-    lines.push(
-      `  ${row.case}: theirs script ${ms(row.theirs.scriptMs)} / layout ${ms(
-        row.theirs.layoutMs,
-      )} / wall ${ms(row.theirs.wallMs)}`,
+      `  ${row.case.padEnd(12)}  ${row.gesture.padEnd(8)}  ours ${ms(row.ours.scriptMs).padEnd(
+        9,
+      )} theirs ${ms(row.theirs.scriptMs)}`,
     );
   }
   lines.push("");
