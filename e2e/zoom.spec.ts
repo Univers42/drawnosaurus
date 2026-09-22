@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { camera, openBoard, shownZoomPercent, stepRatio, wheelAt } from "./board.ts";
 
 /**
