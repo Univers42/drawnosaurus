@@ -105,6 +105,15 @@ export async function openBoard(page: Page, slug = "e2e"): Promise<Board> {
   // there, a wheel event would land on a canvas with no listener and silently do nothing.
   await page.waitForFunction(() => window.__drawEngine !== undefined);
 
+  // The handle appears as soon as the engine is constructed, which is earlier than the
+  // app is settled: the board route is still finishing its fetch, the autosaver is still
+  // arming, and Svelte may still have work queued. A gesture that starts inside that
+  // window has been seen to reach a canvas that is about to be re-rendered, and it lands
+  // nowhere — the tool stays selected and no element is created. Waiting for the network
+  // to go quiet and for one frame to pass closes it.
+  await page.waitForLoadState("networkidle");
+  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
+
   const box = await canvas.boundingBox();
   if (!box) throw new Error("the canvas has no box to aim at");
   return { page, canvas, box };
