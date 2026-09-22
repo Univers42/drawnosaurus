@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { DrawElementDto } from "@drawnosaurus/contract";
-  import type { PeerCursor } from "../realtime/realtimeClient.ts";
+  import type { ConnectionStatus, PeerCursor } from "../realtime/realtimeClient.ts";
   import type { MenuElementInfo } from "./menu.ts";
   import DrawExportModal from "./DrawExportModal.svelte";
   import DrawMermaidModal from "./DrawMermaidModal.svelte";
@@ -13,6 +13,7 @@
     engine,
     slug = "",
     peers = [],
+    connectionStatus = "disconnected",
     menu = $bindable(null),
     showMainMenu = $bindable(false),
     showExport = $bindable(false),
@@ -24,6 +25,7 @@
     engine: DrawEngine | null;
     slug?: string;
     peers?: PeerCursor[];
+    connectionStatus?: ConnectionStatus;
     menu: { x: number; y: number; element: MenuElementInfo | null } | null;
     showMainMenu: boolean;
     showExport: boolean;
@@ -65,7 +67,7 @@
 {/if}
 
 {#if showShare}
-  <DrawShareModal {slug} {peers} onClose={() => (showShare = false)} />
+  <DrawShareModal {slug} {peers} {connectionStatus} onClose={() => (showShare = false)} />
 {/if}
 
 {#if showShortcuts}

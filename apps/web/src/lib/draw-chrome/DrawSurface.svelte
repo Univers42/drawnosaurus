@@ -40,8 +40,13 @@
     readImageFile,
     rejectImageFile,
   } from "./imageFile.ts";
-  import { RealtimeChannel, type PeerCursor } from "../realtime/realtimeClient.ts";
+  import {
+    RealtimeChannel,
+    type ConnectionStatus,
+    type PeerCursor,
+  } from "../realtime/realtimeClient.ts";
   import { ensureRoomKey, importRoomKey } from "../realtime/roomCrypto.ts";
+  import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
   import DrawMainMenu from "./DrawMainMenu.svelte";
@@ -164,7 +169,9 @@
 
   // Realtime
   let peers = $state<PeerCursor[]>([]);
+  let liveStatus = $state<ConnectionStatus>("disconnected");
   let realtime: RealtimeChannel<StampedElement> | null = null;
+  const liveBroadcast = new LiveSceneBroadcaster<StampedElement>();
   let raf = 0;
   let pending: Camera | null = null;
   // The tool's cursor is the floor; the engine's hover answer wins when it has one, and
@@ -536,23 +543,10 @@
     onSceneChange?.(json);
     refreshEmbedFrames();
     if (!realtime) return;
-    try {
-      const data = JSON.parse(json);
-      // The engine reports a delta for the common path and the full scene only for the
-      // structural changes a delta cannot describe. Broadcast whichever arrived —
-      // reading only `elements` would have silently stopped collaborating the moment
-      // deltas landed, and reading only `updated` would break z-order changes.
-      const elements: StampedElement[] = Array.isArray(data.updated)
-        ? data.updated
-        : Array.isArray(data.elements)
-          ? data.elements
-          : [];
-      if (elements.length > 0) {
-        realtime.sendPatch({ elements });
-      }
-    } catch {
-      // A malformed payload is not worth tearing the session down for.
-    }
+    // Diff against what peers already have: synthesise tombstones for soft-deletes
+    // and an explicit order when z-order moved without stamp changes.
+    const patch = liveBroadcast.ingest(json);
+    if (patch) realtime.sendPatch(patch);
   }
 
   onMount(() => {
@@ -581,9 +575,13 @@
     };
     media.addEventListener("change", onSystemThemeChange);
 
-    let unsub: (() => void) | undefined;
+    let unsubPeers: (() => void) | undefined;
+    let unsubStatus: (() => void) | undefined;
+    let unsubPatch: (() => void) | undefined;
     let liveCancelled = false;
     if (slug) {
+      // Seed the broadcaster from the loaded scene so the first stroke is a diff.
+      liveBroadcast.reset(scene.toArray() as StampedElement[]);
       // Fragment room key never leaves the browser. Mint one if the URL has none so
       // the share link becomes a capability URL; peers who open the same #room=
       // derive the same AES key. The API only sees opaque sealed frames.
@@ -592,30 +590,52 @@
         const roomKey = await importRoomKey(raw);
         if (liveCancelled) return;
         realtime = new RealtimeChannel(slug, roomKey);
-        realtime.connect();
-        unsub = realtime.onPeers((list) => {
+        unsubPeers = realtime.onPeers((list) => {
           peers = list;
         });
-        realtime.onRemotePatch((patch) => {
-          if (!engine || !patch.elements?.length) return;
+        unsubStatus = realtime.onStatus((next) => {
+          liveStatus = next;
+        });
+        unsubPatch = realtime.onRemotePatch((patch) => {
+          if (!engine) return;
+          if (!patch.elements?.length && !patch.order?.length) return;
           // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote
           // edits through it duplicated every one of them — and because the result was
-          // then broadcast back, two clients grew the board without bound. A four-element
-          // board reached 8,273 elements and three frames a second that way.
+          // then broadcast back, two clients grew the board without bound.
           //
-          // `applyRemotePatch` also emits no scene event, so nothing echoes back to the
-          // peer that sent it.
-          engine.applyRemotePatch(
-            JSON.stringify({ type: "osidraw", version: 1, elements: patch.elements }),
+          // `applyRemotePatch` emits no scene event, so nothing echoes back to the peer
+          // that sent it. We still feed the host `onSceneChange` so `live` / autosave
+          // see peer deletes and updates.
+          const payload: {
+            type: string;
+            version: number;
+            elements: StampedElement[];
+            order?: string[];
+          } = {
+            type: "osidraw",
+            version: 1,
+            elements: patch.elements ?? [],
+          };
+          if (patch.order) payload.order = patch.order;
+          if (!engine.applyRemotePatch(JSON.stringify(payload))) return;
+          liveBroadcast.adoptRemote(patch);
+          // Order-only patches carry no elements; exportJson is the safe host sync.
+          // Otherwise a delta keeps tombstones visible to the autosave tracker.
+          onSceneChange?.(
+            patch.order?.length ? engine.exportJson() : remotePatchToSceneEvent(patch),
           );
+          refreshEmbedFrames();
         });
+        realtime.connect();
       })();
     }
 
     return () => {
       liveCancelled = true;
       media.removeEventListener("change", onSystemThemeChange);
-      unsub?.();
+      unsubPeers?.();
+      unsubStatus?.();
+      unsubPatch?.();
       realtime?.disconnect();
     };
   });
@@ -972,6 +992,7 @@
     {engine}
     {slug}
     {peers}
+    connectionStatus={liveStatus}
     bind:menu
     bind:showMainMenu
     bind:showExport

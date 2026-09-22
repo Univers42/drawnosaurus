@@ -1,13 +1,15 @@
 <script lang="ts">
-  import type { PeerCursor } from "../realtime/realtimeClient.ts";
+  import type { ConnectionStatus, PeerCursor } from "../realtime/realtimeClient.ts";
 
   let {
     slug,
     peers = [],
+    connectionStatus = "disconnected",
     onClose,
   }: {
     slug: string;
     peers: PeerCursor[];
+    connectionStatus?: ConnectionStatus;
     onClose: () => void;
   } = $props();
 
@@ -17,6 +19,14 @@
   // never receives that fragment; without it, a peer cannot decrypt live frames.
   const shareUrl = $derived(
     typeof window !== "undefined" ? window.location.href : `/boards/${slug}`,
+  );
+
+  const statusLabel = $derived(
+    connectionStatus === "connected"
+      ? "Live"
+      : connectionStatus === "connecting"
+        ? "Connecting…"
+        : "Offline",
   );
 
   async function copyLink(): Promise<void> {
@@ -35,9 +45,13 @@
     <div class="modal-header">
       <div class="title-with-status">
         <h3 id="share-title">Live Collaboration</h3>
-        <span class="live-pill">
+        <span
+          class="live-pill"
+          class:live-pill--offline={connectionStatus !== "connected"}
+          class:live-pill--connecting={connectionStatus === "connecting"}
+        >
           <span class="pulse-dot"></span>
-          Live
+          {statusLabel}
         </span>
       </div>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
@@ -131,6 +145,25 @@
     background: rgba(47, 158, 68, 0.12);
     padding: 2px 8px;
     border-radius: 999px;
+  }
+
+  .live-pill--connecting {
+    color: #f08c00;
+    background: rgba(240, 140, 0, 0.12);
+  }
+
+  .live-pill--connecting .pulse-dot {
+    background: #f08c00;
+  }
+
+  .live-pill--offline {
+    color: var(--muted);
+    background: rgba(128, 128, 128, 0.12);
+  }
+
+  .live-pill--offline .pulse-dot {
+    background: var(--muted);
+    animation: none;
   }
 
   .pulse-dot {

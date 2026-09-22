@@ -29,6 +29,8 @@ export interface PeerCursor {
   lastActive: number;
 }
 
+export type ConnectionStatus = "disconnected" | "connecting" | "connected";
+
 export type RealtimeMessage<T extends StampedElement> =
   | { type: "cursor"; clientId: string; name: string; color: string; x: number; y: number }
   | { type: "patch"; clientId: string; patch: ScenePatch<T> }
@@ -38,6 +40,11 @@ export type RealtimeMessage<T extends StampedElement> =
 const CURSOR_COLORS = ["#e03131", "#2f9e44", "#1971c2", "#f08c00", "#9c36b5", "#0c8599"];
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+/** Drop peers that go silent without a leave (tab crash, network drop). */
+const PEER_STALE_MS = 45_000;
+const PEER_SWEEP_MS = 10_000;
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 15_000;
 
 export function getCollaboratorProfile(): { clientId: string; name: string; color: string } {
   if (typeof window === "undefined") {
@@ -65,8 +72,15 @@ export class RealtimeChannel<T extends StampedElement> {
   private readonly peers = new Map<string, PeerCursor>();
   private listeners: ((peers: PeerCursor[]) => void)[] = [];
   private patchListeners: ((patch: ScenePatch<T>) => void)[] = [];
+  private statusListeners: ((status: ConnectionStatus) => void)[] = [];
   private connected = false;
   private roomKey: CryptoKey | null;
+  private intentionalClose = false;
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private peerSweepTimer: ReturnType<typeof setInterval> | null = null;
+  private status: ConnectionStatus = "disconnected";
+  private preferredUrl: string | undefined;
 
   /**
    * @param roomKey When set, every frame is AES-GCM sealed and plaintext inbound is
@@ -83,17 +97,34 @@ export class RealtimeChannel<T extends StampedElement> {
     return this.roomKey !== null;
   }
 
+  get connectionStatus(): ConnectionStatus {
+    return this.status;
+  }
+
   setRoomKey(key: CryptoKey | null): void {
     this.roomKey = key;
   }
 
   connect(wsUrl?: string): void {
-    if (typeof window === "undefined" || this.ws) return;
-    const url = wsUrl ?? this.defaultWsUrl();
+    if (typeof window === "undefined") return;
+    this.intentionalClose = false;
+    this.preferredUrl = wsUrl;
+    this.openSocket();
+    if (!this.peerSweepTimer) {
+      this.peerSweepTimer = setInterval(() => this.sweepStalePeers(), PEER_SWEEP_MS);
+    }
+  }
+
+  private openSocket(): void {
+    if (this.ws) return;
+    const url = this.preferredUrl ?? this.defaultWsUrl();
+    this.setStatus("connecting");
     try {
       this.ws = new WebSocket(url);
       this.ws.onopen = () => {
         this.connected = true;
+        this.reconnectAttempt = 0;
+        this.setStatus("connected");
         void this.send({
           type: "join",
           clientId: this.profile.clientId,
@@ -107,11 +138,34 @@ export class RealtimeChannel<T extends StampedElement> {
       this.ws.onclose = () => {
         this.connected = false;
         this.ws = null;
+        this.setStatus("disconnected");
+        if (!this.intentionalClose) this.scheduleReconnect();
+      };
+      this.ws.onerror = () => {
+        // onclose follows; reconnect is scheduled there.
       };
     } catch {
       this.connected = false;
       this.ws = null;
+      this.setStatus("disconnected");
+      if (!this.intentionalClose) this.scheduleReconnect();
     }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || this.intentionalClose) return;
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** this.reconnectAttempt, RECONNECT_MAX_MS);
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSocket();
+    }, delay);
+  }
+
+  private setStatus(next: ConnectionStatus): void {
+    if (this.status === next) return;
+    this.status = next;
+    for (const listener of this.statusListeners) listener(next);
   }
 
   private defaultWsUrl(): string {
@@ -199,12 +253,45 @@ export class RealtimeChannel<T extends StampedElement> {
         lastActive: Date.now(),
       });
       this.notifyPeers();
+    } else if (msg.type === "join") {
+      const isNew = !this.peers.has(msg.clientId);
+      const existing = this.peers.get(msg.clientId);
+      this.peers.set(msg.clientId, {
+        clientId: msg.clientId,
+        name: msg.name,
+        color: msg.color,
+        x: existing?.x ?? 0,
+        y: existing?.y ?? 0,
+        lastActive: Date.now(),
+      });
+      this.notifyPeers();
+      // Existing members re-announce so the newcomer sees them without waiting for a cursor.
+      if (isNew) {
+        void this.send({
+          type: "join",
+          clientId: this.profile.clientId,
+          name: this.profile.name,
+          color: this.profile.color,
+        });
+      }
     } else if (msg.type === "patch") {
       this.patchListeners.forEach((fn) => fn(msg.patch));
     } else if (msg.type === "leave") {
       this.peers.delete(msg.clientId);
       this.notifyPeers();
     }
+  }
+
+  private sweepStalePeers(): void {
+    const cutoff = Date.now() - PEER_STALE_MS;
+    let changed = false;
+    for (const [id, peer] of this.peers) {
+      if (peer.lastActive < cutoff) {
+        this.peers.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) this.notifyPeers();
   }
 
   onPeers(callback: (peers: PeerCursor[]) => void): () => void {
@@ -222,12 +309,29 @@ export class RealtimeChannel<T extends StampedElement> {
     };
   }
 
+  onStatus(callback: (status: ConnectionStatus) => void): () => void {
+    this.statusListeners.push(callback);
+    callback(this.status);
+    return () => {
+      this.statusListeners = this.statusListeners.filter((l) => l !== callback);
+    };
+  }
+
   private notifyPeers(): void {
     const list = Array.from(this.peers.values());
     this.listeners.forEach((fn) => fn(list));
   }
 
   disconnect(): void {
+    this.intentionalClose = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.peerSweepTimer) {
+      clearInterval(this.peerSweepTimer);
+      this.peerSweepTimer = null;
+    }
     if (this.ws) {
       const socket = this.ws;
       const leave: RealtimeMessage<T> = { type: "leave", clientId: this.profile.clientId };
@@ -244,6 +348,7 @@ export class RealtimeChannel<T extends StampedElement> {
     }
     this.connected = false;
     this.peers.clear();
+    this.setStatus("disconnected");
   }
 }
 

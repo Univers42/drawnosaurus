@@ -74,6 +74,25 @@ describe("realtimeClient", () => {
     unsubscribe();
   });
 
+  it("handles join as presence before any cursor moves", () => {
+    const channel = new RealtimeChannel("test-slug");
+    let receivedPeers: { clientId: string; name: string }[] = [];
+    channel.onPeers((peers) => {
+      receivedPeers = peers.map((p) => ({ clientId: p.clientId, name: p.name }));
+    });
+
+    channel.handleMessage({
+      type: "join",
+      clientId: "peer_123",
+      name: "Alice",
+      color: "#e03131",
+    });
+    expect(receivedPeers).toEqual([{ clientId: "peer_123", name: "Alice" }]);
+
+    channel.handleMessage({ type: "leave", clientId: "peer_123" });
+    expect(receivedPeers).toEqual([]);
+  });
+
   it("dispatches remote scene patches", () => {
     const channel = new RealtimeChannel("test-slug");
     let receivedPatch: unknown = null;
