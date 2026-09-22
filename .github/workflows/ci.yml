@@ -156,6 +156,11 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Live collaboration E2E encryption security
+        # Named gate for the threat-model suite (also covered by `pnpm test`).
+        # Keeps confidentiality / downgrade / blind-relay invariants visible in CI.
+        run: pnpm test:live-e2e-security
+
       - name: API integration tests against a real MongoDB
         run: pnpm test:integration
 

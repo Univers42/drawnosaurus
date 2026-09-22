@@ -12,6 +12,7 @@
     "start": "node build/index.js",
     "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run --exclude \"**/*.bench.ts\"",
+    "test:live-e2e-security": "vitest run src/lib/realtime/liveE2eSecurity.test.ts",
     "test:bench": "vitest bench --run"
   },
   "dependencies": {
