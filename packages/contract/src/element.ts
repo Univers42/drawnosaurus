@@ -95,6 +95,11 @@ export const drawElementSchema = z.object({
   // re-align every label saved before these fields existed.
   textAlign: z.enum(TEXT_ALIGNS).optional(),
   verticalAlign: z.enum(VERTICAL_ALIGNS).optional(),
+  // `false` for a column dragged out with the text tool, which keeps its width and wraps
+  // inside it. Optional and undefaulted for the same reason as the alignments: every text
+  // saved before this field existed sized itself to its glyphs, and stamping `true` onto
+  // them on the way through the server would write a choice nobody made.
+  autoResize: z.boolean().optional(),
   containerId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   boundTextId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   groupId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
