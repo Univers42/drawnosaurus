@@ -164,6 +164,12 @@ spec stubs `/v1/**` and the websocket in `e2e/board.ts`. Kept out of `make quali
   inside it; use `focusBoard()` before pressing keys (the key listener is on the editor container, not
   the window); use `clickElement()` rather than remembered coordinates, and remember a
   transparent-background shape is hit on its outline only.
+- Input is real (CDP) everywhere except `dispatchWheelAt`, which synthesises a `WheelEvent` because
+  `deltaMode` is set by the platform before the page and Chromium only ever reports pixels. Reach for
+  a dispatched event only when the browser genuinely cannot produce the input, and say why in situ.
+- Locally, trace writing can fail with `ENOENT` on `test-results/.playwright-artifacts-*` because this
+  checkout is on a network filesystem — it fails the test it was tracing and looks like a flake. Add
+  `--trace=off` when running by hand; CI runs on a normal disk where `retain-on-failure` is worth it.
 
 ## Conventions and trip hazards
 
