@@ -33,6 +33,12 @@ export API_PORT   ?= 4300
 export WEB_PORT   ?= 5273
 export MONGO_PORT ?= 27019
 
+# `dev` gets its own host ports so a hot-reload server and the built images from
+# `up` can run side by side — otherwise starting one silently takes the other's
+# port and you debug the wrong build.
+export DEV_WEB_PORT ?= 5373
+export DEV_API_PORT ?= 4373
+
 CYAN  := \033[36m
 GREEN := \033[32m
 RESET := \033[0m
@@ -62,10 +68,25 @@ wasm: submodules ## Build engine/pkg from the Rust crate (required before web bu
 	$(RUN) $(RUN_AS_HOST) wasm
 	@echo -e "$(GREEN)✔ engine/pkg built$(RESET)"
 
-# Order-only-style guard for the targets that merely *consume* engine/pkg: build it
-# when it is missing, leave it alone when it is there. `wasm` stays the way to force
-# a rebuild after touching the crate.
-$(ENGINE_PKG):
+# Everything the WASM is built from. Found rather than listed, so a new module cannot
+# be left out of the list and quietly stop triggering a rebuild.
+ENGINE_CRATE_SRC := $(shell find engine/crates engine/Cargo.toml engine/Cargo.lock \
+	-name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' 2>/dev/null)
+
+# Rebuild engine/pkg when it is missing OR older than the crate it came from.
+#
+# It used to have no prerequisites at all, which meant "build it if absent" and nothing
+# more: after a change to the crate — or a `git pull` that brought one — every target
+# that merely consumes the pkg (`up`, `dev`, `build`, `typecheck`, `test-e2e`) went on
+# serving the previous build. That failure is silent and total. The zoom was fixed in
+# camera.rs and the browser kept running the old `exp(-delta * 0.01)`, so the bug was
+# reported against a tree that no longer contained it, and `make up` could not talk
+# anyone out of it.
+#
+# The cost of getting this wrong the other way is one unnecessary 46s rebuild — a fresh
+# checkout stamps source mtimes at checkout time, which can land newer than a pkg
+# restored from a cache. That is the right side to err on.
+$(ENGINE_PKG): $(ENGINE_CRATE_SRC)
 	@$(MAKE) --no-print-directory wasm
 
 install: ## Install workspace dependencies
@@ -88,6 +109,9 @@ format: ## prettier --check
 test: ## Unit tests (contract, api, web)
 	$(RUN) --no-deps tooling pnpm test
 
+conformance: ## What prompt/*.md asks for, and what covers it
+	$(RUN) --no-deps tooling pnpm --filter @drawnosaurus/conformance test
+
 test-integration: ## API tests against a real MongoDB
 	$(DC) up -d mongo
 	$(RUN) tooling pnpm test:integration
@@ -96,14 +120,50 @@ quality: $(ENGINE_PKG) ## The gate: typecheck + lint + format + unit tests
 	$(RUN) --no-deps tooling pnpm quality
 	@echo -e "$(GREEN)✔ quality green$(RESET)"
 
+# Runs on the host, not in a container: Playwright ships its own browser build and the
+# image that matches it is a gigabyte, which is a poor trade for a target run by hand.
+# `playwright install` is idempotent — a no-op once the browser is cached.
+#
+# Kept out of `quality` on purpose. That gate runs on every save and has to stay fast;
+# a browser is neither fast nor free of the outside world.
+test-e2e: $(ENGINE_PKG) ## Browser tests (Playwright) — zoom, scroll, bucket fill
+	pnpm exec playwright install --with-deps chromium
+	pnpm exec playwright test
+	@echo -e "$(GREEN)✔ e2e green$(RESET)"
+
+# Excalidraw, installed and served from third_party for the parity benchmark. Its yarn
+# cache goes to sgoinfre because $HOME here is a 4.7G disk that is already full.
+parity-deps: oracle ## Install Excalidraw so it can be benchmarked against
+	cd third_party/excalidraw && \
+		YARN_CACHE_FOLDER=/sgoinfre/students/$(USER)/.yarn-cache \
+		corepack yarn install --frozen-lockfile --network-timeout 600000
+	@echo -e "$(GREEN)✔ excalidraw ready to race$(RESET)"
+
+parity: $(ENGINE_PKG) ## Benchmark against Excalidraw, both on localhost
+	pnpm exec playwright test --config perf/playwright.config.ts
+	@echo -e "$(GREEN)✔ parity measured$(RESET)"
+
 verify: quality test-integration ## Everything CI runs
 	@echo -e "$(GREEN)✔ verify green$(RESET)"
 
-dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on WEB_PORT and API_PORT
+dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and DEV_API_PORT
 	$(DC) up -d mongo
-	$(RUN) --no-deps --service-ports -d --name drawnosaurus-api tooling \
+	-$(DC) rm -fsv drawnosaurus-api 2>/dev/null
+	$(RUN) --no-deps -d --name drawnosaurus-api -p $(DEV_API_PORT):4000 tooling \
 		pnpm --filter @drawnosaurus/api dev
-	$(RUN) --no-deps --service-ports tooling pnpm --filter @drawnosaurus/web dev
+	@echo -e "$(GREEN)dev: web http://localhost:$(DEV_WEB_PORT)  api http://localhost:$(DEV_API_PORT)$(RESET)"
+	@# --service-ports is useless here: `tooling` is a generic runner and declares no
+	@# ports, so it published nothing and the server was unreachable from the host.
+	@# The proxy target is the API container by name; inside this container 127.0.0.1
+	@# is the container itself, not the API.
+	@# VITE_USE_POLLING: the working copy is bind-mounted from a network filesystem, and
+	@# inotify does not cross either boundary — without polling Vite never sees an edit
+	@# and serves what it compiled at startup, which looks exactly like a change that was
+	@# never made and survives any number of rebuilds.
+	$(RUN) --no-deps -p $(DEV_WEB_PORT):5173 \
+		-e API_PROXY_TARGET=http://drawnosaurus-api:4000 \
+		-e VITE_USE_POLLING=1 \
+		tooling pnpm --filter @drawnosaurus/web dev
 
 build: $(ENGINE_PKG) ## Build the api and web images
 	$(DC) build api web
@@ -154,5 +214,6 @@ clean: ## Remove containers, volumes, images, and build output
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
 .PHONY: all help submodules wasm install lock typecheck lint format test \
-	test-integration quality verify dev build up down logs shell clean \
+	test-integration test-e2e conformance parity parity-deps quality verify dev build up \
+	down logs shell clean \
 	oracle oracle-fixtures bench

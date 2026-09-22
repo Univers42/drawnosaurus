@@ -1,20 +1,32 @@
 <script lang="ts">
-  import type { PeerCursor } from "../realtime/realtimeClient.ts";
+  import type { ConnectionStatus, PeerCursor } from "../realtime/realtimeClient.ts";
 
   let {
     slug,
     peers = [],
+    connectionStatus = "disconnected",
     onClose,
   }: {
     slug: string;
     peers: PeerCursor[];
+    connectionStatus?: ConnectionStatus;
     onClose: () => void;
   } = $props();
 
   let copied = $state(false);
 
+  // Prefer the live href so the fragment room key travels with the link. The server
+  // never receives that fragment; without it, a peer cannot decrypt live frames.
   const shareUrl = $derived(
-    typeof window !== "undefined" ? `${window.location.origin}/boards/${slug}` : `/boards/${slug}`,
+    typeof window !== "undefined" ? window.location.href : `/boards/${slug}`,
+  );
+
+  const statusLabel = $derived(
+    connectionStatus === "connected"
+      ? "Live"
+      : connectionStatus === "connecting"
+        ? "Connecting…"
+        : "Offline",
   );
 
   async function copyLink(): Promise<void> {
@@ -33,16 +45,22 @@
     <div class="modal-header">
       <div class="title-with-status">
         <h3 id="share-title">Live Collaboration</h3>
-        <span class="live-pill">
+        <span
+          class="live-pill"
+          class:live-pill--offline={connectionStatus !== "connected"}
+          class:live-pill--connecting={connectionStatus === "connecting"}
+        >
           <span class="pulse-dot"></span>
-          Live
+          {statusLabel}
         </span>
       </div>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
     </div>
 
     <p class="description">
-      Anyone with this link can join this board in real-time, see your cursor, and draw together.
+      Anyone with this link can join in real time. The link includes a secret room key (after
+      <code>#</code>) that never reaches the server, so live cursors and patches stay end-to-end
+      encrypted in transit. Board saves over HTTP are still readable by the server.
     </p>
 
     <div class="link-box">
@@ -129,6 +147,25 @@
     border-radius: 999px;
   }
 
+  .live-pill--connecting {
+    color: #f08c00;
+    background: rgba(240, 140, 0, 0.12);
+  }
+
+  .live-pill--connecting .pulse-dot {
+    background: #f08c00;
+  }
+
+  .live-pill--offline {
+    color: var(--muted);
+    background: rgba(128, 128, 128, 0.12);
+  }
+
+  .live-pill--offline .pulse-dot {
+    background: var(--muted);
+    animation: none;
+  }
+
   .pulse-dot {
     width: 6px;
     height: 6px;
@@ -166,6 +203,11 @@
     color: var(--muted);
     margin: 0 0 16px;
     line-height: 1.45;
+  }
+
+  .description code {
+    font-size: 12px;
+    color: var(--ink);
   }
 
   .link-box {

@@ -20,6 +20,9 @@
   let originalText = "";
   let finished = false;
 
+  /** Text bound to a shape, rather than free-standing text placed on the canvas. */
+  const isContainer = $derived(Boolean(request.containerId));
+
   onMount(() => {
     originalText = request.text;
     value = request.text;
@@ -36,6 +39,12 @@
     node.style.height = "auto";
     node.style.height = `${Math.max(node.scrollHeight, fontSizePx * 1.3)}px`;
 
+    if (isContainer && request.width) {
+      // Bound text is as wide as the shape holding it and wraps inside it, so the box
+      // must not grow with the text the way free-standing text does.
+      node.style.width = `${request.width}px`;
+      return;
+    }
     // Measured by the engine, against the font the canvas draws with. This used to
     // guess `maxLineLength * fontSize * 0.65`, counting UTF-16 units — so the box was a
     // third too wide for "Hello", nearly three times too wide for "iiii", and far too
@@ -49,7 +58,7 @@
     if (finished) return;
     finished = true;
     const finalVal = value.trim();
-    if (finalVal.length === 0 && originalText.trim().length === 0) {
+    if (!isContainer && finalVal.length === 0 && originalText.trim().length === 0) {
       engine.deleteSelection();
     } else {
       engine.setElementText(request.id, value);
@@ -63,12 +72,14 @@
   {value}
   aria-label="Text editor"
   spellcheck={false}
+  class:container-text={isContainer}
   style:left={`${request.x}px`}
   style:top={`${request.y}px`}
   style:min-height={`${fontSizePx * 1.3}px`}
   style:color={request.color}
   style:font-size={`${fontSizePx}px`}
   style:font-family={engine.fontFamily()}
+  style:text-align={request.textAlign}
   oninput={(event) => {
     value = event.currentTarget.value;
     autoResize();
@@ -82,7 +93,7 @@
       finished = true;
       engine.setElementText(request.id, originalText);
       onDone();
-    } else if (event.key === "Enter" && !event.shiftKey) {
+    } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       finish();
     }
@@ -95,17 +106,26 @@
     min-width: 60px;
     padding: 2px 6px;
     margin: 0;
-    border: 1.5px dashed var(--accent, #4c6ef5);
+    border: 1.5px dashed var(--accent, #6965db);
     border-radius: 4px;
     outline: none;
     resize: none;
     overflow: hidden;
-    background: var(--color-bg, #ffffff);
+    background: transparent;
     /* The family comes from the engine, so the overlay and the canvas render the same
        glyphs at the same widths. Hard-coding it here is how they drift apart. */
     line-height: 1.25;
     white-space: pre;
     z-index: 20;
     box-sizing: border-box;
+  }
+
+  textarea.container-text {
+    /* No `text-align` here: it comes from the request, which carries the element's
+       resolved alignment. Hard-coding centre for bound text is what the painter used to
+       do, and it is exactly the assumption this feature removes — a right-aligned label
+       would have been typed centred and jumped right the moment the edit was committed. */
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 </style>

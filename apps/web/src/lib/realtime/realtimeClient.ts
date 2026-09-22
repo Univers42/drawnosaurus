@@ -1,5 +1,6 @@
 import { env } from "$env/dynamic/public";
 import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
+import { isSealedEnvelope, open, seal, type SealedEnvelope } from "./roomCrypto.ts";
 
 /**
  * The live socket lives on the API, which is not always the page's origin: compose
@@ -13,6 +14,9 @@ export function liveSocketUrl(slug: string, apiBase: string, pageHref: string): 
   const base = apiBase.replace(/\/$/, "");
   const url = new URL(`${base}/v1/boards/${slug}/live`, pageHref);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  // Fragment room keys must never land on the handshake URL — the server would see them.
+  url.hash = "";
+  url.search = "";
   return url.toString();
 }
 
@@ -25,6 +29,8 @@ export interface PeerCursor {
   lastActive: number;
 }
 
+export type ConnectionStatus = "disconnected" | "connecting" | "connected";
+
 export type RealtimeMessage<T extends StampedElement> =
   | { type: "cursor"; clientId: string; name: string; color: string; x: number; y: number }
   | { type: "patch"; clientId: string; patch: ScenePatch<T> }
@@ -32,6 +38,13 @@ export type RealtimeMessage<T extends StampedElement> =
   | { type: "leave"; clientId: string };
 
 const CURSOR_COLORS = ["#e03131", "#2f9e44", "#1971c2", "#f08c00", "#9c36b5", "#0c8599"];
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+/** Drop peers that go silent without a leave (tab crash, network drop). */
+const PEER_STALE_MS = 45_000;
+const PEER_SWEEP_MS = 10_000;
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 15_000;
 
 export function getCollaboratorProfile(): { clientId: string; name: string; color: string } {
   if (typeof window === "undefined") {
@@ -59,18 +72,60 @@ export class RealtimeChannel<T extends StampedElement> {
   private readonly peers = new Map<string, PeerCursor>();
   private listeners: ((peers: PeerCursor[]) => void)[] = [];
   private patchListeners: ((patch: ScenePatch<T>) => void)[] = [];
+  private statusListeners: ((status: ConnectionStatus) => void)[] = [];
   private connected = false;
+  private roomKey: CryptoKey | null;
+  private intentionalClose = false;
+  private reconnectAttempt = 0;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private peerSweepTimer: ReturnType<typeof setInterval> | null = null;
+  private status: ConnectionStatus = "disconnected";
+  private preferredUrl: string | undefined;
 
-  constructor(readonly slug: string) {}
+  /**
+   * @param roomKey When set, every frame is AES-GCM sealed and plaintext inbound is
+   * dropped (no downgrade). When null, frames stay JSON plaintext for unkeyed URLs.
+   */
+  constructor(
+    readonly slug: string,
+    roomKey: CryptoKey | null = null,
+  ) {
+    this.roomKey = roomKey;
+  }
+
+  get encrypted(): boolean {
+    return this.roomKey !== null;
+  }
+
+  get connectionStatus(): ConnectionStatus {
+    return this.status;
+  }
+
+  setRoomKey(key: CryptoKey | null): void {
+    this.roomKey = key;
+  }
 
   connect(wsUrl?: string): void {
-    if (typeof window === "undefined" || this.ws) return;
-    const url = wsUrl ?? this.defaultWsUrl();
+    if (typeof window === "undefined") return;
+    this.intentionalClose = false;
+    this.preferredUrl = wsUrl;
+    this.openSocket();
+    if (!this.peerSweepTimer) {
+      this.peerSweepTimer = setInterval(() => this.sweepStalePeers(), PEER_SWEEP_MS);
+    }
+  }
+
+  private openSocket(): void {
+    if (this.ws) return;
+    const url = this.preferredUrl ?? this.defaultWsUrl();
+    this.setStatus("connecting");
     try {
       this.ws = new WebSocket(url);
       this.ws.onopen = () => {
         this.connected = true;
-        this.send({
+        this.reconnectAttempt = 0;
+        this.setStatus("connected");
+        void this.send({
           type: "join",
           clientId: this.profile.clientId,
           name: this.profile.name,
@@ -78,21 +133,39 @@ export class RealtimeChannel<T extends StampedElement> {
         });
       };
       this.ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data as string) as RealtimeMessage<T>;
-          this.handleMessage(msg);
-        } catch {
-          // ignore malformed frame
-        }
+        void this.receiveFrame(event.data as string);
       };
       this.ws.onclose = () => {
         this.connected = false;
         this.ws = null;
+        this.setStatus("disconnected");
+        if (!this.intentionalClose) this.scheduleReconnect();
+      };
+      this.ws.onerror = () => {
+        // onclose follows; reconnect is scheduled there.
       };
     } catch {
       this.connected = false;
       this.ws = null;
+      this.setStatus("disconnected");
+      if (!this.intentionalClose) this.scheduleReconnect();
     }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer || this.intentionalClose) return;
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** this.reconnectAttempt, RECONNECT_MAX_MS);
+    this.reconnectAttempt += 1;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSocket();
+    }, delay);
+  }
+
+  private setStatus(next: ConnectionStatus): void {
+    if (this.status === next) return;
+    this.status = next;
+    for (const listener of this.statusListeners) listener(next);
   }
 
   private defaultWsUrl(): string {
@@ -100,7 +173,7 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   sendCursor(x: number, y: number): void {
-    this.send({
+    void this.send({
       type: "cursor",
       clientId: this.profile.clientId,
       name: this.profile.name,
@@ -111,17 +184,61 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   sendPatch(patch: ScenePatch<T>): void {
-    this.send({
+    void this.send({
       type: "patch",
       clientId: this.profile.clientId,
       patch,
     });
   }
 
-  private send(msg: RealtimeMessage<T>): void {
-    if (this.ws && this.connected && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msg));
+  private async send(msg: RealtimeMessage<T>): Promise<void> {
+    if (!this.ws || !this.connected || this.ws.readyState !== WebSocket.OPEN) return;
+    const wire = await this.encodeOutbound(msg);
+    if (wire !== null) this.ws.send(wire);
+  }
+
+  /** Encode a message the way the wire would carry it (for tests). */
+  async encodeOutbound(msg: RealtimeMessage<T>): Promise<string | null> {
+    if (!this.roomKey) {
+      return JSON.stringify(msg);
     }
+    try {
+      const envelope = await seal(this.roomKey, textEncoder.encode(JSON.stringify(msg)));
+      return JSON.stringify(envelope);
+    } catch {
+      return null;
+    }
+  }
+
+  async receiveFrame(raw: string): Promise<void> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    if (this.roomKey) {
+      if (!isSealedEnvelope(parsed)) {
+        // Keyed mode never accepts plaintext — blocks a server/network downgrade.
+        return;
+      }
+      const plain = await open(this.roomKey, parsed);
+      if (!plain) return;
+      try {
+        const msg = JSON.parse(textDecoder.decode(plain)) as RealtimeMessage<T>;
+        this.handleMessage(msg);
+      } catch {
+        // ignore malformed inner payload
+      }
+      return;
+    }
+
+    if (isSealedEnvelope(parsed)) {
+      // Unkeyed client cannot read sealed frames.
+      return;
+    }
+    this.handleMessage(parsed as RealtimeMessage<T>);
   }
 
   handleMessage(msg: RealtimeMessage<T>): void {
@@ -136,12 +253,45 @@ export class RealtimeChannel<T extends StampedElement> {
         lastActive: Date.now(),
       });
       this.notifyPeers();
+    } else if (msg.type === "join") {
+      const isNew = !this.peers.has(msg.clientId);
+      const existing = this.peers.get(msg.clientId);
+      this.peers.set(msg.clientId, {
+        clientId: msg.clientId,
+        name: msg.name,
+        color: msg.color,
+        x: existing?.x ?? 0,
+        y: existing?.y ?? 0,
+        lastActive: Date.now(),
+      });
+      this.notifyPeers();
+      // Existing members re-announce so the newcomer sees them without waiting for a cursor.
+      if (isNew) {
+        void this.send({
+          type: "join",
+          clientId: this.profile.clientId,
+          name: this.profile.name,
+          color: this.profile.color,
+        });
+      }
     } else if (msg.type === "patch") {
       this.patchListeners.forEach((fn) => fn(msg.patch));
     } else if (msg.type === "leave") {
       this.peers.delete(msg.clientId);
       this.notifyPeers();
     }
+  }
+
+  private sweepStalePeers(): void {
+    const cutoff = Date.now() - PEER_STALE_MS;
+    let changed = false;
+    for (const [id, peer] of this.peers) {
+      if (peer.lastActive < cutoff) {
+        this.peers.delete(id);
+        changed = true;
+      }
+    }
+    if (changed) this.notifyPeers();
   }
 
   onPeers(callback: (peers: PeerCursor[]) => void): () => void {
@@ -159,18 +309,47 @@ export class RealtimeChannel<T extends StampedElement> {
     };
   }
 
+  onStatus(callback: (status: ConnectionStatus) => void): () => void {
+    this.statusListeners.push(callback);
+    callback(this.status);
+    return () => {
+      this.statusListeners = this.statusListeners.filter((l) => l !== callback);
+    };
+  }
+
   private notifyPeers(): void {
     const list = Array.from(this.peers.values());
     this.listeners.forEach((fn) => fn(list));
   }
 
   disconnect(): void {
+    this.intentionalClose = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.peerSweepTimer) {
+      clearInterval(this.peerSweepTimer);
+      this.peerSweepTimer = null;
+    }
     if (this.ws) {
-      this.send({ type: "leave", clientId: this.profile.clientId });
-      this.ws.close();
+      const socket = this.ws;
+      const leave: RealtimeMessage<T> = { type: "leave", clientId: this.profile.clientId };
+      // Seal is async; close only after the leave frame is queued so peers drop the cursor.
+      void this.encodeOutbound(leave).then((wire) => {
+        if (wire && socket.readyState === WebSocket.OPEN) {
+          socket.send(wire);
+        }
+        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+          socket.close();
+        }
+      });
       this.ws = null;
     }
     this.connected = false;
     this.peers.clear();
+    this.setStatus("disconnected");
   }
 }
+
+export type { SealedEnvelope };

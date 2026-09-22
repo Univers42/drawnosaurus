@@ -7,4 +7,11 @@ dist
 coverage
 pnpm-lock.yaml
 .playwright-mcp
+# The feature checklists this project is built against. Someone else's document, and the
+# conformance parser reads it line by line — reformatting it would move every line number
+# in a failure message for no gain.
+prompt
+test-results
+playwright-report
+blob-report
 third_party

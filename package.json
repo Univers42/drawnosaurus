@@ -10,17 +10,21 @@
   "description": "Collaborative whiteboard: SvelteKit + Rust/WASM draw-engine in the browser, scenes persisted over a versioned HTTP API into MongoDB.",
   "scripts": {
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.e2e.json",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
     "format": "prettier --check .",
     "format:fix": "prettier --write .",
     "test": "pnpm -r test",
     "test:integration": "pnpm --filter @drawnosaurus/api test:integration",
+    "test:live-e2e-security": "pnpm --filter @drawnosaurus/web exec vitest run src/lib/realtime/liveE2eSecurity.test.ts && pnpm --filter @drawnosaurus/api exec vitest run tests/unit/liveRelay.test.ts",
+    "test:e2e": "playwright test",
     "quality": "pnpm typecheck && pnpm lint && pnpm format && pnpm test"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.2",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-svelte": "^3.12.4",

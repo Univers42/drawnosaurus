@@ -34,6 +34,8 @@ export const DRAW_ELEMENT_TYPES = [
 export const FILL_STYLES = ["hachure", "cross-hatch", "solid", "zigzag"] as const;
 export const STROKE_STYLES = ["solid", "dashed", "dotted"] as const;
 export const ARROWHEADS = ["none", "arrow", "triangle", "dot", "diamond", "bar"] as const;
+export const TEXT_ALIGNS = ["left", "center", "right"] as const;
+export const VERTICAL_ALIGNS = ["top", "middle", "bottom"] as const;
 
 /**
  * Rejects NaN and both infinities. Written as a refine rather than `.finite()`
@@ -86,6 +88,18 @@ export const drawElementSchema = z.object({
 
   text: z.string().max(MAX_TEXT_LENGTH).optional(),
   fontSize: finite.min(1).max(1000).optional(),
+  // Optional rather than defaulted, and the distinction is load-bearing: absent means
+  // nobody chose, which the engine resolves through the element's role — free text reads
+  // from the left, a label centres in its shape. Giving either a `.default()` here would
+  // stamp a value onto every element that passes through the server and silently
+  // re-align every label saved before these fields existed.
+  textAlign: z.enum(TEXT_ALIGNS).optional(),
+  verticalAlign: z.enum(VERTICAL_ALIGNS).optional(),
+  // `false` for a column dragged out with the text tool, which keeps its width and wraps
+  // inside it. Optional and undefaulted for the same reason as the alignments: every text
+  // saved before this field existed sized itself to its glyphs, and stamping `true` onto
+  // them on the way through the server would write a choice nobody made.
+  autoResize: z.boolean().optional(),
   containerId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   boundTextId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   groupId: z.string().max(MAX_ID_LENGTH).nullable().optional(),

@@ -9,7 +9,10 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, dev]
+    # `develop` is this repo's integration branch and was missing, so every push to it
+    # went ungated — the only runs were on pull requests. `dev` is the engine
+    # submodule's name for the same thing; kept so a shared workflow stays portable.
+    branches: [main, develop, dev]
   workflow_dispatch:
 
 concurrency:
@@ -36,6 +39,21 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           find scripts -type f -name '*.sh' -print0 \
             | xargs -0 --no-run-if-empty shellcheck -S error
+
+  wasm-freshness:
+    name: Stale WASM cannot ship
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Needs the crate on disk to point `make -n` at, but builds nothing: the
+      # question is whether the dependency graph would rebuild engine/pkg after the
+      # crate changes, and answering it must not cost a WASM build.
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: A change to the crate must rebuild engine/pkg
+        run: bash scripts/assert-wasm-freshness.sh
 
   wasm:
     name: Build engine WASM
@@ -138,8 +156,55 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      - name: Live collaboration E2E encryption security
+        # Named gate for the threat-model suite (also covered by `pnpm test`).
+        # Keeps confidentiality / downgrade / blind-relay invariants visible in CI.
+        run: pnpm test:live-e2e-security
+
       - name: API integration tests against a real MongoDB
         run: pnpm test:integration
+
+  e2e:
+    name: Browser tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The specs drive the real engine through a real wheel, so they need the real WASM.
+    # Nothing else: every spec stubs /v1/** and the board route falls back to an empty
+    # scene, so there is no API and no Mongo here on purpose — a browser test that talks
+    # to a database fails for the database's reasons, and then nobody believes it.
+    needs: wasm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-pkg
+          path: engine/pkg
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install the browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        # Traces and screenshots, and only when something failed — they are how you find
+        # out what a red browser test actually saw without reproducing it locally.
+        if: failure()
+        with:
+          name: e2e-traces
+          path: test-results
+          retention-days: 7
 
   docker:
     name: Build images

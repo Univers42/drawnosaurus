@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Camera } from "@osionos/draw-engine/types";
   import type { PeerCursor } from "../realtime/realtimeClient.ts";
+  import { worldToScreen } from "./camera.ts";
 
   let {
     peers = [],
@@ -12,9 +13,7 @@
 
   function toScreen(x: number, y: number): { sx: number; sy: number } {
     if (!camera) return { sx: x, sy: y };
-    const sx = (x - camera.x) * camera.scale;
-    const sy = (y - camera.y) * camera.scale;
-    return { sx, sy };
+    return worldToScreen(camera, x, y);
   }
 </script>
 

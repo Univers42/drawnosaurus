@@ -1,0 +1,14 @@
+{
+  // The browser specs. They live outside every workspace package, so `pnpm -r typecheck`
+  // does not see them — and Playwright transpiles specs without typechecking, so without
+  // this nothing would ever check them and the helpers in e2e/ would quietly rot.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    // The specs run in Node and reach into the page, so both halves are in scope.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["e2e/**/*.ts", "perf/**/*.ts", "playwright.config.ts"]
+}

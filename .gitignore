@@ -16,6 +16,12 @@ engine/target
 # session — evidence from a run, not source.
 .playwright-mcp
 
+# Traces, screenshots and reports from `pnpm test:e2e`. The specs in e2e/ are source;
+# what a run of them produced is not.
+test-results
+playwright-report
+blob-report
+
 # The Excalidraw parity reference, fetched by `make oracle` at the SHA pinned in
 # scripts/oracle-sha.txt. ~100MB of someone else's history; the pin is the artefact
 # worth committing, not the tree.
