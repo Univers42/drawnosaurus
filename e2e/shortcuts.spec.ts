@@ -44,6 +44,12 @@ async function drawRectangle(
   await page.mouse.down();
   await page.mouse.move(board.box.x + to.x, board.box.y + to.y, { steps: 6 });
   await page.mouse.up();
+  // Asserted here rather than left to fail three lines later in whatever test called
+  // this: a drag that lands nowhere leaves an empty scene, and the error that follows is
+  // an undefined property read that says nothing about the gesture.
+  await expect
+    .poll(async () => (await sceneElements(page)).length, { timeout: 2_000 })
+    .toBeGreaterThan(0);
 }
 
 test.describe("tool shortcuts", () => {

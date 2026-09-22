@@ -154,3 +154,69 @@ test.describe("duplicating stays fast", () => {
     expect(elapsed, `100 duplicates took ${elapsed}ms`).toBeLessThan(15_000);
   });
 });
+
+test.describe("big duplicates", () => {
+  test("a board of screen-sized copies draws, pans, zooms and erases", async ({ page }) => {
+    // The painter's `Path2D` cache is browser-only code, so nothing in the Rust suite
+    // touches it — and this change rewrote its key from the element id to the shape
+    // fingerprint, so that every copy of a duplicated shape shares one path. The failure
+    // mode of a wrong key is a panic or a wrong picture, and the first of those is what
+    // this catches: the fixture fails the test on any uncaught page error.
+    //
+    // It also walks the cache's whole life in one go — cold build, warm reuse across pan
+    // and zoom, then eviction as the shapes are erased.
+    const board = await openBoard(page);
+
+    await pickTool(page, "Rectangle");
+    await page.mouse.move(board.box.x + 450, board.box.y + 180);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + 1150, board.box.y + 640, { steps: 6 });
+    await page.mouse.up();
+    await focusBoard(board);
+
+    await pickTool(page, "Select");
+    await page.mouse.click(board.box.x + 800, board.box.y + 180);
+    for (let i = 0; i < 60; i += 1) {
+      await page.keyboard.press("Control+d");
+    }
+    expect(await sceneElements(page)).toHaveLength(61);
+
+    // Warm the cache across a pan and a zoom — geometry is generated in element-local
+    // space, so neither should rebuild anything.
+    await page.mouse.move(board.box.x + 700, board.box.y + 400);
+    await page.mouse.wheel(40, 60);
+    await page.keyboard.down("Control");
+    await page.mouse.wheel(0, -100);
+    await page.mouse.wheel(0, 100);
+    await page.keyboard.up("Control");
+
+    // Then take them away, which is what exercises the eviction sweep. The corners are
+    // read back through the camera rather than assumed: the pan and zoom above moved
+    // every shape on screen, and a sweep aimed at where they were drawn would miss.
+    const corners = await page.evaluate(() => {
+      const engine = window.__drawEngine!;
+      const elements = JSON.parse(engine.exportJson()).elements as {
+        x: number;
+        y: number;
+      }[];
+      const { x, y, scale } = engine.camera;
+      const at = (element: { x: number; y: number }) => ({
+        x: element.x * scale + x,
+        y: element.y * scale + y,
+      });
+      return { first: at(elements[0]!), last: at(elements[elements.length - 1]!) };
+    });
+
+    await pickTool(page, "Eraser");
+    // Every copy's top-left corner sits on the line between these two, because Ctrl+D
+    // offsets each one by the same amount.
+    await page.mouse.move(board.box.x + corners.first.x - 8, board.box.y + corners.first.y - 8);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + corners.last.x + 8, board.box.y + corners.last.y + 8, {
+      steps: 10,
+    });
+    await page.mouse.up();
+
+    expect(await sceneElements(page)).toHaveLength(0);
+  });
+});
