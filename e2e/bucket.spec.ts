@@ -44,6 +44,38 @@ async function drawRectangle(page: Page, board: Board): Promise<void> {
   await page.mouse.up();
 }
 
+/**
+ * A line straight down the middle of the rectangle, placed through the engine.
+ *
+ * Scene setup rather than behaviour, so it goes in directly: what is under test is what
+ * the bucket does with the region, not how the divider got drawn.
+ *
+ * It exists because the bucket now colours a *shape's own background* when the region is
+ * exactly that shape's inside. A spec about the polygon it makes otherwise has to ask for
+ * a region that is not one, and half a rectangle is the smallest such region.
+ */
+async function divide(page: Page, board: Board): Promise<void> {
+  const midX = (SHAPE.from.x + SHAPE.to.x) / 2;
+  await page.evaluate(
+    ({ x, y0, y1 }) => {
+      const engine = window.__drawEngine!;
+      const file = JSON.parse(engine.exportJson()) as { elements: unknown[] };
+      file.elements.push({
+        id: "divider", type: "line", x, y: y0, width: 0, height: y1 - y0, angle: 0,
+        strokeColor: "#1e1e1e", backgroundColor: "transparent", fillStyle: "solid",
+        strokeWidth: 2, strokeStyle: "solid", roughness: 0, opacity: 100, roundness: null,
+        seed: 1, version: 1, versionNonce: 1, updated: 0, isDeleted: false,
+        points: [[0, 0], [0, y1 - y0]],
+      });
+      engine.loadScene(JSON.stringify(file));
+    },
+    { x: midX, y0: SHAPE.from.y, y1: SHAPE.to.y },
+  );
+}
+
+/** Inside the left half of the divided rectangle — a region no single shape owns. */
+const LEFT_HALF = { x: 600, y: 400 };
+
 /** One bucket click at a point on the board. */
 async function fillAt(page: Page, board: Board, at: { x: number; y: number }): Promise<void> {
   await pickTool(page, "Bucket fill");
@@ -51,20 +83,42 @@ async function fillAt(page: Page, board: Board, at: { x: number; y: number }): P
 }
 
 test.describe("bucket fill", () => {
-  test("a click inside a shape paints it, and paints it once", async ({ page }) => {
-    // One click is one fill. A duplicate would stack exactly on the original, invisible
-    // until you moved one and found another underneath, and would double the scene on
-    // every click after that — so it is worth an assertion even though it holds today.
+  test("a click inside a shape colours that shape", async ({ page }) => {
+    // The headline behaviour, and a deliberate divergence from Excalidraw: the region
+    // under the click is exactly this rectangle's inside, so the rectangle gets the
+    // colour. One element, not two — which is what makes the colour move, resize, rotate
+    // and round with the shape, because it *is* the shape.
     const board = await openBoard(page);
     await drawRectangle(page, board);
     expect(await sceneElements(page)).toHaveLength(1);
 
     await fillAt(page, board, INSIDE);
 
-    expect(await sceneElements(page)).toHaveLength(2);
-    // The fill is a closed line, and it goes under the outline it came from rather than
-    // over it — paint belongs behind the stroke that bounds it.
-    expect(await elementKinds(page)).toEqual(["line", "rectangle"]);
+    const live = await sceneElements(page);
+    expect(live, "no second element was laid over the shape").toHaveLength(1);
+    expect(live[0]!.type).toBe("rectangle");
+    expect(live[0]!.backgroundColor).not.toBe("transparent");
+  });
+
+  test("a coloured shape carries its colour when it is moved", async ({ page }) => {
+    // What the separate polygon could never do, and what was reported three times: the
+    // paint used to stay behind as a block sitting where the shape had been.
+    const board = await openBoard(page);
+    await drawRectangle(page, board);
+    await fillAt(page, board, INSIDE);
+    const before = (await sceneElements(page))[0]!;
+
+    await pickTool(page, "Select");
+    await page.mouse.click(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
+    await page.mouse.move(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + INSIDE.x + 80, board.box.y + INSIDE.y + 50, { steps: 6 });
+    await page.mouse.up();
+
+    const after = await sceneElements(page);
+    expect(after, "still one element").toHaveLength(1);
+    expect(after[0]!.x).toBeCloseTo(before.x + 80, 0);
+    expect(after[0]!.backgroundColor).toBe(before.backgroundColor);
   });
 
   test("the paint that appears on screen is also sent to the server", async ({ page }) => {
@@ -79,10 +133,13 @@ test.describe("bucket fill", () => {
 
     // The autosaver debounces, so wait for the patch rather than for a duration.
     await expect
-      .poll(async () => (await patchedElements(page)).filter((el) => el.type === "line").length, {
-        message: "no patch carrying the fill ever reached the API",
-        timeout: 10_000,
-      })
+      .poll(
+        async () =>
+          (await patchedElements(page)).filter(
+            (el) => el.type === "rectangle" && el.backgroundColor !== "transparent",
+          ).length,
+        { message: "no patch carrying the colour ever reached the API", timeout: 10_000 },
+      )
       .toBeGreaterThan(0);
   });
 
@@ -112,7 +169,7 @@ test.describe("bucket fill", () => {
 
     for (let click = 0; click < 4; click += 1) {
       await fillAt(page, board, { x: INSIDE.x - click * 12, y: INSIDE.y + click * 12 });
-      expect(await sceneElements(page), `after click ${click + 1}`).toHaveLength(2);
+      expect(await sceneElements(page), `after click ${click + 1}`).toHaveLength(1);
     }
   });
 
@@ -123,24 +180,25 @@ test.describe("bucket fill", () => {
     // solid — `shouldTestInside`, `packages/element/src/collision.ts:82-102`.
     const board = await openBoard(page);
     await drawRectangle(page, board);
-    await fillAt(page, board, INSIDE);
+    await divide(page, board);
+    await fillAt(page, board, LEFT_HALF);
 
     await pickTool(page, "Select");
-    await page.mouse.click(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
+    await page.mouse.click(board.box.x + LEFT_HALF.x, board.box.y + LEFT_HALF.y);
     const picked = await selection(page);
     expect(picked, "a click in the middle of the paint must select the paint").toHaveLength(1);
 
     const before = (await sceneElements(page)).find((el) => el.id === picked[0])!;
-    await page.mouse.move(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
+    await page.mouse.move(board.box.x + LEFT_HALF.x, board.box.y + LEFT_HALF.y);
     await page.mouse.down();
-    await page.mouse.move(board.box.x + INSIDE.x + 60, board.box.y + INSIDE.y + 40, { steps: 6 });
+    await page.mouse.move(board.box.x + LEFT_HALF.x + 60, board.box.y + LEFT_HALF.y + 40, { steps: 6 });
     await page.mouse.up();
     const after = (await sceneElements(page)).find((el) => el.id === picked[0])!;
     expect(after.x).toBeCloseTo(before.x + 60, 0);
     expect(after.y).toBeCloseTo(before.y + 40, 0);
 
     await page.keyboard.press("Delete");
-    expect(await elementKinds(page)).toEqual(["rectangle"]);
+    expect(await elementKinds(page)).toEqual(["rectangle", "line"]);
   });
 
   test("the fill declares the size of the region it covers", async ({ page }) => {
@@ -150,7 +208,8 @@ test.describe("bucket fill", () => {
     // fill as a zero-area box and framed board thumbnails on it.
     const board = await openBoard(page);
     await drawRectangle(page, board);
-    await fillAt(page, board, INSIDE);
+    await divide(page, board);
+    await fillAt(page, board, LEFT_HALF);
 
     const paint = (await sceneElements(page)).find((el) => el.type === "line")!;
     expect(paint.width).toBeGreaterThan(0);
@@ -182,8 +241,8 @@ test.describe("bucket fill", () => {
     await panel.getByRole("button", { name: "#ffc9c9" }).click();
     await page.mouse.click(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
 
-    const paint = (await sceneElements(page)).find((el) => el.type === "line");
-    expect(paint?.backgroundColor).toBe("#ffc9c9");
+    const shape = (await sceneElements(page)).find((el) => el.type === "rectangle");
+    expect(shape?.backgroundColor).toBe("#ffc9c9");
   });
 
   test("a second click in a painted region recolours it", async ({ page }) => {
@@ -193,13 +252,13 @@ test.describe("bucket fill", () => {
     const board = await openBoard(page);
     await drawRectangle(page, board);
     await fillAt(page, board, INSIDE);
-    const first = (await sceneElements(page)).find((el) => el.type === "line")!;
+    const first = (await sceneElements(page)).find((el) => el.type === "rectangle")!;
 
     const panel = page.getByRole("complementary", { name: "Style inspector" });
     await panel.getByRole("button", { name: "#ffec99" }).click();
     await page.mouse.click(board.box.x + INSIDE.x - 10, board.box.y + INSIDE.y + 10);
 
-    const after = (await sceneElements(page)).filter((el) => el.type === "line");
+    const after = await sceneElements(page);
     expect(after, "recoloured in place, not stacked").toHaveLength(1);
     expect(after[0]!.id, "the same element").toBe(first.id);
     expect(after[0]!.backgroundColor).toBe("#ffec99");
@@ -294,9 +353,12 @@ test.describe("the paint behaves like a shape", () => {
    */
   async function fillARectangle(page: Page, board: Board) {
     await drawRectangle(page, board);
-    await fillAt(page, board, INSIDE);
+    // Halved, so the region is one a background cannot express and the bucket still
+    // makes a polygon — which is what this group of specs is about.
+    await divide(page, board);
+    await fillAt(page, board, LEFT_HALF);
     await pickTool(page, "Select");
-    await page.mouse.click(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
+    await page.mouse.click(board.box.x + LEFT_HALF.x, board.box.y + LEFT_HALF.y);
   }
 
   /** The paint, and the corner handle that resizes it — eight pixels beyond its box. */
@@ -355,7 +417,7 @@ test.describe("the paint behaves like a shape", () => {
     await fillARectangle(page, board);
     const before = (await sceneElements(page)).find((el) => el.type === "line")!;
 
-    await page.mouse.dblclick(board.box.x + INSIDE.x, board.box.y + INSIDE.y);
+    await page.mouse.dblclick(board.box.x + LEFT_HALF.x, board.box.y + LEFT_HALF.y);
     const corner = { x: before.x + before.points![1]![0], y: before.y + before.points![1]![1] };
     await page.mouse.move(board.box.x + corner.x, board.box.y + corner.y);
     await page.mouse.down();
@@ -394,7 +456,8 @@ test.describe("what the paint belongs to", () => {
     await page.keyboard.press("Control+a");
     await page.evaluate(() => window.__drawEngine!.groupSelection());
 
-    await fillAt(page, board, INSIDE);
+    await divide(page, board);
+    await fillAt(page, board, LEFT_HALF);
     const paint = (await sceneElements(page)).find((el) => el.type === "line")!;
     const shape = (await sceneElements(page)).find((el) => el.type === "rectangle")!;
     expect(paint.groupId, "the paint is in the same group as the region it fills").toBe(
