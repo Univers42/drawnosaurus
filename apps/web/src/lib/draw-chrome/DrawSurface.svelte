@@ -18,12 +18,17 @@
     persistCanvasBackground,
     persistThemePreference,
     persistGridPreference,
+    persistObjectsSnapPreference,
+    pickGridMode,
     readCanvasBackground,
     readGridPreference,
+    readObjectsSnapPreference,
     readThemePreference,
     resolveThemeMode,
     themeFromCss,
+    toggleObjectsSnap,
     type GridPreference,
+    type SnapModes,
     type ThemeMode,
     type ThemePreference,
   } from "./theme.ts";
@@ -87,6 +92,8 @@
   let themePreference = $state<ThemePreference>("light");
   let canvasBackground = $state<string | null>(null);
   let grid = $state<GridPreference>({ enabled: false, size: 20, step: 5, snap: true });
+  /** Snapping to other elements while moving. Off until turned on, as in Excalidraw. */
+  let objectsSnap = $state(false);
   let ink = $state("#1e1e1e");
   let tool = $state<ExtendedTool>("select");
   let toolLocked = $state(false);
@@ -226,9 +233,23 @@
   }
 
   function pickGrid(patch: Partial<GridPreference>): void {
-    grid = { ...grid, ...patch };
-    persistGridPreference(typeof localStorage === "undefined" ? undefined : localStorage, grid);
+    applySnapModes(pickGridMode({ objectsSnap, grid }, patch));
+  }
+
+  /** `Alt+S` and the menu switch. */
+  function flipObjectsSnap(): void {
+    applySnapModes(toggleObjectsSnap({ objectsSnap, grid }));
+  }
+
+  /** The grid and object snapping change together, because turning one on turns the other off. */
+  function applySnapModes(next: SnapModes): void {
+    const storage = typeof localStorage === "undefined" ? undefined : localStorage;
+    grid = next.grid;
+    objectsSnap = next.objectsSnap;
+    persistGridPreference(storage, grid);
+    persistObjectsSnapPreference(storage, objectsSnap);
     engine?.setGrid(grid);
+    engine?.setObjectsSnap(objectsSnap);
   }
 
   function pickCanvasBackground(color: string): void {
@@ -667,6 +688,9 @@
     themePreference = readThemePreference(localStorage);
     canvasBackground = readCanvasBackground(localStorage);
     grid = readGridPreference(localStorage);
+    objectsSnap = readObjectsSnapPreference(localStorage);
+    // In case the engine was ready first; `onReady` covers the usual order.
+    engine?.setObjectsSnap(objectsSnap);
     themeMode = resolveThemeMode(themePreference, systemPrefersDark());
     document.documentElement.classList.toggle("dark", themeMode === "dark");
 
@@ -880,6 +904,11 @@
           new Blob([engine.exportJson()], { type: "application/json" }),
         );
       }
+    } else if (!mod && event.altKey && event.code === "KeyS") {
+      // Excalidraw's `Alt+S` (`actionToggleObjectsSnapMode.tsx`), on `code` for the same
+      // reason as the grid below — and because on a Mac, Option+S types "ß".
+      event.preventDefault();
+      flipObjectsSnap();
     } else if (!mod && key === "n") {
       // "N" only. 9 is the image tool's, both in the engine's keymap and on the toolbar,
       // and claiming it here did not take it away — `preventDefault` does not stop the
@@ -926,9 +955,11 @@
           {themePreference}
           {canvasBackground}
           {grid}
+          {objectsSnap}
           onPickTheme={pickTheme}
           onPickCanvasBackground={pickCanvasBackground}
           onPickGrid={pickGrid}
+          onToggleObjectsSnap={flipObjectsSnap}
           onOpenExport={() => (showExport = true)}
           onOpenMermaid={() => (showMermaid = true)}
           onOpenShare={() => (showShare = true)}
@@ -959,6 +990,7 @@
       onReady={(next) => {
         engine = next;
         next.setGrid(grid);
+        next.setObjectsSnap(objectsSnap);
         syncStyle(next);
         exposeForDevTools(next);
         onReady?.(next);

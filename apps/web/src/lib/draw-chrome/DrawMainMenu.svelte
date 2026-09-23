@@ -29,9 +29,11 @@
     themePreference = "light",
     canvasBackground = null,
     grid,
+    objectsSnap = false,
     onPickTheme,
     onPickCanvasBackground,
     onPickGrid,
+    onToggleObjectsSnap,
     onOpenExport,
     onOpenMermaid,
     onOpenShare,
@@ -42,9 +44,11 @@
     themePreference: ThemePreference;
     canvasBackground: string | null;
     grid: GridPreference;
+    objectsSnap?: boolean;
     onPickTheme: (preference: ThemePreference) => void;
     onPickCanvasBackground: (color: string) => void;
     onPickGrid: (patch: Partial<GridPreference>) => void;
+    onToggleObjectsSnap: () => void;
     onOpenExport: () => void;
     onOpenMermaid: () => void;
     onOpenShare: () => void;
@@ -253,6 +257,22 @@
           </button>
         {/each}
       </div>
+    </div>
+
+    <div class="dropdown-menu-item-bare">
+      <span class="dropdown-menu-item__text">Snap to objects</span>
+      <span class="dropdown-menu-item__shortcut">Alt+S</span>
+      <button
+        type="button"
+        role="switch"
+        class="switch"
+        class:on={objectsSnap}
+        aria-checked={objectsSnap}
+        aria-label="Snap to objects"
+        onclick={onToggleObjectsSnap}
+      >
+        <span class="knob"></span>
+      </button>
     </div>
 
     <div class="dropdown-menu-item-bare">

@@ -34,6 +34,7 @@ declare global {
       getSelection(): string[];
       getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
       setGrid(grid: { enabled?: boolean }): void;
+      getObjectsSnap(): boolean;
       /** Replaces the whole scene — used to place geometry too small to draw by hand. */
       loadScene(json: string): void;
       groupSelection(): void;
