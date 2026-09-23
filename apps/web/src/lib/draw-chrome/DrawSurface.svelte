@@ -149,17 +149,6 @@
   let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
   let eraserTrailSvgPath = $state("");
   let stickyStartPoint: { x: number; y: number } | null = null;
-  /**
-   * What the current eraser sweep has dimmed, and how see-through each one was before.
-   *
-   * A plain Map rather than a `SvelteMap`: nothing renders from it. The fading is done by
-   * patching the elements themselves, so the canvas already shows the change, and this is
-   * only the record needed to put them back if the sweep is cancelled. Making it reactive
-   * would suggest the markup depends on it, which is the thing a later reader would then
-   * have to disprove.
-   */
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  const elementsPendingErase = new Map<string, { element: DrawElement; originalOpacity: number }>();
   const eraserTrail = new EraserTrail({
     decayTime: 220,
     size: 16,
@@ -489,95 +478,17 @@
     }
   }
 
-  let lastEraserPoint: { x: number; y: number } | null = null;
-
-  /**
-   * Dim whatever the eraser just passed over, without deleting it yet.
-   *
-   * Excalidraw's eraser is a two-stage gesture: everything the stroke touches fades to
-   * near-transparent, and only releasing commits the deletion. That is what makes it
-   * safe to sweep — you can see what you are about to lose and still back out with
-   * Escape. The original opacity is remembered per element so backing out restores it.
-   *
-   * `applyRemotePatch` rather than a normal edit because this must not push history:
-   * the undo stack should hold one deletion, not one entry per element brushed past.
-   */
-  function checkEraserHit(sx: number, sy: number): void {
-    if (!engine) return;
-    const hit = engine.hitTest(sx, sy, 12);
-    if (!hit) return;
-    if (elementsPendingErase.has(hit.id)) return;
-
-    // Erasing one part of a composite erases the whole of it: a group goes together, and
-    // a label goes with its container rather than being orphaned in mid-air.
-    let toDim: DrawElement[] = [hit];
-    try {
-      const parsed = JSON.parse(engine.exportJson());
-      const elements: DrawElement[] = Array.isArray(parsed?.elements) ? parsed.elements : [];
-      // The outermost group, so dimming covers the whole thing rather than one level
-      // of it. `groupIds` runs innermost first, so the last entry is the outer one.
-      const outermost = hit.groupIds?.at(-1);
-      if (outermost) {
-        const grouped = elements.filter((el) => !el.isDeleted && el.groupIds?.includes(outermost));
-        if (grouped.length > 0) toDim = grouped;
-      } else {
-        const boundTexts = elements.filter((el) => el.containerId === hit.id && !el.isDeleted);
-        if (boundTexts.length > 0) toDim = [...toDim, ...boundTexts];
-        if (hit.containerId) {
-          const container = elements.find((el) => el.id === hit.containerId && !el.isDeleted);
-          if (container) toDim = [...toDim, container];
-        }
-      }
-    } catch {
-      // A scene we cannot parse still erases what was hit; it just does not extend the
-      // selection to the rest of the group.
-    }
-
-    const patchElements: DrawElement[] = [];
-    for (const el of toDim) {
-      if (!elementsPendingErase.has(el.id)) {
-        elementsPendingErase.set(el.id, { element: el, originalOpacity: el.opacity });
-        patchElements.push({
-          ...el,
-          opacity: Math.min(el.opacity, 20),
-          version: el.version + 1,
-          versionNonce: Math.floor(Math.random() * 1_000_000_000),
-        });
-      }
-    }
-
-    if (patchElements.length > 0) {
-      engine.applyRemotePatch(
-        JSON.stringify({ type: "osidraw", version: 1, elements: patchElements }),
-      );
-    }
-  }
-
-  /** Back out of an eraser sweep: put every dimmed element back as it was. */
-  function cancelPendingEraser(): void {
-    if (elementsPendingErase.size === 0 || !engine) return;
-    const restored = Array.from(elementsPendingErase.values()).map(
-      ({ element, originalOpacity }) => ({
-        ...element,
-        opacity: originalOpacity,
-        // +2 because the dimming patch already spent +1; a lower version would lose to
-        // it under last-writer-wins and the element would stay faded.
-        version: element.version + 2,
-        versionNonce: Math.floor(Math.random() * 1_000_000_000),
-      }),
-    );
-    elementsPendingErase.clear();
-    engine.applyRemotePatch(JSON.stringify({ type: "osidraw", version: 1, elements: restored }));
-  }
 
   /** Returning `true` claims the gesture, so the engine does not also act on it. */
   function handleCanvasPointerDown(point: { x: number; y: number }): boolean | void {
     if (tool === "eraser") {
-      lastEraserPoint = { x: point.x, y: point.y };
+      // Only the trail is drawn here. What the sweep marks, how it fades and what the
+      // release deletes are the engine's (`engine/eraser.rs`), so the press goes through
+      // to it. This used to claim the gesture and run an eraser of its own, which asked
+      // for the topmost element under each sample — so a stack of copies lost one copy
+      // per pass, the top one answering every sample while the rest were never reached.
       eraserTrail.start(point.x, point.y);
-      elementsPendingErase.clear();
-      checkEraserHit(point.x, point.y);
-      return true;
+      return;
     }
     if (tool === "sticky") {
       stickyStartPoint = { x: point.x, y: point.y };
@@ -588,33 +499,11 @@
   function handleCanvasPointerMove(point: { x: number; y: number }): void {
     if (tool !== "eraser") return;
     eraserTrail.addPoint(point.x, point.y);
-    if (lastEraserPoint) {
-      // Sample along the segment, not just at its ends. A fast sweep produces pointer
-      // events tens of pixels apart, and testing only those would skip straight over
-      // anything thinner than the gap between them.
-      const dx = point.x - lastEraserPoint.x;
-      const dy = point.y - lastEraserPoint.y;
-      const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / 8));
-      for (let i = 1; i <= steps; i++) {
-        checkEraserHit(lastEraserPoint.x + dx * (i / steps), lastEraserPoint.y + dy * (i / steps));
-      }
-    } else {
-      checkEraserHit(point.x, point.y);
-    }
-    lastEraserPoint = { x: point.x, y: point.y };
   }
 
   function handleCanvasPointerUp(point: { x: number; y: number }): void {
     if (tool === "eraser") {
-      lastEraserPoint = null;
       eraserTrail.stop();
-      if (elementsPendingErase.size > 0 && engine) {
-        const ids = Array.from(elementsPendingErase.keys());
-        elementsPendingErase.clear();
-        engine.select(ids);
-        // One history entry for the whole sweep, which is what the gesture was.
-        engine.deleteSelection();
-      }
       return;
     }
 
@@ -774,7 +663,6 @@
   onDestroy(() => {
     if (raf) cancelAnimationFrame(raf);
     if (cursorRaf) cancelAnimationFrame(cursorRaf);
-    cancelPendingEraser();
     eraserTrail.clear();
     realtime?.disconnect();
   });
@@ -883,7 +771,8 @@
     const key = event.key.toLowerCase();
 
     if (event.key === "Escape") {
-      cancelPendingEraser();
+      // The engine lets the eraser's marks go on the same key; the trail goes with them.
+      eraserTrail.stop();
     } else if (mod && event.shiftKey && key === "e") {
       event.preventDefault();
       showExport = true;

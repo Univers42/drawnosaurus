@@ -220,3 +220,167 @@ test.describe("big duplicates", () => {
     expect(await sceneElements(page)).toHaveLength(0);
   });
 });
+
+/**
+ * A pile of filled copies, packed a couple of pixels apart — what a run of duplicates
+ * nudged into place looks like, and what the report was about.
+ *
+ * Scene setup rather than behaviour: what is under test is the sweep. Filled, because a
+ * filled shape is hit anywhere inside it — which is exactly why the old eraser failed
+ * here: it asked for the topmost element under each sample, and the top copy, once
+ * marked, answered every sample after, so the copies beneath were never reached.
+ */
+async function pileOfCopies(page: Page, count: number): Promise<void> {
+  await page.evaluate((count) => {
+    const engine = window.__drawEngine!;
+    const elements = Array.from({ length: count }, (_, i) => {
+      const world = engine.screenToWorld(620 + i * 2, 300 + i * 2);
+      return {
+        id: `copy-${i}`,
+        type: "rectangle",
+        x: world.x,
+        y: world.y,
+        width: 200 / engine.camera.scale,
+        height: 140 / engine.camera.scale,
+        angle: 0,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "#ffc9c9",
+        fillStyle: "solid",
+        strokeWidth: 2,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        roundness: null,
+        seed: i + 1,
+        version: 1,
+        versionNonce: i + 1,
+        updated: 0,
+        isDeleted: false,
+      };
+    });
+    engine.loadScene(JSON.stringify({ type: "osidraw", version: 1, source: "e2e", elements }));
+  }, count);
+}
+
+/** Canvas-relative: through the middle of the pile, from clear space to clear space. */
+const ACROSS_THE_PILE = { from: { x: 560, y: 390 }, to: { x: 960, y: 390 } };
+
+async function sweep(board: Board, done = true): Promise<void> {
+  const { page, box } = board;
+  await page.mouse.move(box.x + ACROSS_THE_PILE.from.x, box.y + ACROSS_THE_PILE.from.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + ACROSS_THE_PILE.to.x, box.y + ACROSS_THE_PILE.to.y, {
+    steps: 12,
+  });
+  if (done) await page.mouse.up();
+}
+
+test.describe("erasing a pile of copies", () => {
+  test("one sweep takes every copy in the pile", async ({ page }) => {
+    const board = await openBoard(page);
+    await pileOfCopies(page, 40);
+    await pickTool(page, "Eraser");
+
+    await sweep(board);
+
+    const left = await sceneElements(page);
+    expect(
+      left.map((el) => el.id),
+      `${left.length} of 40 copies survived`,
+    ).toEqual([]);
+  });
+
+  test("the sweep fades what it will take, and deletes nothing until release", async ({ page }) => {
+    const board = await openBoard(page);
+    // One copy for the colour: faded copies stacked on each other add back up to nearly
+    // solid (ten at a fifth each cover 89%), which is the same in Excalidraw.
+    await pileOfCopies(page, 1);
+    await pickTool(page, "Eraser");
+    const middle = { x: 720, y: 370 };
+    const strength = () =>
+      page.evaluate((at) => {
+        const canvas = document.querySelector("canvas")!;
+        const scale = canvas.width / canvas.getBoundingClientRect().width;
+        const [r, g, b] = canvas
+          .getContext("2d")!
+          .getImageData(Math.round(at.x * scale), Math.round(at.y * scale), 1, 1).data;
+        // How far from white: the pink fill is (255, 201, 201), 108 at full strength.
+        return 255 * 3 - (r! + g! + b!);
+      }, middle);
+    const solid = await strength();
+
+    await sweep(board, false);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => window.__drawEngine!.debugSnapshot().interaction.markedForErasure.length,
+        ),
+      )
+      .toBe(1);
+    await page.waitForTimeout(100);
+    const faded = await strength();
+
+    expect(await sceneElements(page), "nothing deleted yet").toHaveLength(1);
+    expect(solid, "setup: the fill is drawn at full strength").toBeGreaterThan(90);
+    // A fifth of the colour, as Excalidraw's ELEMENT_READY_TO_ERASE_OPACITY (20).
+    expect(faded, `faded to ${faded} from ${solid}`).toBeGreaterThan(solid * 0.1);
+    expect(faded).toBeLessThan(solid * 0.35);
+
+    await page.mouse.up();
+    expect(await sceneElements(page)).toHaveLength(0);
+  });
+
+  test("Escape mid-sweep keeps everything, at full strength", async ({ page }) => {
+    const board = await openBoard(page);
+    await pileOfCopies(page, 10);
+    await pickTool(page, "Eraser");
+
+    await sweep(board, false);
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+
+    const left = await sceneElements(page);
+    expect(left).toHaveLength(10);
+    expect(left.every((el) => (el as { opacity?: number }).opacity === 100)).toBe(true);
+    const marked = await page.evaluate(
+      () => window.__drawEngine!.debugSnapshot().interaction.markedForErasure.length,
+    );
+    expect(marked, "and nothing stays faded").toBe(0);
+  });
+
+  test("undo brings the pile back at full strength", async ({ page }) => {
+    // The old eraser faded by rewriting each copy's opacity, and undo then restored the
+    // faded value: the pile came back see-through.
+    const board = await openBoard(page);
+    await pileOfCopies(page, 10);
+    await pickTool(page, "Eraser");
+    await sweep(board);
+    expect(await sceneElements(page)).toHaveLength(0);
+
+    await focusBoard(board);
+    await page.keyboard.press("Control+z");
+
+    const back = await sceneElements(page);
+    expect(back).toHaveLength(10);
+    expect(back.map((el) => (el as { opacity?: number }).opacity)).toEqual(Array(10).fill(100));
+  });
+
+  test("sweeping back with Alt held keeps what it passes over", async ({ page }) => {
+    // Excalidraw's restore. Out and back along the same line: everything is marked on the
+    // way out, and un-marked on the way back.
+    const board = await openBoard(page);
+    await pileOfCopies(page, 10);
+    await pickTool(page, "Eraser");
+    const { box } = board;
+
+    await sweep(board, false);
+    await page.keyboard.down("Alt");
+    await page.mouse.move(box.x + ACROSS_THE_PILE.from.x, box.y + ACROSS_THE_PILE.from.y, {
+      steps: 12,
+    });
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+
+    expect(await sceneElements(page)).toHaveLength(10);
+  });
+});
