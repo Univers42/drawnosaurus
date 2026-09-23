@@ -41,6 +41,7 @@ declare global {
       getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
       setGrid(grid: { enabled?: boolean }): void;
       getObjectsSnap(): boolean;
+      applyRemotePatch(json: string): boolean;
       debugSnapshot(): { interaction: { markedForErasure: string[] } };
       /** Replaces the whole scene — used to place geometry too small to draw by hand. */
       loadScene(json: string): void;
