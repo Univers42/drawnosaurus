@@ -9,7 +9,7 @@
     type AutosaveStatus,
     type FailureKind,
   } from "$lib/autosave/autosaver.ts";
-  import { DRAFT_PREFIX, writeDraft } from "$lib/autosave/draft.ts";
+  import { DraftStore, indexedDbBackend } from "$lib/autosave/draftStore.ts";
   import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
 
@@ -26,6 +26,13 @@
     typeof localStorage === "undefined" ? undefined : localStorage;
 
   /**
+   * The local copy of the board, for when the server cannot be reached. Written a change
+   * at a time, off the frame that made it — see `draftStore.ts` for what it replaced.
+   */
+  const drafts = new DraftStore(indexedDbBackend());
+  const LEGACY_DRAFT_PREFIX = "drawnosaurus:draft:";
+
+  /**
    * 413 is the board or the request being too large, 400 a change the server will not
    * take: the same patch would be refused the same way, so neither is retried.
    */
@@ -39,9 +46,6 @@
   const saver = new SceneAutosaver<DrawElement>({
     readScene: () => live,
     send: async (patch) => {
-      // The local draft is the safety net for a write that does not land, so it is
-      // cached before the request goes out, not after it succeeds.
-      writeDraft(storage(), slug, live);
       // Deliberately NOT caught. The autosaver needs the rejection: it is what leaves
       // the patch unacknowledged and arms the retry. Swallowing it here made the
       // tracker treat never-sent elements as saved — so they were never resent — and
@@ -67,14 +71,15 @@
         const board = await getBoard(slug);
         title = board.title;
         elements = elementsFromJson(JSON.stringify(board.scene)) ?? [];
+        // The draft this page used to keep in localStorage: the server has the board,
+        // and the string only took up the quota.
+        storage()?.removeItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
       } catch {
-        // Check local storage draft
-        if (typeof localStorage !== "undefined") {
-          const cached = localStorage.getItem(`${DRAFT_PREFIX}${slug}`);
-          if (cached) {
-            elements = elementsFromJson(cached) ?? [];
-          }
-        }
+        // The server is unreachable: the local draft, or the one an older version of
+        // this page kept in localStorage.
+        const drafted = (await drafts.load(slug)) as DrawElement[] | null;
+        const legacy = storage()?.getItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
+        elements = drafted ?? (legacy ? (elementsFromJson(legacy) ?? []) : []);
         title = slug ? `Board ${slug}` : "Untitled";
       }
 
@@ -84,7 +89,9 @@
     })();
 
     const flushOnHide = (): void => {
-      if (document.visibilityState === "hidden") void saver.flush();
+      if (document.visibilityState !== "hidden") return;
+      void saver.flush();
+      void drafts.flush();
     };
     document.addEventListener("visibilitychange", flushOnHide);
 
@@ -122,16 +129,27 @@
 
     if (isDelta(parsed)) {
       applyDelta(parsed);
+      drafts.record(slug, parsed.updated, parsed.removed, live);
     } else {
       const elements = elementsFromJson(json);
       if (elements === null) return;
+      // A whole scene — an undo, a reorder. Only what it actually changed goes to the
+      // draft: undo on a big board would otherwise rewrite every element.
+      const before = new Map(live.map((element) => [element.id, element]));
+      const changed = elements.filter((element) => {
+        const previous = before.get(element.id);
+        return (
+          !previous ||
+          previous.version !== element.version ||
+          previous.versionNonce !== element.versionNonce
+        );
+      });
+      const present = new Set(elements.map((element) => element.id));
+      const removed = live.map((element) => element.id).filter((id) => !present.has(id));
       live = elements;
+      drafts.record(slug, changed, removed, live);
     }
 
-    // The draft cache is written from `live` rather than from the payload, which is no
-    // longer the whole scene. Best effort, and it cannot throw: it used to, once a few
-    // photos filled the storage quota, and the throw stopped the autosave below it.
-    writeDraft(storage(), slug, live);
     saver.notify();
   }
 
