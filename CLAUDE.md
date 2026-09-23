@@ -148,6 +148,18 @@ scoped by its result, so cross-owner access is impossible by construction. `AUTH
 request to one owner; `AUTH_MODE=bearer` refuses to boot rather than serve everything to everyone.
 Replacing auth is a change to `resolveOwner` and nothing else.
 
+### Live: holds and previews
+
+Beside patches, the live link carries `presence` (what each person has selected, each element
+with when they took it) and `preview` / `preview-end` (a gesture in progress, streamed at most
+every `previewInterval`). `apps/web/src/lib/realtime/peerClaims.ts` settles a race — earlier
+claim, then smaller client id — identically on every side, and `engine.setPeers` enforces the
+result: what a peer holds is untouchable, exactly like a locked element (select, marquee,
+eraser, text edit, undo), and previews are painted as live but never enter the scene, history or
+autosave (`engine/crates/draw-engine/src/engine/peers.rs`). A preview carries the pre-gesture
+version, so a commit outranks it whichever arrives first. Frames go out in send order: sealing
+is async, and a preview landing after its end would freeze a shape mid-move.
+
 ### Web app shape
 
 `apps/web/src/lib/draw-chrome/` is the editor chrome. `DrawSurface.svelte` (~1k lines) is the

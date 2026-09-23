@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DrawNotice } from "@osionos/draw-engine/types";
-import { NOTICE_TEXT } from "./notices.ts";
+import { heldNotice, NOTICE_TEXT } from "./notices.ts";
 
 /**
  * Every code the motor can emit has words.
@@ -33,5 +33,17 @@ describe("notice text", () => {
       "Couldn't find an enclosed region to fill here.",
     );
     expect(NOTICE_TEXT["fill-region-too-complex"]).toBe("This region is too complex to fill.");
+  });
+});
+
+describe("held notice", () => {
+  it("names who has it, and says it is not for good", () => {
+    expect(heldNotice("Dino 412")).toMatch(/^Dino 412 is working on this/);
+    expect(heldNotice("Dino 412")).toMatch(/until they let go/);
+  });
+
+  it("still makes sense without a name", () => {
+    expect(heldNotice(undefined)).toMatch(/^Someone /);
+    expect(heldNotice("  ")).toMatch(/^Someone /);
   });
 });

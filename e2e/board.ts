@@ -110,6 +110,24 @@ export interface Board {
  */
 export const OPEN_CANVAS = { left: 440, top: 170, right: 1160, bottom: 650 } as const;
 
+/**
+ * A relay standing in for the API's live route: every frame goes to every other page
+ * that joined it. Pass `join` as `openBoard`'s `live` handler on each page.
+ */
+export function relay() {
+  const sockets: WebSocketRoute[] = [];
+  const frames: string[] = [];
+  const join = (socket: WebSocketRoute) => {
+    sockets.push(socket);
+    socket.onMessage((message) => {
+      const text = String(message);
+      frames.push(text);
+      for (const other of sockets) if (other !== socket) other.send(text);
+    });
+  };
+  return { join, frames };
+}
+
 /** Navigates to a board with the API stubbed out, and waits for the engine to mount. */
 export async function openBoard(
   page: Page,
