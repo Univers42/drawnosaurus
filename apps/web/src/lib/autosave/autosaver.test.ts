@@ -122,6 +122,34 @@ describe("SceneAutosaver", () => {
     expect(statuses.at(-1)).toBe("idle");
   });
 
+  it("does not retry a final refusal, and tries again with the next change", async () => {
+    let scene = [el("a")];
+    const send = vi.fn().mockRejectedValue(new Error("413"));
+    const statuses: AutosaveStatus[] = [];
+    const saver = new SceneAutosaver({
+      readScene: () => scene,
+      send,
+      onStatus: (status) => statuses.push(status),
+      classify: () => "too-large",
+      now: () => 0,
+      nonce: () => 1,
+    });
+
+    saver.notify();
+    await vi.advanceTimersByTimeAsync(800);
+    // A retry loop would have sent it several more times by now.
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(statuses.at(-1)).toBe("too-large");
+
+    scene = [el("a"), el("b")];
+    saver.notify();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(send).toHaveBeenCalledTimes(2);
+    // Still unacknowledged: the refused element goes out again with the new one.
+    expect(send.mock.lastCall?.[0].elements.map((e: StampedElement) => e.id)).toEqual(["a", "b"]);
+  });
+
   it("does not acknowledge a failed patch, so the element is resent", async () => {
     const scene = [el("a")];
     const send = vi.fn().mockRejectedValueOnce(new Error("boom")).mockResolvedValue(undefined);
