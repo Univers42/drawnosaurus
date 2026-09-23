@@ -13,9 +13,20 @@ import base from "../../playwright.config.ts";
  *     PLAYWRIGHT_BROWSERS_PATH=… pnpm exec playwright test -c tools/embed-check
  *
  * Results and a screenshot of every frame go to `test-results/embed-check/`.
+ * `EMBED_CHECK_ONLY=youtube,vimeo` checks only those providers.
  */
 const root = path.resolve(import.meta.dirname, "../..");
-const webServer = base.webServer as { cwd?: string } | undefined;
+
+/**
+ * Served from `localhost`, not the suite's `127.0.0.1`, unless `E2E_HOST` says otherwise.
+ * YouTube refuses label-owned videos — most music — to a page at a bare IP address:
+ * "This video is unavailable", for a video that plays from `localhost`, which is where
+ * the board is used. From 127.0.0.1 the check reported a fault that no one would see.
+ */
+const onLocalhost = (value: string): string =>
+  process.env.E2E_HOST ? value : value.replaceAll("127.0.0.1", "localhost");
+
+const webServer = base.webServer as { command: string; url: string } | undefined;
 
 export default defineConfig({
   ...base,
@@ -24,5 +35,15 @@ export default defineConfig({
   timeout: 60 * 60_000,
   expect: { timeout: 20_000 },
   reporter: [["list"]],
-  ...(webServer ? { webServer: { ...webServer, cwd: path.join(root, "apps/web") } } : {}),
+  use: { ...base.use, baseURL: onLocalhost(String(base.use?.baseURL ?? "")) },
+  ...(webServer
+    ? {
+        webServer: {
+          ...webServer,
+          command: onLocalhost(webServer.command),
+          url: onLocalhost(webServer.url),
+          cwd: path.join(root, "apps/web"),
+        },
+      }
+    : {}),
 });
