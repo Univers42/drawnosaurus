@@ -359,6 +359,30 @@ describe("realtimeClient holds and gestures", () => {
     expect(states.at(-1), "and lets go of it all when they leave").toEqual([]);
   });
 
+  it("has no position for someone who has not pointed anywhere yet", () => {
+    const channel = new RealtimeChannel<El>("abc");
+    let peers: { pointed?: boolean }[] = [];
+    channel.onPeers((list) => (peers = list));
+    channel.handleMessage({ type: "join", clientId: "ana", name: "Ana", color: "#e03131" });
+    channel.handleMessage({
+      type: "presence",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      claims: {},
+    });
+    expect(peers[0]!.pointed).toBeFalsy();
+    channel.handleMessage({
+      type: "cursor",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      x: 5,
+      y: 6,
+    });
+    expect(peers[0]!.pointed).toBe(true);
+  });
+
   it("keeps the cursor it had when presence arrives, and the name when a preview does", () => {
     const channel = new RealtimeChannel<El>("abc");
     let peers: { name: string; x: number; claims: Record<string, number> }[] = [];
