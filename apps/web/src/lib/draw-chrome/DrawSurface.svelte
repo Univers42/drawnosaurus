@@ -1145,6 +1145,10 @@
       {onCameraChange}
       onReady={(next) => {
         engine = next;
+        // Known from the start rather than from the first pan: the cursor we send and
+        // the peers' cursors we draw are both placed with it, and without it ours was
+        // never sent and theirs sat at the corner until someone moved the camera.
+        currentCamera = next.camera;
         next.setGrid(grid);
         next.setObjectsSnap(objectsSnap);
         syncStyle(next);

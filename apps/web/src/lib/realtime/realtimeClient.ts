@@ -27,6 +27,12 @@ export interface PeerCursor {
   color: string;
   x: number;
   y: number;
+  /**
+   * Whether they have pointed anywhere yet. Someone known only from a join or their
+   * presence has no position, and drawing them at 0,0 put a stranger's cursor in the
+   * top-left corner of every board.
+   */
+  pointed?: boolean;
   lastActive: number;
 }
 
@@ -334,7 +340,13 @@ export class RealtimeChannel<T extends StampedElement> {
   handleMessage(msg: RealtimeMessage<T>): void {
     if (msg.clientId === this.profile.clientId) return;
     if (msg.type === "cursor") {
-      this.upsertPeer(msg.clientId, { name: msg.name, color: msg.color, x: msg.x, y: msg.y });
+      this.upsertPeer(msg.clientId, {
+        name: msg.name,
+        color: msg.color,
+        x: msg.x,
+        y: msg.y,
+        pointed: true,
+      });
       this.notifyPeers();
     } else if (msg.type === "join") {
       this.upsertPeer(msg.clientId, { name: msg.name, color: msg.color });

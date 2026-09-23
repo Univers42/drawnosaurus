@@ -139,3 +139,24 @@ test("a shape being moved moves on the other screen before it is let go", async 
   expect(await regionInk(other, moved), "and it stays where it was put").toBeGreaterThan(0.01);
   await close();
 });
+
+test("the other person's cursor is where they point, not in the corner", async ({
+  page,
+  browser,
+}) => {
+  const { host, colleague, close } = await together(page, browser);
+  const other = colleague.page;
+  const cursors = other.locator(".cursor-wrapper");
+  // Known from their join, but they have pointed nowhere yet.
+  await expect(cursors).toHaveCount(0);
+
+  await page.mouse.move(host.box.x + AT.x, host.box.y + AT.y, { steps: 3 });
+  await expect(cursors).toHaveCount(1);
+  await expect
+    .poll(async () => {
+      const at = await cursors.first().boundingBox();
+      return at && { x: Math.round(at.x - colleague.box.x), y: Math.round(at.y - colleague.box.y) };
+    })
+    .toEqual({ x: AT.x, y: AT.y });
+  await close();
+});
