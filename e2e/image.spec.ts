@@ -4,6 +4,7 @@ import {
   OPEN_CANVAS,
   activeTool,
   focusBoard,
+  listenForPicker,
   openBoard,
   pickTool,
   sceneElements,
@@ -99,9 +100,9 @@ async function images(page: Page): Promise<SceneElement[]> {
 /** Inserts the picture through the toolbar and the file picker, as a person does. */
 async function insertThroughPicker(board: Board, file: Buffer): Promise<void> {
   const { page } = board;
-  const chooser = page.waitForEvent("filechooser");
+  const listening = await listenForPicker(page);
   await pickTool(page, "Insert image");
-  await (await chooser).setFiles({ name: "red.png", mimeType: "image/png", buffer: file });
+  await (await listening.opened).setFiles({ name: "red.png", mimeType: "image/png", buffer: file });
   await expect.poll(async () => (await images(page)).length).toBe(1);
 }
 
@@ -153,10 +154,10 @@ async function dropFile(
  */
 async function imageToolWaitingOnPicker(board: Board): Promise<void> {
   const { page } = board;
-  const picker = page.waitForEvent("filechooser");
+  const listening = await listenForPicker(page);
   await focusBoard(board);
   await page.keyboard.press("9");
-  await picker;
+  await listening.opened;
   expect(await activeTool(page), "setup: the image tool is waiting on its picker").toBe("image");
 }
 
