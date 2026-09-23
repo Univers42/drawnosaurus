@@ -221,7 +221,8 @@ jobs:
       - name: Init engine/realtime (nested; not recursive)
         run: |
           # CI cannot fetch the engine's SSH-URL nested submodule as-is.
-          git -C engine config url."https://github.com/".insteadOf "git@github.com:"
+          # `--add` is idempotent across re-runs / checkout already setting insteadOf.
+          git -C engine config --add url."https://github.com/".insteadOf "git@github.com:"
           git -C engine submodule update --init realtime
 
       - uses: docker/setup-buildx-action@v3

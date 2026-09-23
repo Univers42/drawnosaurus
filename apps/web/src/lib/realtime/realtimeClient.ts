@@ -71,7 +71,6 @@ export class RealtimeChannel<T extends StampedElement> {
   private listeners: ((peers: PeerCursor[]) => void)[] = [];
   private patchListeners: ((patch: ScenePatch<T>) => void)[] = [];
   private statusListeners: ((status: ConnectionStatus) => void)[] = [];
-  private connected = false;
   private sessionReady = false;
   private roomKey: CryptoKey | null;
   private intentionalClose = false;
@@ -146,7 +145,6 @@ export class RealtimeChannel<T extends StampedElement> {
         void this.onServerFrame(event.data as string);
       };
       this.ws.onclose = () => {
-        this.connected = false;
         this.sessionReady = false;
         this.ws = null;
         this.setStatus("disconnected");
@@ -156,7 +154,6 @@ export class RealtimeChannel<T extends StampedElement> {
         // onclose follows; reconnect is scheduled there.
       };
     } catch {
-      this.connected = false;
       this.sessionReady = false;
       this.ws = null;
       this.setStatus("disconnected");
@@ -178,7 +175,6 @@ export class RealtimeChannel<T extends StampedElement> {
     }
     if (isSubscribedLive(parsed)) {
       this.sessionReady = true;
-      this.connected = true;
       this.setStatus("connected");
       void this.flushPendingOutbound();
       void this.send({
@@ -249,7 +245,16 @@ export class RealtimeChannel<T extends StampedElement> {
     }
     const payload = await this.encodePayload(msg);
     if (payload === null) return;
-    this.ws.send(publishFrame(this.slug, msg.type, payload));
+    // Sealing is async: the socket may have dropped while we waited.
+    const socket = this.ws;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !this.sessionReady) {
+      if (msg.type === "join" || msg.type === "leave" || msg.type === "cursor") {
+        this.pendingOutbound = this.pendingOutbound.filter((m) => m.type !== msg.type);
+      }
+      this.pendingOutbound.push(msg);
+      return;
+    }
+    socket.send(publishFrame(this.slug, msg.type, payload));
   }
 
   private async flushPendingOutbound(): Promise<void> {
@@ -421,7 +426,6 @@ export class RealtimeChannel<T extends StampedElement> {
       });
       this.ws = null;
     }
-    this.connected = false;
     this.sessionReady = false;
     this.pendingOutbound = [];
     this.peers.clear();

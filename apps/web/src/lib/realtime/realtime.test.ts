@@ -326,9 +326,13 @@ describe("realtimeClient reconnecting", () => {
     const seen: string[] = [];
     channel.onStatus((status) => seen.push(status));
 
-    channel.connect("ws://api/live");
-    FakeSocket.made[0]!.open();
-    FakeSocket.made[0]!.drop();
+    channel.connect("ws://rt/ws");
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    // Connected only after AUTH_OK + SUBSCRIBED — the TCP open alone is still "connecting".
+    socket.onmessage?.({ data: JSON.stringify({ type: "AUTH_OK", conn_id: "c1", server_time: "t" }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: "SUBSCRIBED", sub_id: "live", seq: 0 }) });
+    socket.drop();
 
     expect(seen).toEqual(["disconnected", "connecting", "connected", "disconnected"]);
     channel.disconnect();

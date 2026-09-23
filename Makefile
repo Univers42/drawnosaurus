@@ -21,6 +21,12 @@ RUN   := $(DC) run --rm
 # `docker info` is only paid for by the recipe that needs the answer.
 DOCKER_ROOTLESS = $(shell docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless && echo 1)
 RUN_AS_HOST     = $(if $(DOCKER_ROOTLESS),,--user "$(shell id -u):$(shell id -g)")
+# Tooling writes into the bind-mounted tree (node_modules, .vite-temp, …). Without
+# RUN_AS_HOST on a rootful daemon those dirs become root-owned and host Playwright
+# fails with EACCES when Vite tries to write apps/web/node_modules/.vite-temp.
+TOOLING         = $(RUN) $(RUN_AS_HOST) --no-deps tooling
+HOST_UID        := $(shell id -u)
+HOST_GID        := $(shell id -g)
 
 # The generated wasm-bindgen glue. engine/src/wasmLoad.ts imports it, so the web
 # build, the typecheck and the web image all fail without it — and it is build
@@ -106,45 +112,67 @@ $(ENGINE_PKG): $(ENGINE_CRATE_SRC)
 	@$(MAKE) --no-print-directory wasm
 
 install: ## Install workspace dependencies
-	$(RUN) --no-deps tooling pnpm install
+	$(TOOLING) pnpm install
 	@echo -e "$(GREEN)✔ dependencies installed$(RESET)"
 
 lock: ## Regenerate pnpm-lock.yaml
-	$(RUN) --no-deps tooling pnpm install --no-frozen-lockfile --lockfile-only
+	$(TOOLING) pnpm install --no-frozen-lockfile --lockfile-only
 	@echo -e "$(GREEN)✔ pnpm-lock.yaml updated$(RESET)"
 
 typecheck: $(ENGINE_PKG) ## tsc + svelte-check across the workspace (strict)
-	$(RUN) --no-deps tooling pnpm typecheck
+	$(TOOLING) pnpm typecheck
 
 lint: ## eslint, zero warnings tolerated
-	$(RUN) --no-deps tooling pnpm lint
+	$(TOOLING) pnpm lint
 
 format: ## prettier --check
-	$(RUN) --no-deps tooling pnpm format
+	$(TOOLING) pnpm format
 
 test: ## Unit tests (contract, api, web)
-	$(RUN) --no-deps tooling pnpm test
+	$(TOOLING) pnpm test
 
 conformance: ## What prompt/*.md asks for, and what covers it
-	$(RUN) --no-deps tooling pnpm --filter @drawnosaurus/conformance test
+	$(TOOLING) pnpm --filter @drawnosaurus/conformance test
 
 test-integration: ## API tests against a real MongoDB
 	$(DC) up -d mongo
-	$(RUN) tooling pnpm test:integration
+	$(RUN) $(RUN_AS_HOST) tooling pnpm test:integration
 
 quality: $(ENGINE_PKG) ## The gate: typecheck + lint + format + unit tests
-	$(RUN) --no-deps tooling pnpm quality
+	$(TOOLING) pnpm quality
 	@echo -e "$(GREEN)✔ quality green$(RESET)"
+
+# Undo root-owned bind-mount output from earlier rootful docker runs (no host sudo).
+# Host Playwright needs to write Vite scratch under apps/web/node_modules/.vite-temp.
+reclaim-host-files:
+	@docker run --rm -v "$(CURDIR):/work" -w /work alpine \
+		sh -c 'chown -R $(HOST_UID):$(HOST_GID) \
+			node_modules apps/web/node_modules apps/api/node_modules packages/*/node_modules \
+			apps/web/.svelte-kit apps/web/build test-results \
+			2>/dev/null || true'
 
 # Runs on the host, not in a container: Playwright ships its own browser build and the
 # image that matches it is a gigabyte, which is a poor trade for a target run by hand.
 # `playwright install` is idempotent — a no-op once the browser is cached.
 #
+# No `--with-deps` here: that path runs `sudo` for OS packages and fails on machines
+# without passwordless sudo (lab hosts, many laptops). CI installs deps in the workflow
+# where the runner already has them. Browsers land on sgoinfre when that volume exists
+# (HOME is too small on the 42 machines); otherwise Playwright's default cache is fine.
+#
 # Kept out of `quality` on purpose. That gate runs on every save and has to stay fast;
 # a browser is neither fast nor free of the outside world.
-test-e2e: $(ENGINE_PKG) ## Browser tests (Playwright) — zoom, scroll, bucket fill
-	pnpm exec playwright install --with-deps chromium
-	pnpm exec playwright test
+PLAYWRIGHT_BROWSERS_PATH ?= $(shell \
+	if [ -n "$$PLAYWRIGHT_BROWSERS_PATH" ]; then printf '%s' "$$PLAYWRIGHT_BROWSERS_PATH"; \
+	elif [ -d /sgoinfre/students/$(USER) ]; then printf '/sgoinfre/students/%s/.cache/ms-playwright' "$(USER)"; \
+	fi)
+
+test-e2e: $(ENGINE_PKG) reclaim-host-files ## Browser tests (Playwright) — zoom, scroll, bucket fill
+	@mkdir -p "$(or $(PLAYWRIGHT_BROWSERS_PATH),$(HOME)/.cache/ms-playwright)"
+	PLAYWRIGHT_BROWSERS_PATH="$(or $(PLAYWRIGHT_BROWSERS_PATH),$(HOME)/.cache/ms-playwright)" \
+		pnpm exec playwright install chromium
+	PLAYWRIGHT_BROWSERS_PATH="$(or $(PLAYWRIGHT_BROWSERS_PATH),$(HOME)/.cache/ms-playwright)" \
+		pnpm exec playwright test
 	@echo -e "$(GREEN)✔ e2e green$(RESET)"
 
 # Excalidraw, installed and served from third_party for the parity benchmark. Its yarn
@@ -166,7 +194,7 @@ dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and
 	$(DC) up -d mongo
 	REALTIME_PORT=$(DEV_REALTIME_PORT) $(DC) up -d --build realtime
 	-$(DC) rm -fsv drawnosaurus-api 2>/dev/null
-	$(RUN) --no-deps -d --name drawnosaurus-api -p $(DEV_API_PORT):4000 tooling \
+	$(RUN) $(RUN_AS_HOST) --no-deps -d --name drawnosaurus-api -p $(DEV_API_PORT):4000 tooling \
 		pnpm --filter @drawnosaurus/api dev
 	@echo -e "$(GREEN)dev: web http://localhost:$(DEV_WEB_PORT)  api http://localhost:$(DEV_API_PORT)  realtime ws://localhost:$(DEV_REALTIME_PORT)/ws$(RESET)"
 	@# --service-ports is useless here: `tooling` is a generic runner and declares no
@@ -177,7 +205,7 @@ dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and
 	@# inotify does not cross either boundary — without polling Vite never sees an edit
 	@# and serves what it compiled at startup, which looks exactly like a change that was
 	@# never made and survives any number of rebuilds.
-	$(RUN) --no-deps -p $(DEV_WEB_PORT):5173 \
+	$(RUN) $(RUN_AS_HOST) --no-deps -p $(DEV_WEB_PORT):5173 \
 		-e API_PROXY_TARGET=http://drawnosaurus-api:4000 \
 		-e PUBLIC_REALTIME_WS_URL=ws://localhost:$(DEV_REALTIME_PORT)/ws \
 		-e VITE_USE_POLLING=1 \
@@ -217,7 +245,7 @@ logs: ## Tail service logs
 	$(DC) logs -f api web realtime
 
 shell: ## Interactive shell in the tooling container
-	$(RUN) --no-deps tooling bash
+	$(TOOLING) bash
 
 # The SHA drawnosaurus is held to for Excalidraw parity. Committed; the tree it names
 # is not — see .gitignore.
@@ -256,6 +284,6 @@ clean: ## Remove containers, volumes, images, and build output
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
 .PHONY: all help submodules wasm install lock typecheck lint format test \
-	test-integration test-e2e conformance parity parity-deps quality verify dev build up \
-	down logs shell clean \
+	test-integration test-e2e reclaim-host-files conformance parity parity-deps quality verify \
+	dev build up down logs shell clean \
 	oracle oracle-fixtures bench inspector-smoke stale

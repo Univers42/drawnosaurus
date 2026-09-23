@@ -684,10 +684,29 @@
   function handleSceneChange(json: string): void {
     onSceneChange?.(json);
     refreshEmbedFrames();
-    // Always advance the broadcaster, even before the socket is up — otherwise early
-    // deltas are dropped and later patches are computed against a stale mirror.
-    const patch = liveBroadcast.ingest(json);
-    if (patch) realtime?.sendPatch(patch);
+    // Observe even before the socket is up — otherwise early deltas are dropped and
+    // later patches are computed against a stale mirror. Only take (and mark sent)
+    // when the link can carry the patch; flushLive drains the rest on reconnect.
+    if (!realtime) {
+      liveBroadcast.observe(json);
+      return;
+    }
+    liveBroadcast.observe(json);
+    flushLive();
+  }
+
+  /**
+   * Sends peers what they do not have yet — when it can be sent.
+   *
+   * Diffed against what peers already have: tombstones synthesised for soft-deletes,
+   * and an explicit order when z-order moved without stamp changes. Nothing is taken
+   * while the link is down, so what is drawn offline goes out on reconnect instead of
+   * being marked as sent and dropped.
+   */
+  function flushLive(): void {
+    if (!realtime || realtime.connectionStatus !== "connected") return;
+    const patch = liveBroadcast.takePatch();
+    if (patch) realtime.sendPatch(patch);
   }
 
   /** Merges a peer's patch — from the socket, or from the server when catching up. */

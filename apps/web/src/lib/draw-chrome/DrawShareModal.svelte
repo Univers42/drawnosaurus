@@ -206,11 +206,6 @@
     line-height: 1.45;
   }
 
-  .description code {
-    font-size: 12px;
-    color: var(--ink);
-  }
-
   .link-box {
     display: flex;
     gap: 8px;

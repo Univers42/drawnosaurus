@@ -10,9 +10,9 @@ import { OPEN_CANVAS, openBoard, pickTool, type Board } from "./board.ts";
  * dropped link was invisible, and what was drawn while it was down was marked as sent and
  * never sent. These check that the page says so, and that nothing is lost.
  *
- * The socket is a Playwright route standing in for the API, so a spec can drop it and see
- * what arrives on the next one. Frames are sealed with the room key and cannot be read
- * here; they are counted.
+ * The socket is a Playwright route standing in for engine/realtime, so a spec can drop it
+ * and see what arrives on the next one. Frames are sealed with the room key and cannot be
+ * read here; PUBLISH frames are counted after the AUTH/SUBSCRIBE handshake.
  */
 
 interface Live {
@@ -20,20 +20,54 @@ interface Live {
   received: number[];
 }
 
+function attachLiveHandler(socket: WebSocketRoute, live: Live): void {
+  const index = live.sockets.push(socket) - 1;
+  live.received[index] = 0;
+  socket.onMessage((raw) => {
+    let msg: { type?: string; sub_id?: string };
+    try {
+      msg = JSON.parse(typeof raw === "string" ? raw : raw.toString()) as {
+        type?: string;
+        sub_id?: string;
+      };
+    } catch {
+      return;
+    }
+    if (msg.type === "AUTH") {
+      socket.send(
+        JSON.stringify({
+          type: "AUTH_OK",
+          conn_id: `e2e-${index}`,
+          server_time: new Date().toISOString(),
+        }),
+      );
+      return;
+    }
+    if (msg.type === "SUBSCRIBE") {
+      socket.send(
+        JSON.stringify({
+          type: "SUBSCRIBED",
+          sub_id: msg.sub_id ?? "live",
+          seq: 0,
+        }),
+      );
+      return;
+    }
+    // Only count collab traffic — not AUTH/SUBSCRIBE control frames.
+    if (msg.type === "PUBLISH") {
+      live.received[index] = (live.received[index] ?? 0) + 1;
+    }
+  });
+}
+
 async function openWithLive(
   page: Parameters<typeof openBoard>[0],
 ): Promise<{ board: Board; live: Live }> {
   const live: Live = { sockets: [], received: [] };
   const board = await openBoard(page, "e2e", {
-    live: (socket) => {
-      const index = live.sockets.push(socket) - 1;
-      live.received[index] = 0;
-      socket.onMessage(() => {
-        live.received[index] = (live.received[index] ?? 0) + 1;
-      });
-    },
+    live: (socket) => attachLiveHandler(socket, live),
   });
-  // Connected: the client announces itself as soon as the socket opens.
+  // Connected: the client announces itself (join PUBLISH) after AUTH+SUBSCRIBE.
   await expect.poll(() => live.received[0] ?? 0).toBeGreaterThan(0);
   return { board, live };
 }

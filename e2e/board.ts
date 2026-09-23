@@ -110,6 +110,43 @@ export interface Board {
  */
 export const OPEN_CANVAS = { left: 440, top: 170, right: 1160, bottom: 650 } as const;
 
+/**
+ * Speaks the engine/realtime handshake so the page reaches `connected` instead of
+ * reconnecting forever. Specs that care about the wire pass their own handler.
+ */
+export function stubRealtimeHandshake(socket: WebSocketRoute): void {
+  socket.onMessage((raw) => {
+    let msg: { type?: string; sub_id?: string };
+    try {
+      msg = JSON.parse(typeof raw === "string" ? raw : raw.toString()) as {
+        type?: string;
+        sub_id?: string;
+      };
+    } catch {
+      return;
+    }
+    if (msg.type === "AUTH") {
+      socket.send(
+        JSON.stringify({
+          type: "AUTH_OK",
+          conn_id: "e2e",
+          server_time: new Date().toISOString(),
+        }),
+      );
+      return;
+    }
+    if (msg.type === "SUBSCRIBE") {
+      socket.send(
+        JSON.stringify({
+          type: "SUBSCRIBED",
+          sub_id: msg.sub_id ?? "live",
+          seq: 0,
+        }),
+      );
+    }
+  });
+}
+
 /** Navigates to a board with the API stubbed out, and waits for the engine to mount. */
 export async function openBoard(
   page: Page,
@@ -120,7 +157,7 @@ export async function openBoard(
   // for the length of the run — background work under every assertion, and pages of proxy
   // errors in the log that look like the failure when something else goes wrong. A spec
   // about the live link passes its own handler to see and drop the sockets.
-  await page.routeWebSocket(/\/(live|ws)$/, options.live ?? (() => {}));
+  await page.routeWebSocket(/\/(live|ws)$/, options.live ?? stubRealtimeHandshake);
 
   patches.set(page, []);
 
