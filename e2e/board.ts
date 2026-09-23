@@ -9,7 +9,7 @@ import {
 // The pixel probes live in `probes.ts` so `tools/editor-inspector` can import them
 // without dragging in the test runner. Re-exported here because every spec already
 // reaches for them through `board.ts`.
-export { canvasInk, inkCentroidX, regionInk } from "./probes.ts";
+export { canvasInk, chromaInk, inkCentroidX, regionInk } from "./probes.ts";
 
 /**
  * Opening a board in a browser, with nothing behind it.
@@ -41,10 +41,18 @@ declare global {
       getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
       setGrid(grid: { enabled?: boolean }): void;
       getObjectsSnap(): boolean;
-      debugSnapshot(): { interaction: { markedForErasure: string[] } };
+      applyRemotePatch(json: string): boolean;
+      debugSnapshot(): {
+        interaction: { markedForErasure: string[] };
+        rendering: { redraws: number; scrolls: number; dirty: boolean };
+      };
       /** Replaces the whole scene — used to place geometry too small to draw by hand. */
-      loadScene(json: string): void;
+      loadScene(json: string): boolean;
       groupSelection(): void;
+      /** Places an embed as the dialog does; the new element's id, or null if refused. */
+      insertEmbed(url: string, x: number, y: number): string | null;
+      /** The embeds on screen and where their frames go, as JSON. */
+      embedFramesJson(): string;
     };
   }
 }

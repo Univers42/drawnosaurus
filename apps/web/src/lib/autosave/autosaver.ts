@@ -23,6 +23,12 @@ export type FailureKind = "retry" | "too-large" | "refused";
 
 export interface AutosaverOptions<T extends StampedElement> {
   readScene: () => readonly T[];
+  /**
+   * One element of the scene by id. With it, and the ids the host notes on the tracker,
+   * a save looks at what changed instead of at every element — see
+   * `SceneDiffTracker.noteChanged`.
+   */
+  lookup?: (id: string) => T | undefined;
   send: (patch: ScenePatch<T>) => Promise<void>;
   onStatus?: (status: AutosaveStatus) => void;
   /**
@@ -101,7 +107,7 @@ export class SceneAutosaver<T extends StampedElement> {
 
     const now = this.options.now ?? Date.now;
     const nonce = this.options.nonce ?? randomNonce;
-    const patch = this.tracker.diff(this.options.readScene(), now(), nonce);
+    const patch = this.tracker.diff(this.options.readScene(), now(), nonce, this.options.lookup);
 
     if (patch === null) {
       this.setStatus("idle");
