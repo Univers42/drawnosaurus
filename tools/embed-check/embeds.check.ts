@@ -41,7 +41,8 @@ const ERROR_TEXT = [
   /something went wrong/i,
   /content (is )?(unavailable|not available)/i,
   /refused to connect/i,
-  /log in|sign in/i,
+  /sign in to \w+ to watch/i,
+  /may be broken, or the post may have been removed/i,
 ];
 
 interface Result {
@@ -83,6 +84,9 @@ async function textOf(frame: Frame): Promise<string> {
   }
 }
 
+/** Only these providers, when `EMBED_CHECK_ONLY` names some: `youtube,vimeo`. */
+const ONLY = (process.env.EMBED_CHECK_ONLY ?? "").split(",").filter(Boolean);
+
 test("every link comes up", async ({ page }) => {
   fs.mkdirSync(OUT, { recursive: true });
   const board = await openBoard(page, "embed-check");
@@ -99,6 +103,7 @@ test("every link comes up", async ({ page }) => {
   const results: Result[] = [];
   for (const [index, link] of LINKS.entries()) {
     const n = index + 1;
+    if (ONLY.length > 0 && !ONLY.includes(link.provider)) continue;
     messages.length = 0;
     documents.length = 0;
     await page.evaluate(() => {
