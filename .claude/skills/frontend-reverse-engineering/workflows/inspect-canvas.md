@@ -17,7 +17,7 @@ MODEL → GEOMETRY → TRANSFORM → RENDER PARAMS → CANVAS → SCREEN
    World = `element.x + point[0]`. The painter works in screen space via
    `world_to_screen`. Mixing the two produces an offset proportional to the camera.
 4. **Rotation about the right origin?** `rotation_center(element)` — the centre of the
-   *points*, not `x + width/2`, which sits outside a leftward arrow entirely.
+   _points_, not `x + width/2`, which sits outside a leftward arrow entirely.
 5. **Scaled once or twice?** See the compounding check in `debug-interaction.md`.
 6. **Device pixel ratio?** `get_canvas_state` gives CSS size, backing size and dpr. A
    factor-of-2 error here is always dpr.

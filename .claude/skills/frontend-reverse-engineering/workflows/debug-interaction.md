@@ -24,19 +24,19 @@ get_scene          → geometry after each step
 get_viewport       → camera; a wrong zoom explains a wrong coordinate
 ```
 
-Record the state after *each* pointer event, not only at the end. The question is where
+Record the state after _each_ pointer event, not only at the end. The question is where
 the first divergence is, and a final-state diff cannot answer it.
 
 ## 3. Classify the divergence
 
-| what is wrong | look at |
-|---|---|
-| nothing happened at all | was the gesture swallowed by chrome? start inside `OPEN_CANVAS` |
-| wrong element picked up | `hit_test` — and remember a transparent shape is hit on its outline only |
-| right element, wrong movement | `engine/pointer_move.rs`, the `Interaction` arm for this gesture |
-| correct until you let go | `engine/pointer_end.rs` — settle, discard and history live there |
-| drifts over a long drag | state captured at drag start vs read live — the compounding class |
-| correct state, wrong pixels | `wasm/paint.rs`; state is fine, go to `inspect-canvas.md` |
+| what is wrong                 | look at                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| nothing happened at all       | was the gesture swallowed by chrome? start inside `OPEN_CANVAS`          |
+| wrong element picked up       | `hit_test` — and remember a transparent shape is hit on its outline only |
+| right element, wrong movement | `engine/pointer_move.rs`, the `Interaction` arm for this gesture         |
+| correct until you let go      | `engine/pointer_end.rs` — settle, discard and history live there         |
+| drifts over a long drag       | state captured at drag start vs read live — the compounding class        |
+| correct state, wrong pixels   | `wasm/paint.rs`; state is fine, go to `inspect-canvas.md`                |
 
 ## 4. The compounding check
 

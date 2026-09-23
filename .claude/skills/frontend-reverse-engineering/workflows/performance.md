@@ -1,7 +1,7 @@
 # Measuring before optimising
 
 Never claim something is faster without measuring it. Never optimise code because it
-*looks* inefficient.
+_looks_ inefficient.
 
 ## 1. Define the workload first
 
@@ -24,7 +24,7 @@ in isolation.
 Warm up first, run many iterations, and record the **distribution** — median and spread,
 not one number. A single sample on a shared machine is noise.
 
-Chrome DevTools MCP for traces when you need to see *where* the time goes rather than how
+Chrome DevTools MCP for traces when you need to see _where_ the time goes rather than how
 much there is.
 
 ## 3. Separate the costs
@@ -52,7 +52,7 @@ regions** (the whole canvas repaints), and **offscreen caching**.
 
 ## 5. Report honestly
 
-Not "3x faster". Say: under *this* workload on *this* runtime, median frame time went
+Not "3x faster". Say: under _this_ workload on _this_ runtime, median frame time went
 from X to Y, and the mechanism was Z — traversing A elements per frame instead of B.
 
 If the mechanism cannot be named, the measurement is not understood yet.

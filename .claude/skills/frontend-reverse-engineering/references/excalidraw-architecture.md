@@ -5,15 +5,15 @@ Pinned at `scripts/oracle-sha.txt`, checked out in `third_party/excalidraw` by
 
 ## Layout
 
-| path | what lives there |
-|---|---|
-| `packages/excalidraw/components/App.tsx` | the gesture state machine — pointer down/move/up, tools, most behaviour |
-| `packages/excalidraw/actions/` | named, addressable commands (`actionFinalize`, group actions) |
-| `packages/excalidraw/renderer/interactiveScene.ts` | selection chrome, handles, everything transient |
-| `packages/excalidraw/renderer/staticScene.ts` | the document |
-| `packages/element/src/` | the model: types, geometry, bounds, collision, groups, linear editing |
-| `packages/math/src/` | curves, points, arc length |
-| `packages/common/src/constants.ts` | the constants worth transcribing |
+| path                                               | what lives there                                                        |
+| -------------------------------------------------- | ----------------------------------------------------------------------- |
+| `packages/excalidraw/components/App.tsx`           | the gesture state machine — pointer down/move/up, tools, most behaviour |
+| `packages/excalidraw/actions/`                     | named, addressable commands (`actionFinalize`, group actions)           |
+| `packages/excalidraw/renderer/interactiveScene.ts` | selection chrome, handles, everything transient                         |
+| `packages/excalidraw/renderer/staticScene.ts`      | the document                                                            |
+| `packages/element/src/`                            | the model: types, geometry, bounds, collision, groups, linear editing   |
+| `packages/math/src/`                               | curves, points, arc length                                              |
+| `packages/common/src/constants.ts`                 | the constants worth transcribing                                        |
 
 ## Architecture they have and we do not
 
@@ -29,7 +29,7 @@ Pinned at `scripts/oracle-sha.txt`, checked out in `third_party/excalidraw` by
 
 ## Semantics worth knowing before reading any of it
 
-- `groupIds: string[]` is ordered **innermost → outermost**. The array *is* the nesting.
+- `groupIds: string[]` is ordered **innermost → outermost**. The array _is_ the nesting.
 - Only `type === "arrow"` binds (`isBindingElementType`).
 - Marquee selection is **containment**.
 - `roundness` is a mode, not a radius — elements carry `{type: 3}` with no value.

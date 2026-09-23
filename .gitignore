@@ -28,4 +28,4 @@ blob-report
 third_party/
 
 .env
-.env.local
+.env.localprompts*

@@ -17,7 +17,7 @@ Consequence: there are **no dirty regions**. The whole canvas repaints or nothin
 ## Two caches, both keyed by geometry
 
 - **ShapeCache** (`render/cache.rs`) — rough.js geometry, kept between frames, keyed by a
-  fingerprint of the element's *geometry only*. Panning, zooming and dragging leave the
+  fingerprint of the element's _geometry only_. Panning, zooming and dragging leave the
   fingerprint untouched, so none of them regenerate anything. A cache miss during a drag
   means the fingerprint includes something it should not.
 - **Path2D cache** (`wasm/paint.rs`) — one `Path2D` per op set, so a hachure-filled

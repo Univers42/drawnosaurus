@@ -54,18 +54,18 @@ Architecture facts that decide where to look:
   whole canvas. A "partial redraw" bug cannot exist; a "did not repaint at all" one can.
 - A transparent shape is hit on its **outline only**. The middle of an empty rectangle is
   a hole, deliberately.
-- Chrome floats *on top of* the canvas. A gesture starting under the toolbar or inspector
+- Chrome floats _on top of_ the canvas. A gesture starting under the toolbar or inspector
   is swallowed silently. Start inside `OPEN_CANVAS`.
 
 ## Tools, and what each is actually good for
 
-| tool | use it for | do not use it for |
-|---|---|---|
-| `editor-inspector` MCP | our editor's semantic state, hit tests, render stats, deterministic gestures | anything about the reference |
-| Playwright MCP | driving **excalidraw.com** to observe reference behaviour | measuring our internals |
-| Chrome DevTools MCP | performance traces, memory, console, network | semantic scene state (use the inspector) |
-| `third_party/excalidraw` source | the reference's *rules* — pinned by `scripts/oracle-sha.txt` | what the reference does at runtime |
-| `docs/reference/*.md` | what we have already established, with confidence markers | anything not yet investigated |
+| tool                            | use it for                                                                   | do not use it for                        |
+| ------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------- |
+| `editor-inspector` MCP          | our editor's semantic state, hit tests, render stats, deterministic gestures | anything about the reference             |
+| Playwright MCP                  | driving **excalidraw.com** to observe reference behaviour                    | measuring our internals                  |
+| Chrome DevTools MCP             | performance traces, memory, console, network                                 | semantic scene state (use the inspector) |
+| `third_party/excalidraw` source | the reference's _rules_ — pinned by `scripts/oracle-sha.txt`                 | what the reference does at runtime       |
+| `docs/reference/*.md`           | what we have already established, with confidence markers                    | anything not yet investigated            |
 
 A screenshot proves visual output. It proves nothing about state, coordinates,
 serialization or performance. Keep the three categories separate: **visual**,
@@ -98,7 +98,7 @@ Risk:
 Verification:
 ```
 
-If you cannot fill in *First divergence* and *Root cause*, you are not ready to edit. Keep
+If you cannot fill in _First divergence_ and _Root cause_, you are not ready to edit. Keep
 investigating.
 
 ## Workflows

@@ -4,12 +4,12 @@
 
 Four, and mixing them is the most common source of "it looks offset".
 
-| space | origin | used by |
-|---|---|---|
-| screen / client | browser viewport | raw pointer events |
-| canvas-local | canvas top-left | `localPoint()`, every engine entry point |
-| world | scene origin | the element model, geometry, hit testing |
-| element-local | the element's `x`/`y` | `points[]`, the painter inside its transform |
+| space           | origin                | used by                                      |
+| --------------- | --------------------- | -------------------------------------------- |
+| screen / client | browser viewport      | raw pointer events                           |
+| canvas-local    | canvas top-left       | `localPoint()`, every engine entry point     |
+| world           | scene origin          | the element model, geometry, hit testing     |
+| element-local   | the element's `x`/`y` | `points[]`, the painter inside its transform |
 
 Conversions: `screen_to_world(sx, sy)` and `world_to_screen(camera, wx, wy)`.
 Element-local → world is `element.x + point[0]`, except under rotation, where the pivot is
@@ -27,7 +27,7 @@ One `Option<Interaction>` on the engine — the gesture in progress. Arms includ
 `Rotate`, `ResizeGroup`, `RotateGroup`, `LinearPoint`, `Lasso`, `Laser`, `Marquee`.
 
 **The rule that matters:** anything a gesture needs to measure from is captured when the
-gesture *starts* and held in the arm — `Resize` holds `origin` and `origin_points`,
+gesture _starts_ and held in the arm — `Resize` holds `origin` and `origin_points`,
 `Move` holds `origins`, `ResizeGroup` holds a `GroupFrame`. Deriving from the live element
 instead compounds: each move transforms state an earlier move already transformed.
 
@@ -48,7 +48,7 @@ If you add another gesture that tracks a free cursor, it goes through the same g
 Keyboard: the listener is on the editor container, not the window, so an embedding page
 keeps its own shortcuts. Nothing has focus until something is clicked — a test that
 starts by pressing a key presses it into the void, and `focusBoard()` focuses by
-*clicking*, which is itself a gesture.
+_clicking_, which is itself a gesture.
 
 ## Chrome overlays the canvas
 

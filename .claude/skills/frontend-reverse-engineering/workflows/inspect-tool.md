@@ -9,7 +9,7 @@ each step. Do not rely on memory of how it feels; it is usually wrong in the det
 matter.
 
 Export the scene before and after. The `.excalidraw` JSON tells you what the gesture
-actually *did* to the model, which is the part you have to reproduce.
+actually _did_ to the model, which is the part you have to reproduce.
 
 ## 2. Find the rule in the source
 
@@ -19,15 +19,15 @@ is not.
 
 Useful entry points:
 
-| subject | file |
-|---|---|
-| gestures, tool state, the big switch | `packages/excalidraw/components/App.tsx` |
-| element model and type guards | `packages/element/src/types.ts`, `typeChecks.ts` |
-| groups | `packages/element/src/groups.ts` |
-| linear elements, point editing | `packages/element/src/linearElementEditor.ts` |
-| selection chrome, handles | `packages/excalidraw/renderer/interactiveScene.ts` |
-| geometry, shape generation | `packages/element/src/shape.ts`, `bounds.ts` |
-| constants worth transcribing | `packages/common/src/constants.ts` |
+| subject                              | file                                               |
+| ------------------------------------ | -------------------------------------------------- |
+| gestures, tool state, the big switch | `packages/excalidraw/components/App.tsx`           |
+| element model and type guards        | `packages/element/src/types.ts`, `typeChecks.ts`   |
+| groups                               | `packages/element/src/groups.ts`                   |
+| linear elements, point editing       | `packages/element/src/linearElementEditor.ts`      |
+| selection chrome, handles            | `packages/excalidraw/renderer/interactiveScene.ts` |
+| geometry, shape generation           | `packages/element/src/shape.ts`, `bounds.ts`       |
+| constants worth transcribing         | `packages/common/src/constants.ts`                 |
 
 ## 3. Write the rule down before implementing
 
@@ -46,7 +46,7 @@ Every feature has one or two, and they are the ones that will bite:
 - Only **arrows** bind. Lines never do.
 - Marquee selection is **containment**, not overlap.
 - Curvature is one global `roundness` flag; the violet dots are midpoint handles that
-  *insert* a point, not curve controls.
+  _insert_ a point, not curve controls.
 
 Record these explicitly. They are the difference between parity and something that looks
 similar and behaves wrong.

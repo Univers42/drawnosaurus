@@ -1,6 +1,6 @@
 # Differential testing against the oracle
 
-The check that our behaviour is *right*, rather than merely self-consistent.
+The check that our behaviour is _right_, rather than merely self-consistent.
 
 ## Two things can be compared
 

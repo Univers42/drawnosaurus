@@ -203,6 +203,12 @@ oracle-fixtures: oracle ## Regenerate the rough.js conformance fixtures
 	cd engine/tools/rough-oracle && npm install && npm run generate
 	@echo -e "$(GREEN)✔ fixtures regenerated — review the diff before committing$(RESET)"
 
+inspector-smoke: ## End-to-end check of the editor-inspector MCP server (needs `make dev`)
+	@test -d tools/editor-inspector/node_modules || (cd tools/editor-inspector && npm install --no-audit --no-fund)
+	PLAYWRIGHT_BROWSERS_PATH=$${PLAYWRIGHT_BROWSERS_PATH:-/sgoinfre/students/$$USER/.cache/ms-playwright} \
+		node tools/editor-inspector/src/smoke.ts
+	@echo -e "$(GREEN)✔ inspector green$(RESET)"
+
 bench: ## Run the engine benchmarks (criterion)
 	cd engine && docker compose run --rm --no-deps draw-engine \
 		cargo bench --workspace -- --warm-up-time 1 --measurement-time 3
@@ -216,4 +222,4 @@ clean: ## Remove containers, volumes, images, and build output
 .PHONY: all help submodules wasm install lock typecheck lint format test \
 	test-integration test-e2e conformance parity parity-deps quality verify dev build up \
 	down logs shell clean \
-	oracle oracle-fixtures bench
+	oracle oracle-fixtures bench inspector-smoke
