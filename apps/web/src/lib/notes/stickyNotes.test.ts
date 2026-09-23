@@ -23,16 +23,16 @@ describe("stickyNotes", () => {
     expect(note.backgroundColor).toBe(STICKY_PALETTES.yellow.bg);
     expect(note.strokeColor).toBe(STICKY_PALETTES.yellow.stroke);
     expect(note.boundTextId).toBe(text.id);
-    expect(note.groupId).toBeDefined();
+    expect(note.groupIds).toHaveLength(1);
 
     expect(text.type).toBe("text");
     expect(text.containerId).toBe(note.id);
-    expect(text.groupId).toBe(note.groupId);
+    expect(text.groupIds).toEqual(note.groupIds);
     expect(text.text).toBe("Remember to buy milk");
     expect(text.fontSize).toBe(20);
 
     expect(date.type).toBe("text");
-    expect(date.groupId).toBe(note.groupId);
+    expect(date.groupIds).toEqual(note.groupIds);
     expect(date.fontSize).toBe(12);
     expect(date.opacity).toBe(45);
     expect(date.text).toBe(getStickyNoteDateLabel());
@@ -42,7 +42,7 @@ describe("stickyNotes", () => {
     expect(shadow.y).toBe(203);
     expect(shadow.opacity).toBe(16);
     expect(shadow.roundness).toBe(12);
-    expect(shadow.groupId).toBe(note.groupId);
+    expect(shadow.groupIds).toEqual(note.groupIds);
 
     expect(drawElementSchema.safeParse(note).success).toBe(true);
     expect(drawElementSchema.safeParse(text).success).toBe(true);

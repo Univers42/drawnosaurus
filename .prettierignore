@@ -15,3 +15,10 @@ test-results
 playwright-report
 blob-report
 third_party
+
+# The inspector is a standalone tool with its own toolchain, like engine/tools/.
+tools/editor-inspector/node_modules
+
+# Pasted verbatim, and referred to by line number in plans and commits — reformatting it
+# would move every one of those references. Same reason `prompt/` is ignored above.
+prompts.md

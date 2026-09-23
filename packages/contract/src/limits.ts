@@ -25,3 +25,13 @@ export const MAX_TITLE_LENGTH = 200;
 /** List endpoints paginate; this is the ceiling a caller can ask for. */
 export const MAX_PAGE_SIZE = 100;
 export const DEFAULT_PAGE_SIZE = 24;
+
+/**
+ * How deeply groups may nest.
+ *
+ * Nesting is unbounded in principle — a group can contain a group indefinitely — but a
+ * wire format has to bound it, or a crafted document can carry an arbitrarily long array
+ * per element. Thirty-two is far past any drawing anyone makes by hand and still cheap to
+ * validate.
+ */
+export const MAX_GROUP_DEPTH = 32;
