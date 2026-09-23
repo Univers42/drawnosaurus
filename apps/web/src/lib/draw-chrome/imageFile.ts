@@ -77,6 +77,85 @@ export function describeRejection(reason: ImageRejection): string {
 }
 
 /** The images among a drop's files, in the order they were dropped. */
+/**
+ * The longest side an inserted image keeps, in pixels. Excalidraw's
+ * `DEFAULT_MAX_IMAGE_WIDTH_OR_HEIGHT` (`packages/common/src/constants.ts:388`).
+ *
+ * Larger images are scaled down on insertion, **before** the size check. The order is the
+ * point: a phone photo is routinely over 4 MB, and checking first refused it outright
+ * where Excalidraw would have shrunk it and let it in. It also keeps boards small — every
+ * image lives inline in the board's one database document.
+ */
+export const IMAGE_MAX_SIDE = 1440;
+
+/**
+ * The size an image should be stored at: unchanged when it already fits, otherwise
+ * scaled so its longer side is `max`, proportions kept. Never upscales.
+ */
+export function scaledToFit(
+  width: number,
+  height: number,
+  max: number = IMAGE_MAX_SIDE,
+): { width: number; height: number } {
+  const longest = Math.max(width, height);
+  if (!(longest > max) || !Number.isFinite(longest)) return { width, height };
+  const scale = max / longest;
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
+}
+
+/**
+ * Whether a file of this type and size is shrunk on the way in.
+ *
+ * SVG never is: it has no pixels to reduce, and rasterising it would throw away the one
+ * thing that makes it worth using. Excalidraw exempts it the same way (`data/blob.ts:365`).
+ */
+export function needsDownscale(type: string, width: number, height: number): boolean {
+  return type.toLowerCase() !== "image/svg+xml" && Math.max(width, height) > IMAGE_MAX_SIDE;
+}
+
+/**
+ * Shrinks an image file to fit {@link IMAGE_MAX_SIDE}, keeping its type.
+ *
+ * Returns the original file whenever it does not need shrinking **or cannot be shrunk**
+ * — no canvas, a decode failure, a browser that will not encode the type. Excalidraw's
+ * does the same (`App.tsx:12650-12660`): a failed resize is logged and the original goes
+ * on to the size check, which is then the only thing that can refuse it.
+ */
+export async function downscaleImageFile(file: File): Promise<File> {
+  if (file.type.toLowerCase() === "image/svg+xml") return file;
+  if (typeof createImageBitmap !== "function" || typeof document === "undefined") return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const { width, height } = bitmap;
+    if (!needsDownscale(file.type, width, height)) {
+      bitmap.close();
+      return file;
+    }
+    const target = scaledToFit(width, height);
+    const canvas = document.createElement("canvas");
+    canvas.width = target.width;
+    canvas.height = target.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return file;
+    }
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bitmap, 0, 0, target.width, target.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, file.type, 0.9),
+    );
+    // `toBlob` falls back to PNG for a type it cannot encode; the file then says so.
+    return blob ? new File([blob], file.name, { type: blob.type || file.type }) : file;
+  } catch {
+    return file;
+  }
+}
+
 export function imagesFrom(files: readonly File[]): File[] {
   return files.filter((file) => isSupportedImageType(file.type));
 }

@@ -196,7 +196,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "🖼️ Images",
     status: "covered",
-    tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`],
+    tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`, "e2e/image.spec.ts"],
   },
   {
     section: "🧩 Frames",
@@ -479,8 +479,19 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "10. Images",
+    text: /Image IDs|Image file store/,
+    status: "gap",
+    why: "The picture rides on the element as a data: URL rather than in a file store keyed by id. Everything works through it, but a board is one Mongo document, so two or three large pictures reach the 16MB ceiling — now refused with a 413 (apps/api/tests/integration/images.test.ts) rather than a 500. See docs/reference/images.md.",
+  },
+  {
+    section: "10. Images",
     status: "covered",
-    tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`],
+    tests: [
+      `${ENGINE}/ci_image.rs`,
+      `${WEB}/draw-chrome/imageFile.test.ts`,
+      "e2e/image.spec.ts",
+      "apps/api/tests/integration/images.test.ts",
+    ],
   },
   {
     section: "11. Sticky notes",
@@ -667,9 +678,15 @@ export const RULES: readonly Rule[] = [
   { section: "29. Undo / redo", status: "covered", tests: [`${ENGINE}/ci_history.rs`] },
   {
     section: "30. Clipboard",
-    text: /Image paste|External paste|image\/png|text\/html/,
+    text: /Image paste|image\/png/,
+    status: "covered",
+    tests: ["e2e/image.spec.ts"],
+  },
+  {
+    section: "30. Clipboard",
+    text: /External paste|text\/html/,
     status: "gap",
-    why: "Internal copy/paste round-trips with id regeneration; rich external formats do not.",
+    why: "Internal copy/paste round-trips with id regeneration, and a pasted image file is placed; other rich external formats are not read.",
   },
   { section: "30. Clipboard", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
   {

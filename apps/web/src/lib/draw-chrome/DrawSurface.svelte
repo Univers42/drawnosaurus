@@ -36,7 +36,9 @@
   import {
     IMAGE_ACCEPT,
     describeRejection,
+    downscaleImageFile,
     imagesFrom,
+    isSupportedImageType,
     readImageFile,
     rejectImageFile,
   } from "./imageFile.ts";
@@ -259,22 +261,62 @@
   /**
    * Decode a file and hand it to the engine.
    *
-   * Everything about *where* and *how big* is the engine's — see `insertImage` — so this
-   * does only what a browser must: check the file is one we can read, decode it, and
-   * report the natural size.
+   * Everything about *where* and *how big* on the board is the engine's — see
+   * `insertImage` — so this does only what a browser must: check the file is one we can
+   * read, shrink it to a size worth storing, decode it, and report the natural size.
+   * Returns the new element's id, or null when the file was refused.
    */
-  async function placeImageFile(file: File, at: { x: number; y: number }): Promise<void> {
-    const rejection = rejectImageFile(file);
+  async function placeImageFile(file: File, at: { x: number; y: number }): Promise<string | null> {
+    // The type first, then shrink, then the size. Shrinking before the size check is
+    // Excalidraw's order (`App.tsx:12649-12668`) and it is what lets a phone photo in:
+    // they are routinely over the limit before being brought down to 1440px, and checking
+    // first refused them outright.
+    if (!isSupportedImageType(file.type)) {
+      notify(describeRejection("type"));
+      return null;
+    }
+    const shrunk = await downscaleImageFile(file);
+    const rejection = rejectImageFile(shrunk);
     if (rejection) {
       notify(describeRejection(rejection));
-      return;
+      return null;
     }
-    const decoded = await readImageFile(file);
+    const decoded = await readImageFile(shrunk);
     if (!decoded) {
       notify(describeRejection("decode"));
-      return;
+      return null;
     }
-    engine?.insertImage(decoded.dataUrl, decoded.naturalWidth, decoded.naturalHeight, at.x, at.y);
+    return (
+      engine?.insertImage(
+        decoded.dataUrl,
+        decoded.naturalWidth,
+        decoded.naturalHeight,
+        at.x,
+        at.y,
+      ) ?? null
+    );
+  }
+
+  /**
+   * Places image files and finishes the gesture the way Excalidraw's `insertImages` does
+   * (it ends in `actionFinalize`, `App.tsx:13002-13005`): everything placed is selected,
+   * and the tool goes back to Select unless it is locked.
+   *
+   * The return to Select is not cosmetic. The engine deliberately ignores presses while
+   * the image tool is active — a picker may be open — so an image dropped or pasted
+   * while the tool was still "image" could not be picked up afterwards, which is exactly
+   * "the image cannot be dragged".
+   */
+  async function placeImages(files: readonly File[], at: { x: number; y: number }): Promise<void> {
+    const placed: string[] = [];
+    // Several files stack from the point rather than landing on top of one another,
+    // because the engine centres each on the point it is given.
+    for (const [index, file] of files.entries()) {
+      const id = await placeImageFile(file, { x: at.x + index * 24, y: at.y + index * 24 });
+      if (id) placed.push(id);
+    }
+    if (placed.length > 1) engine?.select(placed);
+    if (!toolLocked) handleToolSelect("select");
   }
 
   function viewportCentre(): { x: number; y: number } {
@@ -295,20 +337,85 @@
     handleToolSelect("select");
   }
 
-  async function onCanvasDrop(event: DragEvent): Promise<void> {
-    const files = imagesFrom(Array.from(event.dataTransfer?.files ?? []));
-    if (files.length === 0) return;
+  /**
+   * The picker was dismissed without a file.
+   *
+   * Without this the tool stayed on "image" with nothing to do, and since the engine
+   * ignores presses under that tool, the whole board stopped responding until another
+   * tool was chosen by hand. Excalidraw resets to Select on the same path
+   * (`App.tsx:12773-12789`).
+   */
+  function onImagePickerCancelled(): void {
+    imageDropAt = null;
+    if (tool === "image") handleToolSelect("select");
+  }
+
+  /** Whether an event landed somewhere that owns its own drop or paste — a field, a dialog. */
+  function isOwnedElsewhere(target: EventTarget | null): boolean {
+    const el = target instanceof Element ? target : null;
+    return Boolean(
+      el?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], dialog'),
+    );
+  }
+
+  function hasFiles(event: DragEvent): boolean {
+    return Array.from(event.dataTransfer?.types ?? []).includes("Files");
+  }
+
+  /**
+   * A file dragged over any part of the editor.
+   *
+   * On the whole editor rather than the canvas alone: the toolbar, the inspector and the
+   * zoom bar float *over* the canvas, so a drop that happened to land on one of them used
+   * to be ignored — and a file drop nobody cancels is opened by the browser in the tab,
+   * replacing the board. Excalidraw puts its handler on the container for the same reason
+   * (`App.tsx:2451`, `:4224-4235`).
+   */
+  function onChromeDragOver(event: DragEvent): void {
+    if (hasFiles(event) && !isOwnedElsewhere(event.target)) event.preventDefault();
+  }
+
+  async function onChromeDrop(event: DragEvent): Promise<void> {
+    if (!hasFiles(event) || isOwnedElsewhere(event.target)) return;
+    // Cancelled for *any* file, image or not. A drop of a PDF that nobody cancels is
+    // opened by the browser in this tab, and the board is gone.
     event.preventDefault();
+    const files = imagesFrom(Array.from(event.dataTransfer?.files ?? []));
+    if (files.length === 0) {
+      notify(describeRejection("type"));
+      return;
+    }
+    // Canvas-relative, whichever element the drop landed on: that is the space the engine
+    // places things in.
     const rect = canvasHost?.getBoundingClientRect();
     const at = rect
       ? { x: event.clientX - rect.left, y: event.clientY - rect.top }
       : viewportCentre();
-    // Dropped where they were dropped: several files stack from that point rather than
-    // landing on top of one another, because the engine centres each on the point it is
-    // given.
-    for (const [index, file] of files.entries()) {
-      await placeImageFile(file, { x: at.x + index * 24, y: at.y + index * 24 });
-    }
+    await placeImages(files, at);
+  }
+
+  /** Where the pointer last was over the canvas, canvas-relative. Pasted images land here. */
+  let lastPointer: { x: number; y: number } | null = null;
+
+  /**
+   * Pasting an image from the clipboard.
+   *
+   * On the capture phase of the editor, so it runs *before* the engine's own paste
+   * listener on its container, and stops the event there when it handles it. That order
+   * matters: with an image and no text on the clipboard the engine read no text and fell
+   * back to its internal clipboard — so pasting a screenshot after copying some shapes
+   * pasted the shapes. Files are read synchronously, before any await: the clipboard is
+   * only readable during the event.
+   *
+   * Leaves pastes into fields and dialogs alone, as Excalidraw does (`App.tsx:4771-4782`).
+   */
+  function onChromePaste(event: ClipboardEvent): void {
+    if (isOwnedElsewhere(event.target)) return;
+    const files = imagesFrom(Array.from(event.clipboardData?.files ?? []));
+    if (files.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void placeImages(files, lastPointer ?? viewportCentre());
   }
 
   /**
@@ -700,6 +807,7 @@
     const sy = e.clientY - rect.top;
 
     hoverPending = { x: sx, y: sy };
+    lastPointer = { x: sx, y: sy };
 
     if (realtime && currentCamera) {
       // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
@@ -796,7 +904,13 @@
 <svelte:window onkeydown={onAppShortcut} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="draw-chrome" style:cursor={hoverCursor ?? toolCursor}>
+<div
+  class="draw-chrome"
+  style:cursor={hoverCursor ?? toolCursor}
+  ondragover={onChromeDragOver}
+  ondrop={onChromeDrop}
+  onpastecapture={onChromePaste}
+>
   <DrawHeader
     {title}
     {status}
@@ -829,10 +943,6 @@
   <div
     bind:this={canvasHost}
     class="canvas-host"
-    ondragover={(event) => {
-      if (Array.from(event.dataTransfer?.types ?? []).includes("Files")) event.preventDefault();
-    }}
-    ondrop={onCanvasDrop}
     onmousemove={onCanvasPointerMove}
     onmouseleave={onCanvasPointerLeave}
     onpointerdowncapture={() => (dragging = true)}
@@ -912,6 +1022,7 @@
     accept={IMAGE_ACCEPT}
     aria-label="Insert image"
     onchange={onImageChosen}
+    oncancel={onImagePickerCancelled}
   />
 
   <!--
