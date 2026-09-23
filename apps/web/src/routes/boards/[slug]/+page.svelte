@@ -93,6 +93,12 @@
     };
   });
 
+  /** The board as the server has it, deletions included — for catching up after a drop. */
+  async function fetchLatest(): Promise<DrawElement[]> {
+    const board = await getBoard(slug, { tombstones: true });
+    return elementsFromJson(JSON.stringify(board.scene)) ?? [];
+  }
+
   onDestroy(() => {
     saver.dispose();
   });
@@ -174,7 +180,15 @@
 <div class="board">
   <div class="surface">
     {#if scene !== undefined}
-      <DrawSurface {scene} {title} {slug} {status} {onSceneChange} ariaLabel="Board canvas" />
+      <DrawSurface
+        {scene}
+        {title}
+        {slug}
+        {status}
+        {onSceneChange}
+        {fetchLatest}
+        ariaLabel="Board canvas"
+      />
     {:else}
       <div class="loading-state">
         <p>Loading board…</p>

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import {
+  boardQuerySchema,
   createBoardSchema,
   listQuerySchema,
   patchElementsSchema,
@@ -45,10 +46,13 @@ export function registerBoardRoutes(app: FastifyInstance, { repo, config }: Boar
   app.get("/v1/boards/:slug", async (request, reply) => {
     const owner = resolveOwner(request, config);
     const slug = slugSchema.parse((request.params as { slug: string }).slug);
+    const { include } = boardQuerySchema.parse(request.query);
 
     const doc = await repo.findBySlug(owner, slug);
 
-    return await reply.header("ETag", etagFor(doc.rev)).send(toBoard(doc));
+    return await reply
+      .header("ETag", etagFor(doc.rev))
+      .send(toBoard(doc, { tombstones: include === "tombstones" }));
   });
 
   /**
