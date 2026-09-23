@@ -86,7 +86,7 @@ export const RULES: readonly Rule[] = [
     section: "Shapes",
     text: /disable snapping/,
     status: "gap",
-    why: "Holding ctrl/cmd to bypass snapping mid-drag. `snap_move` exists and is tested; the modifier is not threaded through the pointer path.",
+    why: "Half done. Ctrl/Cmd now inverts snapping to objects for a move (ci_objects_snap.rs, e2e/objectsSnap.spec.ts). It does not yet release the grid: Excalidraw passes a null grid size to getGridPoint while it is held, so drawing and resizing on a snapping grid go free, and ours stay on the grid.",
   },
   {
     section: "Shapes",
@@ -163,8 +163,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "📐 Alignment & distribution",
     text: /bypass snapping/,
-    status: "gap",
-    why: "Same missing modifier as the shape tools — see the Shapes rule above.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_objects_snap.rs`, "e2e/objectsSnap.spec.ts"],
   },
   {
     section: "📐 Alignment & distribution",
@@ -298,7 +298,7 @@ export const RULES: readonly Rule[] = [
     section: "🔲 Grid",
     text: /custom grid spacing|disable snapping/,
     status: "gap",
-    why: "Grid size and step are in the model and settable, but no UI exposes them, and the bypass modifier is not threaded through the drag path.",
+    why: "Spacing is offered as a fixed set of sizes in the menu, not a custom value. Ctrl/Cmd inverts snapping to objects but does not yet release the grid — see the Shapes rule above.",
   },
   {
     section: "🔲 Grid",
@@ -588,7 +588,12 @@ export const RULES: readonly Rule[] = [
   {
     section: "19. Snapping",
     status: "covered",
-    tests: [`${ENGINE}/ci_snapping.rs`, `${ENGINE}/ci_grid.rs`],
+    tests: [
+      `${ENGINE}/ci_snapping.rs`,
+      `${ENGINE}/ci_grid.rs`,
+      `${ENGINE}/ci_objects_snap.rs`,
+      "e2e/objectsSnap.spec.ts",
+    ],
   },
   {
     section: "20. Fill and stroke system",

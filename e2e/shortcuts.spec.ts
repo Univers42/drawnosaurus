@@ -104,9 +104,14 @@ test.describe("tool shortcuts", () => {
       const board = await openBoard(page);
       await focusBoard(board);
       await page.keyboard.press("l");
+      // The image tool opens the file picker, and a picker nobody answers is dismissed
+      // at once by a headless browser — which, correctly, puts the tool back to Select.
+      // Listening holds it open, as a person choosing a file does.
+      const picker = key === "9" ? page.waitForEvent("filechooser") : null;
 
       await page.keyboard.press(key);
 
+      await picker;
       expect(await activeTool(page)).toBe(tool);
     });
   }
@@ -420,12 +425,17 @@ test.describe("the board keeps its keys to itself", () => {
     // the sticky note *and* opened the image picker in a single keystroke.
     const board = await openBoard(page);
     await focusBoard(board);
+    // Held open by listening; see the digit shortcuts above.
+    let pickers = 0;
+    page.on("filechooser", () => (pickers += 1));
 
     await page.keyboard.press("9");
 
+    await expect.poll(() => pickers, { message: "9 opens the picker" }).toBe(1);
     expect(await activeTool(page)).toBe("image");
     // The picker is a file input; if the host had also claimed 9, it would be open.
     expect(await page.locator("input[type=file]").count()).toBeLessThanOrEqual(1);
+    expect(pickers, "and opens it once").toBe(1);
   });
 
   test("a shortcut does not scroll the page under the canvas", async ({ page }) => {
