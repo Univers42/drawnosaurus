@@ -78,6 +78,11 @@ export const drawElementSchema = z.object({
   roughness: finite.min(0).max(10),
   opacity: finite.min(0).max(100),
   roundness: finite.nullable(),
+  // An explicit corner radius from the in-place handle. Optional and undefaulted for the
+  // same reason as the text fields below: every rounded shape saved before this existed
+  // uses the adaptive corner, and stamping a value onto them on the way through the server
+  // would change how every one of them looks.
+  cornerRadius: finite.min(0).max(100_000).optional(),
 
   seed: finite,
   points: z.array(point).max(MAX_POINTS_PER_ELEMENT).optional(),

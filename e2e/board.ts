@@ -63,6 +63,12 @@ export interface SceneElement {
   verticalAlign?: "top" | "middle" | "bottom";
   containerId?: string | null;
   boundTextId?: string | null;
+  /** Arrows only: the shape each end is attached to. */
+  startBinding?: string | null;
+  endBinding?: string | null;
+  /** Rectangles: an explicit corner radius from the in-place handle. */
+  cornerRadius?: number;
+  roundness?: number | null;
 }
 
 /** Every `PATCH /v1/**` body the page has sent, in order, per page. */

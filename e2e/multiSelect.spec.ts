@@ -248,3 +248,43 @@ test.describe("multi-select gestures reach the engine", () => {
     expect(after[1]! - before[1]!, "and the one that was not").toBeCloseTo(70, 0);
   });
 });
+
+/**
+ * The rubber band itself, *while* it is being dragged.
+ *
+ * Every other case here measures after release, which is why this was missed: the
+ * `Marquee` arm updated its rectangle and never asked for a frame, so the selection came
+ * out right and nothing was drawn for the whole length of the drag. Found through
+ * `editor-inspector` — mid-gesture the engine reported `kind: "marquee"` and the inside of
+ * the rectangle read zero ink.
+ */
+test.describe("the rubber band", () => {
+  test("is drawn while it is being dragged, not only once it is let go", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+    await pickTool(page, "Select");
+    // A patch inside where the band will be and clear of both boxes — empty until the
+    // band's tinted fill covers it.
+    const inside = {
+      left: RIGHT.x + RIGHT.w + 60,
+      top: RIGHT.y + 20,
+      right: RIGHT.x + RIGHT.w + 120,
+      bottom: RIGHT.y + 60,
+    };
+    const empty = await regionInk(page, inside);
+
+    const from = at(board, LEFT.x - 30, LEFT.y - 40);
+    const to = at(board, RIGHT.x + RIGHT.w + 160, RIGHT.y + RIGHT.h + 30);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    await page.waitForTimeout(120);
+
+    const during = await regionInk(page, inside);
+    await page.mouse.up();
+
+    expect(
+      during,
+      `the band should be on screen mid-drag: ${empty} before, ${during} during`,
+    ).toBeGreaterThan(empty + 0.5);
+  });
+});
