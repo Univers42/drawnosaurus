@@ -481,10 +481,12 @@ test.describe("what the paint belongs to", () => {
     await fillAt(page, board, LEFT_HALF);
     const paint = (await sceneElements(page)).find((el) => el.type === "line")!;
     const shape = (await sceneElements(page)).find((el) => el.type === "rectangle")!;
-    expect(paint.groupId, "the paint is in the same group as the region it fills").toBe(
-      shape.groupId,
+    expect(paint.groupIds, "the paint is in the same group as the region it fills").toEqual(
+      shape.groupIds,
     );
-    expect(paint.groupId).toBeTruthy();
+    // Not redundant: two `undefined`s compare equal, so without this the assertion above
+    // passes for a paint that joined no group at all.
+    expect(paint.groupIds?.length).toBeGreaterThan(0);
 
     // Dragging the *other* member of the group must carry the paint along with it.
     await pickTool(page, "Select");

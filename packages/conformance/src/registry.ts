@@ -534,11 +534,18 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "16. Grouping",
-    text: /Nested|Enter group|Exit group/,
-    status: "gap",
-    why: "Groups are flat: an element carries group ids but nothing walks a hierarchy or enters one.",
+    // Was a gap reading "groups are flat", which stopped being true when `group_id`
+    // became `group_ids`. The array *is* the hierarchy, and `selected_group_for` walks
+    // it; double click enters, Escape and a click outside leave.
+    text: /Nested|Enter group|Exit group|Select group/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_groups_nested.rs`, "e2e/groups.spec.ts"],
   },
-  { section: "16. Grouping", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
+  {
+    section: "16. Grouping",
+    status: "covered",
+    tests: [`${ENGINE}/ci_edit.rs`, `${ENGINE}/ci_groups_nested.rs`, "e2e/groups.spec.ts"],
+  },
   { section: "17. Z-order", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
   {
     section: "18. Binding system",

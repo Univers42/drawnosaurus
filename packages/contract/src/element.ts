@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   MAX_COLOR_LENGTH,
+  MAX_GROUP_DEPTH,
   MAX_ID_LENGTH,
   MAX_POINTS_PER_ELEMENT,
   MAX_TEXT_LENGTH,
@@ -102,6 +103,13 @@ export const drawElementSchema = z.object({
   autoResize: z.boolean().optional(),
   containerId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   boundTextId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
+  // The groups this element is in, **innermost first**. The array *is* the nesting:
+  // there is no group entity and no parent pointer, just ids that several elements
+  // share. Mirrors the engine's `group_ids`; see `docs/reference/groups.md`.
+  groupIds: z.array(z.string().max(MAX_ID_LENGTH)).max(MAX_GROUP_DEPTH).optional(),
+  // The pre-array spelling, still accepted so boards saved before groups could nest keep
+  // loading. The engine folds it into `groupIds` on the way in and writes only the array
+  // back, so a document is in the old shape at most once.
   groupId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   locked: z.boolean().optional(),
 
