@@ -17,15 +17,18 @@ apps/web (SvelteKit, TS strict) ──HTTP /v1──▶ apps/api (Fastify) ─�
 ```
 
 **Sharing across computers** goes through one origin: the `gateway` service (Caddy,
-`docker/gateway/Caddyfile`) serves the app and `/v1` together on :5273, so the web image runs with
-`PUBLIC_API_URL=""` and a page talks back to whatever host it was opened at — localhost, a LAN
-address, the tunnel. The api (:4300) and mongo (:27019) ports are bound to 127.0.0.1. Guests (any
-non-localhost Host) cannot list, create or delete boards: the gateway refuses. `GET /v1/share`
-tells the Share dialog the LAN origin `make up` detected (`SHARE_LAN_ORIGINS`) and the quick
-tunnel's public origin (`make share`, cloudflared's `/quicktunnel`). Live frames must stay
-readable on plain `http://` over the LAN, where browsers withhold `crypto.subtle`:
-`roomCrypto.ts` falls back to `@noble/*` with byte-identical envelopes. User guide:
-`docs/collaboration.md`.
+`docker/gateway/Caddyfile`) serves the app and `/v1` together, so the web image runs with
+`PUBLIC_API_URL=""`. Who is asking is decided by the entrance a connection arrived at — never by a
+header: `127.0.0.1:5273` → `:80` (this computer, everything), `*:5274` (`SHARE_PORT`) → `:81`
+(network guests), the tunnel → `:82` (internet guests). The gateway overwrites
+`X-Drawnosaurus-Role` for the API; guests cannot list, create or delete boards, nor open the
+tunnel. api (:4300) and mongo (:27019) are on 127.0.0.1. `GET /v1/share` gives the Share dialog
+the network links `make up` found (`scripts/lan.sh`: the DNS name first when the network's DNS
+resolves it, then each address) and the internet link, which the dialog opens and closes via
+`/v1/share/tunnel` (`apps/api/src/tunnel.ts` runs cloudflared and offers the link only once
+Cloudflare's DNS publishes the name). Live frames stay readable on plain `http://`, where
+browsers withhold `crypto.subtle`: `roomCrypto.ts` falls back to `@noble/*` with byte-identical
+envelopes. User guide: `docs/collaboration.md`.
 
 **The boundary rule:** the engine never talks to the network, the server never runs WASM. The only
 thing crossing between them is an `.osidraw` scene document.
@@ -35,19 +38,19 @@ thing crossing between them is an `.osidraw` scene document.
 Everything runs in Docker via the Makefile; there is no host Node requirement for the gate.
 `make help` lists every target.
 
-| Command                               | What it does                                             |
-| ------------------------------------- | -------------------------------------------------------- |
-| `make all`                            | submodule → WASM → deps → quality gate → running stack   |
-| `make up`                             | mongo + api + web behind the gateway on :5273            |
-| `make share` / `make unshare`         | put the running stack on the internet / take it off      |
-| `make dev`                            | Vite dev server + API with hot reload on :5373 / :4373   |
-| `make verify`                         | what CI runs: `quality` + integration tests              |
-| `make quality`                        | typecheck + lint + format + unit tests                   |
-| `make test` / `make test-integration` | unit tests / API tests against a real mongod             |
-| `make test-e2e`                       | Playwright, **on the host** (installs chromium first)    |
-| `make conformance`                    | the `prompt/*.md` coverage matrix                        |
-| `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate |
-| `make shell`                          | bash in the tooling container                            |
+| Command                               | What it does                                                  |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `make all`                            | submodule → WASM → deps → quality gate → running stack        |
+| `make up`                             | the stack behind the gateway: :5273 for you, :5274 for others |
+| `make share` / `make unshare`         | put the running stack on the internet / take it off           |
+| `make dev`                            | Vite dev server + API with hot reload on :5373 / :4373        |
+| `make verify`                         | what CI runs: `quality` + integration tests                   |
+| `make quality`                        | typecheck + lint + format + unit tests                        |
+| `make test` / `make test-integration` | unit tests / API tests against a real mongod                  |
+| `make test-e2e`                       | Playwright, **on the host** (installs chromium first)         |
+| `make conformance`                    | the `prompt/*.md` coverage matrix                             |
+| `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate      |
+| `make shell`                          | bash in the tooling container                                 |
 
 Host ports are non-standard (5273/4300/27019/5373/4373, and 5473 for the browser suite's own
 Vite) because a sibling stack owns the usual ones. The suite's port is kept apart from `make dev`'s

@@ -31,6 +31,9 @@ ENGINE_PKG := engine/pkg/draw_engine.js
 # 3000/4000/5173/27017. Override per invocation: `make up API_PORT=4500`.
 export API_PORT   ?= 4300
 export WEB_PORT   ?= 5273
+# The port other computers open — the Share dialog's links point at it. WEB_PORT is on
+# 127.0.0.1 only; see docker/gateway/Caddyfile for why it is a port of its own.
+export SHARE_PORT ?= 5274
 export MONGO_PORT ?= 27019
 
 # `dev` gets its own host ports so a hot-reload server and the built images from
@@ -39,16 +42,15 @@ export MONGO_PORT ?= 27019
 export DEV_WEB_PORT ?= 5373
 export DEV_API_PORT ?= 4373
 
-# This computer's address on the local network: the source address of the route to the
-# internet, which is the interface a colleague's machine reaches it on — not the Docker
-# or libvirt bridges, which `hostname -I` also lists. Falls back to the first address
-# `hostname -I` gives, then to macOS's Wi-Fi and Ethernet. Lazy `=`, so only the recipes
-# that need it pay for it. Override with `make up LAN_IP=192.168.1.20`.
-LAN_IP ?= $(shell { ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p'; \
-	hostname -I 2>/dev/null | tr ' ' '\n'; ipconfig getifaddr en0 2>/dev/null; \
-	ipconfig getifaddr en1 2>/dev/null; } | grep -m1 .)
+# Where other computers reach this one: its network addresses — every real interface, so
+# a computer on both the wired network and the Wi-Fi is reachable from both — and the
+# links to offer, best first: the computer's DNS name when the network's DNS knows it
+# (every seat at 42 Madrid has one, and it works from the wired network and the Wi-Fi
+# alike), then the addresses. See scripts/lan.sh. Lazy, so only the recipes that need
+# them pay for them. Override with `make up LAN_IPS="192.168.1.20 10.0.0.5"`.
+LAN_IPS ?= $(shell scripts/lan.sh ips 2>/dev/null)
 # Told to the API, which tells the Share dialog. See apps/api/src/share.ts.
-export SHARE_LAN_ORIGINS = $(if $(strip $(LAN_IP)),http://$(strip $(LAN_IP)):$(WEB_PORT))
+export SHARE_LAN_ORIGINS = $(shell scripts/lan.sh origins $(SHARE_PORT) $(LAN_IPS) 2>/dev/null)
 
 # What the images are built from. `.git` is not in the Docker build context, so the
 # image cannot find out for itself; these go in as build args, are shown at the foot of
@@ -191,31 +193,38 @@ build: $(ENGINE_PKG) ## Build the api and web images
 up: $(ENGINE_PKG) ## Start the stack: mongo + api + web behind the gateway on WEB_PORT
 	$(DC) up -d --build mongo api web gateway
 	@echo -e "$(GREEN)✔ up: http://localhost:$(WEB_PORT)$(RESET)"
-	@if [ -n "$(SHARE_LAN_ORIGINS)" ]; then \
-		echo -e "$(GREEN)  on your network: $(SHARE_LAN_ORIGINS)  (docs/collaboration.md)$(RESET)"; \
+	@first=$$(printf '%s' "$(SHARE_LAN_ORIGINS)" | cut -d, -f1); \
+	if [ -n "$$first" ]; then \
+		echo -e "$(GREEN)  for people on your network, wired or Wi-Fi: $$first$(RESET)"; \
+		echo "  open a board and press Share: the link to send is at the top (docs/collaboration.md)"; \
 	else \
-		echo "  on your network: address not found — pass it, e.g. make up LAN_IP=192.168.1.20"; \
+		echo "  no network address found: only this computer can open it (see docs/collaboration.md)"; \
 	fi
 	@echo -e "$(GREEN)  built from app $(BUILD_APP_SHA) · engine $(BUILD_ENGINE_SHA)$(RESET)"
 
-# The quick tunnel prints its public name in its log; there is no other way to learn
-# it from outside the container. Waits up to a minute for it.
+# The same as the Share dialog's "Share on the internet" button, for a terminal: the API
+# starts the tunnel (apps/api/src/tunnel.ts) and says its public link once it is
+# connected. Waits up to a minute.
 share: ## Put the running stack on the internet (Cloudflare quick tunnel, no account)
-	@$(DC) ps -q gateway 2>/dev/null | grep -q . || { echo "the stack is not running: run 'make up' first"; exit 1; }
-	@$(DC) --profile share up -d tunnel
-	@url=""; for _ in $$(seq 1 60); do \
-		url=$$($(DC) --profile share logs tunnel 2>/dev/null | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1); \
-		[ -n "$$url" ] && break; sleep 1; \
+	@curl -fsS -X POST http://127.0.0.1:$(API_PORT)/v1/share/tunnel >/dev/null 2>&1 \
+		|| { echo "the stack is not running: run 'make up' first"; exit 1; }
+	@for _ in $$(seq 1 60); do \
+		info=$$(curl -fsS http://127.0.0.1:$(API_PORT)/v1/share); \
+		case "$$info" in \
+			*'"state":"on"'*) break ;; \
+			*'"state":"failed"'*) echo "the internet link did not open: $$(printf '%s' "$$info" \
+				| sed -n 's/.*"message":"\([^"]*\)".*/\1/p')"; exit 1 ;; \
+		esac; \
+		sleep 1; \
 	done; \
-	if [ -z "$$url" ]; then \
-		echo "the tunnel did not come up — '$(DC) --profile share logs tunnel' says why"; exit 1; \
-	fi; \
+	url=$$(printf '%s' "$$info" | sed -n 's/.*"public":"\([^"]*\)".*/\1/p'); \
+	[ -n "$$url" ] || { echo "the internet link did not open in time"; exit 1; }; \
 	echo -e "$(GREEN)✔ on the internet: $$url$(RESET)"; \
-	echo "  open a board, press Share, and send the internet link — it carries the room key."; \
-	echo "  'make unshare' takes it off again."
+	echo "  open a board and press Share: the internet link is there, with the room key."; \
+	echo "  'make unshare', or the Share dialog, closes it."
 
 unshare: ## Take the stack off the internet
-	@$(DC) --profile share rm -sf tunnel >/dev/null 2>&1 || true
+	@curl -fsS -X DELETE http://127.0.0.1:$(API_PORT)/v1/share/tunnel >/dev/null 2>&1 || true
 	@echo -e "$(GREEN)✔ off the internet$(RESET)"
 
 # Is the running web container built from what is checked out? It exists because a
@@ -236,7 +245,7 @@ stale: ## Is the running stack built from this checkout? Exits 1 if not
 	fi
 
 down: ## Stop and remove containers
-	$(DC) --profile share down
+	$(DC) down
 	@echo -e "$(GREEN)✔ down$(RESET)"
 
 logs: ## Tail service logs

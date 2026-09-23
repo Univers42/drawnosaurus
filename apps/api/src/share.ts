@@ -1,71 +1,81 @@
-import type { FastifyInstance } from "fastify";
-import { isPrivateHost, type ShareInfo } from "@drawnosaurus/contract";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import type { ShareInfo, ShareRole } from "@drawnosaurus/contract";
 import type { Config } from "./config.ts";
+import { Tunnel } from "./tunnel.ts";
 
 /**
- * `GET /v1/share`: where other people can reach this drawnosaurus.
+ * `/v1/share`: where other people can reach this drawnosaurus, and the internet link.
  *
- * The page cannot know — a board opened at localhost has no idea what address a
- * colleague would use — so the Share dialog asks here. Two sources:
+ * The page cannot know where it can be reached — a board opened at localhost has no
+ * idea which address a colleague would use — so the Share dialog asks here:
  *
- * - the LAN origins `make up` passed in, read from the host, because inside the
- *   container there are no addresses but the container's own;
- * - the tunnel `make share` starts, whose public name is random and only known once it
- *   is up. cloudflared says it on its metrics server at `/quicktunnel`.
+ * - the network links `make up` found on the host (scripts/lan.sh): the computer's DNS
+ *   name when the network has one, then its addresses. Inside the container there are
+ *   no addresses but the container's own, so it is told;
+ * - the internet link, while the tunnel is on — started and stopped from the dialog by
+ *   the person at this computer, and by nobody else.
  *
- * The LAN addresses are told only to someone already on this computer or on the local
- * network. Someone arriving through the public tunnel is on the internet, and the
- * machine's private addresses are none of their business.
+ * Who is asking comes from the gateway, which knows it from the address the connection
+ * arrived on (docker/gateway/Caddyfile), in X-Drawnosaurus-Role. A request with none did
+ * not come through the gateway: it came to the API's own port, which only this computer
+ * can reach, or through `make dev`'s proxy.
  */
 
-/** How long the tunnel's answer is kept, so an open dialog does not poll it per frame. */
-const TUNNEL_CACHE_MS = 5_000;
-/** How long to wait for the tunnel. When none is running, its name does not resolve. */
-const TUNNEL_TIMEOUT_MS = 800;
+const ROLE_HEADER = "x-drawnosaurus-role";
 
-type Fetch = (url: string, init: { signal: AbortSignal }) => Promise<Response>;
-
-/** Asks the tunnel for its public origin; null when there is no tunnel, or no answer. */
-export function tunnelOrigin(metricsUrl: string | null, fetcher: Fetch = fetch) {
-  let cached: { at: number; origin: string | null } | null = null;
-  return async (now = Date.now()): Promise<string | null> => {
-    if (!metricsUrl) return null;
-    if (cached && now - cached.at < TUNNEL_CACHE_MS) return cached.origin;
-    let origin: string | null = null;
-    try {
-      const response = await fetcher(`${metricsUrl.replace(/\/$/, "")}/quicktunnel`, {
-        signal: AbortSignal.timeout(TUNNEL_TIMEOUT_MS),
-      });
-      if (response.ok) {
-        const body = (await response.json()) as { hostname?: unknown };
-        const hostname = typeof body.hostname === "string" ? body.hostname.trim() : "";
-        // A host name and nothing else: this goes straight into a link people click.
-        if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(hostname)) origin = `https://${hostname}`;
-      }
-    } catch {
-      origin = null;
-    }
-    cached = { at: now, origin };
-    return origin;
-  };
+export function roleOf(request: Pick<FastifyRequest, "headers">): ShareRole {
+  const role = request.headers[ROLE_HEADER];
+  return role === "guest" || role === "internet" ? role : "host";
 }
 
-/** What a request arriving for `host` is told. */
+/** What `role` is told. */
 export function shareInfoFor(
-  host: string,
+  role: ShareRole,
   lanOrigins: readonly string[],
-  publicOrigin: string | null,
+  tunnel: Tunnel,
 ): ShareInfo {
+  const { state, origin, message } = tunnel.current;
   return {
-    lan: isPrivateHost(host) ? [...lanOrigins] : [],
-    public: publicOrigin,
+    // Someone on the internet has no use for the machine's network addresses.
+    lan: role === "internet" ? [] : [...lanOrigins],
+    public: state === "on" ? origin : null,
+    // Why it failed is for the person who can do something about it.
+    tunnel: role === "host" && message ? { state, message } : { state },
+    canManage: role === "host",
   };
 }
 
-export function registerShareRoutes(app: FastifyInstance, config: Config): void {
-  const publicOrigin = tunnelOrigin(config.tunnelMetricsUrl);
-  app.get("/v1/share", async (request) => {
-    // The gateway passes the Host the browser used; that is what says where they are.
-    return shareInfoFor(request.headers.host ?? "", config.shareLanOrigins, await publicOrigin());
+export function registerShareRoutes(
+  app: FastifyInstance,
+  config: Config,
+  tunnel = new Tunnel(config.tunnelTarget),
+): void {
+  const answer = (request: FastifyRequest): ShareInfo =>
+    shareInfoFor(roleOf(request), config.shareLanOrigins, tunnel);
+
+  const hostOnly = {
+    error: {
+      code: "host_only",
+      message: "Only the computer running drawnosaurus can open or close the internet link.",
+    },
+  };
+
+  app.get("/v1/share", async (request) => answer(request));
+
+  app.post("/v1/share/tunnel", async (request, reply) => {
+    if (roleOf(request) !== "host") return reply.status(403).send(hostOnly);
+    tunnel.start();
+    return reply.status(202).send(answer(request));
+  });
+
+  app.delete("/v1/share/tunnel", async (request, reply) => {
+    if (roleOf(request) !== "host") return reply.status(403).send(hostOnly);
+    tunnel.stop();
+    return answer(request);
+  });
+
+  // The tunnel is a child process: it goes when the API does.
+  app.addHook("onClose", async () => {
+    tunnel.stop();
   });
 }

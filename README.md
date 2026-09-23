@@ -20,7 +20,7 @@ Everything runs in Docker; there is no host Node requirement.
 
 ```sh
 make all     # submodule → WASM → deps → quality gate → the running stack
-make up      # mongo + api + web, behind the gateway on :5273
+make up      # mongo + api + web behind the gateway: :5273 for you, :5274 for colleagues
 make share   # and on the internet, through a Cloudflare quick tunnel (make unshare to stop)
 make verify  # the full gate: typecheck, lint, format, unit tests, integration tests
 make help    # every target
@@ -29,8 +29,9 @@ make help    # every target
 Then open **http://localhost:5273**. The API is on **http://localhost:4300**, for tools on this
 computer only.
 
-**Drawing with someone on another computer** — on your network or anywhere on the internet — is
-one link from the board's **Share** button: see **[docs/collaboration.md](docs/collaboration.md)**.
+**Drawing with someone on another computer** — wired, Wi-Fi, or anywhere on the internet — is one
+link from the board's **Share** button (with a QR code, and a button for the internet link): see
+**[docs/collaboration.md](docs/collaboration.md)**.
 
 > Host ports default to 5273/4300/27019 instead of the usual 5173/4000/27017 because the sibling
 > osionos stack already owns those. Override per invocation: `make up API_PORT=4500 WEB_PORT=5500`.
@@ -92,7 +93,8 @@ Three things worth knowing before touching it:
 | `PATCH`  | `/v1/boards/:slug/elements` | The autosave path. Changed elements + tombstones, reconciled.             |
 | `DELETE` | `/v1/boards/:slug`          | Soft delete.                                                              |
 | `GET`    | `/v1/boards/:slug/live`     | The live websocket: a blind relay of sealed frames.                       |
-| `GET`    | `/v1/share`                 | Where others reach this server: LAN origins, the tunnel's public origin.  |
+| `GET`    | `/v1/share`                 | Where others reach this server: network links, the internet link.         |
+| `POST`   | `/v1/share/tunnel`          | Opens the internet link (this computer only). `DELETE` closes it.         |
 | `GET`    | `/healthz`, `/readyz`       | Liveness; readiness pings Mongo.                                          |
 
 Every failure uses one envelope, `{ "error": { "code", "message" } }`, and nothing internal leaks

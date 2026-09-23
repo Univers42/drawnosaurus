@@ -24,10 +24,10 @@ export interface Config {
    */
   shareLanOrigins: string[];
   /**
-   * The tunnel's metrics server, where it says which public name it was given — see
-   * `share.ts`. Unset, or unreachable because no tunnel is running: no public link.
+   * Where the internet tunnel sends requests — the gateway's internet entrance — see
+   * `tunnel.ts`. Unset where there is no tunnel to offer: tests, `make dev`.
    */
-  tunnelMetricsUrl: string | null;
+  tunnelTarget: string | null;
 }
 
 const DEFAULT_BODY_LIMIT = 8 * 1024 * 1024;
@@ -79,6 +79,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     authMode,
     devOwnerId: env.DEV_OWNER_ID ?? "dev-owner",
     shareLanOrigins: origins(env.SHARE_LAN_ORIGINS),
-    tunnelMetricsUrl: env.SHARE_TUNNEL_METRICS ? env.SHARE_TUNNEL_METRICS : null,
+    tunnelTarget: env.SHARE_TUNNEL_TARGET ? env.SHARE_TUNNEL_TARGET : null,
   };
 }
