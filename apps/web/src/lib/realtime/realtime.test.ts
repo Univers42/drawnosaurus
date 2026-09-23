@@ -1,39 +1,100 @@
 import { describe, expect, it } from "vitest";
-import { RealtimeChannel, getCollaboratorProfile, liveSocketUrl } from "./realtimeClient.ts";
+import {
+  authFrame,
+  boardLiveTopic,
+  boardSubscribePattern,
+  collabPayloadFromServerFrame,
+  isAuthOk,
+  isSubscribedLive,
+  liveSocketUrl,
+  publishFrame,
+  subscribeFrame,
+} from "./realtimeProtocol.ts";
+import { RealtimeChannel, getCollaboratorProfile } from "./realtimeClient.ts";
 import { generateRoomKeyBytes, importRoomKey, isSealedEnvelope } from "./roomCrypto.ts";
 
 describe("liveSocketUrl", () => {
   const page = "http://localhost:5273/boards/abc123";
 
-  it("targets the API origin when PUBLIC_API_URL is set", () => {
-    // The compose case: web on 5273, api on 4300. Deriving the host from the page
-    // sent the handshake to the web server, which 404s — it has no /v1 route.
-    expect(liveSocketUrl("abc123", "http://localhost:4300", page)).toBe(
-      "ws://localhost:4300/v1/boards/abc123/live",
-    );
+  it("uses PUBLIC_REALTIME_WS_URL when set", () => {
+    expect(liveSocketUrl("ws://localhost:4402/ws", page)).toBe("ws://localhost:4402/ws");
   });
 
-  it("stays same-origin when PUBLIC_API_URL is unset", () => {
-    expect(liveSocketUrl("abc123", "", page)).toBe("ws://localhost:5273/v1/boards/abc123/live");
+  it("stays same-origin /ws when the realtime URL is unset", () => {
+    expect(liveSocketUrl("", page)).toBe("ws://localhost:5273/ws");
   });
 
-  it("upgrades to wss when the API is https", () => {
-    expect(liveSocketUrl("abc123", "https://api.example.com", page)).toBe(
-      "wss://api.example.com/v1/boards/abc123/live",
-    );
-  });
-
-  it("keeps a path prefix and tolerates a trailing slash in the base", () => {
-    expect(liveSocketUrl("abc123", "https://example.com/api/", page)).toBe(
-      "wss://example.com/api/v1/boards/abc123/live",
-    );
+  it("upgrades https origins to wss", () => {
+    expect(liveSocketUrl("https://rt.example.com/ws", page)).toBe("wss://rt.example.com/ws");
   });
 
   it("strips fragment room keys so they never reach the handshake URL", () => {
     const withRoom = "http://localhost:5273/boards/abc123#room=secretkeymaterialhere012345678901";
-    expect(liveSocketUrl("abc123", "http://localhost:4300", withRoom)).toBe(
-      "ws://localhost:4300/v1/boards/abc123/live",
+    expect(liveSocketUrl("ws://localhost:4402/ws", withRoom)).toBe("ws://localhost:4402/ws");
+    expect(liveSocketUrl("http://localhost:4402/ws#room=leak", page)).toBe(
+      "ws://localhost:4402/ws",
     );
+  });
+
+  it("strips query-string attempts to smuggle the room key", () => {
+    expect(liveSocketUrl("ws://localhost:4402/ws?room=smuggled", page)).toBe(
+      "ws://localhost:4402/ws",
+    );
+  });
+});
+
+describe("realtime protocol framing", () => {
+  it("builds AUTH, SUBSCRIBE and PUBLISH frames for a board room", () => {
+    expect(JSON.parse(authFrame("dev"))).toEqual({ type: "AUTH", token: "dev" });
+    expect(JSON.parse(subscribeFrame("abc"))).toEqual({
+      type: "SUBSCRIBE",
+      sub_id: "live",
+      topic: "boards/abc/*",
+    });
+    expect(boardSubscribePattern("abc")).toBe("boards/abc/*");
+    expect(boardLiveTopic("abc")).toBe("boards/abc/live");
+
+    const published = JSON.parse(
+      publishFrame("abc", "patch", { type: "patch", clientId: "u1", patch: { elements: [] } }),
+    );
+    expect(published).toEqual({
+      type: "PUBLISH",
+      topic: "boards/abc/live",
+      event_type: "patch",
+      payload: { type: "patch", clientId: "u1", patch: { elements: [] } },
+    });
+  });
+
+  it("recognises AUTH_OK and SUBSCRIBED control frames", () => {
+    expect(isAuthOk({ type: "AUTH_OK", conn_id: "c1", server_time: "t" })).toBe(true);
+    expect(isSubscribedLive({ type: "SUBSCRIBED", sub_id: "live", seq: 0 })).toBe(true);
+    expect(isSubscribedLive({ type: "SUBSCRIBED", sub_id: "other", seq: 0 })).toBe(false);
+  });
+
+  it("extracts collab payloads from EVENT frames and ignores control frames", () => {
+    const sealed = { v: 1, iv: "aa", ct: "bb" };
+    expect(
+      collabPayloadFromServerFrame({
+        type: "EVENT",
+        sub_id: "live",
+        event: {
+          event_id: "e1",
+          topic: "boards/abc/live",
+          event_type: "patch",
+          sequence: 1,
+          timestamp: "t",
+          payload: sealed,
+        },
+      }),
+    ).toEqual(sealed);
+    expect(collabPayloadFromServerFrame({ type: "PONG", server_time: "t" })).toBeNull();
+  });
+
+  it("keeps a sealed envelope intact as PUBLISH.payload JSON", () => {
+    const sealed = { v: 1, iv: "AAAA", ct: "BBBB" };
+    const frame = JSON.parse(publishFrame("slug", "cursor", sealed));
+    expect(frame.payload).toEqual(sealed);
+    expect(JSON.stringify(frame).includes("MARKER")).toBe(false);
   });
 });
 
@@ -67,7 +128,6 @@ describe("realtimeClient", () => {
     expect(peer.x).toBe(250);
     expect(peer.y).toBe(400);
 
-    // Leave event
     channel.handleMessage({ type: "leave", clientId: "peer_123" });
     expect(receivedPeers.length).toBe(0);
 

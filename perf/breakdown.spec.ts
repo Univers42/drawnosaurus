@@ -37,7 +37,7 @@ for (const fill of ["hachure", "solid", "none"] as const) {
       fillStyle: fill === "none" ? "hachure" : fill,
       backgroundColor: fill === "none" ? "transparent" : "#ffec99",
     }));
-    await page.routeWebSocket(/\/live$/, () => {});
+    await page.routeWebSocket(/\/(live|ws)$/, () => {});
     await page.route("**/v1/**", async (route) => {
       if (route.request().method() !== "GET") {
         await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });

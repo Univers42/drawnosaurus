@@ -1,9 +1,7 @@
 import cors from "@fastify/cors";
-import websocket from "@fastify/websocket";
 import Fastify, { type FastifyInstance } from "fastify";
 import { assertAuthModeSupported } from "./auth.ts";
 import { registerBoardRoutes } from "./boards/routes.ts";
-import { registerLiveRoutes } from "./boards/live.ts";
 import { BoardRepository } from "./boards/repository.ts";
 import type { Config } from "./config.ts";
 import { registerErrorHandler } from "./errors.ts";
@@ -44,7 +42,6 @@ export async function buildApp({
     methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"],
     exposedHeaders: ["ETag", "Location"],
   });
-  await app.register(websocket);
 
   registerErrorHandler(app);
 
@@ -64,7 +61,7 @@ export async function buildApp({
   });
 
   registerBoardRoutes(app, { repo: new BoardRepository(mongo.boards), config });
-  registerLiveRoutes(app);
+  // Live collaboration is engine/realtime (separate process), not an in-process WS.
 
   return app;
 }

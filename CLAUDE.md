@@ -27,8 +27,8 @@ Everything runs in Docker via the Makefile; there is no host Node requirement fo
 | Command                               | What it does                                             |
 | ------------------------------------- | -------------------------------------------------------- |
 | `make all`                            | submodule → WASM → deps → quality gate → running stack   |
-| `make up`                             | mongo + api + web (web :5273, api :4300, mongo :27019)   |
-| `make dev`                            | Vite dev server + API with hot reload on :5373 / :4373   |
+| `make up`                             | mongo + realtime + api + web (:5273 / :4402 / :4300 / :27019) |
+| `make dev`                            | Vite + API + realtime hot stack (:5373 / :4373 / :4473)      |
 | `make verify`                         | what CI runs: `quality` + integration tests              |
 | `make quality`                        | typecheck + lint + format + unit tests                   |
 | `make test` / `make test-integration` | unit tests / API tests against a real mongod             |
@@ -37,10 +37,10 @@ Everything runs in Docker via the Makefile; there is no host Node requirement fo
 | `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate |
 | `make shell`                          | bash in the tooling container                            |
 
-Host ports are non-standard (5273/4300/27019/5373/4373, and 5473 for the browser suite's own
+Host ports are non-standard (5273/4300/27019/4402/5373/4373/4473, and 5473 for the browser suite's own
 Vite) because a sibling stack owns the usual ones. The suite's port is kept apart from `make dev`'s
 so the two can run at once — the editor-inspector needs the dev stack while specs run.
-Override per invocation: `make up API_PORT=4500 WEB_PORT=5500`.
+Override per invocation: `make up API_PORT=4500 WEB_PORT=5500 REALTIME_PORT=4502`.
 
 **Running one test.** Inside `make shell`, or directly on the host:
 

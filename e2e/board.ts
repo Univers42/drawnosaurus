@@ -101,7 +101,7 @@ export async function openBoard(page: Page, slug = "e2e"): Promise<Board> {
   // The realtime channel. Left unhandled it fails to connect and reconnects on a timer
   // for the length of the run — background work under every assertion, and pages of proxy
   // errors in the log that look like the failure when something else goes wrong.
-  await page.routeWebSocket(/\/live$/, () => {});
+  await page.routeWebSocket(/\/(live|ws)$/, () => {});
 
   patches.set(page, []);
 

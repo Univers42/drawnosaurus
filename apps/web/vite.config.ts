@@ -12,6 +12,7 @@ const engineSrc = fileURLToPath(new URL("../../engine/src", import.meta.url));
 const enginePkg = fileURLToPath(new URL("../../engine/pkg", import.meta.url));
 
 const apiTarget = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:4000";
+const realtimeTarget = process.env.REALTIME_PROXY_TARGET ?? "http://127.0.0.1:4402";
 
 /**
  * Watch by polling instead of by inotify.
@@ -36,6 +37,8 @@ export default defineConfig({
     proxy: {
       // Same-origin in dev so the browser never needs CORS.
       "/v1": { target: apiTarget, changeOrigin: true, ws: true },
+      // Live collab gateway (engine/realtime). Used when PUBLIC_REALTIME_WS_URL is unset.
+      "/ws": { target: realtimeTarget, changeOrigin: true, ws: true },
     },
   },
   assetsInclude: ["**/*.wasm"],

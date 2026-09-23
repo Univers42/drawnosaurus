@@ -61,7 +61,7 @@ export class InspectorSession {
 
     // The realtime channel. Left unhandled it fails and reconnects on a timer for the
     // whole session — background work under every measurement.
-    await page.routeWebSocket(/\/live$/, () => {});
+    await page.routeWebSocket(/\/(live|ws)$/, () => {});
 
     // Stubbed rather than served, exactly as the browser suite does it: an inspector that
     // needs a database reports the database's problems as the editor's.

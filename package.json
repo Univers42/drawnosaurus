@@ -17,7 +17,7 @@
     "format:fix": "prettier --write .",
     "test": "pnpm -r test",
     "test:integration": "pnpm --filter @drawnosaurus/api test:integration",
-    "test:live-e2e-security": "pnpm --filter @drawnosaurus/web exec vitest run src/lib/realtime/liveE2eSecurity.test.ts && pnpm --filter @drawnosaurus/api exec vitest run tests/unit/liveRelay.test.ts",
+    "test:live-e2e-security": "pnpm --filter @drawnosaurus/web exec vitest run src/lib/realtime/liveE2eSecurity.test.ts src/lib/realtime/realtime.test.ts",
     "test:e2e": "playwright test",
     "quality": "pnpm typecheck && pnpm lint && pnpm format && pnpm test"
   },

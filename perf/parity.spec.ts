@@ -51,7 +51,7 @@ const report: {
 /** Loads drawnosaurus with the scene already in it. */
 async function openOurs(page: Page, count: number, shape: Shape): Promise<void> {
   const elements = buildScene(count, shape);
-  await page.routeWebSocket(/\/live$/, () => {});
+  await page.routeWebSocket(/\/(live|ws)$/, () => {});
   await page.route("**/v1/**", async (route) => {
     if (route.request().method() !== "GET") {
       await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });

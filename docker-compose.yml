@@ -18,6 +18,23 @@ services:
       retries: 12
       start_period: 10s
 
+  # Live collaboration transport (engine/realtime). Host port 4402 avoids API
+  # 4300 and the realtime sandbox's default 4002. WS pub/sub only — no
+  # Postgres/Mongo CDC (sandbox compose needs POSTGRES_PASSWORD; we do not).
+  # Dockerfile is under docker/ (outside the build context).
+  realtime:
+    build:
+      context: ./engine/realtime
+      dockerfile: ../../docker/realtime.Dockerfile
+    environment:
+      REALTIME_HOST: "0.0.0.0"
+      REALTIME_PORT: "4000"
+      REALTIME_AUTH: "noauth"
+      REALTIME_STATIC_DIR: "/app/static"
+      RUST_LOG: "info,realtime_gateway=info,realtime_server=info"
+    ports:
+      - "${REALTIME_PORT:-4402}:4000"
+
   api:
     build:
       context: .
@@ -50,8 +67,10 @@ services:
       # Read at runtime, not baked in, so one image can point anywhere. It must be the
       # HOST-visible api address: the browser resolves it, not the compose network.
       PUBLIC_API_URL: http://localhost:${API_PORT:-4300}
+      PUBLIC_REALTIME_WS_URL: ws://localhost:${REALTIME_PORT:-4402}/ws
     depends_on:
       - api
+      - realtime
     ports:
       - "${WEB_PORT:-5273}:3000"
 

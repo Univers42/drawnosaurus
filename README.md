@@ -6,9 +6,12 @@ deliberately does not have: persistence, an HTTP contract, and a merge rule for 
 
 ```
 SvelteKit (TS strict) ──HTTP /v1──▶ Fastify ──▶ MongoDB
-   │                                   │
-   └─ draw_engine_bg.wasm              └─ validate · reconcile · denormalise
-      (scene, geometry, paint)
+   │                      │
+   │                      └─ validate · reconcile · denormalise
+   ├─ draw_engine_bg.wasm
+   │    (scene, geometry, paint)
+   └─ WS /ws ──▶ realtime-agnostic (engine/realtime)
+        sealed live patches / cursors (AES-GCM room key in #room=)
 ```
 
 The engine never talks to the network and the server never runs WASM. The only thing crossing
@@ -25,10 +28,11 @@ make verify  # the full gate: typecheck, lint, format, unit tests, integration t
 make help    # every target
 ```
 
-Then open **http://localhost:5273**. The API is on **http://localhost:4300**.
+Then open **http://localhost:5273**. The API is on **http://localhost:4300**. Live
+collaboration uses the realtime gateway at **ws://localhost:4402/ws** (engine/realtime).
 
-> Host ports default to 5273/4300/27019 instead of the usual 5173/4000/27017 because the sibling
-> osionos stack already owns those. Override per invocation: `make up API_PORT=4500 WEB_PORT=5500`.
+> Host ports default to 5273/4300/27019/4402 instead of the usual 5173/4000/27017 because the sibling
+> osionos stack already owns those. Override per invocation: `make up API_PORT=4500 WEB_PORT=5500 REALTIME_PORT=4502`.
 
 `engine/src/wasmLoad.ts` imports the generated `engine/pkg/draw_engine.js`, which is gitignored build
 output — absent from a fresh clone, and needed by the web build, the web image and the typecheck

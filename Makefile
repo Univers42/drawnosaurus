@@ -32,12 +32,14 @@ ENGINE_PKG := engine/pkg/draw_engine.js
 export API_PORT   ?= 4300
 export WEB_PORT   ?= 5273
 export MONGO_PORT ?= 27019
+export REALTIME_PORT ?= 4402
 
 # `dev` gets its own host ports so a hot-reload server and the built images from
 # `up` can run side by side — otherwise starting one silently takes the other's
 # port and you debug the wrong build.
 export DEV_WEB_PORT ?= 5373
 export DEV_API_PORT ?= 4373
+export DEV_REALTIME_PORT ?= 4473
 
 # What the images are built from. `.git` is not in the Docker build context, so the
 # image cannot find out for itself; these go in as build args, are shown at the foot of
@@ -65,10 +67,16 @@ all: ## Everything at once: submodule, WASM, deps, quality gate, then the stack
 	@$(MAKE) --no-print-directory up
 	@echo -e "$(GREEN)✔ all green$(RESET)"
 
-submodules: ## Fetch the engine submodule if the clone did not
+submodules: ## Fetch the engine submodule (and its realtime nested submodule)
 	@test -f engine/Cargo.toml || { \
 		echo "[submodule] engine is empty — fetching"; \
 		git submodule update --init engine; \
+	}
+	@# Nested: CI checks out engine non-recursively (SSH sibling would fail). Live
+	@# collab needs engine/realtime explicitly.
+	@test -f engine/realtime/Cargo.toml || { \
+		echo "[submodule] engine/realtime is empty — fetching"; \
+		git -C engine submodule update --init realtime; \
 	}
 
 wasm: submodules ## Build engine/pkg from the Rust crate (required before web build/dev)
@@ -156,10 +164,11 @@ verify: quality test-integration ## Everything CI runs
 
 dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and DEV_API_PORT
 	$(DC) up -d mongo
+	REALTIME_PORT=$(DEV_REALTIME_PORT) $(DC) up -d --build realtime
 	-$(DC) rm -fsv drawnosaurus-api 2>/dev/null
 	$(RUN) --no-deps -d --name drawnosaurus-api -p $(DEV_API_PORT):4000 tooling \
 		pnpm --filter @drawnosaurus/api dev
-	@echo -e "$(GREEN)dev: web http://localhost:$(DEV_WEB_PORT)  api http://localhost:$(DEV_API_PORT)$(RESET)"
+	@echo -e "$(GREEN)dev: web http://localhost:$(DEV_WEB_PORT)  api http://localhost:$(DEV_API_PORT)  realtime ws://localhost:$(DEV_REALTIME_PORT)/ws$(RESET)"
 	@# --service-ports is useless here: `tooling` is a generic runner and declares no
 	@# ports, so it published nothing and the server was unreachable from the host.
 	@# The proxy target is the API container by name; inside this container 127.0.0.1
@@ -170,16 +179,17 @@ dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and
 	@# never made and survives any number of rebuilds.
 	$(RUN) --no-deps -p $(DEV_WEB_PORT):5173 \
 		-e API_PROXY_TARGET=http://drawnosaurus-api:4000 \
+		-e PUBLIC_REALTIME_WS_URL=ws://localhost:$(DEV_REALTIME_PORT)/ws \
 		-e VITE_USE_POLLING=1 \
 		tooling pnpm --filter @drawnosaurus/web dev
 
-build: $(ENGINE_PKG) ## Build the api and web images
-	$(DC) build api web
+build: $(ENGINE_PKG) ## Build the api, web, and realtime images
+	$(DC) build api web realtime
 	@echo -e "$(GREEN)✔ images built$(RESET)"
 
-up: $(ENGINE_PKG) ## Start mongo + api + web
-	$(DC) up -d --build mongo api web
-	@echo -e "$(GREEN)✔ up: web http://localhost:$(WEB_PORT)  api http://localhost:$(API_PORT)$(RESET)"
+up: $(ENGINE_PKG) ## Start mongo + realtime + api + web
+	$(DC) up -d --build mongo realtime api web
+	@echo -e "$(GREEN)✔ up: web http://localhost:$(WEB_PORT)  api http://localhost:$(API_PORT)  realtime ws://localhost:$(REALTIME_PORT)/ws$(RESET)"
 	@echo -e "$(GREEN)  built from app $(BUILD_APP_SHA) · engine $(BUILD_ENGINE_SHA)$(RESET)"
 
 # Is the running web container built from what is checked out? It exists because a
@@ -204,7 +214,7 @@ down: ## Stop and remove containers
 	@echo -e "$(GREEN)✔ down$(RESET)"
 
 logs: ## Tail service logs
-	$(DC) logs -f api web
+	$(DC) logs -f api web realtime
 
 shell: ## Interactive shell in the tooling container
 	$(RUN) --no-deps tooling bash

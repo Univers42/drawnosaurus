@@ -1,24 +1,17 @@
 import { env } from "$env/dynamic/public";
 import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
+import {
+  authFrame,
+  collabPayloadFromServerFrame,
+  isAuthOk,
+  isSubscribedLive,
+  liveSocketUrl,
+  publishFrame,
+  subscribeFrame,
+} from "./realtimeProtocol.ts";
 import { isSealedEnvelope, open, seal, type SealedEnvelope } from "./roomCrypto.ts";
 
-/**
- * The live socket lives on the API, which is not always the page's origin: compose
- * publishes web and api on different host ports, and the browser — not the compose
- * network — resolves this URL. So it mirrors the HTTP client exactly: PUBLIC_API_URL
- * when set, relative otherwise (dev proxy and same-origin deploys), then http(s)
- * swapped for ws(s). Resolving against the page href keeps any path prefix in the
- * base, which a bare `new URL(path, origin)` would drop.
- */
-export function liveSocketUrl(slug: string, apiBase: string, pageHref: string): string {
-  const base = apiBase.replace(/\/$/, "");
-  const url = new URL(`${base}/v1/boards/${slug}/live`, pageHref);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  // Fragment room keys must never land on the handshake URL — the server would see them.
-  url.hash = "";
-  url.search = "";
-  return url.toString();
-}
+export { liveSocketUrl } from "./realtimeProtocol.ts";
 
 export interface PeerCursor {
   clientId: string;
@@ -45,6 +38,7 @@ const PEER_STALE_MS = 45_000;
 const PEER_SWEEP_MS = 10_000;
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 15_000;
+const DEV_AUTH_TOKEN = "dev";
 
 export function getCollaboratorProfile(): { clientId: string; name: string; color: string } {
   if (typeof window === "undefined") {
@@ -66,6 +60,10 @@ export function getCollaboratorProfile(): { clientId: string; name: string; colo
   return { clientId: id, name, color: CURSOR_COLORS[colorIndex] ?? "#1971c2" };
 }
 
+/**
+ * Live collab channel over engine/realtime: AUTH → SUBSCRIBE boards/{slug}/*
+ * → PUBLISH sealed (or plaintext) collab payloads. Scene merge stays host-side.
+ */
 export class RealtimeChannel<T extends StampedElement> {
   readonly profile = getCollaboratorProfile();
   private ws: WebSocket | null = null;
@@ -74,6 +72,7 @@ export class RealtimeChannel<T extends StampedElement> {
   private patchListeners: ((patch: ScenePatch<T>) => void)[] = [];
   private statusListeners: ((status: ConnectionStatus) => void)[] = [];
   private connected = false;
+  private sessionReady = false;
   private roomKey: CryptoKey | null;
   private intentionalClose = false;
   private reconnectAttempt = 0;
@@ -118,25 +117,20 @@ export class RealtimeChannel<T extends StampedElement> {
   private openSocket(): void {
     if (this.ws) return;
     const url = this.preferredUrl ?? this.defaultWsUrl();
+    this.sessionReady = false;
     this.setStatus("connecting");
     try {
       this.ws = new WebSocket(url);
       this.ws.onopen = () => {
-        this.connected = true;
         this.reconnectAttempt = 0;
-        this.setStatus("connected");
-        void this.send({
-          type: "join",
-          clientId: this.profile.clientId,
-          name: this.profile.name,
-          color: this.profile.color,
-        });
+        this.ws?.send(authFrame(env.PUBLIC_REALTIME_TOKEN || DEV_AUTH_TOKEN));
       };
       this.ws.onmessage = (event) => {
-        void this.receiveFrame(event.data as string);
+        void this.onServerFrame(event.data as string);
       };
       this.ws.onclose = () => {
         this.connected = false;
+        this.sessionReady = false;
         this.ws = null;
         this.setStatus("disconnected");
         if (!this.intentionalClose) this.scheduleReconnect();
@@ -146,9 +140,41 @@ export class RealtimeChannel<T extends StampedElement> {
       };
     } catch {
       this.connected = false;
+      this.sessionReady = false;
       this.ws = null;
       this.setStatus("disconnected");
       if (!this.intentionalClose) this.scheduleReconnect();
+    }
+  }
+
+  private async onServerFrame(raw: string): Promise<void> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    if (isAuthOk(parsed)) {
+      this.ws?.send(subscribeFrame(this.slug));
+      return;
+    }
+    if (isSubscribedLive(parsed)) {
+      this.sessionReady = true;
+      this.connected = true;
+      this.setStatus("connected");
+      void this.send({
+        type: "join",
+        clientId: this.profile.clientId,
+        name: this.profile.name,
+        color: this.profile.color,
+      });
+      return;
+    }
+
+    const payload = collabPayloadFromServerFrame(parsed);
+    if (payload !== null) {
+      await this.receivePayload(payload);
     }
   }
 
@@ -169,7 +195,7 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   private defaultWsUrl(): string {
-    return liveSocketUrl(this.slug, env.PUBLIC_API_URL ?? "", window.location.href);
+    return liveSocketUrl(env.PUBLIC_REALTIME_WS_URL ?? "", window.location.href);
   }
 
   sendCursor(x: number, y: number): void {
@@ -192,24 +218,32 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   private async send(msg: RealtimeMessage<T>): Promise<void> {
-    if (!this.ws || !this.connected || this.ws.readyState !== WebSocket.OPEN) return;
-    const wire = await this.encodeOutbound(msg);
-    if (wire !== null) this.ws.send(wire);
+    if (!this.ws || !this.sessionReady || this.ws.readyState !== WebSocket.OPEN) return;
+    const payload = await this.encodePayload(msg);
+    if (payload === null) return;
+    this.ws.send(publishFrame(this.slug, msg.type, payload));
   }
 
-  /** Encode a message the way the wire would carry it (for tests). */
+  /**
+   * Collab payload as it appears inside PUBLISH / EVENT (object, not a double-encoded string).
+   * Tests stringify this to assert ciphertext has no plaintext markers.
+   */
   async encodeOutbound(msg: RealtimeMessage<T>): Promise<string | null> {
-    if (!this.roomKey) {
-      return JSON.stringify(msg);
-    }
+    const payload = await this.encodePayload(msg);
+    if (payload === null) return null;
+    return JSON.stringify(payload);
+  }
+
+  private async encodePayload(msg: RealtimeMessage<T>): Promise<unknown | null> {
+    if (!this.roomKey) return msg;
     try {
-      const envelope = await seal(this.roomKey, textEncoder.encode(JSON.stringify(msg)));
-      return JSON.stringify(envelope);
+      return await seal(this.roomKey, textEncoder.encode(JSON.stringify(msg)));
     } catch {
       return null;
     }
   }
 
+  /** Accept a collab payload (sealed envelope or plaintext message). */
   async receiveFrame(raw: string): Promise<void> {
     let parsed: unknown;
     try {
@@ -217,7 +251,10 @@ export class RealtimeChannel<T extends StampedElement> {
     } catch {
       return;
     }
+    await this.receivePayload(parsed);
+  }
 
+  async receivePayload(parsed: unknown): Promise<void> {
     if (this.roomKey) {
       if (!isSealedEnvelope(parsed)) {
         // Keyed mode never accepts plaintext — blocks a server/network downgrade.
@@ -335,10 +372,9 @@ export class RealtimeChannel<T extends StampedElement> {
     if (this.ws) {
       const socket = this.ws;
       const leave: RealtimeMessage<T> = { type: "leave", clientId: this.profile.clientId };
-      // Seal is async; close only after the leave frame is queued so peers drop the cursor.
-      void this.encodeOutbound(leave).then((wire) => {
-        if (wire && socket.readyState === WebSocket.OPEN) {
-          socket.send(wire);
+      void this.encodePayload(leave).then((payload) => {
+        if (payload && socket.readyState === WebSocket.OPEN && this.sessionReady) {
+          socket.send(publishFrame(this.slug, "leave", payload));
         }
         if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
           socket.close();
@@ -347,6 +383,7 @@ export class RealtimeChannel<T extends StampedElement> {
       this.ws = null;
     }
     this.connected = false;
+    this.sessionReady = false;
     this.peers.clear();
     this.setStatus("disconnected");
   }

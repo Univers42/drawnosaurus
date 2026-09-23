@@ -217,19 +217,20 @@ describe("live E2E encryption security — downgrade resistance", () => {
   });
 });
 
-describe("live E2E encryption security — key never reaches the API URL", () => {
+describe("live E2E encryption security — key never reaches the realtime handshake", () => {
+  const pageHref = "https://app.example/boards/abc";
+
   it("strips fragment room keys from the WebSocket handshake URL", () => {
     const page = "https://app.example/boards/abc#room=should-never-leak-to-ws";
-    const url = liveSocketUrl("abc", "https://api.example", page);
-    expect(url).toBe("wss://api.example/v1/boards/abc/live");
+    const url = liveSocketUrl("wss://rt.example/ws", page);
+    expect(url).toBe("wss://rt.example/ws");
     expect(url.includes("room=")).toBe(false);
     expect(url.includes("should-never-leak")).toBe(false);
   });
 
   it("strips query-string attempts to smuggle the room key onto the socket", () => {
-    const page = "https://app.example/boards/abc?room=smuggled-key#room=real-key";
-    const url = liveSocketUrl("abc", "https://api.example/", page);
-    expect(url).toBe("wss://api.example/v1/boards/abc/live");
+    const url = liveSocketUrl("wss://rt.example/ws?room=smuggled-key#room=real-key", pageHref);
+    expect(url).toBe("wss://rt.example/ws");
     expect(url.includes("smuggled-key")).toBe(false);
     expect(url.includes("real-key")).toBe(false);
     expect(url.includes("?")).toBe(false);

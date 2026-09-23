@@ -15,14 +15,12 @@
   "dependencies": {
     "@drawnosaurus/contract": "workspace:*",
     "@fastify/cors": "^11.1.0",
-    "@fastify/websocket": "^11.3.0",
     "fastify": "^5.6.1",
     "mongodb": "^6.21.0",
     "zod": "^4.1.13"
   },
   "devDependencies": {
     "@types/node": "^22.19.1",
-    "@types/ws": "^8.18.1",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   }
