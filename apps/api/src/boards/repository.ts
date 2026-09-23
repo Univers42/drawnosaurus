@@ -9,8 +9,9 @@ import {
   type DrawElementDto,
 } from "@drawnosaurus/contract";
 import { boardTooLarge, conflict, notFound } from "../errors.ts";
-import type { BoardDoc, BoardFields } from "../mongo.ts";
+import type { BoardDoc, BoardFields, StoredElement } from "../mongo.ts";
 import { cursorFilter, decodeCursor, encodeCursor } from "./cursor.ts";
+import { keepPictures, type PictureStore } from "./pictures.ts";
 import { toSummary } from "./presenter.ts";
 import { mintSlug } from "./slug.ts";
 
@@ -34,7 +35,8 @@ const MAX_WRITE_ATTEMPTS = 4;
 
 /**
  * MongoDB's ceiling on one document. A board is one document with its elements inline —
- * pictures included — so this is the ceiling on a board.
+ * everything but pictures, which are kept beside it (`pictures.ts`) — so this is the
+ * ceiling on a board's shapes and text.
  *
  * Checked before writing rather than recognised afterwards, because past it the failure
  * has no single shape: a little over, the server refuses the update; further over, the
@@ -43,29 +45,13 @@ const MAX_WRITE_ATTEMPTS = 4;
  */
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 
-/**
- * A tombstone without its picture.
- *
- * Nothing draws a deleted element, and a picture is most of an image's size. Kept, every
- * deleted photo went on counting against the board's 16MB, so deleting images never made
- * room — and a board that had held a few photos refused the next one while looking empty.
- * Applied to everything written, so boards that already carry them are cleaned on their
- * next save.
- */
-function withoutTombstonePictures(elements: DrawElementDto[]): DrawElementDto[] {
-  return elements.map((element) => {
-    if (!element.isDeleted || element.dataUrl === undefined) return element;
-    const tombstone = { ...element };
-    delete tombstone.dataUrl;
-    return tombstone;
-  });
-}
-
 export class BoardRepository {
   private readonly boards: Collection<BoardFields>;
+  private readonly pictures: PictureStore;
 
-  constructor(boards: Collection<BoardFields>) {
+  constructor(boards: Collection<BoardFields>, pictures: PictureStore) {
     this.boards = boards;
+    this.pictures = pictures;
   }
 
   /**
@@ -125,6 +111,15 @@ export class BoardRepository {
     return doc;
   }
 
+  /** A board as it goes out, its pictures back on their images — see `pictures.ts`. */
+  async read(ownerId: string, slug: string): Promise<BoardDoc> {
+    return await this.withPictures(await this.findBySlug(ownerId, slug));
+  }
+
+  async withPictures(doc: BoardDoc): Promise<BoardDoc> {
+    return { ...doc, elements: await this.pictures.restore(doc.elements) };
+  }
+
   /** Full replace, guarded by the rev the caller says it saw (`If-Match`). */
   async replace(
     ownerId: string,
@@ -152,8 +147,9 @@ export class BoardRepository {
   ): Promise<PatchResult> {
     for (let attempt = 0; attempt < MAX_WRITE_ATTEMPTS; attempt += 1) {
       const current = await this.findBySlug(ownerId, slug);
-      const merged = reconcileElements(current.elements, incoming);
-      const elements = order === undefined ? merged.elements : applyOrder(merged.elements, order);
+      const merged = reconcileElements<StoredElement>(current.elements, incoming);
+      const kept = keepPictures(merged.elements, current.elements, incoming);
+      const elements = order === undefined ? kept : applyOrder(kept, order);
 
       const updated = await this.commit(current, elements);
       if (updated !== null) {
@@ -179,10 +175,10 @@ export class BoardRepository {
    */
   private async commit(
     current: BoardDoc,
-    elements: DrawElementDto[],
+    elements: StoredElement[],
     title?: string,
   ): Promise<BoardDoc | null> {
-    elements = withoutTombstonePictures(elements);
+    elements = await this.pictures.stow(current._id, elements);
     const patch: Record<string, unknown> = {
       elements,
       bounds: sceneBounds(elements),
