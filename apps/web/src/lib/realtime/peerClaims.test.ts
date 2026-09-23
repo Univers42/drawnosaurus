@@ -77,7 +77,8 @@ describe("claimSelection", () => {
 
 describe("previewInterval", () => {
   it("sends a small gesture often and a large one less often", () => {
-    expect(previewInterval(400)).toBe(50);
+    expect(previewInterval(400)).toBe(33);
+    expect(previewInterval(10_000)).toBeGreaterThan(previewInterval(400));
     expect(previewInterval(40_000)).toBeGreaterThan(previewInterval(400));
     expect(previewInterval(1_000_000)).toBeGreaterThan(previewInterval(40_000));
   });
