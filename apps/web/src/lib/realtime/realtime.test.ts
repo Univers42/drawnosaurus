@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RealtimeChannel, getCollaboratorProfile, liveSocketUrl } from "./realtimeClient.ts";
 import { generateRoomKeyBytes, importRoomKey, isSealedEnvelope } from "./roomCrypto.ts";
 
@@ -207,5 +207,101 @@ describe("realtimeClient encrypted frames", () => {
     });
     await receiver.receiveFrame(wire!);
     expect(receivedPatch).toBeNull();
+  });
+});
+
+describe("realtimeClient reconnecting", () => {
+  /** A socket the test opens and closes by hand. */
+  class FakeSocket {
+    static OPEN = 1;
+    static CONNECTING = 0;
+    static made: FakeSocket[] = [];
+    readyState = 0;
+    onopen: (() => void) | null = null;
+    onclose: (() => void) | null = null;
+    onmessage: ((event: { data: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    sent: string[] = [];
+    constructor(readonly url: string) {
+      FakeSocket.made.push(this);
+    }
+    open(): void {
+      this.readyState = 1;
+      this.onopen?.();
+    }
+    drop(): void {
+      this.readyState = 3;
+      this.onclose?.();
+    }
+    send(data: string): void {
+      this.sent.push(data);
+    }
+    close(): void {
+      this.readyState = 3;
+    }
+  }
+
+  function withBrowser() {
+    vi.useFakeTimers();
+    FakeSocket.made = [];
+    const listeners = new Map<string, () => void>();
+    vi.stubGlobal("window", {
+      location: { href: "http://localhost:5273/boards/abc" },
+      addEventListener: (type: string, fn: () => void) => listeners.set(type, fn),
+      removeEventListener: (type: string) => listeners.delete(type),
+    });
+    vi.stubGlobal("sessionStorage", { getItem: () => null, setItem: () => undefined });
+    vi.stubGlobal("WebSocket", FakeSocket);
+    return listeners;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("reports every step, so the page can say the link is down", () => {
+    withBrowser();
+    const channel = new RealtimeChannel("abc");
+    const seen: string[] = [];
+    channel.onStatus((status) => seen.push(status));
+
+    channel.connect("ws://api/live");
+    FakeSocket.made[0]!.open();
+    FakeSocket.made[0]!.drop();
+
+    expect(seen).toEqual(["disconnected", "connecting", "connected", "disconnected"]);
+    channel.disconnect();
+  });
+
+  it("tries again on its own after a drop", () => {
+    withBrowser();
+    const channel = new RealtimeChannel("abc");
+    channel.connect("ws://api/live");
+    FakeSocket.made[0]!.drop();
+
+    vi.advanceTimersByTime(500);
+
+    expect(FakeSocket.made).toHaveLength(2);
+    channel.disconnect();
+  });
+
+  it("tries at once when the browser says it is back online", () => {
+    // Rather than at the end of a backoff that may have grown to fifteen seconds.
+    const listeners = withBrowser();
+    const channel = new RealtimeChannel("abc");
+    channel.connect("ws://api/live");
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      FakeSocket.made.at(-1)!.drop();
+      vi.advanceTimersByTime(15_000);
+    }
+    FakeSocket.made.at(-1)!.drop();
+    const before = FakeSocket.made.length;
+
+    listeners.get("online")!();
+
+    expect(FakeSocket.made).toHaveLength(before + 1);
+    channel.disconnect();
+    expect(listeners.has("online"), "and stops listening when closed").toBe(false);
   });
 });

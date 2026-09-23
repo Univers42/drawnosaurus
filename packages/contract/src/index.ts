@@ -24,6 +24,7 @@ export {
   createBoardSchema,
   errorSchema,
   listQuerySchema,
+  boardQuerySchema,
   osidrawFileSchema,
   patchElementsSchema,
   replaceBoardSchema,

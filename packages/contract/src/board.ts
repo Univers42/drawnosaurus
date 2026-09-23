@@ -50,6 +50,18 @@ export const listQuerySchema = z.object({
   cursor: z.string().max(256).optional(),
 });
 
+/**
+ * `GET /v1/boards/:slug?include=tombstones` — the board with its deleted elements too.
+ *
+ * A board load leaves them out: they exist so a delete can win a merge, and a client
+ * builds its own as it edits. A client catching up after its live connection dropped
+ * needs them, though — a peer's delete made meanwhile is otherwise just an element the
+ * server no longer mentions, which reads the same as one it has not been told about.
+ */
+export const boardQuerySchema = z.object({
+  include: z.literal("tombstones").optional(),
+});
+
 /** List rows never carry elements — that is the point of the denormalised fields. */
 export const boardSummarySchema = z.object({
   slug: slugSchema,

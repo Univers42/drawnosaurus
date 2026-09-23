@@ -73,6 +73,31 @@ describe("LiveSceneBroadcaster", () => {
   });
 });
 
+describe("changes made while the socket is down", () => {
+  it("are kept, and go out together once they can", () => {
+    // Observed but not taken, as the page does while disconnected. They used to be
+    // marked as sent the moment they were diffed, and the send was dropped.
+    const broadcaster = new LiveSceneBroadcaster();
+    broadcaster.reset([el("a")]);
+    broadcaster.observe(
+      JSON.stringify({ type: "osidraw-delta", updated: [el("a", 2)], removed: [] }),
+    );
+    broadcaster.observe(JSON.stringify({ type: "osidraw-delta", updated: [el("b")], removed: [] }));
+    broadcaster.observe(JSON.stringify({ type: "osidraw-delta", updated: [], removed: ["a"] }));
+
+    const patch = broadcaster.takePatch(900, () => 5);
+
+    expect(patch?.elements.map((e) => [e.id, e.isDeleted])).toEqual([
+      ["b", false],
+      ["a", true],
+    ]);
+    expect(
+      broadcaster.takePatch(901, () => 6),
+      "and only once",
+    ).toBeNull();
+  });
+});
+
 describe("remotePatchToSceneEvent", () => {
   it("turns tombstones into a host delta the page applyDelta understands", () => {
     const event = JSON.parse(

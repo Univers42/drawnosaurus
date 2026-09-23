@@ -791,14 +791,20 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "40. Collaboration",
-    text: /Follow user|Offline queue|Reconnection|Remote selections|Active tool|Connection state|User list/,
+    text: /Follow user|Remote selections|Active tool|User list/,
     status: "gap",
-    why: "Presence beyond cursors, and the offline/reconnect path. Element sync and last-write-wins are done.",
+    why: "Presence beyond cursors. Element sync, last-write-wins, reconnection with catch-up, the offline queue and the connection state are done.",
   },
   {
     section: "40. Collaboration",
     status: "covered",
-    tests: [`${WEB}/realtime/realtime.test.ts`, `${ENGINE}/ci_remote_patch.rs`],
+    tests: [
+      `${WEB}/realtime/realtime.test.ts`,
+      `${WEB}/realtime/liveBroadcast.test.ts`,
+      `${WEB}/draw-chrome/status.test.ts`,
+      "e2e/live.spec.ts",
+      `${ENGINE}/ci_remote_patch.rs`,
+    ],
   },
   {
     section: "42. Rendering engine",

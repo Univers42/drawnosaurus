@@ -53,7 +53,9 @@
   } from "../realtime/realtimeClient.ts";
   import { ensureRoomKey, importRoomKey } from "../realtime/roomCrypto.ts";
   import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
-  import type { StampedElement } from "../autosave/sceneDiff.ts";
+  import type { StampedElement, ScenePatch } from "../autosave/sceneDiff.ts";
+  import type { AutosaveStatus } from "../autosave/autosaver.ts";
+  import { liveLabel } from "./status.ts";
   import DrawHeader from "./DrawHeader.svelte";
   import DrawMainMenu from "./DrawMainMenu.svelte";
   import { downloadBlob } from "./download.ts";
@@ -75,14 +77,21 @@
     ariaLabel = "Drawing canvas",
     onSceneChange,
     onReady,
+    fetchLatest,
   }: {
     scene: Scene;
     title?: string;
     slug?: string;
-    status?: string;
+    status?: AutosaveStatus;
     ariaLabel?: string;
     onSceneChange?: (json: string) => void;
     onReady?: (engine: DrawEngine) => void;
+    /**
+     * The board as the server has it now, deleted elements included — read after the
+     * live connection comes back, to catch up on what peers did while it was down. The
+     * page owns the API; this only knows when to ask.
+     */
+    fetchLatest?: () => Promise<StampedElement[]>;
   } = $props();
 
   let engine = $state.raw<DrawEngine | null>(null);
@@ -169,6 +178,9 @@
   let peers = $state<PeerCursor[]>([]);
   let liveStatus = $state<ConnectionStatus>("disconnected");
   let realtime: RealtimeChannel<StampedElement> | null = null;
+  /** Whether the live link has ever come up, and ever failed — see `liveLabel`. */
+  let liveHistory = $state({ everConnected: false, everFailed: false });
+  const liveText = $derived(slug ? liveLabel(liveStatus, liveHistory) : null);
   const liveBroadcast = new LiveSceneBroadcaster<StampedElement>();
   let raf = 0;
   let pending: Camera | null = null;
@@ -559,10 +571,69 @@
     onSceneChange?.(json);
     refreshEmbedFrames();
     if (!realtime) return;
-    // Diff against what peers already have: synthesise tombstones for soft-deletes
-    // and an explicit order when z-order moved without stamp changes.
-    const patch = liveBroadcast.ingest(json);
+    liveBroadcast.observe(json);
+    flushLive();
+  }
+
+  /**
+   * Sends peers what they do not have yet — when it can be sent.
+   *
+   * Diffed against what peers already have: tombstones synthesised for soft-deletes,
+   * and an explicit order when z-order moved without stamp changes. Nothing is taken
+   * while the link is down, so what is drawn offline goes out on reconnect instead of
+   * being marked as sent and dropped.
+   */
+  function flushLive(): void {
+    if (!realtime || realtime.connectionStatus !== "connected") return;
+    const patch = liveBroadcast.takePatch();
     if (patch) realtime.sendPatch(patch);
+  }
+
+  /** Merges a peer's patch — from the socket, or from the server when catching up. */
+  function applyRemote(patch: ScenePatch<StampedElement>): void {
+    if (!engine) return;
+    if (!patch.elements?.length && !patch.order?.length) return;
+    // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote edits
+    // through it duplicated every one of them — and because the result was then
+    // broadcast back, two clients grew the board without bound.
+    //
+    // `applyRemotePatch` emits no scene event, so nothing echoes back to the peer that
+    // sent it. We still feed the host `onSceneChange` so `live` / autosave see peer
+    // deletes and updates.
+    const payload: {
+      type: string;
+      version: number;
+      elements: StampedElement[];
+      order?: string[];
+    } = {
+      type: "osidraw",
+      version: 1,
+      elements: patch.elements ?? [],
+    };
+    if (patch.order) payload.order = patch.order;
+    if (!engine.applyRemotePatch(JSON.stringify(payload))) return;
+    liveBroadcast.adoptRemote(patch);
+    // Order-only patches carry no elements; exportJson is the safe host sync.
+    // Otherwise a delta keeps tombstones visible to the autosave tracker.
+    onSceneChange?.(patch.order?.length ? engine.exportJson() : remotePatchToSceneEvent(patch));
+    refreshEmbedFrames();
+  }
+
+  /**
+   * After the live link comes back: what peers did while it was down reached the
+   * server but not us, and nothing would ever resend it. Read the board and merge it —
+   * the merge keeps whichever copy of each element is newer, so what we did offline
+   * stands. Best effort: if the read fails, the next reconnect tries again.
+   */
+  async function catchUp(): Promise<void> {
+    if (!fetchLatest) return;
+    let elements: StampedElement[];
+    try {
+      elements = await fetchLatest();
+    } catch {
+      return;
+    }
+    applyRemote({ elements });
   }
 
   onMount(() => {
@@ -613,38 +684,19 @@
           peers = list;
         });
         unsubStatus = realtime.onStatus((next) => {
+          const reconnected = next === "connected" && liveHistory.everConnected;
+          if (liveStatus === "connecting" && next === "disconnected") {
+            liveHistory.everFailed = true;
+          }
+          if (next === "connected") liveHistory.everConnected = true;
           liveStatus = next;
+          if (next === "connected") {
+            // Ours first — what was drawn offline — then theirs, from the server.
+            flushLive();
+            if (reconnected) void catchUp();
+          }
         });
-        unsubPatch = realtime.onRemotePatch((patch) => {
-          if (!engine) return;
-          if (!patch.elements?.length && !patch.order?.length) return;
-          // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote
-          // edits through it duplicated every one of them — and because the result was
-          // then broadcast back, two clients grew the board without bound.
-          //
-          // `applyRemotePatch` emits no scene event, so nothing echoes back to the peer
-          // that sent it. We still feed the host `onSceneChange` so `live` / autosave
-          // see peer deletes and updates.
-          const payload: {
-            type: string;
-            version: number;
-            elements: StampedElement[];
-            order?: string[];
-          } = {
-            type: "osidraw",
-            version: 1,
-            elements: patch.elements ?? [],
-          };
-          if (patch.order) payload.order = patch.order;
-          if (!engine.applyRemotePatch(JSON.stringify(payload))) return;
-          liveBroadcast.adoptRemote(patch);
-          // Order-only patches carry no elements; exportJson is the safe host sync.
-          // Otherwise a delta keeps tombstones visible to the autosave tracker.
-          onSceneChange?.(
-            patch.order?.length ? engine.exportJson() : remotePatchToSceneEvent(patch),
-          );
-          refreshEmbedFrames();
-        });
+        unsubPatch = realtime.onRemotePatch(applyRemote);
         realtime.connect();
       })();
     }
@@ -827,6 +879,7 @@
   <DrawHeader
     {title}
     {status}
+    live={liveText}
     onToggleMenu={() => (showMainMenu = !showMainMenu)}
     onOpenShare={() => (showShare = true)}
     onOpenShortcuts={() => (showShortcuts = true)}

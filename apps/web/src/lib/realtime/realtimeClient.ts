@@ -101,6 +101,20 @@ export class RealtimeChannel<T extends StampedElement> {
     return this.status;
   }
 
+  /**
+   * The network is back: try now rather than at the end of a backoff that may have grown
+   * to fifteen seconds while it was gone.
+   */
+  private readonly onOnline = (): void => {
+    if (this.intentionalClose || this.ws) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempt = 0;
+    this.openSocket();
+  };
+
   setRoomKey(key: CryptoKey | null): void {
     this.roomKey = key;
   }
@@ -109,6 +123,7 @@ export class RealtimeChannel<T extends StampedElement> {
     if (typeof window === "undefined") return;
     this.intentionalClose = false;
     this.preferredUrl = wsUrl;
+    window.addEventListener("online", this.onOnline);
     this.openSocket();
     if (!this.peerSweepTimer) {
       this.peerSweepTimer = setInterval(() => this.sweepStalePeers(), PEER_SWEEP_MS);
@@ -192,9 +207,12 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   private async send(msg: RealtimeMessage<T>): Promise<void> {
-    if (!this.ws || !this.connected || this.ws.readyState !== WebSocket.OPEN) return;
+    const socket = this.ws;
+    if (!socket || !this.connected || socket.readyState !== WebSocket.OPEN) return;
     const wire = await this.encodeOutbound(msg);
-    if (wire !== null) this.ws.send(wire);
+    // The socket as it was before the await: sealing is asynchronous, and a drop in
+    // between left `this.ws` null — a send racing a disconnect threw an unhandled error.
+    if (wire !== null && socket.readyState === WebSocket.OPEN) socket.send(wire);
   }
 
   /** Encode a message the way the wire would carry it (for tests). */
@@ -324,6 +342,7 @@ export class RealtimeChannel<T extends StampedElement> {
 
   disconnect(): void {
     this.intentionalClose = true;
+    if (typeof window !== "undefined") window.removeEventListener("online", this.onOnline);
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

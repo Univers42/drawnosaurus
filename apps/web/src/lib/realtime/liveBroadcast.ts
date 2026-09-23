@@ -64,25 +64,46 @@ export class LiveSceneBroadcaster<T extends StampedElement = StampedElement> {
     now = Date.now(),
     nonce: () => number = () => Math.floor(Math.random() * 0x7fffffff),
   ): ScenePatch<T> | null {
+    if (!this.observe(json)) return null;
+    return this.takePatch(now, nonce);
+  }
+
+  /**
+   * Fold an engine scene event into the mirror, without deciding that peers have it.
+   *
+   * Separate from {@link takePatch} for the time the socket is down. `ingest` marked each
+   * change as shared the moment it was diffed, while the send that followed was dropped
+   * for want of a connection — so everything drawn offline was never sent at all. Now a
+   * change is only taken when it can go, and what piles up offline goes out as one
+   * patch on reconnect. Returns false for a payload that is not a scene event.
+   */
+  observe(json: string): boolean {
     let parsed: unknown;
     try {
       parsed = JSON.parse(json);
     } catch {
-      return null;
+      return false;
     }
-
     if (isDelta(parsed)) {
       this.live = applyDelta(this.live, parsed);
-    } else if (
+      return true;
+    }
+    if (
       typeof parsed === "object" &&
       parsed !== null &&
       Array.isArray((parsed as { elements?: unknown }).elements)
     ) {
       this.live = (parsed as { elements: T[] }).elements.filter((element) => !element.isDeleted);
-    } else {
-      return null;
+      return true;
     }
+    return false;
+  }
 
+  /** What peers do not have yet, marked as theirs. Null when they have everything. */
+  takePatch(
+    now = Date.now(),
+    nonce: () => number = () => Math.floor(Math.random() * 0x7fffffff),
+  ): ScenePatch<T> | null {
     const patch = this.tracker.diff(this.live, now, nonce);
     if (patch) this.tracker.acknowledge(patch);
     return patch;
