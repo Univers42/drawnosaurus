@@ -37,6 +37,9 @@ ENGINE_PKG := engine/pkg/draw_engine.js
 # 3000/4000/5173/27017. Override per invocation: `make up API_PORT=4500`.
 export API_PORT   ?= 4300
 export WEB_PORT   ?= 5273
+# The port other computers open — the Share dialog's links point at it. WEB_PORT is on
+# 127.0.0.1 only; see docker/gateway/Caddyfile for why it is a port of its own.
+export SHARE_PORT ?= 5274
 export MONGO_PORT ?= 27019
 export REALTIME_PORT ?= 4402
 
@@ -46,6 +49,16 @@ export REALTIME_PORT ?= 4402
 export DEV_WEB_PORT ?= 5373
 export DEV_API_PORT ?= 4373
 export DEV_REALTIME_PORT ?= 4473
+
+# Where other computers reach this one: its network addresses — every real interface, so
+# a computer on both the wired network and the Wi-Fi is reachable from both — and the
+# links to offer, best first: the computer's DNS name when the network's DNS knows it
+# (every seat at 42 Madrid has one, and it works from the wired network and the Wi-Fi
+# alike), then the addresses. See scripts/lan.sh. Lazy, so only the recipes that need
+# them pay for them. Override with `make up LAN_IPS="192.168.1.20 10.0.0.5"`.
+LAN_IPS ?= $(shell scripts/lan.sh ips 2>/dev/null)
+# Told to the API, which tells the Share dialog. See apps/api/src/share.ts.
+export SHARE_LAN_ORIGINS = $(shell scripts/lan.sh origins $(SHARE_PORT) $(LAN_IPS) 2>/dev/null)
 
 # What the images are built from. `.git` is not in the Docker build context, so the
 # image cannot find out for itself; these go in as build args, are shown at the foot of
@@ -194,7 +207,7 @@ dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and
 	$(DC) up -d mongo
 	REALTIME_PORT=$(DEV_REALTIME_PORT) $(DC) up -d --build realtime
 	-$(DC) rm -fsv drawnosaurus-api 2>/dev/null
-	$(RUN) $(RUN_AS_HOST) --no-deps -d --name drawnosaurus-api -p $(DEV_API_PORT):4000 tooling \
+	$(RUN) $(RUN_AS_HOST) --no-deps -d --name drawnosaurus-api -p 127.0.0.1:$(DEV_API_PORT):4000 tooling \
 		pnpm --filter @drawnosaurus/api dev
 	@echo -e "$(GREEN)dev: web http://localhost:$(DEV_WEB_PORT)  api http://localhost:$(DEV_API_PORT)  realtime ws://localhost:$(DEV_REALTIME_PORT)/ws$(RESET)"
 	@# --service-ports is useless here: `tooling` is a generic runner and declares no
@@ -215,10 +228,42 @@ build: $(ENGINE_PKG) ## Build the api, web, and realtime images
 	$(DC) build api web realtime
 	@echo -e "$(GREEN)✔ images built$(RESET)"
 
-up: $(ENGINE_PKG) ## Start mongo + realtime + api + web
-	$(DC) up -d --build mongo realtime api web
+up: $(ENGINE_PKG) ## Start the stack mongo + api + web behind the gateway on WEB_PORT + realtime
+	$(DC) up -d --build mongo realtime api web gateway
 	@echo -e "$(GREEN)✔ up: web http://localhost:$(WEB_PORT)  api http://localhost:$(API_PORT)  realtime ws://localhost:$(REALTIME_PORT)/ws$(RESET)"
+	@first=$$(printf '%s' "$(SHARE_LAN_ORIGINS)" | cut -d, -f1); \
+	if [ -n "$$first" ]; then \
+		echo -e "$(GREEN)  for people on your network, wired or Wi-Fi: $$first$(RESET)"; \
+		echo "  open a board and press Share: the link to send is at the top (docs/collaboration.md)"; \
+	else \
+		echo "  no network address found: only this computer can open it (see docs/collaboration.md)"; \
+	fi
 	@echo -e "$(GREEN)  built from app $(BUILD_APP_SHA) · engine $(BUILD_ENGINE_SHA)$(RESET)"
+
+# The same as the Share dialog's "Share on the internet" button, for a terminal: the API
+# starts the tunnel (apps/api/src/tunnel.ts) and says its public link once it is
+# connected. Waits up to a minute.
+share: ## Put the running stack on the internet (Cloudflare quick tunnel, no account)
+	@curl -fsS -X POST http://127.0.0.1:$(API_PORT)/v1/share/tunnel >/dev/null 2>&1 \
+		|| { echo "the stack is not running: run 'make up' first"; exit 1; }
+	@for _ in $$(seq 1 60); do \
+		info=$$(curl -fsS http://127.0.0.1:$(API_PORT)/v1/share); \
+		case "$$info" in \
+			*'"state":"on"'*) break ;; \
+			*'"state":"failed"'*) echo "the internet link did not open: $$(printf '%s' "$$info" \
+				| sed -n 's/.*"message":"\([^"]*\)".*/\1/p')"; exit 1 ;; \
+		esac; \
+		sleep 1; \
+	done; \
+	url=$$(printf '%s' "$$info" | sed -n 's/.*"public":"\([^"]*\)".*/\1/p'); \
+	[ -n "$$url" ] || { echo "the internet link did not open in time"; exit 1; }; \
+	echo -e "$(GREEN)✔ on the internet: $$url$(RESET)"; \
+	echo "  open a board and press Share: the internet link is there, with the room key."; \
+	echo "  'make unshare', or the Share dialog, closes it."
+
+unshare: ## Take the stack off the internet
+	@curl -fsS -X DELETE http://127.0.0.1:$(API_PORT)/v1/share/tunnel >/dev/null 2>&1 || true
+	@echo -e "$(GREEN)✔ off the internet$(RESET)"
 
 # Is the running web container built from what is checked out? It exists because a
 # container left up while commits land serves the old code, and nothing says so — it

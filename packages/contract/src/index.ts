@@ -65,3 +65,14 @@ export {
   MAX_TITLE_LENGTH,
   SUPPORTED_OSIDRAW_VERSION,
 } from "./limits.ts";
+
+export {
+  isAddressHost,
+  isLoopbackHost,
+  shareInfoSchema,
+  shareRoleSchema,
+  tunnelStateSchema,
+  type ShareInfo,
+  type ShareRole,
+  type TunnelState,
+} from "./share.ts";

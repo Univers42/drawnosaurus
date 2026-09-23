@@ -2,7 +2,22 @@
  * Live-room end-to-end crypto: a fragment-carried secret derives an AES-256-GCM
  * key via HKDF. The API never sees the fragment, so sealed wire frames stay opaque
  * to the blind WebSocket relay. Persistence (HTTP/Mongo) is a separate concern.
+ *
+ * # Without a secure context
+ *
+ * The browser only offers `crypto.subtle` to pages served over https or from
+ * localhost. A colleague opening the board at `http://10.12.19.1:5273` over the LAN
+ * gets none, and live collaboration died on the first line that touched it — the key
+ * could not even be imported, so the socket was never opened. There, the same HKDF and
+ * AES-256-GCM run in audited pure JavaScript (`@noble/*`): the same key from the same
+ * secret, the same envelope byte for byte, so a peer on http and one on localhost read
+ * each other's frames. `crypto.getRandomValues`, which the IVs and room keys come from,
+ * is available in every context.
  */
+
+import { gcm } from "@noble/ciphers/aes.js";
+import { hkdf } from "@noble/hashes/hkdf.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 
 export const ROOM_HASH_PARAM = "room";
 export const HKDF_INFO = "drawnosaurus-live-v1";
@@ -152,36 +167,62 @@ export function ensureRoomKey(locationLike: {
   return raw;
 }
 
-export async function importRoomKey(raw: Uint8Array): Promise<CryptoKey> {
+/**
+ * A room key, ready to seal and open frames: the browser's own AES-GCM when it offers
+ * one, the pure-JavaScript one when it does not — see the module notes.
+ */
+export type RoomKey =
+  | { readonly engine: "webcrypto"; readonly subtle: SubtleCrypto; readonly key: CryptoKey }
+  | { readonly engine: "fallback"; readonly key: Uint8Array };
+
+/** What this page has for Web Crypto: none outside a secure context. */
+const pageSubtle = (): SubtleCrypto | undefined =>
+  (globalThis.crypto as Crypto | undefined)?.subtle ?? undefined;
+
+/**
+ * Derives the room's AES-256-GCM key from the fragment secret.
+ *
+ * `subtle` is the page's by default; pass `null` to take the fallback, as a page outside
+ * a secure context does.
+ */
+export async function importRoomKey(
+  raw: Uint8Array,
+  subtle: SubtleCrypto | null = pageSubtle() ?? null,
+): Promise<RoomKey> {
   if (raw.byteLength !== ROOM_KEY_BYTES) {
     throw new Error(`room key must be ${ROOM_KEY_BYTES} bytes`);
   }
+  const info = textEncoder.encode(HKDF_INFO);
+  if (!subtle) {
+    // RFC 5869 with an empty salt, exactly as Web Crypto's HKDF below.
+    return { engine: "fallback", key: hkdf(sha256, raw, new Uint8Array(), info, 32) };
+  }
   // Copy into a fresh ArrayBuffer-backed view — TS's BufferSource rejects SharedArrayBuffer-typed views.
   const material = toArrayBuffer(raw);
-  const baseKey = await crypto.subtle.importKey("raw", material, "HKDF", false, ["deriveKey"]);
-  return crypto.subtle.deriveKey(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: new Uint8Array(),
-      info: textEncoder.encode(HKDF_INFO),
-    },
+  const baseKey = await subtle.importKey("raw", material, "HKDF", false, ["deriveKey"]);
+  const key = await subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info },
     baseKey,
     { name: "AES-GCM", length: 256 },
     false,
     ["encrypt", "decrypt"],
   );
+  return { engine: "webcrypto", subtle, key };
 }
 
-export async function seal(key: CryptoKey, plaintext: Uint8Array): Promise<SealedEnvelope> {
+export async function seal(key: RoomKey, plaintext: Uint8Array): Promise<SealedEnvelope> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
-  const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: toArrayBuffer(iv) },
-      key,
-      toArrayBuffer(plaintext),
-    ),
-  );
+  // Ciphertext then the 16-byte tag, in both: the envelope is the same either way.
+  const ciphertext =
+    key.engine === "webcrypto"
+      ? new Uint8Array(
+          await key.subtle.encrypt(
+            { name: "AES-GCM", iv: toArrayBuffer(iv) },
+            key.key,
+            toArrayBuffer(plaintext),
+          ),
+        )
+      : gcm(key.key, iv).encrypt(plaintext);
   return {
     v: ENVELOPE_VERSION,
     iv: bytesToBase64Url(iv),
@@ -189,7 +230,7 @@ export async function seal(key: CryptoKey, plaintext: Uint8Array): Promise<Seale
   };
 }
 
-export async function open(key: CryptoKey, envelope: SealedEnvelope): Promise<Uint8Array | null> {
+export async function open(key: RoomKey, envelope: SealedEnvelope): Promise<Uint8Array | null> {
   if (envelope.v !== ENVELOPE_VERSION || !envelope.iv || !envelope.ct) {
     return null;
   }
@@ -197,14 +238,16 @@ export async function open(key: CryptoKey, envelope: SealedEnvelope): Promise<Ui
     const iv = base64UrlToBytes(envelope.iv);
     const ct = base64UrlToBytes(envelope.ct);
     if (iv.byteLength !== IV_BYTES || ct.byteLength === 0) return null;
+    if (key.engine === "fallback") return gcm(key.key, iv).decrypt(ct);
     return new Uint8Array(
-      await crypto.subtle.decrypt(
+      await key.subtle.decrypt(
         { name: "AES-GCM", iv: toArrayBuffer(iv) },
-        key,
+        key.key,
         toArrayBuffer(ct),
       ),
     );
   } catch {
+    // A wrong key or a tampered frame: the tag does not verify, in either engine.
     return null;
   }
 }

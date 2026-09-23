@@ -9,7 +9,7 @@ import {
   publishFrame,
   subscribeFrame,
 } from "./realtimeProtocol.ts";
-import { isSealedEnvelope, open, seal, type SealedEnvelope } from "./roomCrypto.ts";
+import { isSealedEnvelope, open, seal, type RoomKey, type SealedEnvelope } from "./roomCrypto.ts";
 
 export { liveSocketUrl } from "./realtimeProtocol.ts";
 
@@ -72,7 +72,7 @@ export class RealtimeChannel<T extends StampedElement> {
   private patchListeners: ((patch: ScenePatch<T>) => void)[] = [];
   private statusListeners: ((status: ConnectionStatus) => void)[] = [];
   private sessionReady = false;
-  private roomKey: CryptoKey | null;
+  private roomKey: RoomKey | null;
   private intentionalClose = false;
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -88,7 +88,7 @@ export class RealtimeChannel<T extends StampedElement> {
    */
   constructor(
     readonly slug: string,
-    roomKey: CryptoKey | null = null,
+    roomKey: RoomKey | null = null,
   ) {
     this.roomKey = roomKey;
   }
@@ -115,7 +115,7 @@ export class RealtimeChannel<T extends StampedElement> {
     this.openSocket();
   };
 
-  setRoomKey(key: CryptoKey | null): void {
+  setRoomKey(key: RoomKey | null): void {
     this.roomKey = key;
   }
 

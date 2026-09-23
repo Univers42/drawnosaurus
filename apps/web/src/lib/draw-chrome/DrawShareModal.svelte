@@ -1,5 +1,10 @@
 <script lang="ts">
+  import { onDestroy, onMount } from "svelte";
+  import { renderSVG } from "uqr";
+  import type { ShareInfo } from "@drawnosaurus/contract";
+  import { getShareInfo, startTunnel, stopTunnel } from "$lib/api/client.ts";
   import type { ConnectionStatus, PeerCursor } from "../realtime/realtimeClient.ts";
+  import { copyText, describeLink, shareLinks, type ShareLink } from "./share.ts";
 
   let {
     slug,
@@ -13,14 +18,71 @@
     onClose: () => void;
   } = $props();
 
-  let copied = $state(false);
+  /** What the server says about where others can reach it; null until it answers. */
+  let info = $state<ShareInfo | null>(null);
+  /** The link last copied, for its button's "Copied" — or one that did not copy. */
+  let copied = $state<string | null>(null);
+  let copyFailed = $state<string | null>(null);
+  /** The link whose QR code is showing. */
+  let qrFor = $state<string | null>(null);
+  /** An internet-link request in flight, and what went wrong with the last one. */
+  let busy = $state(false);
+  let requestError = $state<string | null>(null);
 
-  // Prefer the live href (includes `#room=` after connect). Peers can also join from
-  // the bare board URL — the room key is derived from the slug when the fragment is
-  // absent — but sharing the full link keeps a private `#room=` override intact.
-  const shareUrl = $derived(
-    typeof window !== "undefined" ? window.location.href : `/boards/${slug}`,
+  async function refresh(): Promise<void> {
+    try {
+      info = await getShareInfo();
+    } catch {
+      // Keep what was there: the links do not stop working because one answer failed.
+    }
+  }
+
+  onMount(() => {
+    void refresh();
+  });
+
+  // While the internet link opens, ask again every second until it is on or failed.
+  let poll: ReturnType<typeof setInterval> | null = null;
+  $effect(() => {
+    const opening = info?.tunnel.state === "starting";
+    if (opening && !poll) poll = setInterval(() => void refresh(), 1000);
+    if (!opening && poll) {
+      clearInterval(poll);
+      poll = null;
+    }
+  });
+  onDestroy(() => {
+    if (poll) clearInterval(poll);
+  });
+
+  // From the live location, so the fragment room key travels with each link. The server
+  // never receives that fragment; without it, a peer cannot decrypt live frames.
+  const links = $derived(
+    typeof window === "undefined"
+      ? []
+      : shareLinks(
+          {
+            origin: window.location.origin,
+            pathname: window.location.pathname || `/boards/${slug}`,
+            search: window.location.search,
+            hash: window.location.hash,
+          },
+          info,
+        ),
   );
+  const primary = $derived(links[0]);
+  /**
+   * The internet link, shown where it was opened — in its own section, for the computer
+   * that opened it — rather than filed under "Other links", where pressing the button
+   * seemed to do nothing.
+   */
+  const internetLink = $derived(
+    info?.canManage
+      ? links.find((link) => link.kind === "internet" && link !== primary)
+      : undefined,
+  );
+  const others = $derived(links.slice(1).filter((link) => link !== internetLink));
+  const tunnelState = $derived(info?.tunnel.state ?? "unavailable");
 
   const statusLabel = $derived(
     connectionStatus === "connected"
@@ -30,16 +92,84 @@
         : "Offline",
   );
 
-  async function copyLink(): Promise<void> {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      await navigator.clipboard.writeText(shareUrl);
-      copied = true;
+  async function copyLink(url: string): Promise<void> {
+    if (await copyText(url)) {
+      copied = url;
+      copyFailed = null;
       setTimeout(() => {
-        copied = false;
+        if (copied === url) copied = null;
       }, 2000);
+    } else {
+      // Nothing reached the clipboard: say so, and leave the text to copy by hand.
+      copyFailed = url;
+    }
+  }
+
+  const qrSource = (url: string): string =>
+    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(renderSVG(url, { pixelSize: 4, border: 2 }))}`;
+
+  async function openInternet(): Promise<void> {
+    busy = true;
+    requestError = null;
+    try {
+      info = await startTunnel();
+    } catch (error) {
+      requestError = error instanceof Error ? error.message : "the internet link did not open";
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function closeInternet(): Promise<void> {
+    busy = true;
+    requestError = null;
+    try {
+      info = await stopTunnel();
+      if (qrFor && !links.some((link) => link.url === qrFor)) qrFor = null;
+    } catch (error) {
+      requestError = error instanceof Error ? error.message : "the internet link did not close";
+    } finally {
+      busy = false;
     }
   }
 </script>
+
+{#snippet linkRow(link: ShareLink, main: boolean)}
+  {@const about = describeLink(link)}
+  <div class="link-row" class:link-row--primary={main} data-kind={link.kind}>
+    <div class="link-label">
+      <span class="link-title">{about.title}</span>
+      <span class="link-hint">{about.hint}</span>
+    </div>
+    <div class="link-box">
+      <input
+        readonly
+        value={link.url}
+        aria-label={`Share link — ${about.title}`}
+        onfocus={(event) => (event.currentTarget as HTMLInputElement).select()}
+      />
+      <button type="button" class="copy-btn" onclick={() => copyLink(link.url)}>
+        {copied === link.url ? "Copied! ✓" : "Copy link"}
+      </button>
+      <button
+        type="button"
+        class="qr-btn"
+        aria-label="Show a QR code of this link"
+        aria-pressed={qrFor === link.url}
+        onclick={() => (qrFor = qrFor === link.url ? null : link.url)}>QR</button
+      >
+    </div>
+    {#if copyFailed === link.url}
+      <p class="copy-failed" role="alert">Could not copy — select the link and press Ctrl+C.</p>
+    {/if}
+    {#if qrFor === link.url}
+      <div class="qr">
+        <img src={qrSource(link.url)} alt="QR code of the link" />
+        <span>Scan it with a phone or tablet's camera to open the board there.</span>
+      </div>
+    {/if}
+  </div>
+{/snippet}
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="share-title">
   <div class="modal-card pop-in">
@@ -58,18 +188,67 @@
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
     </div>
 
-    <p class="description">
-      Anyone with this board link can draw together in real time. Live frames are sealed in the
-      browser so the realtime relay only sees ciphertext; board saves over HTTP are still readable
-      by the server.
-    </p>
+    <p class="lead">Send this link. Whoever opens it draws on this board with you, live.</p>
 
-    <div class="link-box">
-      <input readonly value={shareUrl} aria-label="Share URL" />
-      <button type="button" class="copy-btn" onclick={copyLink}>
-        {copied ? "Copied! ✓" : "Copy Link"}
-      </button>
-    </div>
+    {#if primary}
+      {@render linkRow(primary, true)}
+    {/if}
+
+    {#if others.length > 0}
+      <details class="more">
+        <summary>Other links ({others.length})</summary>
+        {#each others as link (link.url)}
+          {@render linkRow(link, false)}
+        {/each}
+      </details>
+    {/if}
+
+    {#if info?.canManage && tunnelState !== "unavailable"}
+      <section class="internet" aria-label="Internet link">
+        {#if tunnelState === "starting"}
+          <p>Opening a public link… it takes about ten seconds.</p>
+        {:else if tunnelState === "on"}
+          {#if internetLink}
+            {@render linkRow(internetLink, false)}
+          {/if}
+          <p>
+            Open until you stop it, or restart drawnosaurus.
+            <button type="button" class="text-btn" onclick={closeInternet} disabled={busy}
+              >Stop sharing on the internet</button
+            >
+          </p>
+        {:else}
+          <p>Not on the same network — at home, or on a phone's mobile data?</p>
+          <button type="button" class="internet-btn" onclick={openInternet} disabled={busy}
+            >Share on the internet</button
+          >
+          {#if tunnelState === "failed" && info?.tunnel.message}
+            <p class="tunnel-error" role="alert">It did not open: {info.tunnel.message}.</p>
+          {/if}
+        {/if}
+        {#if requestError}
+          <p class="tunnel-error" role="alert">{requestError}</p>
+        {/if}
+      </section>
+    {/if}
+
+    <details class="help">
+      <summary>How does this work?</summary>
+      <ol>
+        <li>
+          Copy the link and send it — chat, email — or show its QR code to someone with a phone.
+        </li>
+        <li>They open it in any browser. Nothing to install, no account.</li>
+        <li>
+          If it does not open for them, try one of the other links. If none do, their network cannot
+          reach this computer: use <strong>Share on the internet</strong>.
+        </li>
+      </ol>
+      <p>
+        The part after <code>#</code> is the room's secret key. It never reaches the server, so live changes
+        stay end-to-end encrypted — and anyone who has the link can edit this board.
+      </p>
+    </details>
 
     <div class="peers-section">
       <div class="peers-header">
@@ -199,17 +378,37 @@
     background: var(--bg-hover);
   }
 
-  .description {
+  .link-row {
+    margin-bottom: 14px;
+  }
+
+  .link-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 6px;
+  }
+
+  .link-title {
     font-size: 13px;
+    font-weight: 600;
+    color: var(--fg-strong);
+  }
+
+  .link-hint {
+    font-size: 12px;
     color: var(--muted);
-    margin: 0 0 16px;
-    line-height: 1.45;
+  }
+
+  .copy-failed {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #e03131;
   }
 
   .link-box {
     display: flex;
     gap: 8px;
-    margin-bottom: 20px;
   }
 
   .link-box input {
@@ -291,5 +490,120 @@
   .name {
     color: var(--ink);
     font-weight: 500;
+  }
+  .lead {
+    font-size: 13px;
+    color: var(--ink);
+    margin: 0 0 14px;
+    line-height: 1.45;
+  }
+
+  .link-row--primary .link-box input {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .qr-btn {
+    padding: 8px 10px;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .qr-btn[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .qr {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .qr img {
+    width: 148px;
+    height: 148px;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 6px;
+    image-rendering: pixelated;
+  }
+
+  details.more,
+  details.help {
+    margin: 0 0 14px;
+    font-size: 13px;
+  }
+
+  details summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  details.help ol {
+    margin: 0 0 8px;
+    padding-left: 18px;
+    color: var(--ink);
+    line-height: 1.5;
+  }
+
+  details.help p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+
+  .internet {
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    margin: 4px 0 14px;
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  .internet p {
+    margin: 0 0 8px;
+    line-height: 1.45;
+  }
+
+  .internet-btn {
+    padding: 8px 14px;
+    background: var(--bg);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .internet-btn:disabled {
+    opacity: 0.6;
+    cursor: progress;
+  }
+
+  .text-btn {
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--accent);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .tunnel-error {
+    color: #e03131;
   }
 </style>

@@ -159,3 +159,37 @@ function flipLastBase64UrlChar(value: string): string {
   const flipped = alphabet[(idx + 1) % alphabet.length]!;
   return value.slice(0, -1) + flipped;
 }
+
+describe("roomCrypto without a secure context", () => {
+  // `crypto.subtle` exists only on https and localhost. A colleague on the LAN opens the
+  // board at http://10.x.x.x and has none; the fallback must be the same cipher, or the
+  // two of them sit in one room unable to read a word of each other.
+  it("takes the fallback when there is no Web Crypto", async () => {
+    const key = await importRoomKey(generateRoomKeyBytes(), null);
+    expect(key.engine).toBe("fallback");
+    expect((await importRoomKey(generateRoomKeyBytes())).engine).toBe("webcrypto");
+  });
+
+  it("opens what Web Crypto sealed, and seals what Web Crypto opens", async () => {
+    const raw = generateRoomKeyBytes();
+    const onLocalhost = await importRoomKey(raw);
+    const onTheLan = await importRoomKey(raw, null);
+    const message = encoder.encode(JSON.stringify({ type: "cursor", x: 12, y: 34 }));
+
+    const fromLocalhost = await seal(onLocalhost, message);
+    expect(decoder.decode((await open(onTheLan, fromLocalhost))!)).toBe(decoder.decode(message));
+
+    const fromTheLan = await seal(onTheLan, message);
+    expect(decoder.decode((await open(onLocalhost, fromTheLan))!)).toBe(decoder.decode(message));
+  });
+
+  it("refuses a tampered frame and a stranger's key, as Web Crypto does", async () => {
+    const raw = generateRoomKeyBytes();
+    const key = await importRoomKey(raw, null);
+    const envelope = await seal(key, encoder.encode("hello"));
+
+    expect(await open(key, { ...envelope, ct: flipLastBase64UrlChar(envelope.ct) })).toBeNull();
+    expect(await open(await importRoomKey(generateRoomKeyBytes(), null), envelope)).toBeNull();
+    expect(await open(key, { v: 1, iv: "!!!", ct: "!!!" })).toBeNull();
+  });
+});

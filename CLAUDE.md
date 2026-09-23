@@ -16,6 +16,20 @@ apps/web (SvelteKit, TS strict) ──HTTP /v1──▶ apps/api (Fastify) ─�
       packages/contract — schemas + merge rule, shared by both
 ```
 
+**Sharing across computers** goes through one origin: the `gateway` service (Caddy,
+`docker/gateway/Caddyfile`) serves the app and `/v1` together, so the web image runs with
+`PUBLIC_API_URL=""`. Who is asking is decided by the entrance a connection arrived at — never by a
+header: `127.0.0.1:5273` → `:80` (this computer, everything), `*:5274` (`SHARE_PORT`) → `:81`
+(network guests), the tunnel → `:82` (internet guests). The gateway overwrites
+`X-Drawnosaurus-Role` for the API; guests cannot list, create or delete boards, nor open the
+tunnel. api (:4300) and mongo (:27019) are on 127.0.0.1. `GET /v1/share` gives the Share dialog
+the network links `make up` found (`scripts/lan.sh`: the DNS name first when the network's DNS
+resolves it, then each address) and the internet link, which the dialog opens and closes via
+`/v1/share/tunnel` (`apps/api/src/tunnel.ts` runs cloudflared and offers the link only once
+Cloudflare's DNS publishes the name). Live frames stay readable on plain `http://`, where
+browsers withhold `crypto.subtle`: `roomCrypto.ts` falls back to `@noble/*` with byte-identical
+envelopes. User guide: `docs/collaboration.md`.
+
 **The boundary rule:** the engine never talks to the network, the server never runs WASM. The only
 thing crossing between them is an `.osidraw` scene document.
 

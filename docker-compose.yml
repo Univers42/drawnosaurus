@@ -8,7 +8,10 @@ services:
       # Host ports are all overridable because this machine also runs the sibling
       # osionos stack, which already owns 3000/4000/5173/27017. Container-internal
       # ports never change, so the compose network and CI are unaffected.
-      - "${MONGO_PORT:-27019}:27017"
+      #
+      # On 127.0.0.1 only. This mongod has no password, and published on every
+      # interface anyone on the network could read or rewrite every board in it.
+      - "127.0.0.1:${MONGO_PORT:-27019}:27017"
     healthcheck:
       # api and the test runner both wait on this: connecting to a mongod that is
       # still starting up is the classic flaky-CI cause.
@@ -47,11 +50,21 @@ services:
       # ports); the Vite dev proxy is same-origin and needs none of this.
       CORS_ORIGIN: "*"
       AUTH_MODE: dev
+      # Where people on the network reach the gateway, best first — the computer's DNS
+      # name, then its addresses — worked out by `make up` on the host (scripts/lan.sh):
+      # inside this container there are no addresses but its own. See share.ts.
+      SHARE_LAN_ORIGINS: ${SHARE_LAN_ORIGINS:-}
+      # Where the internet link the Share dialog opens sends requests: the gateway's
+      # internet entrance. See tunnel.ts.
+      SHARE_TUNNEL_TARGET: http://gateway:82
     depends_on:
       mongo:
         condition: service_healthy
     ports:
-      - "${API_PORT:-4300}:4000"
+      # For tools on this computer. Everyone else goes through the gateway, which is
+      # what decides what a guest may do; published on every interface, this port let
+      # anyone on the network walk around it.
+      - "127.0.0.1:${API_PORT:-4300}:4000"
 
   web:
     build:
@@ -64,15 +77,31 @@ services:
         BUILD_ENGINE_SHA: ${BUILD_ENGINE_SHA:-unknown}
     environment:
       PORT: "3000"
-      # Read at runtime, not baked in, so one image can point anywhere. It must be the
-      # HOST-visible api address: the browser resolves it, not the compose network.
-      PUBLIC_API_URL: http://localhost:${API_PORT:-4300}
+      # Empty: the API is on the page's own origin, behind the gateway. It used to be
+      # http://localhost:4300, which on a colleague's computer is their own machine.
+      PUBLIC_API_URL: ""
+    depends_on:
+      - api
+
+  # The one address everything is reached at — the app and /v1 on the same origin, from
+  # any name this computer is reached by. Who is asking is decided by which entrance a
+  # connection arrived at; see docker/gateway/Caddyfile.
+  gateway:
+    image: caddy:2.10.2-alpine
+    volumes:
+      - ./docker/gateway/Caddyfile:/etc/caddy/Caddyfile:ro
       PUBLIC_REALTIME_WS_URL: ws://localhost:${REALTIME_PORT:-4402}/ws
     depends_on:
       - api
       - realtime
+      - web
     ports:
-      - "${WEB_PORT:-5273}:3000"
+      # This computer's entrance, on 127.0.0.1 only: nobody else can connect to it.
+      - "127.0.0.1:${WEB_PORT:-5273}:80"
+      # Everyone else's, on every interface — wired, Wi-Fi, whatever address this computer
+      # has today — which is what the links in the Share dialog point at. Its own port:
+      # rootless Docker cannot publish one port on two addresses.
+      - "${SHARE_PORT:-5274}:81"
 
   # Ephemeral runner for install/typecheck/lint/test. The repo is bind-mounted so
   # results land on the host; only the pnpm download cache is a volume.

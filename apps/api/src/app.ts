@@ -5,6 +5,7 @@ import { registerBoardRoutes } from "./boards/routes.ts";
 import { BoardRepository } from "./boards/repository.ts";
 import type { Config } from "./config.ts";
 import { registerErrorHandler } from "./errors.ts";
+import { registerShareRoutes } from "./share.ts";
 import type { MongoHandle } from "./mongo.ts";
 
 export interface BuildAppOptions {
@@ -62,6 +63,7 @@ export async function buildApp({
 
   registerBoardRoutes(app, { repo: new BoardRepository(mongo.boards), config });
   // Live collaboration is engine/realtime (separate process), not an in-process WS.
+  registerShareRoutes(app, config);
 
   return app;
 }
