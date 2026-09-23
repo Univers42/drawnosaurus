@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from "@playwright/test";
+import { expect, type FileChooser, type Locator, type Page } from "@playwright/test";
 
 // The pixel probes live in `probes.ts` so `tools/editor-inspector` can import them
 // without dragging in the test runner. Re-exported here because every spec already
@@ -322,6 +322,24 @@ export async function clickElement(board: Board, index: number): Promise<void> {
     };
   }, index);
   await board.page.mouse.click(board.box.x + at.x, board.box.y + at.y);
+}
+
+/**
+ * Starts listening for the file picker, and returns once the browser is intercepting it.
+ *
+ * `page.waitForEvent("filechooser")` switches interception on without waiting for the
+ * switch to land. A click takes several round trips and gives it time; a single key
+ * press does not, and under the load of the full suite the picker opened first — the
+ * headless browser closed it at once, the app correctly went back to Select, and the
+ * listener waited thirty seconds for an event that had already come and gone. One round
+ * trip to the page afterwards is ordered behind the switch.
+ */
+export async function listenForPicker(page: Page): Promise<{ opened: Promise<FileChooser> }> {
+  const opened = page.waitForEvent("filechooser");
+  await page.evaluate(() => undefined);
+  // Wrapped: an async function returning the promise itself would hand back what it
+  // resolves to, and awaiting this would wait for the picker before anything opened it.
+  return { opened };
 }
 
 /** The tool the engine currently has active. */
