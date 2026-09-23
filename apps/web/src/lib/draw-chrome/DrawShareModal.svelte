@@ -4,7 +4,7 @@
   import type { ShareInfo } from "@drawnosaurus/contract";
   import { getShareInfo, startTunnel, stopTunnel } from "$lib/api/client.ts";
   import type { ConnectionStatus, PeerCursor } from "../realtime/realtimeClient.ts";
-  import { copyText, describeLink, shareLinks, type ShareLink } from "./share.ts";
+  import { copyText, describeLink, internetPrompt, shareLinks, type ShareLink } from "./share.ts";
 
   let {
     slug,
@@ -218,7 +218,7 @@
             >
           </p>
         {:else}
-          <p>Not on the same network — at home, or on a phone's mobile data?</p>
+          <p>{internetPrompt(links)}</p>
           <button type="button" class="internet-btn" onclick={openInternet} disabled={busy}
             >Share on the internet</button
           >
