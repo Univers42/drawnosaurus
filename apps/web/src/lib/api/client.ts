@@ -67,7 +67,9 @@ export const listBoards = (limit?: number, cursor?: string): Promise<BoardList> 
 export const createBoard = (title: string): Promise<BoardSummary> =>
   request<BoardSummary>("/v1/boards", { method: "POST", body: JSON.stringify({ title }) });
 
-export const getBoard = (slug: string): Promise<Board> => request<Board>(`/v1/boards/${slug}`);
+/** `tombstones` includes deleted elements, for catching up after a lost connection. */
+export const getBoard = (slug: string, options: { tombstones?: boolean } = {}): Promise<Board> =>
+  request<Board>(`/v1/boards/${slug}${options.tombstones ? "?include=tombstones" : ""}`);
 
 export const deleteBoard = (slug: string): Promise<void> =>
   request<void>(`/v1/boards/${slug}`, { method: "DELETE" });

@@ -1,9 +1,12 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import type { AutosaveStatus } from "$lib/autosave/autosaver.ts";
+  import { autosaveIsTrouble, autosaveLabel } from "./status.ts";
 
   let {
     title = "Untitled",
     status = "idle",
+    live = null,
     onToggleMenu,
     onOpenShare,
     onOpenShortcuts,
@@ -11,7 +14,9 @@
     menu,
   }: {
     title?: string;
-    status?: string;
+    status?: AutosaveStatus;
+    /** What to say about live collaboration, or null when all is well. See `liveLabel`. */
+    live?: string | null;
     onToggleMenu: () => void;
     onOpenShare: () => void;
     onOpenShortcuts: () => void;
@@ -46,15 +51,11 @@
     else if (e.key === "Escape") isEditing = false;
   }
 
-  const statusText = $derived(
-    status === "saving"
-      ? "Saving…"
-      : status === "error"
-        ? "Saved locally"
-        : status === "dirty"
-          ? "Unsaved changes"
-          : "Saved",
-  );
+  // The one wording, from `status.ts`. This used to keep its own, in which every state it
+  // did not name read "Saved" — a board the server had refused among them — and a failed
+  // save read "Saved locally".
+  const statusText = $derived(autosaveLabel(status));
+  const trouble = $derived(autosaveIsTrouble(status));
 </script>
 
 <header class="draw-header" aria-label="Canvas header">
@@ -105,14 +106,25 @@
     <span
       class="save-status"
       class:saving={status === "saving"}
-      class:cached={status === "error"}
-      class:dirty={status === "dirty"}
+      class:trouble
+      aria-live="polite"
+      aria-label="Save status"
     >
       {#if status === "saving"}
         <span class="dot-pulse"></span>
       {/if}
       {statusText}
     </span>
+    {#if live}
+      <span
+        class="save-status live-status trouble"
+        aria-live="polite"
+        aria-label="Live collaboration"
+      >
+        <span class="dot-offline"></span>
+        {live}
+      </span>
+    {/if}
   </div>
 
   <div class="right-group">
@@ -254,12 +266,15 @@
     backdrop-filter: blur(8px);
   }
 
-  .save-status.cached {
-    color: var(--accent);
+  .save-status.trouble {
+    color: var(--danger);
   }
 
-  .save-status.dirty {
-    color: var(--danger);
+  .dot-offline {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--danger);
   }
 
   .dot-pulse {

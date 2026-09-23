@@ -129,3 +129,43 @@ export function inkCentroidX(
     return ink === 0 ? Number.NaN : weighted / ink / w;
   }, region);
 }
+
+/**
+ * How much *coloured* ink is inside a region, as a fraction of its pixels.
+ *
+ * `regionInk` counts anything that is not paper, which cannot tell selection chrome from
+ * the shape under it once the two share a line — and tracing a shape is exactly that. The
+ * default ink is a near-black grey and the paper white or near-black, all with next to no
+ * chroma, while the selection colour is a strong violet in either theme; so pixels whose
+ * channels spread wide are the chrome and nothing else.
+ *
+ * Canvas-relative CSS pixels, as `regionInk`.
+ */
+export function chromaInk(
+  page: Page,
+  region: { left: number; top: number; right: number; bottom: number },
+): Promise<number> {
+  return page.evaluate((area) => {
+    const canvas = document.querySelector("canvas");
+    if (!canvas) throw new Error("no canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    const box = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / box.width;
+    const scaleY = canvas.height / box.height;
+    const x0 = Math.round(area.left * scaleX);
+    const y0 = Math.round(area.top * scaleY);
+    const w = Math.round((area.right - area.left) * scaleX);
+    const h = Math.round((area.bottom - area.top) * scaleY);
+    if (w <= 0 || h <= 0) throw new Error("empty region");
+    const { data } = ctx.getImageData(x0, y0, w, h);
+    let coloured = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i]!;
+      const g = data[i + 1]!;
+      const b = data[i + 2]!;
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 40) coloured += 1;
+    }
+    return coloured / (w * h);
+  }, region);
+}

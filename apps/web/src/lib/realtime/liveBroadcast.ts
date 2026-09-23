@@ -6,6 +6,7 @@
  * needs synthesised tombstones and an explicit `order` when z-order drifted.
  */
 import { SceneDiffTracker, type ScenePatch, type StampedElement } from "../autosave/sceneDiff.ts";
+import { SceneMirror } from "../autosave/sceneMirror.ts";
 
 export interface SceneDeltaEvent {
   type: "osidraw-delta";
@@ -21,37 +22,17 @@ function isDelta(value: unknown): value is SceneDeltaEvent {
   );
 }
 
-function applyDelta<T extends StampedElement>(live: readonly T[], delta: SceneDeltaEvent): T[] {
-  const removed: Record<string, true> = {};
-  for (const id of delta.removed) removed[id] = true;
-
-  const pending: Record<string, T> = {};
-  for (const element of delta.updated) {
-    if (!element.isDeleted) pending[element.id] = element as T;
-  }
-
-  const next: T[] = [];
-  for (const element of live) {
-    if (removed[element.id]) continue;
-    const replacement = pending[element.id];
-    if (replacement) {
-      next.push(replacement);
-      delete pending[element.id];
-    } else {
-      next.push(element);
-    }
-  }
-  for (const element of Object.values(pending)) next.push(element);
-  return next;
-}
-
 export class LiveSceneBroadcaster<T extends StampedElement = StampedElement> {
   private readonly tracker = new SceneDiffTracker<T>();
-  private live: T[] = [];
+  /**
+   * What peers are sent a diff of. Changed in place and told to the tracker by id, so a
+   * send compares what changed and not the board — see `sceneMirror.ts`.
+   */
+  private readonly live = new SceneMirror<T>();
 
   /** Seed from the board load so the first stroke is a diff, not a full dump. */
   reset(elements: readonly T[]): void {
-    this.live = elements.filter((element) => !element.isDeleted) as T[];
+    this.live.replace(elements);
     this.tracker.reset(elements);
   }
 
@@ -64,26 +45,50 @@ export class LiveSceneBroadcaster<T extends StampedElement = StampedElement> {
     now = Date.now(),
     nonce: () => number = () => Math.floor(Math.random() * 0x7fffffff),
   ): ScenePatch<T> | null {
+    if (!this.observe(json)) return null;
+    return this.takePatch(now, nonce);
+  }
+
+  /**
+   * Fold an engine scene event into the mirror, without deciding that peers have it.
+   *
+   * Separate from {@link takePatch} for the time the socket is down. `ingest` marked each
+   * change as shared the moment it was diffed, while the send that followed was dropped
+   * for want of a connection — so everything drawn offline was never sent at all. Now a
+   * change is only taken when it can go, and what piles up offline goes out as one
+   * patch on reconnect. Returns false for a payload that is not a scene event.
+   */
+  observe(json: string): boolean {
     let parsed: unknown;
     try {
       parsed = JSON.parse(json);
     } catch {
-      return null;
+      return false;
     }
-
     if (isDelta(parsed)) {
-      this.live = applyDelta(this.live, parsed);
-    } else if (
+      this.live.apply(parsed as unknown as { updated: T[]; removed: string[] });
+      this.tracker.noteChanged(parsed.updated.map((element) => element.id));
+      this.tracker.noteChanged(parsed.removed);
+      return true;
+    }
+    if (
       typeof parsed === "object" &&
       parsed !== null &&
       Array.isArray((parsed as { elements?: unknown }).elements)
     ) {
-      this.live = (parsed as { elements: T[] }).elements.filter((element) => !element.isDeleted);
-    } else {
-      return null;
+      this.live.replace((parsed as { elements: T[] }).elements);
+      this.tracker.noteEverything();
+      return true;
     }
+    return false;
+  }
 
-    const patch = this.tracker.diff(this.live, now, nonce);
+  /** What peers do not have yet, marked as theirs. Null when they have everything. */
+  takePatch(
+    now = Date.now(),
+    nonce: () => number = () => Math.floor(Math.random() * 0x7fffffff),
+  ): ScenePatch<T> | null {
+    const patch = this.tracker.diff(this.live.elements, now, nonce, this.live.lookup);
     if (patch) this.tracker.acknowledge(patch);
     return patch;
   }
@@ -93,20 +98,9 @@ export class LiveSceneBroadcaster<T extends StampedElement = StampedElement> {
    * otherwise we would echo their edit straight back.
    */
   adoptRemote(patch: ScenePatch<T>): void {
-    const removed = new Set(patch.elements.filter((element) => element.isDeleted).map((e) => e.id));
-    const pending = new Map(
-      patch.elements
-        .filter((element) => !element.isDeleted)
-        .map((element) => [element.id, element]),
-    );
-
-    let next = this.live.filter((element) => !removed.has(element.id));
-    next = next.map((element) => pending.get(element.id) ?? element);
-    for (const element of next) pending.delete(element.id);
-    for (const element of pending.values()) next.push(element);
-
     if (patch.order) {
-      const byId = new Map(next.map((element) => [element.id, element]));
+      const byId = new Map(this.live.elements.map((element) => [element.id, element]));
+      for (const element of patch.elements) byId.set(element.id, element);
       const ordered: T[] = [];
       for (const id of patch.order) {
         const element = byId.get(id);
@@ -116,15 +110,15 @@ export class LiveSceneBroadcaster<T extends StampedElement = StampedElement> {
         }
       }
       for (const element of byId.values()) ordered.push(element);
-      next = ordered;
+      this.live.replace(ordered);
+    } else {
+      this.live.apply({ updated: patch.elements, removed: [] });
     }
-
-    this.live = next;
     this.tracker.acknowledge(patch);
   }
 
   get snapshot(): readonly T[] {
-    return this.live;
+    return this.live.elements;
   }
 }
 

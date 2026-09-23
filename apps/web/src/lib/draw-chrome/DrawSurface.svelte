@@ -41,7 +41,19 @@
   import { type ExtendedTool } from "./tools.ts";
   import { createStickyNote, DEFAULT_STICKY_NOTE_SIZE } from "../notes/stickyNotes.ts";
   import { EraserTrail } from "../eraser/eraserTrail.ts";
-  import { parseEmbedFrames, sandboxFor, frameStyle, type EmbedFrame } from "./embed.ts";
+  import {
+    EMBED_ALLOW,
+    EMBED_REFERRER_POLICY,
+    frameInnerStyle,
+    frameSrc,
+    frameStyle,
+    isClick,
+    isFrameCentre,
+    parseEmbedFrames,
+    playMessage,
+    sandboxFor,
+    type EmbedFrame,
+  } from "./embed.ts";
   import DrawEmbedModal from "./DrawEmbedModal.svelte";
   import {
     IMAGE_ACCEPT,
@@ -58,7 +70,9 @@
   } from "../realtime/realtimeClient.ts";
   import { importRoomKey, resolveRoomKey } from "../realtime/roomCrypto.ts";
   import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
-  import type { StampedElement } from "../autosave/sceneDiff.ts";
+  import type { StampedElement, ScenePatch } from "../autosave/sceneDiff.ts";
+  import type { AutosaveStatus } from "../autosave/autosaver.ts";
+  import { liveLabel } from "./status.ts";
   import DrawHeader from "./DrawHeader.svelte";
   import DrawMainMenu from "./DrawMainMenu.svelte";
   import { downloadBlob } from "./download.ts";
@@ -80,14 +94,21 @@
     ariaLabel = "Drawing canvas",
     onSceneChange,
     onReady,
+    fetchLatest,
   }: {
     scene: Scene;
     title?: string;
     slug?: string;
-    status?: string;
+    status?: AutosaveStatus;
     ariaLabel?: string;
     onSceneChange?: (json: string) => void;
     onReady?: (engine: DrawEngine) => void;
+    /**
+     * The board as the server has it now, deleted elements included — read after the
+     * live connection comes back, to catch up on what peers did while it was down. The
+     * page owns the API; this only knows when to ask.
+     */
+    fetchLatest?: () => Promise<StampedElement[]>;
   } = $props();
 
   let engine = $state.raw<DrawEngine | null>(null);
@@ -176,6 +197,9 @@
   let peers = $state<PeerCursor[]>([]);
   let liveStatus = $state<ConnectionStatus>("disconnected");
   let realtime: RealtimeChannel<StampedElement> | null = null;
+  /** Whether the live link has ever come up, and ever failed — see `liveLabel`. */
+  let liveHistory = $state({ everConnected: false, everFailed: false });
+  const liveText = $derived(slug ? liveLabel(liveStatus, liveHistory) : null);
   const liveBroadcast = new LiveSceneBroadcaster<StampedElement>();
   let raf = 0;
   let pending: Camera | null = null;
@@ -454,9 +478,92 @@
    */
   let embedFrames = $state.raw<EmbedFrame[]>([]);
 
+  /**
+   * The embed whose page has the pointer, if any.
+   *
+   * None of them by default. A frame that took every pointer event made the embed a hole
+   * in the board: a press on it went to the video, so it could not be selected, moved or
+   * resized from anywhere it covered. Now the board owns the pointer and a *click* in an
+   * embed's middle hands it to the page — Excalidraw's `activeEmbeddable` — until the next
+   * press on the board, or Escape, takes it back.
+   */
+  let activeEmbed = $state<string | null>(null);
+  /** The embed whose middle the pointer rests on, for the "Click to interact" hint. */
+  let hoverEmbed = $state<string | null>(null);
+  /** The press that may turn out to be a click on an embed. */
+  let embedPress: { x: number; y: number; at: number } | null = null;
+  const embedIframes: Record<string, HTMLIFrameElement> = {};
+
   function refreshEmbedFrames(): void {
     embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : [];
+    if (activeEmbed && !embedFrames.some((frame) => frame.id === activeEmbed)) {
+      activeEmbed = null;
+    }
   }
+
+  /** The embed whose middle is at a screen point — and on top there, not under a shape. */
+  function embedAt(x: number, y: number): EmbedFrame | null {
+    const candidates = embedFrames.filter((frame) => isFrameCentre(frame, x, y));
+    if (candidates.length === 0 || !engine) return null;
+    const hit = engine.hitTest(x, y);
+    return candidates.find((frame) => frame.id === hit?.id) ?? null;
+  }
+
+  /** On a click in an embed's middle: hand it the pointer, and start it if it plays. */
+  function activateEmbedAt(point: { x: number; y: number }): void {
+    const press = embedPress;
+    embedPress = null;
+    if (!press || tool !== "select" || embedFrames.length === 0) return;
+    if (!isClick(press, { ...point, at: performance.now() })) return;
+    const frame = embedAt(point.x, point.y);
+    if (!frame) return;
+    activeEmbed = frame.id;
+    hoverEmbed = null;
+    const message = playMessage(frame.url);
+    const target = embedIframes[frame.id]?.contentWindow;
+    if (message && target) target.postMessage(message, new URL(frame.url).origin);
+  }
+
+  function trackEmbed(node: HTMLIFrameElement, id: string) {
+    embedIframes[id] = node;
+    return {
+      destroy() {
+        if (embedIframes[id] === node) delete embedIframes[id];
+      },
+    };
+  }
+
+  const pageHostname = typeof location === "undefined" ? "" : location.hostname;
+
+  /**
+   * Once per frame while something may be moving an embed.
+   *
+   * The engine reports a change to the scene when a gesture is committed, not at every
+   * move of it, so a frame placed only on scene changes stayed where the drag started and
+   * jumped at the end — the page looked as if it had come loose from the board.
+   */
+  let embedRefresh = false;
+  function scheduleEmbedRefresh(): void {
+    if (embedRefresh) return;
+    embedRefresh = true;
+    // Asked for after the handler returns, so it lands after the frame callback the
+    // pointer input queues for the engine's move — callbacks in one frame run in the
+    // order they were asked for. Asked for first, it read the embed where the previous
+    // move had left it, and the frame trailed the drag by one move all the way.
+    queueMicrotask(() =>
+      requestAnimationFrame(() => {
+        embedRefresh = false;
+        refreshEmbedFrames();
+      }),
+    );
+  }
+
+  // A scene the page hands in is not reported back — the page already has it — so its
+  // embeds are placed here. Deferred, so the canvas has taken the scene first.
+  $effect(() => {
+    void scene;
+    if (engine) queueMicrotask(refreshEmbedFrames);
+  });
 
   function insertEmbed(url: string): void {
     const at = viewportCentre();
@@ -486,7 +593,17 @@
   }
 
   /** Returning `true` claims the gesture, so the engine does not also act on it. */
-  function handleCanvasPointerDown(point: { x: number; y: number }): boolean | void {
+  function handleCanvasPointerDown(
+    point: { x: number; y: number },
+    event?: PointerEvent,
+  ): boolean | void {
+    // Any press on the board takes the pointer back from a page: a press inside the
+    // page's own frame never reaches the canvas at all.
+    activeEmbed = null;
+    const plain =
+      !event ||
+      (event.button === 0 && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey);
+    embedPress = plain ? { x: point.x, y: point.y, at: performance.now() } : null;
     if (tool === "eraser") {
       // Only the trail is drawn here. What the sweep marks, how it fades and what the
       // release deletes are the engine's (`engine/eraser.rs`), so the press goes through
@@ -503,11 +620,13 @@
   }
 
   function handleCanvasPointerMove(point: { x: number; y: number }): void {
+    if (embedFrames.length > 0) scheduleEmbedRefresh();
     if (tool !== "eraser") return;
     eraserTrail.addPoint(point.x, point.y);
   }
 
   function handleCanvasPointerUp(point: { x: number; y: number }): void {
+    activateEmbedAt(point);
     if (tool === "eraser") {
       eraserTrail.stop();
       return;
@@ -571,6 +690,53 @@
     if (patch) realtime?.sendPatch(patch);
   }
 
+  /** Merges a peer's patch — from the socket, or from the server when catching up. */
+  function applyRemote(patch: ScenePatch<StampedElement>): void {
+    if (!engine) return;
+    if (!patch.elements?.length && !patch.order?.length) return;
+    // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote edits
+    // through it duplicated every one of them — and because the result was then
+    // broadcast back, two clients grew the board without bound.
+    //
+    // `applyRemotePatch` emits no scene event, so nothing echoes back to the peer that
+    // sent it. We still feed the host `onSceneChange` so `live` / autosave see peer
+    // deletes and updates.
+    const payload: {
+      type: string;
+      version: number;
+      elements: StampedElement[];
+      order?: string[];
+    } = {
+      type: "osidraw",
+      version: 1,
+      elements: patch.elements ?? [],
+    };
+    if (patch.order) payload.order = patch.order;
+    if (!engine.applyRemotePatch(JSON.stringify(payload))) return;
+    liveBroadcast.adoptRemote(patch);
+    // Order-only patches carry no elements; exportJson is the safe host sync.
+    // Otherwise a delta keeps tombstones visible to the autosave tracker.
+    onSceneChange?.(patch.order?.length ? engine.exportJson() : remotePatchToSceneEvent(patch));
+    refreshEmbedFrames();
+  }
+
+  /**
+   * After the live link comes back: what peers did while it was down reached the
+   * server but not us, and nothing would ever resend it. Read the board and merge it —
+   * the merge keeps whichever copy of each element is newer, so what we did offline
+   * stands. Best effort: if the read fails, the next reconnect tries again.
+   */
+  async function catchUp(): Promise<void> {
+    if (!fetchLatest) return;
+    let elements: StampedElement[];
+    try {
+      elements = await fetchLatest();
+    } catch {
+      return;
+    }
+    applyRemote({ elements });
+  }
+
   onMount(() => {
     // Apply the stored choice *before* reading the tokens: themeFromCss resolves the
     // canvas colours off the host CSS variables, and the `dark` class is what swaps
@@ -619,38 +785,19 @@
           peers = list;
         });
         unsubStatus = realtime.onStatus((next) => {
+          const reconnected = next === "connected" && liveHistory.everConnected;
+          if (liveStatus === "connecting" && next === "disconnected") {
+            liveHistory.everFailed = true;
+          }
+          if (next === "connected") liveHistory.everConnected = true;
           liveStatus = next;
+          if (next === "connected") {
+            // Ours first — what was drawn offline — then theirs, from the server.
+            flushLive();
+            if (reconnected) void catchUp();
+          }
         });
-        unsubPatch = realtime.onRemotePatch((patch) => {
-          if (!engine) return;
-          if (!patch.elements?.length && !patch.order?.length) return;
-          // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote
-          // edits through it duplicated every one of them — and because the result was
-          // then broadcast back, two clients grew the board without bound.
-          //
-          // `applyRemotePatch` emits no scene event, so nothing echoes back to the peer
-          // that sent it. We still feed the host `onSceneChange` so `live` / autosave
-          // see peer deletes and updates.
-          const payload: {
-            type: string;
-            version: number;
-            elements: StampedElement[];
-            order?: string[];
-          } = {
-            type: "osidraw",
-            version: 1,
-            elements: patch.elements ?? [],
-          };
-          if (patch.order) payload.order = patch.order;
-          if (!engine.applyRemotePatch(JSON.stringify(payload))) return;
-          liveBroadcast.adoptRemote(patch);
-          // Order-only patches carry no elements; exportJson is the safe host sync.
-          // Otherwise a delta keeps tombstones visible to the autosave tracker.
-          onSceneChange?.(
-            patch.order?.length ? engine.exportJson() : remotePatchToSceneEvent(patch),
-          );
-          refreshEmbedFrames();
-        });
+        unsubPatch = realtime.onRemotePatch(applyRemote);
         realtime.connect();
       })();
     }
@@ -710,6 +857,8 @@
   // resizes and that one moves. Without it the difference is discovered by dragging,
   // which is how a resize that was meant to be a move happens.
   let hoverCursor = $state<string | null>(null);
+  /** Whether a button was down at the last hover sample: no hint during a drag. */
+  let hoverButtons = false;
   let hoverPending: { x: number; y: number } | null = null;
 
   function onCanvasPointerMove(e: MouseEvent): void {
@@ -720,6 +869,7 @@
     const sy = e.clientY - rect.top;
 
     hoverPending = { x: sx, y: sy };
+    hoverButtons = e.buttons !== 0;
     lastPointer = { x: sx, y: sy };
 
     if (realtime) {
@@ -738,7 +888,13 @@
       // several times more events than there are frames to show them in.
       const at = hoverPending;
       hoverPending = null;
-      if (at && engine) hoverCursor = engine.hoverCursor(at.x, at.y);
+      if (at && engine) {
+        hoverCursor = engine.hoverCursor(at.x, at.y);
+        const over =
+          !hoverButtons && tool === "select" && embedFrames.length > 0 ? embedAt(at.x, at.y) : null;
+        hoverEmbed = over && over.id !== activeEmbed ? over.id : null;
+        if (hoverEmbed) hoverCursor = "pointer";
+      }
 
       const next = cursorPending;
       cursorPending = null;
@@ -751,6 +907,7 @@
 
   function onCanvasPointerLeave(): void {
     hoverCursor = null;
+    hoverEmbed = null;
   }
 
   let mainMenu = $state.raw<DrawMainMenu | null>(null);
@@ -778,6 +935,7 @@
     if (event.key === "Escape") {
       // The engine lets the eraser's marks go on the same key; the trail goes with them.
       eraserTrail.stop();
+      activeEmbed = null;
     } else if (mod && event.shiftKey && key === "e") {
       event.preventDefault();
       showExport = true;
@@ -833,6 +991,7 @@
   <DrawHeader
     {title}
     {status}
+    live={liveText}
     onToggleMenu={() => (showMainMenu = !showMainMenu)}
     onOpenShare={() => (showShare = true)}
     onOpenShortcuts={() => (showShortcuts = true)}
@@ -885,6 +1044,7 @@
         next.setObjectsSnap(objectsSnap);
         syncStyle(next);
         exposeForDevTools(next);
+        refreshEmbedFrames();
         onReady?.(next);
       }}
       onToolChange={(next: DrawTool) => {
@@ -950,22 +1110,37 @@
   />
 
   <!--
-    Live pages, over the canvas. `pointer-events` is off while a drag is in progress so
-    that dragging an embed moves the element rather than being swallowed by the page
-    inside it — the frame is content, but the board still owns the gesture.
+    Live pages, over the canvas. Each is laid out at its size on the board and scaled
+    with the zoom, and none takes the pointer until a click in its middle hands it over —
+    see `activeEmbed`. Until then a press on one is the board's, so an embed is selected,
+    moved and resized like any other shape.
   -->
   {#each embedFrames as frame (frame.id)}
-    <iframe
-      title="Embedded page"
-      src={frame.url}
-      sandbox={sandboxFor(frame)}
-      referrerpolicy="no-referrer"
-      loading="lazy"
-      allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+    <div
       class="embed-frame"
-      class:inert={dragging}
-      style={frameStyle(frame)}
-    ></iframe>
+      class:active={frame.id === activeEmbed}
+      style={`${frameStyle(frame)};--embed-scale:${frame.scale}`}
+    >
+      <iframe
+        use:trackEmbed={frame.id}
+        title="Embedded page"
+        src={frame.srcdoc ? undefined : frameSrc(frame, pageHostname)}
+        srcdoc={frame.srcdoc}
+        sandbox={sandboxFor(frame)}
+        referrerpolicy={EMBED_REFERRER_POLICY}
+        allow={EMBED_ALLOW}
+        allowfullscreen
+        loading="lazy"
+        style={frameInnerStyle(frame)}
+      ></iframe>
+    </div>
+    {#if frame.id === hoverEmbed}
+      <span
+        class="embed-hint"
+        style:left={`${frame.x + frame.width / 2}px`}
+        style:top={`${frame.y + frame.height / 2}px`}>Click to interact</span
+      >
+    {/if}
   {/each}
 
   {#if imageNotice}
