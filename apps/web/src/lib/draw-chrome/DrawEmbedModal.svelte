@@ -72,8 +72,8 @@
       </p>
     {:else}
       <p class="hint">
-        Paste a link to a video, a Figma file or a Drive file. The page is framed on the board and
-        stays live.
+        Paste a link — a video, a post, a song, a map, a document or a sandbox — or the embed code a
+        site gives you. It is framed on the board and stays live; click its middle to use it.
       </p>
     {/if}
 

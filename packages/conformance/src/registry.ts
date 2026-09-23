@@ -273,7 +273,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "🧱 Web embeds",
     status: "covered",
-    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`],
+    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`, "e2e/embed.spec.ts"],
   },
   {
     section: "🧙 Magic Frame / Wireframe → Code",
@@ -526,7 +526,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "13. Embeds",
     status: "covered",
-    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`],
+    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`, "e2e/embed.spec.ts"],
   },
   {
     section: "14. Selection engine",

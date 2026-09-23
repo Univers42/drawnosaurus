@@ -148,17 +148,44 @@
   pointer-events: none;
 }
 
-/* A live page framed on the board. Positioned by the engine in screen pixels, so it
-   tracks the rectangle drawn under it through every pan and zoom. */
+/* A live page framed on the board. Positioned and scaled by the engine's numbers (see
+   `frameStyle`), so it tracks the rectangle drawn under it through every pan and zoom.
+   The board keeps the pointer until the frame is activated: until then a press on it
+   selects, moves or resizes the embed instead of reaching the page. */
 .embed-frame {
-  border: 1px solid var(--line);
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
   border-radius: 0.25rem;
   background: var(--surface);
-  z-index: 1;
+  pointer-events: none;
 }
 
-/* While a drag is in progress the board owns the gesture, not the page inside the
-   frame — otherwise dragging an embed scrolls its contents instead of moving it. */
-.embed-frame.inert {
+.embed-frame iframe {
+  display: block;
+  border: 0;
   pointer-events: none;
+}
+
+.embed-frame.active iframe {
+  pointer-events: auto;
+}
+
+/* Which page has the pointer. Divided by the zoom, so it is two pixels on screen. */
+.embed-frame.active {
+  outline: calc(2px / var(--embed-scale, 1)) solid var(--accent);
+}
+
+.embed-hint {
+  position: absolute;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  padding: 0.375rem 0.75rem;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8125rem;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.2);
+  pointer-events: none;
+  white-space: nowrap;
 }
