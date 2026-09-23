@@ -68,7 +68,7 @@ custom controls.
   phone. Tables, code and diagrams scroll inside their own container so the page body
   never scrolls sideways.
 - Both themes. Define the full palette on a light `:root`, then override only the
-  tokens that change — never let a colour exist *only* inside a dark-mode block, and
+  tokens that change — never let a colour exist _only_ inside a dark-mode block, and
   always set an explicit background on `body`.
 - Respect `prefers-reduced-motion`.
 

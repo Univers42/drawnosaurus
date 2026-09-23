@@ -20,7 +20,7 @@ Look for what a mechanical check cannot see in the change itself:
 
 - Parsing source with a regex instead of an AST.
 - A sample, a `head -n`, a `LIMIT`, a partial scan standing in for a full one.
-- Existence used as a proxy for a property — a test file's *name* standing in for
+- Existence used as a proxy for a property — a test file's _name_ standing in for
   coverage.
 - A timeout, a retry bound, a cache TTL: each one is a guess about how long is too long.
 - A number that is derived rather than measured — bytes÷4 for tokens, a ratio, an
@@ -64,8 +64,8 @@ The caveat belongs where the reader is, not only in the source:
 - No marker on exact code. A marker on something deterministic trains readers to skip
   markers, which is the one thing that makes the whole convention useless.
 - A caveat is not a substitute for a fix. "Ponytail: returns the wrong answer for empty
-  input" is a defect with a label on it. Caveats cover *approximation*, never
-  *breakage* — fix that instead.
+  input" is a defect with a label on it. Caveats cover _approximation_, never
+  _breakage_ — fix that instead.
 - If the thing is correct, say so plainly. Hedging exact work is its own dishonesty.
 
 ## Report

@@ -8,14 +8,14 @@ are actually laying something out.
 One source of truth per axis. A value that appears twice is a token that has not been
 named yet.
 
-| Axis | Shape | Why |
-|---|---|---|
-| Colour | semantic names (`--surface`, `--text-muted`, `--danger`), not literals (`--blue-500`) | a redesign changes the mapping, not 400 call sites |
-| Spacing | one scale, 4px or 8px base — `4 8 12 16 24 32 48 64` | arbitrary values are why nothing lines up |
-| Type | a scale with paired line-heights, not ad-hoc `font-size` | vertical rhythm survives |
-| Radius | 3–4 steps, plus `full` | more than that reads as inconsistency |
-| Z-index | a named ladder (`dropdown: 10, sticky: 20, modal: 40, toast: 50`) | `z-index: 99999` is a symptom |
-| Motion | 2–3 durations and 2 easings | mixed timings feel broken without looking broken |
+| Axis    | Shape                                                                                 | Why                                                |
+| ------- | ------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| Colour  | semantic names (`--surface`, `--text-muted`, `--danger`), not literals (`--blue-500`) | a redesign changes the mapping, not 400 call sites |
+| Spacing | one scale, 4px or 8px base — `4 8 12 16 24 32 48 64`                                  | arbitrary values are why nothing lines up          |
+| Type    | a scale with paired line-heights, not ad-hoc `font-size`                              | vertical rhythm survives                           |
+| Radius  | 3–4 steps, plus `full`                                                                | more than that reads as inconsistency              |
+| Z-index | a named ladder (`dropdown: 10, sticky: 20, modal: 40, toast: 50`)                     | `z-index: 99999` is a symptom                      |
+| Motion  | 2–3 durations and 2 easings                                                           | mixed timings feel broken without looking broken   |
 
 Semantic layer on top of the primitive layer: `--danger: var(--red-600)`. Components
 reference the semantic name only, so theming is one file.
@@ -28,7 +28,7 @@ reference the semantic name only, so theming is one file.
 - **`gap`, not margins**, for spacing between siblings — no collapse, no last-child
   exception.
 - **Intrinsic sizing over breakpoints.** `grid-template-columns:
-  repeat(auto-fit, minmax(16rem, 1fr))` adapts continuously; a breakpoint only adapts at
+repeat(auto-fit, minmax(16rem, 1fr))` adapts continuously; a breakpoint only adapts at
   one width.
 - **Container queries** when a component must respond to its container rather than the
   viewport — a card in a sidebar and the same card in a main column.
