@@ -100,8 +100,10 @@ shape it, and each is a test:
 
 1. exported JSON **drops tombstones**, so a deletion arrives as an id that vanished and the tombstone
    the server's merge needs must be synthesised;
-2. **undo can resurrect** a deleted element with its original stamp, which would lose against the
-   tombstone already sent — so a resurrection is re-stamped to outrank it;
+2. **undo can resurrect** a deleted element. The engine stamps an undo above whatever it restores
+   over (undo is a new edit, as in Excalidraw — `engine/crates/draw-engine/src/engine/stamp.rs`), so the host
+   re-stamps a resurrection only when it does _not_ outrank the tombstone already sent (an older
+   engine, a local draft) — minting a second stamp for an engine-stamped one would desync the two;
 3. **z-order is array position** and the engine reorders without touching stamps, so a reorder is
    invisible to a stamp diff. The client predicts the order the server will reach and sends an
    explicit `order` only on a mismatch.
@@ -114,6 +116,12 @@ unacknowledged and arm the retry.
 Winner per id in `reconcile.ts`: higher `version`, tie broken by `versionNonce`, then `updated` — in
 that order, so clock skew only ever decides a tie the edit counts could not. Order-independent and
 idempotent.
+
+The stamp is the only change signal the host diff, the server and the peers have, so **every local
+edit must move it**. The engine stamps each element a commit changed, once per commit, in
+`push_history` (`engine/crates/draw-engine/src/engine/stamp.rs`) — moves, resizes and re-routed
+arrows included. A peer's copy of an element with an uncommitted local change is refused, and the
+commit stamps above it.
 
 `PUT /v1/boards/:slug` **requires `If-Match`** (428 without, 409 if stale) because a full replace from
 a stale tab destroys newer work. `PATCH /v1/boards/:slug/elements` — the autosave path — has no

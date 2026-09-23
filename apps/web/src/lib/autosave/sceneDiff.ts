@@ -86,7 +86,13 @@ export class SceneDiffTracker<T extends StampedElement> {
         continue;
       }
 
-      if (previous.isDeleted) {
+      // A resurrection — undo of a delete — that does not outrank the tombstone we sent
+      // would lose to it and stay deleted server-side, so it is re-stamped here. Only
+      // then: the engine now stamps an undo above whatever it restores over, and a host
+      // stamp minted on top of that would never reach the engine, so its next edit of
+      // the element would carry a lower version than the server's and be refused. The
+      // branch stays for boards restored from an older engine or a local draft.
+      if (previous.isDeleted && element.version <= previous.version) {
         changed.push({
           ...element,
           version: Math.max(element.version, previous.version) + 1,

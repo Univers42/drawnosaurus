@@ -92,6 +92,20 @@ describe("SceneDiffTracker", () => {
     expect(undo?.elements[0]).toMatchObject({ id: "a", isDeleted: false, version: 5 });
   });
 
+  it("sends a resurrection the engine already stamped above the tombstone as it is", () => {
+    // The engine re-stamps an undo. Minting a second stamp on top would leave the host
+    // and the engine disagreeing, and the engine's next edit would then be refused.
+    const tracker = new SceneDiffTracker();
+    tracker.reset([el("a", 3)]);
+    const deletion = tracker.diff([], 500, nonce);
+    if (deletion !== null) tracker.acknowledge(deletion);
+
+    const restored = { ...el("a", 5), versionNonce: 4242 };
+    const undo = tracker.diff([restored], 600, nonce);
+
+    expect(undo?.elements[0]).toEqual(restored);
+  });
+
   it("sends an explicit order when the stack is rearranged", () => {
     const tracker = new SceneDiffTracker();
     tracker.reset([el("a"), el("b"), el("c")]);
