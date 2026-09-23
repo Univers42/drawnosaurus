@@ -3,8 +3,14 @@
   import { page } from "$app/state";
   import { elementsFromJson } from "@osionos/draw-engine/json";
   import { Scene, type DrawElement } from "@osionos/draw-engine/types";
-  import { getBoard, patchElements } from "$lib/api/client.ts";
-  import { SceneAutosaver, type AutosaveStatus } from "$lib/autosave/autosaver.ts";
+  import { ApiClientError, getBoard, patchElements } from "$lib/api/client.ts";
+  import {
+    SceneAutosaver,
+    type AutosaveStatus,
+    type FailureKind,
+  } from "$lib/autosave/autosaver.ts";
+  import { DRAFT_PREFIX, writeDraft } from "$lib/autosave/draft.ts";
+  import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
 
   const slug = $derived(page.params.slug ?? "");
@@ -16,26 +22,42 @@
   /** Latest elements the engine reported; the autosaver reads this, never the DOM. */
   let live: DrawElement[] = [];
 
-  const LOCAL_STORAGE_PREFIX = "drawnosaurus:draft:";
+  const storage = (): Storage | undefined =>
+    typeof localStorage === "undefined" ? undefined : localStorage;
+
+  /**
+   * 413 is the board or the request being too large, 400 a change the server will not
+   * take: the same patch would be refused the same way, so neither is retried.
+   */
+  function classify(error: unknown): FailureKind {
+    if (!(error instanceof ApiClientError)) return "retry";
+    if (error.status === 413) return "too-large";
+    if (error.status === 400 || error.status === 422) return "refused";
+    return "retry";
+  }
 
   const saver = new SceneAutosaver<DrawElement>({
     readScene: () => live,
     send: async (patch) => {
       // The local draft is the safety net for a write that does not land, so it is
       // cached before the request goes out, not after it succeeds.
-      if (typeof localStorage !== "undefined" && slug) {
-        localStorage.setItem(`${LOCAL_STORAGE_PREFIX}${slug}`, JSON.stringify(live));
-      }
+      writeDraft(storage(), slug, live);
       // Deliberately NOT caught. The autosaver needs the rejection: it is what leaves
       // the patch unacknowledged and arms the retry. Swallowing it here made the
       // tracker treat never-sent elements as saved — so they were never resent — and
       // let the "idle" that follows a successful send overwrite the error status,
       // leaving the header reading "Saved" for a board the server had never received.
-      await patchElements(slug, patch);
+      //
+      // In parts, pictures last and alone, so one the server refuses holds back only
+      // itself. See `splitPatch`.
+      for (const part of splitPatch(patch)) {
+        await patchElements(slug, part);
+      }
     },
     onStatus: (next) => {
       status = next;
     },
+    classify,
   });
 
   onMount(() => {
@@ -48,7 +70,7 @@
       } catch {
         // Check local storage draft
         if (typeof localStorage !== "undefined") {
-          const cached = localStorage.getItem(`${LOCAL_STORAGE_PREFIX}${slug}`);
+          const cached = localStorage.getItem(`${DRAFT_PREFIX}${slug}`);
           if (cached) {
             elements = elementsFromJson(cached) ?? [];
           }
@@ -101,13 +123,9 @@
     }
 
     // The draft cache is written from `live` rather than from the payload, which is no
-    // longer the whole scene.
-    if (typeof localStorage !== "undefined" && slug) {
-      localStorage.setItem(
-        `${LOCAL_STORAGE_PREFIX}${slug}`,
-        JSON.stringify({ type: "osidraw", version: 1, elements: live }),
-      );
-    }
+    // longer the whole scene. Best effort, and it cannot throw: it used to, once a few
+    // photos filled the storage quota, and the throw stopped the autosave below it.
+    writeDraft(storage(), slug, live);
     saver.notify();
   }
 

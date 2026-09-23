@@ -3,6 +3,8 @@ import {
   IMAGE_ACCEPT,
   IMAGE_MAX_SIDE,
   needsDownscale,
+  prepareImageFile,
+  smallerOf,
   scaledToFit,
   IMAGE_MAX_BYTES,
   IMAGE_MIME_TYPES,
@@ -112,5 +114,45 @@ describe("shrinking large images before the size check", () => {
     expect(needsDownscale("image/png", 1440, 1440)).toBe(false);
     expect(needsDownscale("image/svg+xml", 9000, 9000)).toBe(false);
     expect(needsDownscale("IMAGE/SVG+XML", 9000, 9000)).toBe(false);
+  });
+});
+
+describe("preparing a file: type, then shrink, then size", () => {
+  const photo = { type: "image/jpeg", size: IMAGE_MAX_BYTES + 1 };
+  const shrunkTo = (size: number) => async (file: typeof photo) => ({ ...file, size });
+
+  it("lets in a photo that is over the limit until it is shrunk", async () => {
+    // The order the reported bug got wrong: size first refused this outright.
+    expect(await prepareImageFile(photo, shrunkTo(900_000))).toEqual({
+      file: { type: "image/jpeg", size: 900_000 },
+    });
+  });
+
+  it("refuses by size what is still too big after shrinking", async () => {
+    expect(await prepareImageFile(photo, shrunkTo(IMAGE_MAX_BYTES + 1))).toEqual({
+      rejection: "size",
+    });
+  });
+
+  it("refuses by type before spending anything on shrinking", async () => {
+    let shrinks = 0;
+    const result = await prepareImageFile({ type: "application/pdf", size: 10 }, async (file) => {
+      shrinks += 1;
+      return file;
+    });
+    expect(result).toEqual({ rejection: "type" });
+    expect(shrinks).toBe(0);
+  });
+});
+
+describe("never trading a file for a bigger one", () => {
+  it("keeps the original when the re-encoded copy came out larger", () => {
+    // An AVIF re-encoded as PNG, say.
+    expect(smallerOf({ size: 3_000_000 }, { size: 400_000 })).toEqual({ size: 400_000 });
+    expect(smallerOf({ size: 300_000 }, { size: 4_000_000 })).toEqual({ size: 300_000 });
+  });
+
+  it("leaves an animated GIF alone rather than flattening it to one frame", () => {
+    expect(needsDownscale("image/gif", 4000, 3000)).toBe(false);
   });
 });

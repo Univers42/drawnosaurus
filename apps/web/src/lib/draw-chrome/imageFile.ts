@@ -113,7 +113,35 @@ export function scaledToFit(
  * thing that makes it worth using. Excalidraw exempts it the same way (`data/blob.ts:365`).
  */
 export function needsDownscale(type: string, width: number, height: number): boolean {
-  return type.toLowerCase() !== "image/svg+xml" && Math.max(width, height) > IMAGE_MAX_SIDE;
+  const kind = type.toLowerCase();
+  // Nor GIF: a canvas re-encodes one frame, so an animation would arrive as a still.
+  return (
+    kind !== "image/svg+xml" && kind !== "image/gif" && Math.max(width, height) > IMAGE_MAX_SIDE
+  );
+}
+
+/** The smaller of what shrinking produced and the original — see `downscaleImageFile`. */
+export function smallerOf<F extends { size: number }>(shrunk: F, original: F): F {
+  return shrunk.size < original.size ? shrunk : original;
+}
+
+export type PreparedImage<F> = { file: F } | { rejection: ImageRejection };
+
+/**
+ * Type, then shrink, then size — Excalidraw's order (`App.tsx:12649-12668`).
+ *
+ * The order is the point: a phone photo is routinely over the size limit *before* it is
+ * brought down to 1440px, and checking the size first refused it outright. `shrink` is
+ * passed in so the order can be tested without a browser.
+ */
+export async function prepareImageFile<F extends { type: string; size: number }>(
+  file: F,
+  shrink: (file: F) => Promise<F>,
+): Promise<PreparedImage<F>> {
+  if (!isSupportedImageType(file.type)) return { rejection: "type" };
+  const shrunk = await shrink(file);
+  const rejection = rejectImageFile(shrunk);
+  return rejection ? { rejection } : { file: shrunk };
 }
 
 /**
@@ -125,7 +153,7 @@ export function needsDownscale(type: string, width: number, height: number): boo
  * on to the size check, which is then the only thing that can refuse it.
  */
 export async function downscaleImageFile(file: File): Promise<File> {
-  if (file.type.toLowerCase() === "image/svg+xml") return file;
+  if (!needsDownscale(file.type, Infinity, Infinity)) return file;
   if (typeof createImageBitmap !== "function" || typeof document === "undefined") return file;
   try {
     const bitmap = await createImageBitmap(file);
@@ -146,11 +174,21 @@ export async function downscaleImageFile(file: File): Promise<File> {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(bitmap, 0, 0, target.width, target.height);
     bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, file.type, 0.9),
-    );
-    // `toBlob` falls back to PNG for a type it cannot encode; the file then says so.
-    return blob ? new File([blob], file.name, { type: blob.type || file.type }) : file;
+    const encode = (type: string) =>
+      new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.9));
+    let blob = await encode(file.type);
+    // `toBlob` falls back to PNG for a type it cannot encode — AVIF, BMP, and WebP in
+    // Safari — and a lossless PNG of a photo can be several times the size of the lossy
+    // original. WebP keeps it small where the browser has it.
+    if (blob && blob.type !== file.type) {
+      const webp = await encode("image/webp");
+      if (webp && webp.type === "image/webp" && webp.size < blob.size) blob = webp;
+    }
+    if (!blob) return file;
+    // Never trade a file for a bigger one: its pixels are fewer, but the size check and
+    // the board's 16MB are about bytes.
+    const shrunk = new File([blob], file.name, { type: blob.type || file.type });
+    return smallerOf(shrunk, file);
   } catch {
     return file;
   }

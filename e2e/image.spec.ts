@@ -117,14 +117,16 @@ async function paintedRed(page: Page) {
  * A file dropped at a canvas-relative point, on whatever element is on top there.
  *
  * Dispatched rather than performed: a file drag starts in the operating system, and
- * Playwright can only drag things that are already on the page. Returns whether the drop
- * was cancelled — an uncancelled file drop is one the browser navigates to.
+ * Playwright can only drag things that are already on the page. Reports whether the
+ * `dragover` and the `drop` were each cancelled. Both matter: a browser only delivers a
+ * drop to a target whose dragover was cancelled, and opens a drop nobody cancels in
+ * place of the page.
  */
 async function dropFile(
   board: Board,
   at: { x: number; y: number },
   file: { name: string; type: string; base64: string },
-): Promise<boolean> {
+): Promise<{ over: boolean; drop: boolean }> {
   return board.page.evaluate(
     ({ point, file }) => {
       const bytes = Uint8Array.from(atob(file.base64), (c) => c.charCodeAt(0));
@@ -132,11 +134,30 @@ async function dropFile(
       transfer.items.add(new File([bytes], file.name, { type: file.type }));
       const target = document.elementFromPoint(point.x, point.y)!;
       const init = { bubbles: true, cancelable: true, clientX: point.x, clientY: point.y };
-      target.dispatchEvent(new DragEvent("dragover", { ...init, dataTransfer: transfer }));
-      return !target.dispatchEvent(new DragEvent("drop", { ...init, dataTransfer: transfer }));
+      const over = !target.dispatchEvent(
+        new DragEvent("dragover", { ...init, dataTransfer: transfer }),
+      );
+      const drop = !target.dispatchEvent(
+        new DragEvent("drop", { ...init, dataTransfer: transfer }),
+      );
+      return { over, drop };
     },
     { point: { x: board.box.x + at.x, y: board.box.y + at.y }, file },
   );
+}
+
+/**
+ * Chooses the image tool and leaves its picker open, as it is while a person looks for
+ * a file. Listening for the picker is what holds it open: one nobody answers is closed
+ * at once by a headless browser, which puts the tool straight back to Select.
+ */
+async function imageToolWaitingOnPicker(board: Board): Promise<void> {
+  const { page } = board;
+  const picker = page.waitForEvent("filechooser");
+  await focusBoard(board);
+  await page.keyboard.press("9");
+  await picker;
+  expect(await activeTool(page), "setup: the image tool is waiting on its picker").toBe("image");
 }
 
 const MIDDLE = {
@@ -199,10 +220,13 @@ test("a dropped image lands where it was dropped and can be moved straight away"
 }) => {
   const board = await openBoard(page);
   const base64 = (await redPng(page)).toString("base64");
+  // Dropped while the image tool is waiting on its picker, the state in which presses
+  // were being ignored: the drop has to hand back Select itself.
+  await imageToolWaitingOnPicker(board);
 
   const cancelled = await dropFile(board, MIDDLE, { name: "red.png", type: "image/png", base64 });
 
-  expect(cancelled, "the drop must be cancelled or the browser opens the file").toBe(true);
+  expect(cancelled, "cancelled, or the browser opens the file").toEqual({ over: true, drop: true });
   await expect.poll(async () => (await images(page)).length).toBe(1);
   const red = await paintedRed(page);
   expect((red.left + red.right) / 2).toBeCloseTo(MIDDLE.x, -1);
@@ -218,6 +242,18 @@ test("a dropped image lands where it was dropped and can be moved straight away"
   expect((await images(page))[0]!.x).toBeLessThan(before.x - 50);
 });
 
+test("with the tool locked, a drop keeps the image tool", async ({ page }) => {
+  const board = await openBoard(page);
+  await page.getByRole("button", { name: /^Keep tool active after drawing/ }).click();
+  await imageToolWaitingOnPicker(board);
+  const base64 = (await redPng(page)).toString("base64");
+
+  await dropFile(board, MIDDLE, { name: "red.png", type: "image/png", base64 });
+
+  await expect.poll(async () => (await images(page)).length).toBe(1);
+  expect(await activeTool(page)).toBe("image");
+});
+
 test("a drop on a floating panel still lands, instead of replacing the board", async ({ page }) => {
   const board = await openBoard(page);
   const base64 = (await redPng(page)).toString("base64");
@@ -230,7 +266,7 @@ test("a drop on a floating panel still lands, instead of replacing the board", a
 
   const cancelled = await dropFile(board, at, { name: "red.png", type: "image/png", base64 });
 
-  expect(cancelled).toBe(true);
+  expect(cancelled).toEqual({ over: true, drop: true });
   await expect.poll(async () => (await images(page)).length).toBe(1);
 });
 
@@ -243,29 +279,35 @@ test("a dropped file that is not an image is refused, and still cancelled", asyn
     base64: btoa("%PDF-1.4"),
   });
 
-  expect(cancelled, "a PDF nobody cancels is opened by the browser in this tab").toBe(true);
+  expect(cancelled, "a PDF nobody cancels is opened by the browser in this tab").toEqual({
+    over: true,
+    drop: true,
+  });
   await expect(page.getByRole("status")).toContainText(/./);
   expect(await images(page)).toHaveLength(0);
 });
 
 test("dismissing the picker gives the board back", async ({ page }) => {
   const board = await openBoard(page);
-  const chooser = page.waitForEvent("filechooser");
-  await pickTool(page, "Insert image");
-  await chooser;
-
-  // What the browser fires when the dialog is closed with nothing chosen. Playwright's
-  // file chooser has no cancel, so the event is sent the way the browser sends it.
-  await page.getByLabel("Insert image", { exact: true }).dispatchEvent("cancel");
-
-  expect(await activeTool(page)).toBe("select");
-  // And the board answers presses again: a marquee over nothing leaves nothing selected
-  // rather than being swallowed by a tool that ignores them.
-  await page.mouse.move(board.box.x + MIDDLE.x, board.box.y + MIDDLE.y);
+  // Something to select afterwards, drawn with its top edge in the open.
+  await pickTool(page, "Rectangle");
+  await page.mouse.move(board.box.x + 520, board.box.y + 240);
   await page.mouse.down();
-  await page.mouse.move(board.box.x + MIDDLE.x + 60, board.box.y + MIDDLE.y + 60, { steps: 4 });
-  expect(await page.evaluate(() => window.__drawEngine!.getTool())).toBe("select");
+  await page.mouse.move(board.box.x + 640, board.box.y + 320, { steps: 4 });
   await page.mouse.up();
+  await focusBoard(board);
+
+  // Nobody answers the picker, so the headless browser closes it straight away — with
+  // the same trusted `cancel` a person closing the dialog produces.
+  await pickTool(page, "Insert image");
+
+  await expect.poll(() => activeTool(page)).toBe("select");
+  // And the board answers presses again: a marquee catches the rectangle.
+  await page.mouse.move(board.box.x + 500, board.box.y + 220);
+  await page.mouse.down();
+  await page.mouse.move(board.box.x + 660, board.box.y + 340, { steps: 4 });
+  await page.mouse.up();
+  expect(await selection(page)).toHaveLength(1);
 });
 
 test("pasting an image places it, rather than the shapes copied earlier", async ({ page }) => {
@@ -278,6 +320,8 @@ test("pasting an image places it, rather than the shapes copied earlier", async 
   await page.mouse.up();
   await page.keyboard.press("Control+c");
   const base64 = (await redPng(page)).toString("base64");
+  // From the image tool, so the return to Select is the paste's doing.
+  await imageToolWaitingOnPicker(board);
   await page.mouse.move(board.box.x + MIDDLE.x, board.box.y + MIDDLE.y);
 
   // Dispatched: a real paste reads the system clipboard, which a headless browser does

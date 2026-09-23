@@ -43,9 +43,8 @@
     describeRejection,
     downscaleImageFile,
     imagesFrom,
-    isSupportedImageType,
+    prepareImageFile,
     readImageFile,
-    rejectImageFile,
   } from "./imageFile.ts";
   import {
     RealtimeChannel,
@@ -288,21 +287,13 @@
    * Returns the new element's id, or null when the file was refused.
    */
   async function placeImageFile(file: File, at: { x: number; y: number }): Promise<string | null> {
-    // The type first, then shrink, then the size. Shrinking before the size check is
-    // Excalidraw's order (`App.tsx:12649-12668`) and it is what lets a phone photo in:
-    // they are routinely over the limit before being brought down to 1440px, and checking
-    // first refused them outright.
-    if (!isSupportedImageType(file.type)) {
-      notify(describeRejection("type"));
+    // Type, then shrink, then size: see `prepareImageFile` for why the order matters.
+    const prepared = await prepareImageFile(file, downscaleImageFile);
+    if ("rejection" in prepared) {
+      notify(describeRejection(prepared.rejection));
       return null;
     }
-    const shrunk = await downscaleImageFile(file);
-    const rejection = rejectImageFile(shrunk);
-    if (rejection) {
-      notify(describeRejection(rejection));
-      return null;
-    }
-    const decoded = await readImageFile(shrunk);
+    const decoded = await readImageFile(prepared.file);
     if (!decoded) {
       notify(describeRejection("decode"));
       return null;
@@ -393,14 +384,19 @@
    * (`App.tsx:2451`, `:4224-4235`).
    */
   function onChromeDragOver(event: DragEvent): void {
-    if (hasFiles(event) && !isOwnedElsewhere(event.target)) event.preventDefault();
+    // Cancelled everywhere, a dialog included. Whether the drop *places* anything is
+    // decided on the drop; whether the browser opens the file in place of the board must
+    // never depend on what happened to be under the pointer — an open dialog's backdrop
+    // covers the whole editor, and a drop on it used to navigate the tab away.
+    if (hasFiles(event)) event.preventDefault();
   }
 
   async function onChromeDrop(event: DragEvent): Promise<void> {
-    if (!hasFiles(event) || isOwnedElsewhere(event.target)) return;
-    // Cancelled for *any* file, image or not. A drop of a PDF that nobody cancels is
-    // opened by the browser in this tab, and the board is gone.
+    if (!hasFiles(event)) return;
+    // Cancelled for *any* file, image or not, and wherever it lands. A drop of a PDF
+    // that nobody cancels is opened by the browser in this tab, and the board is gone.
     event.preventDefault();
+    if (isOwnedElsewhere(event.target)) return;
     const files = imagesFrom(Array.from(event.dataTransfer?.files ?? []));
     if (files.length === 0) {
       notify(describeRejection("type"));

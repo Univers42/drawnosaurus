@@ -6,8 +6,9 @@ import { focusBoard, openBoard, sceneElements, type Board } from "./board.ts";
  * Snapping to other elements: off unless asked for, as Excalidraw ships it.
  *
  * `ci_objects_snap.rs` pins the rule. These check what only a browser can: that the
- * modifier really reaches the engine from a real key held during a real drag, that
- * `Alt+S` is matched on the physical key, and that the menu tells the truth about it.
+ * modifier — Ctrl or Cmd — really reaches the engine from a real key held during a real
+ * drag, that `Alt+S` is matched on the physical key, that the menu shows and changes it,
+ * and that it survives a reload.
  */
 
 /**
@@ -110,7 +111,7 @@ test("holding Control snaps that one drag", async ({ page }) => {
   expect(await objectsSnap(page), "the preference is untouched").toBe(false);
 });
 
-test("Alt+S turns it on, the menu says so, and it is remembered", async ({ page }) => {
+test("Alt+S turns it on, and the menu says so", async ({ page }) => {
   const board = await openBoard(page);
   await twoBoxes(page);
   await focusBoard(board);
@@ -118,7 +119,6 @@ test("Alt+S turns it on, the menu says so, and it is remembered", async ({ page 
   await page.keyboard.press("Alt+KeyS");
 
   expect(await objectsSnap(page)).toBe(true);
-  expect(await page.evaluate(() => localStorage.getItem("drawnosaurus:objects-snap"))).toBe("true");
   await nudge(board);
   expect(await gap(page)).toBeCloseTo(0, 0);
 
@@ -127,6 +127,49 @@ test("Alt+S turns it on, the menu says so, and it is remembered", async ({ page 
     "aria-checked",
     "true",
   );
+});
+
+test("the menu switch turns it off again", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await page.keyboard.press("Alt+KeyS");
+  await page.getByRole("button", { name: "Open main menu" }).click();
+
+  await page.getByRole("switch", { name: "Snap to objects" }).click();
+
+  expect(await objectsSnap(page)).toBe(false);
+});
+
+test("it is remembered across a reload", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await page.keyboard.press("Alt+KeyS");
+
+  // The API stubs and the socket route belong to the page, so they survive the reload.
+  await page.reload();
+  await page.waitForFunction(() => window.__drawEngine !== undefined);
+  await page.waitForLoadState("networkidle");
+
+  expect(await objectsSnap(page)).toBe(true);
+});
+
+/**
+ * Alt+S is matched on the physical key, as Excalidraw's is: on a Mac, Option+S types
+ * "ß", and a shortcut matched on the character would never fire there.
+ *
+ * Sent through CDP because that is the only way to deliver a key whose character and
+ * physical key disagree; Playwright's keyboard derives one from the other.
+ */
+test("Alt+S works where the key types something else", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  const cdp = await page.context().newCDPSession(page);
+  const key = { key: "ß", code: "KeyS", windowsVirtualKeyCode: 83, modifiers: 1 };
+
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...key });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...key });
+
+  await expect.poll(() => objectsSnap(page)).toBe(true);
 });
 
 test("with it on, holding Control lets a drag land freely", async ({ page }) => {
@@ -138,6 +181,22 @@ test("with it on, holding Control lets a drag land freely", async ({ page }) => 
   await nudge(board, true);
 
   expect(await gap(page)).toBeCloseTo(3, 0);
+});
+
+test("Cmd works as Ctrl does, for the Mac", async ({ page }) => {
+  const board = await openBoard(page);
+  await twoBoxes(page);
+  const { box } = board;
+  const from = { x: box.x + MOVING.x + MOVING.w / 2, y: box.y + MOVING.y + MOVING.h / 2 };
+
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.keyboard.down("Meta");
+  await page.mouse.move(from.x - NUDGE, from.y, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up("Meta");
+
+  expect(await gap(page)).toBeCloseTo(0, 0);
 });
 
 test("turning it on hides the grid, and showing the grid turns it off", async ({ page }) => {

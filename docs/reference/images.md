@@ -57,14 +57,28 @@ no new plumbing, at the cost of scene size.
 
 That cost has a hard edge: **a board is one MongoDB document**, so the pictures share its
 16MB. One element may carry at most `MAX_IMAGE_DATA_URL_LENGTH` (6MB, a little over the
-4MB file limit once base64 is paid), which always fits one autosave under the 8MB body
-limit. Two or three large pictures fill the document. The repository measures the BSON
-size before writing and refuses with **413 `board_too_large`**; it used to be a 500 —
-a little over, the server refuses the update; further over, the driver throws a bare
-`RangeError` serialising the command, so the size is checked up front rather than
-recognised afterwards.
+4MB file limit once base64 is paid). What keeps that workable, each found by review and
+each pinned by a test:
 
-The fix for the ceiling is a file store keyed by id. Recorded as a gap in the
+- **Deleted pictures give their room back.** A tombstone used to keep its `dataUrl`, so a
+  board that had once held three photos refused the next one while showing none. The
+  engine's tombstone, the host's synthesised one and the server's stored copy all drop it
+  now (`ci_version_stamps.rs`, `sceneDiff.test.ts`, `images.test.ts` › gives its room back).
+  Undo does not need it: each history step keeps its own copy of the element.
+- **A picture travels alone.** The autosave splits a patch so every element carrying a
+  picture is its own request, after everything else (`split.ts`). One the server refuses
+  refuses only itself; the edits beside it have already been merged. Two new photos no
+  longer exceed the 8MB body limit together.
+- **A refusal is an answer, not a retry.** A 413 — the board over 16MB, measured as BSON
+  before the write — used to be retried every thirty seconds forever. It now stops, and the
+  header reads "Not saved — board over 16 MB" until the next change (`autosaver.test.ts`).
+- **The local draft cannot stop the autosave.** `localStorage` holds about five million
+  characters; a board with a few photos is past that, and the draft's `setItem` threw
+  before the autosave was told about the change — silently, with the header reading
+  "Saved". The draft is now best effort, falling back to a copy without pictures
+  (`draft.test.ts`).
+
+The fix for the ceiling itself is a file store keyed by id. Recorded as a gap in the
 conformance registry ("Image IDs", "Image file store").
 
 ## Rendering
@@ -82,5 +96,8 @@ nothing at all for an image with no picture yet, rather than a broken reference
 
 - **UNKNOWN** — behaviour at the 16MB edge for boards created before the size check,
   if any already sit near it. None were observed.
+- Shrinking re-encodes in the file's own type where the browser can, and otherwise tries
+  WebP; it never keeps a result larger than the original, and leaves GIFs alone rather
+  than flattening an animation to one frame (`imageFile.test.ts`).
 - **UNKNOWN** — per-format decode. We accept what the browser decodes; WebP/AVIF/HEIC are
   not asserted per format (recorded gap, "WebP").

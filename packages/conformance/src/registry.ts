@@ -189,6 +189,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🖼️ Images",
+    text: /`I` — Image tool/,
+    status: "out-of-scope",
+    why: "The same cheat-sheet error as under Essential shortcuts: Excalidraw's TOOLS table gives the image tool a digit (9) and no letter — see ci_shortcuts.rs.",
+  },
+  {
+    section: "🖼️ Images",
     text: /crop|Crop/,
     status: "gap",
     why: "No crop mode. Images resize and move; cropping needs a second rect on the element and a mode in the interaction state machine.",
@@ -414,6 +420,12 @@ export const RULES: readonly Rule[] = [
     text: /Lock/,
     status: "gap",
     why: "No locked state — see the Locking rule.",
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /Snap to nearby objects/,
+    status: "gap",
+    why: "Snapping to objects, and its Ctrl/Cmd inversion, applies to moving a selection only (ci_objects_snap.rs). Drawing and resizing snap to the grid but not to other elements, where Excalidraw's snapNewElement and snapResizingElements (App.tsx:13375, :13499) do.",
   },
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
@@ -678,9 +690,17 @@ export const RULES: readonly Rule[] = [
     section: "29. Undo / redo",
     text: /Branch|Collaboration-aware|Text editing transactions/,
     status: "gap",
-    why: "History is a linear snapshot stack. Branching and collaboration-aware history need the operation model from §41.",
+    why: "History is a linear snapshot stack; branching needs the operation model from §41. Undo is partly collaboration-aware: it restores only the elements its own step changed and goes out as a new edit, so it no longer reverts a peer's work elsewhere (ci_version_stamps.rs). It is whole-element, though — undoing your change to an element a peer has since edited restores all of it, where Excalidraw's deltas restore only the properties you changed.",
   },
-  { section: "29. Undo / redo", status: "covered", tests: [`${ENGINE}/ci_history.rs`] },
+  {
+    section: "29. Undo / redo",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_history.rs`,
+      `${ENGINE}/ci_version_stamps.rs`,
+      "e2e/versionStamps.spec.ts",
+    ],
+  },
   {
     section: "30. Clipboard",
     text: /Image paste|image\/png/,

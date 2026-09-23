@@ -423,19 +423,30 @@ test.describe("the board keeps its keys to itself", () => {
     // `preventDefault` does not stop a second listener on the same key, and this board has
     // two: the engine's on the canvas and the host's on the container. `9` once selected
     // the sticky note *and* opened the image picker in a single keystroke.
+    // Counted at the source. Chromium folds two picker opens in one keystroke into one
+    // file-chooser event, so counting those could never see the double fire this is for.
+    await page.addInitScript(() => {
+      const opens = { count: 0 };
+      (window as unknown as { __pickerOpens: typeof opens }).__pickerOpens = opens;
+      const click = HTMLInputElement.prototype.click;
+      HTMLInputElement.prototype.click = function (this: HTMLInputElement) {
+        if (this.type === "file") opens.count += 1;
+        return click.call(this);
+      };
+    });
     const board = await openBoard(page);
     await focusBoard(board);
     // Held open by listening; see the digit shortcuts above.
-    let pickers = 0;
-    page.on("filechooser", () => (pickers += 1));
+    const picker = page.waitForEvent("filechooser");
 
     await page.keyboard.press("9");
 
-    await expect.poll(() => pickers, { message: "9 opens the picker" }).toBe(1);
+    await picker;
     expect(await activeTool(page)).toBe("image");
-    // The picker is a file input; if the host had also claimed 9, it would be open.
-    expect(await page.locator("input[type=file]").count()).toBeLessThanOrEqual(1);
-    expect(pickers, "and opens it once").toBe(1);
+    const opens = await page.evaluate(
+      () => (window as unknown as { __pickerOpens: { count: number } }).__pickerOpens.count,
+    );
+    expect(opens, "9 opens the picker once").toBe(1);
   });
 
   test("a shortcut does not scroll the page under the canvas", async ({ page }) => {

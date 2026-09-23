@@ -70,6 +70,8 @@ export interface SceneElement {
   /** Rectangles: an explicit corner radius from the in-place handle. */
   cornerRadius?: number;
   roundness?: number | null;
+  /** The reconciliation stamp: every saved edit moves it. */
+  version?: number;
 }
 
 /** Every `PATCH /v1/**` body the page has sent, in order, per page. */

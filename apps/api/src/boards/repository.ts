@@ -43,6 +43,24 @@ const MAX_WRITE_ATTEMPTS = 4;
  */
 const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
 
+/**
+ * A tombstone without its picture.
+ *
+ * Nothing draws a deleted element, and a picture is most of an image's size. Kept, every
+ * deleted photo went on counting against the board's 16MB, so deleting images never made
+ * room — and a board that had held a few photos refused the next one while looking empty.
+ * Applied to everything written, so boards that already carry them are cleaned on their
+ * next save.
+ */
+function withoutTombstonePictures(elements: DrawElementDto[]): DrawElementDto[] {
+  return elements.map((element) => {
+    if (!element.isDeleted || element.dataUrl === undefined) return element;
+    const tombstone = { ...element };
+    delete tombstone.dataUrl;
+    return tombstone;
+  });
+}
+
 export class BoardRepository {
   private readonly boards: Collection<BoardFields>;
 
@@ -164,6 +182,7 @@ export class BoardRepository {
     elements: DrawElementDto[],
     title?: string,
   ): Promise<BoardDoc | null> {
+    elements = withoutTombstonePictures(elements);
     const patch: Record<string, unknown> = {
       elements,
       bounds: sceneBounds(elements),
