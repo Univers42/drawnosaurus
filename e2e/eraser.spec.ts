@@ -520,3 +520,59 @@ test.describe("the eraser's fade on screen", () => {
     await page.mouse.up();
   });
 });
+
+test.describe("the pen's eraser end", () => {
+  /**
+   * A stroke with a pen turned round: pointer button 5, as Excalidraw reads it.
+   *
+   * Dispatched rather than performed: neither CDP nor Playwright's mouse can press the
+   * eraser button — CDP's mouse has left, middle, right, back and forward, and nothing
+   * for a pen's other end.
+   */
+  async function penEraserStroke(
+    page: Page,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+  ) {
+    await page.evaluate(
+      ({ from, to }) => {
+        const canvas = document.querySelector("canvas")!;
+        const box = canvas.getBoundingClientRect();
+        const fire = (
+          type: string,
+          at: { x: number; y: number },
+          button: number,
+          buttons: number,
+        ) =>
+          canvas.dispatchEvent(
+            new PointerEvent(type, {
+              bubbles: true,
+              cancelable: true,
+              pointerId: 1,
+              pointerType: "pen",
+              isPrimary: true,
+              clientX: box.left + at.x,
+              clientY: box.top + at.y,
+              button,
+              buttons,
+            }),
+          );
+        fire("pointerdown", from, 5, 32);
+        fire("pointermove", to, -1, 32);
+        fire("pointerup", to, 5, 0);
+      },
+      { from, to },
+    );
+  }
+
+  test("erases what it crosses, and hands back the tool that was in hand", async ({ page }) => {
+    await openBoard(page);
+    await pileOfCopies(page, 5);
+    await pickTool(page, "Rectangle");
+
+    await penEraserStroke(page, ACROSS_THE_PILE.from, ACROSS_THE_PILE.to);
+
+    await expect.poll(async () => (await sceneElements(page)).length).toBe(0);
+    expect(await page.evaluate(() => window.__drawEngine!.getTool())).toBe("rectangle");
+  });
+});
