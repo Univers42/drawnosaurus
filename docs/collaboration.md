@@ -86,7 +86,14 @@ heavily.
   is anyone's again.
 - **Two people reaching for the same shape at once:** the one who took it first keeps it
   — both screens agree — and the other lets go without their change being applied.
-- If someone's connection drops, what they held is released after a short while.
+- **A text shows while it is typed**, word by word, and nobody else can touch it until
+  it is finished.
+- **Whoever arrives gets everything on the board**, including what the others drew a
+  moment ago and has not been saved yet: the people already there send it. A picture or a
+  video is sent once; moving it afterwards sends only where it went.
+- **When someone leaves** — closes the tab, reloads, loses their connection — what they
+  held is released at once. A tab duplicated from another is a second person, and the two
+  see each other.
 
 ## Can it be fully automatic?
 
@@ -149,8 +156,15 @@ make up LAN_IPS=192.168.1.20
 Cloudflare. The message says what happened; there is no way around it from here.
 
 **The header says "Connection lost — reconnecting…":** the live link dropped. It
-reconnects by itself, and nothing drawn in the meantime is lost — it is sent once the
-link is back. If it stays, check the stack is up: `docker compose ps`.
+reconnects by itself, and nothing drawn in the meantime is lost on either side: once the
+link is back, each side sends the other what it missed. A link that dies without closing
+— a laptop lid shut, a network changed — is noticed within about fifteen seconds and
+reopened. If it stays, check the stack is up: `docker compose ps`.
+
+**A video or a frame's name was missing after reloading a board saved before this was
+fixed:** the server used to drop an embed's address, a frame's name and what was inside a
+frame. Open the board once in the browser that made it: its local copy still has them,
+and they are put back and saved again.
 
 **"Only the computer running drawnosaurus can do that":** the home page, or deleting a
 board, from another computer. That is on purpose — open boards from their links.

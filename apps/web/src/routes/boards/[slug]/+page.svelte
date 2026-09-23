@@ -10,6 +10,8 @@
     type FailureKind,
   } from "$lib/autosave/autosaver.ts";
   import { DraftStore, indexedDbBackend } from "$lib/autosave/draftStore.ts";
+  import { PictureLedger } from "$lib/autosave/pictures.ts";
+  import { recoverStripped } from "$lib/autosave/recover.ts";
   import { SceneMirror } from "$lib/autosave/sceneMirror.ts";
   import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
@@ -47,6 +49,12 @@
     return "retry";
   }
 
+  /**
+   * The pictures the server already has. Left off each save: they never change, and
+   * moving a photo re-sent the photo — megabytes per move, from everyone in the room.
+   */
+  const saved = new PictureLedger();
+
   const saver = new SceneAutosaver<DrawElement>({
     readScene: () => live.elements,
     lookup: live.lookup,
@@ -59,9 +67,10 @@
       //
       // In parts, pictures last and alone, so one the server refuses holds back only
       // itself. See `splitPatch`.
-      for (const part of splitPatch(patch)) {
+      for (const part of splitPatch({ ...patch, elements: saved.strip(patch.elements) })) {
         await patchElements(slug, part);
       }
+      saved.note(patch.elements);
     },
     onStatus: (next) => {
       status = next;
@@ -72,6 +81,9 @@
   onMount(() => {
     void (async () => {
       let elements: DrawElement[] = [];
+      let repaired: DrawElement[] = [];
+      // Read beside the board rather than after it, so it costs the page no time.
+      const draft = drafts.load(slug) as Promise<DrawElement[] | null>;
       try {
         const board = await getBoard(slug);
         title = board.title;
@@ -79,18 +91,38 @@
         // The draft this page used to keep in localStorage: the server has the board,
         // and the string only took up the quota.
         storage()?.removeItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
+        // What the server stripped from boards saved before its schema had the fields —
+        // every video an empty box — this browser may still have in its draft.
+        const recovered = recoverStripped(elements, await draft, Date.now(), () =>
+          Math.floor(Math.random() * 0x7fffffff),
+        );
+        if (recovered.repaired.length > 0) {
+          saver.tracker.reset(elements);
+          saved.reset(elements);
+          elements = recovered.elements;
+          repaired = recovered.repaired;
+        }
       } catch {
         // The server is unreachable: the local draft, or the one an older version of
         // this page kept in localStorage.
-        const drafted = (await drafts.load(slug)) as DrawElement[] | null;
+        const drafted = await draft;
         const legacy = storage()?.getItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
         elements = drafted ?? (legacy ? (elementsFromJson(legacy) ?? []) : []);
         title = slug ? `Board ${slug}` : "Untitled";
       }
 
-      saver.tracker.reset(elements);
+      if (repaired.length === 0) {
+        saver.tracker.reset(elements);
+        saved.reset(elements);
+      }
       live.replace(elements);
       scene = new Scene(elements);
+      if (repaired.length > 0) {
+        // Saved again, whole: the tracker holds the server's stripped copies, which these
+        // outrank.
+        saver.tracker.noteChanged(repaired.map((element) => element.id));
+        saver.notify();
+      }
     })();
 
     const flushOnHide = (): void => {

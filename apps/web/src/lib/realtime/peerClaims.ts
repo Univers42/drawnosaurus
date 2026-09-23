@@ -95,11 +95,13 @@ export function claimSelection(previous: Claims, selected: readonly string[], no
 /**
  * How long to wait between two previews of a gesture, from the size of the last one.
  *
- * A shape moved is a few hundred bytes and goes twenty times a second, which is smooth.
- * A long freehand stroke is tens of kilobytes; at that rate it would saturate a slow
- * link and arrive late, which is worse than arriving less often.
+ * A shape moved is a few hundred bytes and goes thirty times a second — as often as a
+ * cursor, so the shape keeps up with the hand moving it. A long freehand stroke is tens
+ * of kilobytes; at that rate it would saturate a slow link and arrive late, which is
+ * worse than arriving less often.
  */
 export function previewInterval(bytes: number): number {
+  if (bytes <= 4_000) return 33;
   if (bytes <= 16_000) return 50;
   if (bytes <= 64_000) return 120;
   if (bytes <= 256_000) return 300;

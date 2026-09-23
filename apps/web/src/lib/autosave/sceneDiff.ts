@@ -253,4 +253,9 @@ export class SceneDiffTracker<T extends StampedElement> {
   get knownCount(): number {
     return this.known.size;
   }
+
+  /** Every element the other side is known to have, tombstones included. */
+  knownElements(): IterableIterator<T> {
+    return this.known.values();
+  }
 }
