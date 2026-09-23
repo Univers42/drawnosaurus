@@ -189,6 +189,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🖼️ Images",
+    text: /`I` — Image tool/,
+    status: "out-of-scope",
+    why: "The same cheat-sheet error as under Essential shortcuts: Excalidraw's TOOLS table gives the image tool a digit (9) and no letter — see ci_shortcuts.rs.",
+  },
+  {
+    section: "🖼️ Images",
     text: /crop|Crop/,
     status: "gap",
     why: "No crop mode. Images resize and move; cropping needs a second rect on the element and a mode in the interaction state machine.",
@@ -414,6 +420,12 @@ export const RULES: readonly Rule[] = [
     text: /Lock/,
     status: "gap",
     why: "No locked state — see the Locking rule.",
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /Snap to nearby objects/,
+    status: "gap",
+    why: "Snapping to objects, and its Ctrl/Cmd inversion, applies to moving a selection only (ci_objects_snap.rs). Drawing and resizing snap to the grid but not to other elements, where Excalidraw's snapNewElement and snapResizingElements (App.tsx:13375, :13499) do.",
   },
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
