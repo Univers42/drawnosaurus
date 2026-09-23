@@ -1,5 +1,9 @@
 <script lang="ts">
+  import { onMount } from "svelte";
+  import type { ShareInfo } from "@drawnosaurus/contract";
+  import { getShareInfo } from "$lib/api/client.ts";
   import type { ConnectionStatus, PeerCursor } from "../realtime/realtimeClient.ts";
+  import { copyText, shareLinks, type ShareLink } from "./share.ts";
 
   let {
     slug,
@@ -13,13 +17,56 @@
     onClose: () => void;
   } = $props();
 
-  let copied = $state(false);
+  /** The link last copied, for the button's "Copied" — or a failure to say so. */
+  let copied = $state<string | null>(null);
+  let copyFailed = $state<string | null>(null);
 
-  // Prefer the live href so the fragment room key travels with the link. The server
+  /** What the server says about where others can reach it; null until it answers. */
+  let info = $state<ShareInfo | null>(null);
+
+  onMount(() => {
+    getShareInfo()
+      .then((answer) => {
+        info = answer;
+      })
+      .catch(() => {
+        info = null;
+      });
+  });
+
+  // From the live location, so the fragment room key travels with each link. The server
   // never receives that fragment; without it, a peer cannot decrypt live frames.
-  const shareUrl = $derived(
-    typeof window !== "undefined" ? window.location.href : `/boards/${slug}`,
+  const links = $derived(
+    typeof window === "undefined"
+      ? []
+      : shareLinks(
+          {
+            origin: window.location.origin,
+            pathname: window.location.pathname || `/boards/${slug}`,
+            search: window.location.search,
+            hash: window.location.hash,
+          },
+          info,
+        ),
   );
+
+  const onThisComputer = $derived(
+    typeof window !== "undefined" &&
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"),
+  );
+  const hasInternetLink = $derived(links.some((link) => link.kind === "internet"));
+
+  const TITLES: Record<ShareLink["kind"], string> = {
+    network: "People on your network",
+    internet: "Anyone on the internet",
+    "this-computer": "Only this computer",
+  };
+  const HINTS: Record<ShareLink["kind"], string> = {
+    network: "On the same Wi-Fi or wired network as this computer.",
+    internet: "Through the public tunnel. `make unshare` on this computer closes it.",
+    "this-computer":
+      "Nobody else can open this address. Run `make up` so your network address is known, or `make share` for an internet link.",
+  };
 
   const statusLabel = $derived(
     connectionStatus === "connected"
@@ -29,13 +76,16 @@
         : "Offline",
   );
 
-  async function copyLink(): Promise<void> {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      await navigator.clipboard.writeText(shareUrl);
-      copied = true;
+  async function copyLink(url: string): Promise<void> {
+    if (await copyText(url)) {
+      copied = url;
+      copyFailed = null;
       setTimeout(() => {
-        copied = false;
+        if (copied === url) copied = null;
       }, 2000);
+    } else {
+      // Nothing reached the clipboard: say so, and leave the text selected to copy by hand.
+      copyFailed = url;
     }
   }
 </script>
@@ -58,17 +108,40 @@
     </div>
 
     <p class="description">
-      Anyone with this link can join in real time. The link includes a secret room key (after
-      <code>#</code>) that never reaches the server, so live cursors and patches stay end-to-end
-      encrypted in transit. Board saves over HTTP are still readable by the server.
+      Anyone with a link can open this board and draw with you in real time. Each link carries a
+      secret room key (after <code>#</code>) that never reaches the server, so live cursors and
+      changes stay end-to-end encrypted in transit. Board saves are still readable by the server.
     </p>
 
-    <div class="link-box">
-      <input readonly value={shareUrl} aria-label="Share URL" />
-      <button type="button" class="copy-btn" onclick={copyLink}>
-        {copied ? "Copied! ✓" : "Copy Link"}
-      </button>
-    </div>
+    {#each links as link (link.url)}
+      <div class="link-row" data-kind={link.kind}>
+        <div class="link-label">
+          <span class="link-title">{TITLES[link.kind]}</span>
+          <span class="link-hint">{HINTS[link.kind]}</span>
+        </div>
+        <div class="link-box">
+          <input
+            readonly
+            value={link.url}
+            aria-label={`Share link — ${TITLES[link.kind]}`}
+            onfocus={(event) => (event.currentTarget as HTMLInputElement).select()}
+          />
+          <button type="button" class="copy-btn" onclick={() => copyLink(link.url)}>
+            {copied === link.url ? "Copied! ✓" : "Copy link"}
+          </button>
+        </div>
+        {#if copyFailed === link.url}
+          <p class="copy-failed" role="alert">Could not copy — select the link and press Ctrl+C.</p>
+        {/if}
+      </div>
+    {/each}
+
+    {#if onThisComputer && !hasInternetLink}
+      <p class="hint">
+        For someone outside your network, run <code>make share</code> on this computer: an internet link
+        appears here.
+      </p>
+    {/if}
 
     <div class="peers-section">
       <div class="peers-header">
@@ -210,10 +283,49 @@
     color: var(--ink);
   }
 
+  .link-row {
+    margin-bottom: 14px;
+  }
+
+  .link-label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 6px;
+  }
+
+  .link-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fg-strong);
+  }
+
+  .link-hint {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .copy-failed {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #e03131;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 16px;
+    line-height: 1.45;
+  }
+
+  .hint code {
+    font-size: 12px;
+    color: var(--ink);
+  }
+
   .link-box {
     display: flex;
     gap: 8px;
-    margin-bottom: 20px;
   }
 
   .link-box input {

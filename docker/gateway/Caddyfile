@@ -1,0 +1,36 @@
+# The one address drawnosaurus is reached at: the app and its API on the same origin.
+#
+# The page used to be told the API lived at http://localhost:4300. On the computer
+# running the stack that is true; on a colleague's it is their own machine, where
+# nothing is listening, so a board opened from another computer could not load, save or
+# go live. Behind this gateway every request goes back to wherever the page came from —
+# localhost, a LAN address, a tunnel's public name — and a link works from all of them.
+# Websockets pass through `reverse_proxy` untouched, so the live link does too.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:80 {
+	# Guests — anyone reaching this computer by another name than localhost, over the
+	# network or through the tunnel — open and edit the boards they are given links to.
+	# Listing every board, creating and deleting are for the computer running it.
+	@guestManages expression `!({host} in ["localhost", "127.0.0.1", "::1"]) && ((({method} == "GET" || {method} == "HEAD" || {method} == "POST") && {path} == "/v1/boards") || ({method} == "DELETE" && {path}.startsWith("/v1/boards/")))`
+	handle @guestManages {
+		header Content-Type application/json
+		respond `{"error":{"code":"host_only","message":"Only the computer running drawnosaurus can list, create or delete boards. Open a board from the link you were given."}}` 403
+	}
+
+	handle /v1/* {
+		reverse_proxy api:4000
+	}
+
+	handle /healthz {
+		reverse_proxy api:4000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+}

@@ -8,7 +8,10 @@ services:
       # Host ports are all overridable because this machine also runs the sibling
       # osionos stack, which already owns 3000/4000/5173/27017. Container-internal
       # ports never change, so the compose network and CI are unaffected.
-      - "${MONGO_PORT:-27019}:27017"
+      #
+      # On 127.0.0.1 only. This mongod has no password, and published on every
+      # interface anyone on the network could read or rewrite every board in it.
+      - "127.0.0.1:${MONGO_PORT:-27019}:27017"
     healthcheck:
       # api and the test runner both wait on this: connecting to a mongod that is
       # still starting up is the classic flaky-CI cause.
@@ -30,11 +33,19 @@ services:
       # ports); the Vite dev proxy is same-origin and needs none of this.
       CORS_ORIGIN: "*"
       AUTH_MODE: dev
+      # Where people on the network reach the gateway, worked out by `make up` from the
+      # host — inside this container there are no addresses but its own. See share.ts.
+      SHARE_LAN_ORIGINS: ${SHARE_LAN_ORIGINS:-}
+      # The tunnel `make share` starts says its public name here; no tunnel, no answer.
+      SHARE_TUNNEL_METRICS: http://tunnel:2000
     depends_on:
       mongo:
         condition: service_healthy
     ports:
-      - "${API_PORT:-4300}:4000"
+      # For tools on this computer. Everyone else goes through the gateway, which is
+      # what decides what a guest may do; published on every interface, this port let
+      # anyone on the network walk around it.
+      - "127.0.0.1:${API_PORT:-4300}:4000"
 
   web:
     build:
@@ -47,13 +58,46 @@ services:
         BUILD_ENGINE_SHA: ${BUILD_ENGINE_SHA:-unknown}
     environment:
       PORT: "3000"
-      # Read at runtime, not baked in, so one image can point anywhere. It must be the
-      # HOST-visible api address: the browser resolves it, not the compose network.
-      PUBLIC_API_URL: http://localhost:${API_PORT:-4300}
+      # Empty: the API is on the page's own origin, behind the gateway. It used to be
+      # http://localhost:4300, which on a colleague's computer is their own machine.
+      PUBLIC_API_URL: ""
     depends_on:
       - api
+
+  # The one address everything is reached at — the app and /v1 on the same origin, from
+  # any name this computer is reached by. See docker/gateway/Caddyfile.
+  gateway:
+    image: caddy:2.10.2-alpine
+    volumes:
+      - ./docker/gateway/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - api
+      - web
     ports:
-      - "${WEB_PORT:-5273}:3000"
+      # Every interface, on purpose: this is the port colleagues on the network open.
+      - "${WEB_PORT:-5273}:80"
+
+  # The stack on the internet, for `make share`: a Cloudflare quick tunnel, which needs
+  # no account and no open port — it dials out. Its public name is random and is new
+  # each time it starts. Off unless asked for.
+  tunnel:
+    image: cloudflare/cloudflared:2025.9.1
+    profiles: ["share"]
+    # http2 rather than QUIC: QUIC is UDP, which school and office networks often drop,
+    # and then the tunnel never comes up. http2 goes out on 443 like any web page.
+    command:
+      [
+        "tunnel",
+        "--no-autoupdate",
+        "--protocol",
+        "http2",
+        "--metrics",
+        "0.0.0.0:2000",
+        "--url",
+        "http://gateway:80",
+      ]
+    depends_on:
+      - gateway
 
   # Ephemeral runner for install/typecheck/lint/test. The repo is bind-mounted so
   # results land on the host; only the pnpm download cache is a volume.
