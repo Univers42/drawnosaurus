@@ -110,13 +110,19 @@ export class SceneDiffTracker<T extends StampedElement> {
     const present = new Set(live.map((element) => element.id));
     for (const [id, previous] of this.known) {
       if (present.has(id) || previous.isDeleted) continue;
-      changed.push({
+      const tombstone: T = {
         ...previous,
         isDeleted: true,
         version: previous.version + 1,
         versionNonce: nonce(),
         updated: now,
-      });
+      };
+      // Nothing draws a tombstone, and an image's picture is most of its size: sent
+      // with it, every deleted photo went on counting against the board's 16MB, and
+      // deleting images never made room. Undo does not need it — the engine keeps its
+      // own copy and sends the whole element back.
+      delete (tombstone as { dataUrl?: unknown }).dataUrl;
+      changed.push(tombstone);
     }
 
     const predicted = predictOrder(this.order, changed);

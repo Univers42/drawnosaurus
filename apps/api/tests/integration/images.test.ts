@@ -69,6 +69,32 @@ describe("an image's picture", () => {
   });
 });
 
+describe("a deleted image", () => {
+  /**
+   * Three of the largest pictures do not fit in one board. Deleting one has to make room
+   * for another: a tombstone that kept its picture never did, so a board that had once
+   * held three photos refused the next one while showing none.
+   */
+  it("gives its room back", async () => {
+    const slug = await createBoard(app);
+    const picture = largestPicture();
+    for (const id of ["one", "two"]) {
+      expect(
+        (await patch(slug, [element({ id, type: "image", dataUrl: picture })])).statusCode,
+      ).toBe(200);
+    }
+
+    // The tombstone as a client might send it: picture and all.
+    const deleted = await patch(slug, [
+      element({ id: "one", type: "image", dataUrl: picture, isDeleted: true, version: 2 }),
+    ]);
+    expect(deleted.statusCode).toBe(200);
+    const third = await patch(slug, [element({ id: "three", type: "image", dataUrl: picture })]);
+
+    expect(third.statusCode).toBe(200);
+  });
+});
+
 describe("a board past MongoDB's 16MB document ceiling", () => {
   /**
    * Three of the largest pictures do not fit in one document. Each request is within the
