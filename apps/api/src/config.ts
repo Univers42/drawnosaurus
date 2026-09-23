@@ -16,6 +16,18 @@ export interface Config {
   authMode: AuthMode;
   /** Owner every request maps to while authMode is "dev". */
   devOwnerId: string;
+  /**
+   * Where people on the local network reach this drawnosaurus — the gateway's origin
+   * on each LAN address, such as `http://10.12.19.1:5273`. Set by `make up`, which is
+   * the only thing that can see the host's addresses: inside the container there are
+   * none but the container's own. Empty when nobody said.
+   */
+  shareLanOrigins: string[];
+  /**
+   * The tunnel's metrics server, where it says which public name it was given — see
+   * `share.ts`. Unset, or unreachable because no tunnel is running: no public link.
+   */
+  tunnelMetricsUrl: string | null;
 }
 
 const DEFAULT_BODY_LIMIT = 8 * 1024 * 1024;
@@ -37,6 +49,23 @@ function intOr(value: string | undefined, fallback: number): number {
   return parsed;
 }
 
+/** A comma-separated list of origins; anything that is not one is dropped. */
+function origins(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => {
+      try {
+        const url = new URL(entry);
+        return (url.protocol === "http:" || url.protocol === "https:") && url.pathname === "/";
+      } catch {
+        return false;
+      }
+    })
+    .map((entry) => new URL(entry).origin);
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const authMode: AuthMode = env.AUTH_MODE === "bearer" ? "bearer" : "dev";
 
@@ -49,5 +78,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bodyLimit: intOr(env.BODY_LIMIT, DEFAULT_BODY_LIMIT),
     authMode,
     devOwnerId: env.DEV_OWNER_ID ?? "dev-owner",
+    shareLanOrigins: origins(env.SHARE_LAN_ORIGINS),
+    tunnelMetricsUrl: env.SHARE_TUNNEL_METRICS ? env.SHARE_TUNNEL_METRICS : null,
   };
 }

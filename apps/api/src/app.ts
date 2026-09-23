@@ -7,6 +7,7 @@ import { registerLiveRoutes } from "./boards/live.ts";
 import { BoardRepository } from "./boards/repository.ts";
 import type { Config } from "./config.ts";
 import { registerErrorHandler } from "./errors.ts";
+import { registerShareRoutes } from "./share.ts";
 import type { MongoHandle } from "./mongo.ts";
 
 export interface BuildAppOptions {
@@ -65,6 +66,7 @@ export async function buildApp({
 
   registerBoardRoutes(app, { repo: new BoardRepository(mongo.boards), config });
   registerLiveRoutes(app);
+  registerShareRoutes(app, config);
 
   return app;
 }

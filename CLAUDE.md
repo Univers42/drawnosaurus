@@ -16,6 +16,17 @@ apps/web (SvelteKit, TS strict) ──HTTP /v1──▶ apps/api (Fastify) ─�
       packages/contract — schemas + merge rule, shared by both
 ```
 
+**Sharing across computers** goes through one origin: the `gateway` service (Caddy,
+`docker/gateway/Caddyfile`) serves the app and `/v1` together on :5273, so the web image runs with
+`PUBLIC_API_URL=""` and a page talks back to whatever host it was opened at — localhost, a LAN
+address, the tunnel. The api (:4300) and mongo (:27019) ports are bound to 127.0.0.1. Guests (any
+non-localhost Host) cannot list, create or delete boards: the gateway refuses. `GET /v1/share`
+tells the Share dialog the LAN origin `make up` detected (`SHARE_LAN_ORIGINS`) and the quick
+tunnel's public origin (`make share`, cloudflared's `/quicktunnel`). Live frames must stay
+readable on plain `http://` over the LAN, where browsers withhold `crypto.subtle`:
+`roomCrypto.ts` falls back to `@noble/*` with byte-identical envelopes. User guide:
+`docs/collaboration.md`.
+
 **The boundary rule:** the engine never talks to the network, the server never runs WASM. The only
 thing crossing between them is an `.osidraw` scene document.
 
@@ -27,7 +38,8 @@ Everything runs in Docker via the Makefile; there is no host Node requirement fo
 | Command                               | What it does                                             |
 | ------------------------------------- | -------------------------------------------------------- |
 | `make all`                            | submodule → WASM → deps → quality gate → running stack   |
-| `make up`                             | mongo + api + web (web :5273, api :4300, mongo :27019)   |
+| `make up`                             | mongo + api + web behind the gateway on :5273            |
+| `make share` / `make unshare`         | put the running stack on the internet / take it off      |
 | `make dev`                            | Vite dev server + API with hot reload on :5373 / :4373   |
 | `make verify`                         | what CI runs: `quality` + integration tests              |
 | `make quality`                        | typecheck + lint + format + unit tests                   |

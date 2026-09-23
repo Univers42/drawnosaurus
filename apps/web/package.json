@@ -16,7 +16,9 @@
     "test:bench": "vitest bench --run"
   },
   "dependencies": {
-    "@drawnosaurus/contract": "workspace:*"
+    "@drawnosaurus/contract": "workspace:*",
+    "@noble/ciphers": "^2.4.0",
+    "@noble/hashes": "^2.4.0"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.3.4",
