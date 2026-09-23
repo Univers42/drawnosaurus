@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { focusBoard, openBoard, pickTool, type Board } from "./board.ts";
+import { clickElement, focusBoard, openBoard, pickTool, type Board } from "./board.ts";
 
 /**
  * The static layer, checked in pixels.
@@ -19,6 +19,12 @@ import { focusBoard, openBoard, pickTool, type Board } from "./board.ts";
  *
  * The two must be identical. Not similar, identical: a scroll by whole device pixels is
  * an exact copy, so anything else is a bug rather than a rounding difference.
+ *
+ * While the camera is still moving the painter shows the last picture moved, with only
+ * the edges it uncovers painted — an approximation by design, replaced by a full redraw
+ * on the first frame after the motion stops. So the exact comparison is made once the
+ * camera has settled, which is the picture that stays on screen; what a frame in motion
+ * must get right is checked on its own below.
  */
 
 /** The canvas as a data URL — an exact readout of every pixel. */
@@ -46,6 +52,17 @@ async function forceFullRedraw(board: Board): Promise<void> {
     engine.setGrid({ enabled: was });
     await new Promise((done) => requestAnimationFrame(done));
   });
+  await board.page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+}
+
+/** The 140ms motion tail in `MOTION_MS`, plus room for the frame that follows it. */
+const PAST_THE_MOTION_TAIL = 400;
+
+/** Waits until the camera has stopped and the frame after it has been painted. */
+async function settle(board: Board): Promise<void> {
+  await board.page.waitForTimeout(PAST_THE_MOTION_TAIL);
   await board.page.evaluate(
     () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
   );
@@ -79,9 +96,7 @@ test.describe("the static layer", () => {
       // Negated, because a wheel delta moves the content the other way — so this pans the
       // camera by exactly (dx, dy).
       await page.mouse.wheel(-dx, -dy);
-      await page.evaluate(
-        () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
-      );
+      await settle(board);
       const scrolled = await pixels(board);
 
       await forceFullRedraw(board);
@@ -103,9 +118,7 @@ test.describe("the static layer", () => {
     for (let i = 0; i < 30; i += 1) {
       await page.mouse.wheel(-13, -7);
     }
-    await page.evaluate(
-      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
-    );
+    await settle(board);
     const scrolled = await pixels(board);
 
     await forceFullRedraw(board);
@@ -126,13 +139,94 @@ test.describe("the static layer", () => {
     for (let i = 0; i < 5; i += 1) {
       await page.mouse.wheel(-11, -9);
     }
-    await page.evaluate(
-      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
-    );
+    await settle(board);
     const scrolled = await pixels(board);
 
     await forceFullRedraw(board);
     expect(scrolled).toBe(await pixels(board));
+  });
+
+  test("the edge a pan uncovers is drawn while it is still moving", async ({ page }) => {
+    // The moved picture does not reach the edge the board is coming in from. Left bare,
+    // that edge showed empty paper until the camera stopped — the edge someone is looking
+    // at, because it is where they are going.
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await focusBoard(board);
+    await page.mouse.move(board.box.x + 700, board.box.y + 400);
+
+    // The rectangle half off the left edge, then settled, so the next pan starts from a
+    // picture drawn for where the camera is.
+    await page.mouse.wheel(500, 0);
+    await settle(board);
+    const strip = { left: 0, top: 0, right: 36, bottom: board.box.height };
+
+    // Forty pixels back, so the rectangle's left side comes into view across the strip —
+    // and the strip read in the very frame that painted it. A frame is only "in motion"
+    // within 140ms of the pan, and a frame here can come later than that, so the pan is
+    // dispatched and the frame caught from inside the page, in one task: an `await` back
+    // to the test between the two would let the motion expire before anything was read.
+    // Tried a few times, because the first frame can still come late.
+    const seen = await page.evaluate(async (strip) => {
+      const engine = window.__drawEngine!;
+      const canvas = document.querySelector("canvas")!;
+      const ctx = canvas.getContext("2d")!;
+      const box = canvas.getBoundingClientRect();
+      const ink = (): number => {
+        const w = Math.round(strip.right * (canvas.width / box.width));
+        const h = Math.round(strip.bottom * (canvas.height / box.height));
+        const { data } = ctx.getImageData(0, 0, w, h);
+        const paper = ctx.getImageData(canvas.width - 1, 0, 1, 1).data;
+        let count = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (
+            Math.abs(data[i]! - paper[0]!) > 12 ||
+            Math.abs(data[i + 1]! - paper[1]!) > 12 ||
+            Math.abs(data[i + 2]! - paper[2]!) > 12
+          ) {
+            count += 1;
+          }
+        }
+        return count / (w * h);
+      };
+      const frame = () => new Promise((done) => requestAnimationFrame(done));
+      const still = async () => {
+        while (engine.debugSnapshot().rendering.dirty) await frame();
+        await frame();
+      };
+      const wheel = (deltaX: number) =>
+        canvas.dispatchEvent(
+          new WheelEvent("wheel", {
+            deltaX,
+            clientX: box.x + 700,
+            clientY: box.y + 400,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const before = engine.debugSnapshot().rendering.scrolls;
+        wheel(-40);
+        // Registered after the engine's own frame callback, so it runs straight after
+        // that frame is painted.
+        await frame();
+        const moved = engine.debugSnapshot().rendering.scrolls > before;
+        const moving = ink();
+        await still();
+        const settled = ink();
+        if (moved) return { moving, settled };
+        wheel(40);
+        await still();
+      }
+      return null;
+    }, strip);
+
+    expect(seen, "no frame was ever painted while the camera moved").not.toBeNull();
+    expect(seen!.settled, "nothing came into view, so this proves nothing").toBeGreaterThan(0);
+    expect(seen!.moving, "the uncovered edge was left blank while moving").toBeGreaterThan(
+      seen!.settled * 0.8,
+    );
   });
 
   test("editing while panned redraws rather than reusing", async ({ page }) => {
@@ -155,5 +249,112 @@ test.describe("the static layer", () => {
     );
 
     expect(await pixels(board), "a new shape did not reach the canvas").not.toBe(before);
+  });
+});
+
+/** How many times the engine has drawn its picture of the board from scratch. */
+function redraws(board: Board): Promise<number> {
+  return board.page.evaluate(() => window.__drawEngine!.debugSnapshot().rendering.redraws);
+}
+
+const twoFrames = (board: Board) =>
+  board.page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+
+test.describe("adding to the board paints on top of the picture", () => {
+  // Most changes to a big board are an element added on top: a shape drawn, a paste,
+  // every Ctrl+D of a stack of copies. The picture of the board is then the old picture
+  // with the new element painted over it — so it is painted over it, instead of the
+  // whole board being drawn again. On 9,000 shapes that was ten milliseconds of
+  // rasterising per duplicate, for one new shape.
+  //
+  // Each case checks both halves: that the board was not drawn again, and that what is
+  // on the canvas is exactly what drawing it again produces.
+
+  test("a duplicate is painted over the picture, exactly", async ({ page }) => {
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await clickElement(board, 2);
+    await twoFrames(board);
+
+    const before = await redraws(board);
+    await page.keyboard.press("Control+d");
+    await twoFrames(board);
+    const shown = await pixels(board);
+
+    expect(await redraws(board), "the whole board was drawn again for one copy").toBe(before);
+    await forceFullRedraw(board);
+    expect(shown, "painting on top differs from drawing it all again").toBe(await pixels(board));
+  });
+
+  test("a shape being drawn never draws the board again, and ends exact", async ({ page }) => {
+    // While it is drawn, the rest of the board is the picture already on screen; when it
+    // ends, the shape is painted onto that picture. At no point is the board redrawn.
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await pickTool(page, "Rectangle");
+    await twoFrames(board);
+
+    const before = await redraws(board);
+    await page.mouse.move(board.box.x + 520, board.box.y + 470);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + 700, board.box.y + 600, { steps: 6 });
+    await twoFrames(board);
+    expect(await redraws(board), "starting the shape drew the whole board again").toBe(before);
+    await page.mouse.up();
+    await twoFrames(board);
+    const shown = await pixels(board);
+
+    expect(await redraws(board), "finishing the shape drew the whole board again").toBe(before);
+    await forceFullRedraw(board);
+    expect(shown, "painting on top differs from drawing it all again").toBe(await pixels(board));
+  });
+
+  test("an Alt-drag copy never draws the board again, and ends exact", async ({ page }) => {
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await pickTool(page, "Select");
+    const top = await page.evaluate(() => {
+      const engine = window.__drawEngine!;
+      const elements = JSON.parse(engine.exportJson()).elements;
+      const last = elements[elements.length - 1];
+      const { x, y, scale } = engine.camera;
+      // Its top edge: a shape with no background is held by its outline.
+      return { x: (last.x + last.width / 2) * scale + x, y: last.y * scale + y };
+    });
+    await twoFrames(board);
+
+    const before = await redraws(board);
+    await page.mouse.move(board.box.x + top.x, board.box.y + top.y);
+    await page.keyboard.down("Alt");
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + top.x + 60, board.box.y + top.y + 40, { steps: 6 });
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    await twoFrames(board);
+    const shown = await pixels(board);
+
+    expect(
+      JSON.parse(await page.evaluate(() => window.__drawEngine!.exportJson())).elements,
+    ).toHaveLength(4);
+    expect(await redraws(board), "the copy drew the whole board again").toBe(before);
+    await forceFullRedraw(board);
+    expect(shown, "painting on top differs from drawing it all again").toBe(await pixels(board));
+  });
+
+  test("a change to something already drawn draws it all again", async ({ page }) => {
+    // The other direction: an element that is part of the picture cannot be painted
+    // over it, because its old self is in there.
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await clickElement(board, 0);
+    await twoFrames(board);
+
+    const before = await redraws(board);
+    await page.keyboard.press("ArrowRight");
+    await twoFrames(board);
+
+    expect(await redraws(board)).toBeGreaterThan(before);
   });
 });

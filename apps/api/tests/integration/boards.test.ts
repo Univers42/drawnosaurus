@@ -165,6 +165,35 @@ describe("element reconciliation", () => {
     expect(replay.json()).toMatchObject({ rejected: 1 });
   });
 
+  it("returns tombstones when asked, for a client catching up", async () => {
+    // A reconnecting client has to learn of a peer's delete; without the tombstone it
+    // reads the same as an element the server was never told about.
+    const slug = await createBoard(app);
+    await patch(slug, { elements: [element({ id: "a" }), element({ id: "b" })] });
+    await patch(slug, { elements: [element({ id: "a", version: 2, isDeleted: true })] });
+
+    const board = await app.inject({
+      method: "GET",
+      url: `/v1/boards/${slug}?include=tombstones`,
+    });
+    const elements = (board.json() as { scene: { elements: { id: string; isDeleted: boolean }[] } })
+      .scene.elements;
+
+    expect(elements.map((e) => [e.id, e.isDeleted])).toEqual([
+      ["a", true],
+      ["b", false],
+    ]);
+  });
+
+  it("refuses an include it does not know", async () => {
+    const slug = await createBoard(app);
+    const response = await app.inject({
+      method: "GET",
+      url: `/v1/boards/${slug}?include=everything`,
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
   it("applies an explicit z-order, which no stamp could express", async () => {
     const slug = await createBoard(app);
     await patch(slug, {

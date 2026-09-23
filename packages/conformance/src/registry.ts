@@ -273,7 +273,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "🧱 Web embeds",
     status: "covered",
-    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`],
+    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`, "e2e/embed.spec.ts"],
   },
   {
     section: "🧙 Magic Frame / Wireframe → Code",
@@ -526,7 +526,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "13. Embeds",
     status: "covered",
-    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`],
+    tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`, "e2e/embed.spec.ts"],
   },
   {
     section: "14. Selection engine",
@@ -642,12 +642,6 @@ export const RULES: readonly Rule[] = [
     section: "23. Touch / mobile",
     status: "gap",
     why: "Pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout.",
-  },
-  {
-    section: "24. Eraser",
-    text: /Touch\/pen eraser support/,
-    status: "gap",
-    why: "A pen's eraser end is not recognised. Excalidraw switches to the eraser when a pointer arrives with button 5 (App.tsx:8700-8716); here the pen draws with whatever tool is active. Touch erases like a mouse.",
   },
   {
     section: "24. Eraser",
@@ -797,14 +791,20 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "40. Collaboration",
-    text: /Follow user|Offline queue|Reconnection|Remote selections|Active tool|Connection state|User list/,
+    text: /Follow user|Remote selections|Active tool|User list/,
     status: "gap",
-    why: "Presence beyond cursors, and the offline/reconnect path. Element sync and last-write-wins are done.",
+    why: "Presence beyond cursors. Element sync, last-write-wins, reconnection with catch-up, the offline queue and the connection state are done.",
   },
   {
     section: "40. Collaboration",
     status: "covered",
-    tests: [`${WEB}/realtime/realtime.test.ts`, `${ENGINE}/ci_remote_patch.rs`],
+    tests: [
+      `${WEB}/realtime/realtime.test.ts`,
+      `${WEB}/realtime/liveBroadcast.test.ts`,
+      `${WEB}/draw-chrome/status.test.ts`,
+      "e2e/live.spec.ts",
+      `${ENGINE}/ci_remote_patch.rs`,
+    ],
   },
   {
     section: "42. Rendering engine",

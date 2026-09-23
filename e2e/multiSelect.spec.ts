@@ -1,6 +1,7 @@
 import { expect, test } from "./fixtures.ts";
 import {
   OPEN_CANVAS,
+  chromaInk,
   openBoard,
   pickTool,
   regionInk,
@@ -45,9 +46,9 @@ function at(board: Board, x: number, y: number): { x: number; y: number } {
   return { x: board.box.x + x, y: board.box.y + y };
 }
 
-async function drawBox(board: Board, box: typeof LEFT): Promise<void> {
+async function drawBox(board: Board, box: typeof LEFT, kind = "Rectangle"): Promise<void> {
   const { page } = board;
-  await pickTool(page, "Rectangle");
+  await pickTool(page, kind);
   const from = at(board, box.x, box.y);
   const to = at(board, box.x + box.w, box.y + box.h);
   await page.mouse.move(from.x, from.y);
@@ -81,11 +82,11 @@ const GAP_BAND = {
 };
 
 /**
- * The patch the *lower* box's own border crosses, and nothing else can.
+ * The patch a box of the *lower* shape's own would cross, and nothing else can.
  *
- * It sits above that box but far below the group frame's top edge, which is up at the
- * higher box; and it is inset from the box's sides, so the group frame's verticals miss
- * it too. Ink here means the element got a border of its own.
+ * It sits above that shape but far below the group frame's top edge, which is up at the
+ * higher box; and it is inset from the shape's sides, so the group frame's verticals miss
+ * it too. Ink here means the element got a box of its own — which it no longer does.
  */
 const OWN_BORDER_BAND = {
   left: RIGHT.x + 20,
@@ -94,10 +95,22 @@ const OWN_BORDER_BAND = {
   bottom: RIGHT.y - 2,
 };
 
-async function drawTwoBoxes(page: Parameters<typeof openBoard>[0]): Promise<Board> {
+/** Along the lower shape's top edge, inset from its corners: where a trace of it runs. */
+const OWN_EDGE_BAND = {
+  left: RIGHT.x + 20,
+  // Tight: a box of its own would run four pixels above the edge, and must miss this.
+  top: RIGHT.y - 2,
+  right: RIGHT.x + RIGHT.w - 20,
+  bottom: RIGHT.y + 3,
+};
+
+async function drawTwoBoxes(
+  page: Parameters<typeof openBoard>[0],
+  lower = "Rectangle",
+): Promise<Board> {
   const board = await openBoard(page);
   await drawBox(board, LEFT);
-  await drawBox(board, RIGHT);
+  await drawBox(board, RIGHT, lower);
   await deselect(board);
   return board;
 }
@@ -145,29 +158,74 @@ test.describe("the frame around a multi-selection", () => {
   });
 
   /**
-   * Each selected element keeps a border of its own, inside the group frame.
+   * Each selected element is shown by its own shape, traced in the selection colour.
    *
-   * Excalidraw draws both: a border per selected element
-   * (`interactiveScene.ts:1922-1948`) and, separately, the dotted box around their common
-   * bounds (`:2027-2052`). We drew only the second, so once two things were selected you
-   * could see *that* a region was selected but not *which* shapes in it were — and with a
-   * shape outside the marquee sitting inside its bounds, no way at all to tell it apart
-   * from one that was caught.
+   * Excalidraw puts a padded box around every selected element
+   * (`interactiveScene.ts:1922-1948`) inside the dotted box around them all
+   * (`:2027-2052`), and so did we. On a board of neighbouring shapes that is a lattice of
+   * rectangles over everything, the same for a circle as for a rectangle — reported as
+   * "the multi-selector selects all the div around the shapes; we should see the selected
+   * element, just the shape". Without *something* per element, though, you could see that
+   * a region was held but not which shapes in it were; so each is traced along its edge.
    */
-  test("puts a border around each selected element, not just around the group", async ({
+  test("traces each selected element along its own edge, in the selection colour", async ({
     page,
   }) => {
+    const board = await drawTwoBoxes(page);
+    const before = await chromaInk(page, OWN_EDGE_BAND);
+
+    await marqueeBoth(board);
+
+    expect(await selection(page)).toHaveLength(2);
+    const traced = await chromaInk(page, OWN_EDGE_BAND);
+    expect(
+      traced,
+      `the lower box's edge should be traced: ${before} before, ${traced} after`,
+    ).toBeGreaterThan(before + 0.05);
+  });
+
+  test("draws no box around each one", async ({ page }) => {
     const board = await drawTwoBoxes(page);
     const empty = await regionInk(page, OWN_BORDER_BAND);
 
     await marqueeBoth(board);
 
     expect(await selection(page)).toHaveLength(2);
-    const bordered = await regionInk(page, OWN_BORDER_BAND);
     expect(
-      bordered,
-      `the lower box should have its own border: ${empty} before, ${bordered} after`,
-    ).toBeGreaterThan(empty + 0.01);
+      await regionInk(page, OWN_BORDER_BAND),
+      "a box was drawn around the lower shape, outside its own edge",
+    ).toBeCloseTo(empty, 2);
+  });
+
+  test("an ellipse is traced round its curve, not boxed", async ({ page }) => {
+    // Where the report was plainest: a box around a circle points at the corners, where
+    // the circle is not.
+    const board = await drawTwoBoxes(page, "Ellipse");
+    const top = {
+      left: RIGHT.x + RIGHT.w / 2 - 15,
+      top: RIGHT.y - 2,
+      right: RIGHT.x + RIGHT.w / 2 + 15,
+      bottom: RIGHT.y + 3,
+    };
+    const corner = {
+      left: RIGHT.x - 12,
+      top: RIGHT.y - 12,
+      right: RIGHT.x + 16,
+      bottom: RIGHT.y + 16,
+    };
+    const curveBefore = await chromaInk(page, top);
+    const cornerBefore = await regionInk(page, corner);
+
+    await marqueeBoth(board);
+
+    expect(await selection(page)).toHaveLength(2);
+    expect(await chromaInk(page, top), "the top of the curve is not traced").toBeGreaterThan(
+      curveBefore + 0.05,
+    );
+    expect(
+      await regionInk(page, corner),
+      "something was drawn at the corner of the ellipse's box, where the ellipse is not",
+    ).toBeCloseTo(cornerBefore, 2);
   });
 
   /**

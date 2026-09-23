@@ -75,8 +75,8 @@ each pinned by a test:
 - **The local draft cannot stop the autosave.** `localStorage` holds about five million
   characters; a board with a few photos is past that, and the draft's `setItem` threw
   before the autosave was told about the change — silently, with the header reading
-  "Saved". The draft is now best effort, falling back to a copy without pictures
-  (`draft.test.ts`).
+  "Saved". The draft now lives in IndexedDB, written a change at a time off the frame
+  that made it, and a failed write is dropped rather than thrown (`draftStore.test.ts`).
 
 The fix for the ceiling itself is a file store keyed by id. Recorded as a gap in the
 conformance registry ("Image IDs", "Image file store").

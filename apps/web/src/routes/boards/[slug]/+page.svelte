@@ -9,7 +9,8 @@
     type AutosaveStatus,
     type FailureKind,
   } from "$lib/autosave/autosaver.ts";
-  import { DRAFT_PREFIX, writeDraft } from "$lib/autosave/draft.ts";
+  import { DraftStore, indexedDbBackend } from "$lib/autosave/draftStore.ts";
+  import { SceneMirror } from "$lib/autosave/sceneMirror.ts";
   import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
 
@@ -19,11 +20,21 @@
   let status = $state<AutosaveStatus>("idle");
   let title = $state("Board");
 
-  /** Latest elements the engine reported; the autosaver reads this, never the DOM. */
-  let live: DrawElement[] = [];
+  /**
+   * Latest elements the engine reported, found by id; the autosaver reads this, never
+   * the DOM. See `sceneMirror.ts` for why it is changed in place.
+   */
+  const live = new SceneMirror<DrawElement>();
 
   const storage = (): Storage | undefined =>
     typeof localStorage === "undefined" ? undefined : localStorage;
+
+  /**
+   * The local copy of the board, for when the server cannot be reached. Written a change
+   * at a time, off the frame that made it — see `draftStore.ts` for what it replaced.
+   */
+  const drafts = new DraftStore(indexedDbBackend());
+  const LEGACY_DRAFT_PREFIX = "drawnosaurus:draft:";
 
   /**
    * 413 is the board or the request being too large, 400 a change the server will not
@@ -37,11 +48,9 @@
   }
 
   const saver = new SceneAutosaver<DrawElement>({
-    readScene: () => live,
+    readScene: () => live.elements,
+    lookup: live.lookup,
     send: async (patch) => {
-      // The local draft is the safety net for a write that does not land, so it is
-      // cached before the request goes out, not after it succeeds.
-      writeDraft(storage(), slug, live);
       // Deliberately NOT caught. The autosaver needs the rejection: it is what leaves
       // the patch unacknowledged and arms the retry. Swallowing it here made the
       // tracker treat never-sent elements as saved — so they were never resent — and
@@ -67,24 +76,27 @@
         const board = await getBoard(slug);
         title = board.title;
         elements = elementsFromJson(JSON.stringify(board.scene)) ?? [];
+        // The draft this page used to keep in localStorage: the server has the board,
+        // and the string only took up the quota.
+        storage()?.removeItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
       } catch {
-        // Check local storage draft
-        if (typeof localStorage !== "undefined") {
-          const cached = localStorage.getItem(`${DRAFT_PREFIX}${slug}`);
-          if (cached) {
-            elements = elementsFromJson(cached) ?? [];
-          }
-        }
+        // The server is unreachable: the local draft, or the one an older version of
+        // this page kept in localStorage.
+        const drafted = (await drafts.load(slug)) as DrawElement[] | null;
+        const legacy = storage()?.getItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
+        elements = drafted ?? (legacy ? (elementsFromJson(legacy) ?? []) : []);
         title = slug ? `Board ${slug}` : "Untitled";
       }
 
       saver.tracker.reset(elements);
-      live = elements;
+      live.replace(elements);
       scene = new Scene(elements);
     })();
 
     const flushOnHide = (): void => {
-      if (document.visibilityState === "hidden") void saver.flush();
+      if (document.visibilityState !== "hidden") return;
+      void saver.flush();
+      void drafts.flush();
     };
     document.addEventListener("visibilitychange", flushOnHide);
 
@@ -92,6 +104,12 @@
       document.removeEventListener("visibilitychange", flushOnHide);
     };
   });
+
+  /** The board as the server has it, deletions included — for catching up after a drop. */
+  async function fetchLatest(): Promise<DrawElement[]> {
+    const board = await getBoard(slug, { tombstones: true });
+    return elementsFromJson(JSON.stringify(board.scene)) ?? [];
+  }
 
   onDestroy(() => {
     saver.dispose();
@@ -115,17 +133,25 @@
     }
 
     if (isDelta(parsed)) {
-      applyDelta(parsed);
+      const appended = live.apply(parsed);
+      saver.tracker.noteChanged(parsed.updated.map((element) => element.id));
+      saver.tracker.noteChanged(parsed.removed);
+      // A delta never rearranges the stack: all it can do is put new elements on top.
+      drafts.record(slug, parsed.updated, parsed.removed, { appended });
     } else {
       const elements = elementsFromJson(json);
       if (elements === null) return;
-      live = elements;
+      // A whole scene — an undo, a reorder. Only what it actually changed goes to the
+      // draft: undo on a big board would otherwise rewrite every element.
+      const { changed, removed } = live.replace(
+        elements,
+        (before, after) =>
+          before.version === after.version && before.versionNonce === after.versionNonce,
+      );
+      saver.tracker.noteEverything();
+      drafts.record(slug, changed, removed, { order: live.elements.map((element) => element.id) });
     }
 
-    // The draft cache is written from `live` rather than from the payload, which is no
-    // longer the whole scene. Best effort, and it cannot throw: it used to, once a few
-    // photos filled the storage quota, and the throw stopped the autosave below it.
-    writeDraft(storage(), slug, live);
     saver.notify();
   }
 
@@ -139,34 +165,6 @@
     typeof value === "object" &&
     value !== null &&
     (value as { type?: unknown }).type === "osidraw-delta";
-
-  function applyDelta(delta: SceneDelta): void {
-    // Plain objects rather than Map/Set: these are function-local lookups, not
-    // reactive state, and Svelte's lint rightly steers reactive collections elsewhere.
-    const removed: Record<string, true> = {};
-    for (const id of delta.removed) removed[id] = true;
-
-    const pending: Record<string, DrawElement> = {};
-    for (const element of delta.updated) pending[element.id] = element;
-
-    // Rebuilt in place so z-order is preserved: the engine only sends a delta when the
-    // order has not changed, so position in this array still means what it did.
-    const next: DrawElement[] = [];
-    for (const element of live) {
-      if (removed[element.id]) continue;
-      const replacement = pending[element.id];
-      if (replacement) {
-        next.push(replacement);
-        delete pending[element.id];
-      } else {
-        next.push(element);
-      }
-    }
-    // Whatever is left is new, and new elements go on top.
-    for (const element of Object.values(pending)) next.push(element);
-
-    live = next;
-  }
 </script>
 
 <svelte:head><title>{title} · drawnosaurus</title></svelte:head>
@@ -174,7 +172,15 @@
 <div class="board">
   <div class="surface">
     {#if scene !== undefined}
-      <DrawSurface {scene} {title} {slug} {status} {onSceneChange} ariaLabel="Board canvas" />
+      <DrawSurface
+        {scene}
+        {title}
+        {slug}
+        {status}
+        {onSceneChange}
+        {fetchLatest}
+        ariaLabel="Board canvas"
+      />
     {:else}
       <div class="loading-state">
         <p>Loading board…</p>

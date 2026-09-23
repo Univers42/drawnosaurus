@@ -27,13 +27,14 @@ export function toSummary(doc: BoardDoc): BoardSummary {
  * engine parses. Tombstones are dropped on the way out — they exist so a delete
  * can win a merge, and the client rebuilds its own as it edits.
  */
-export function toBoard(doc: BoardDoc): Board {
+export function toBoard(doc: BoardDoc, options: { tombstones?: boolean } = {}): Board {
   return {
     ...toSummary(doc),
     scene: {
       type: "osidraw",
       version: SUPPORTED_OSIDRAW_VERSION,
-      elements: liveElements(doc.elements),
+      // With them when asked: see `boardQuerySchema`.
+      elements: options.tombstones ? doc.elements : liveElements(doc.elements),
     },
   };
 }
