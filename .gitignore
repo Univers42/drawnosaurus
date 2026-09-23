@@ -29,3 +29,7 @@ third_party/
 
 .env
 .env.localprompts*
+
+# Per-machine Claude Code settings — MCP paths and permissions differ per
+# checkout, so this is local state rather than something the repo agrees on.
+.claude/settings.local.json

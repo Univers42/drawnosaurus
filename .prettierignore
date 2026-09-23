@@ -22,3 +22,6 @@ tools/editor-inspector/node_modules
 # Pasted verbatim, and referred to by line number in plans and commits — reformatting it
 # would move every one of those references. Same reason `prompt/` is ignored above.
 prompts.md
+
+# Written by the tooling, not by hand.
+.claude/settings.local.json
