@@ -555,6 +555,16 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "18. Binding system",
+    // Carved out of the section rule, which named tests that never exercised it. Moving a
+    // bound arrow on its own used to be impossible — each frame re-resolved its ends onto
+    // its shapes and put it back — so "unbind" was claimed covered while the gesture that
+    // performs it did nothing at all.
+    text: /^Unbind$|^Rebind$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_arrow_drag.rs`, "e2e/arrowDrag.spec.ts"],
+  },
+  {
+    section: "18. Binding system",
     status: "covered",
     tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_binding_overlap.rs`],
   },
