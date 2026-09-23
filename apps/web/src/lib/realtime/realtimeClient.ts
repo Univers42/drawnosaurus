@@ -1,5 +1,6 @@
 import { env } from "$env/dynamic/public";
 import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
+import type { Inventory } from "./liveBroadcast.ts";
 import type { Claims, PeerState } from "./peerClaims.ts";
 import { isSealedEnvelope, open, seal, type RoomKey, type SealedEnvelope } from "./roomCrypto.ts";
 
@@ -33,6 +34,8 @@ export interface PeerCursor {
    * top-left corner of every board.
    */
   pointed?: boolean;
+  /** The server's name for their connection, so its `gone` can be matched to them. */
+  socket?: string;
   lastActive: number;
 }
 
@@ -44,10 +47,30 @@ export type ConnectionStatus = "disconnected" | "connecting" | "connected";
 export type RealtimeMessage<T extends StampedElement> =
   | { type: "cursor"; clientId: string; name: string; color: string; x: number; y: number }
   | { type: "patch"; clientId: string; patch: ScenePatch<T> }
-  | { type: "join"; clientId: string; name: string; color: string }
+  /** `have`: what the newcomer has, so those already here can send what it lacks. */
+  | {
+      type: "join";
+      clientId: string;
+      name: string;
+      color: string;
+      socket?: string;
+      have?: Inventory;
+    }
   | { type: "leave"; clientId: string }
   /** What the sender holds: their selection, with when they took each element. */
-  | { type: "presence"; clientId: string; name: string; color: string; claims: Claims }
+  | {
+      type: "presence";
+      clientId: string;
+      name: string;
+      color: string;
+      claims: Claims;
+      socket?: string;
+    }
+  /**
+   * The answer to a join, for the one who joined: what they lack, and what the sender
+   * has, so the newcomer can send back what the sender lacks in turn.
+   */
+  | { type: "sync"; clientId: string; to: string; elements: T[]; have?: Inventory }
   /** Their gesture in progress: the elements it changes, as they are right now. */
   | { type: "preview"; clientId: string; elements: T[] }
   /** The gesture is over; its commit went out before this, as a patch. */
@@ -68,15 +91,50 @@ const PRESENCE_HEARTBEAT_MS = 15_000;
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 15_000;
 
+/**
+ * Asking the server whether the link still carries anything (`api/src/boards/live.ts`).
+ *
+ * A link can die without closing — a laptop lid shut, a network changed — and the socket
+ * then reads as open for as long as TCP takes to notice, which can be many minutes.
+ * Everything sent meanwhile went nowhere and everything others did never came, while the
+ * page said it was connected. A ping unanswered for `LINK_TIMEOUT_MS` ends the socket and
+ * a new one is opened, which sends and asks for everything missed. Any frame counts as
+ * an answer; a server that has never answered one is not held to it.
+ */
+const PING = '{"type":"ping"}';
+const PONG = '{"type":"pong"}';
+const LINK_CHECK_MS = 5_000;
+const LINK_TIMEOUT_MS = 10_000;
+
+/**
+ * How much may sit unsent on the socket before cursors and previews are dropped rather
+ * than queued. Both are superseded by the next one, and behind a slow link a queue of
+ * them delayed the edits behind it — every patch waited for seconds of stale cursors.
+ */
+const VOLATILE_BUFFER_LIMIT = 256 * 1024;
+
+/** What the page lends the channel to bring a newcomer up to date — see `liveBroadcast.ts`. */
+export interface SceneSync<T> {
+  /** What this client has. */
+  inventory(): Inventory;
+  /** What someone with `have` lacks, whole. */
+  missing(have: Inventory): T[];
+}
+
+/**
+ * Who this page is to the others in the room.
+ *
+ * The id is new for every page, never stored. It was kept in `sessionStorage`, which a
+ * browser copies into a duplicated tab — and two tabs with one id each took the other's
+ * frames for its own echo and dropped them, so neither ever saw the other's edits. A
+ * page reloaded is a new id too; the server says when the old one's connection goes, so
+ * nothing it held stays held (`gone`). The name is kept: it is the same person.
+ */
 export function getCollaboratorProfile(): { clientId: string; name: string; color: string } {
   if (typeof window === "undefined") {
     return { clientId: "ssr", name: "Guest", color: "#1971c2" };
   }
-  let id = sessionStorage.getItem("drawnosaurus:clientId");
-  if (!id) {
-    id = `user_${Math.random().toString(36).slice(2, 9)}`;
-    sessionStorage.setItem("drawnosaurus:clientId", id);
-  }
+  const id = `user_${Math.random().toString(36).slice(2, 11)}`;
   let name = sessionStorage.getItem("drawnosaurus:userName");
   if (!name) {
     const num = Math.floor(Math.random() * 900 + 100);
@@ -113,6 +171,15 @@ export class RealtimeChannel<T extends StampedElement> {
   private peerSweepTimer: ReturnType<typeof setInterval> | null = null;
   private status: ConnectionStatus = "disconnected";
   private preferredUrl: string | undefined;
+  private sync: SceneSync<T> | null = null;
+  /** The server's name for this client's connection, from its `welcome`. */
+  private socketId: string | undefined;
+  private linkTimer: ReturnType<typeof setInterval> | null = null;
+  /** When the ping in flight was sent, and when anything was last heard. */
+  private pingSentAt = 0;
+  private heardAt = 0;
+  /** Whether this server answers pings at all: an older one does not. */
+  private answersPings = false;
 
   /**
    * @param roomKey When set, every frame is AES-GCM sealed and plaintext inbound is
@@ -151,6 +218,11 @@ export class RealtimeChannel<T extends StampedElement> {
     this.roomKey = key;
   }
 
+  /** How to bring someone who joins up to date, and to be brought up to date on joining. */
+  setSceneSync(sync: SceneSync<T>): void {
+    this.sync = sync;
+  }
+
   connect(wsUrl?: string): void {
     if (typeof window === "undefined") return;
     this.intentionalClose = false;
@@ -163,6 +235,9 @@ export class RealtimeChannel<T extends StampedElement> {
     if (!this.heartbeatTimer) {
       this.heartbeatTimer = setInterval(() => this.sendPresence(), PRESENCE_HEARTBEAT_MS);
     }
+    if (!this.linkTimer) {
+      this.linkTimer = setInterval(() => this.checkLink(), LINK_CHECK_MS);
+    }
   }
 
   private openSocket(): void {
@@ -170,36 +245,40 @@ export class RealtimeChannel<T extends StampedElement> {
     const url = this.preferredUrl ?? this.defaultWsUrl();
     this.setStatus("connecting");
     try {
-      this.ws = new WebSocket(url);
-      this.ws.onopen = () => {
+      const socket = new WebSocket(url);
+      this.ws = socket;
+      this.socketId = undefined;
+      this.answersPings = false;
+      this.pingSentAt = 0;
+      socket.onopen = () => {
+        if (this.ws !== socket) return;
         this.connected = true;
         this.reconnectAttempt = 0;
+        this.heardAt = Date.now();
         this.setStatus("connected");
-        void this.send({
+        const join: Extract<RealtimeMessage<T>, { type: "join" }> = {
           type: "join",
           clientId: this.profile.clientId,
           name: this.profile.name,
           color: this.profile.color,
-        });
+        };
+        // Everyone already here sends back what this client lacks: what was drawn and
+        // not yet saved, what the server refused, what went by while the link was down.
+        if (this.sync) join.have = this.sync.inventory();
+        void this.send(join);
         this.sendPresence();
       };
-      this.ws.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (this.ws !== socket) return;
+        this.heardAt = Date.now();
         void this.receiveFrame(event.data as string);
       };
-      this.ws.onclose = () => {
-        this.connected = false;
-        this.ws = null;
-        // Nothing heard from anyone from here on is current: a gesture frozen mid-move
-        // or a hold released meanwhile. They say it all again when we are back.
-        if (this.peers.size > 0) {
-          this.peers.clear();
-          this.notifyPeers();
-          this.notifyState();
-        }
-        this.setStatus("disconnected");
-        if (!this.intentionalClose) this.scheduleReconnect();
+      // Events of a socket already given up on are ignored: a new one may be open by
+      // the time the old one's close arrives, and must not be taken for closed.
+      socket.onclose = () => {
+        if (this.ws === socket) this.lost();
       };
-      this.ws.onerror = () => {
+      socket.onerror = () => {
         // onclose follows; reconnect is scheduled there.
       };
     } catch {
@@ -207,6 +286,43 @@ export class RealtimeChannel<T extends StampedElement> {
       this.ws = null;
       this.setStatus("disconnected");
       if (!this.intentionalClose) this.scheduleReconnect();
+    }
+  }
+
+  /** The link is gone: forget who was here, say so, and try again. */
+  private lost(): void {
+    this.connected = false;
+    this.ws = null;
+    // Nothing heard from anyone from here on is current: a gesture frozen mid-move
+    // or a hold released meanwhile. They say it all again when we are back.
+    if (this.peers.size > 0) {
+      this.peers.clear();
+      this.notifyPeers();
+      this.notifyState();
+    }
+    this.setStatus("disconnected");
+    if (!this.intentionalClose) this.scheduleReconnect();
+  }
+
+  /** Pings, and gives up on a link that has stopped answering — see `PING`. */
+  private checkLink(): void {
+    const socket = this.ws;
+    if (!socket || !this.connected || socket.readyState !== WebSocket.OPEN) return;
+    const now = Date.now();
+    const waiting = this.pingSentAt > this.heardAt;
+    if (waiting && this.answersPings && now - this.pingSentAt >= LINK_TIMEOUT_MS) {
+      socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
+      try {
+        socket.close();
+      } catch {
+        // Already closing: it is being replaced either way.
+      }
+      this.lost();
+      return;
+    }
+    if (!waiting) {
+      socket.send(PING);
+      this.pingSentAt = now;
     }
   }
 
@@ -260,13 +376,15 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   private sendPresence(): void {
-    void this.send({
+    const presence: Extract<RealtimeMessage<T>, { type: "presence" }> = {
       type: "presence",
       clientId: this.profile.clientId,
       name: this.profile.name,
       color: this.profile.color,
       claims: this.claims,
-    });
+    };
+    if (this.socketId) presence.socket = this.socketId;
+    void this.send(presence);
   }
 
   sendPreview(elements: T[]): void {
@@ -280,6 +398,12 @@ export class RealtimeChannel<T extends StampedElement> {
   private send(msg: RealtimeMessage<T>): Promise<void> {
     const socket = this.ws;
     if (!socket || !this.connected || socket.readyState !== WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+    if (
+      (msg.type === "cursor" || msg.type === "preview") &&
+      socket.bufferedAmount > VOLATILE_BUFFER_LIMIT
+    ) {
       return Promise.resolve();
     }
     // Sealed now, in parallel with whatever is ahead; written only after it.
@@ -307,12 +431,19 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   async receiveFrame(raw: string): Promise<void> {
+    if (raw === PONG) {
+      this.answersPings = true;
+      return;
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
     } catch {
       return;
     }
+    // The server's own word, about connections, never sealed: it has no key. It could
+    // only lie about who has left, which a server that drops frames can do anyway.
+    if (this.handleControl(parsed)) return;
 
     if (this.roomKey) {
       if (!isSealedEnvelope(parsed)) {
@@ -337,6 +468,34 @@ export class RealtimeChannel<T extends StampedElement> {
     this.handleMessage(parsed as RealtimeMessage<T>);
   }
 
+  /** `welcome` and `gone`, from the server — see `api/src/boards/live.ts`. */
+  private handleControl(parsed: unknown): boolean {
+    if (typeof parsed !== "object" || parsed === null || "clientId" in parsed) return false;
+    const { type, socket } = parsed as { type?: unknown; socket?: unknown };
+    if (typeof socket !== "string") return false;
+    if (type === "welcome") {
+      this.socketId = socket;
+      // Said again with it, so everyone can tell which connection is ours.
+      this.sendPresence();
+      return true;
+    }
+    if (type === "gone") {
+      let changed = false;
+      for (const [id, peer] of this.peers) {
+        if (peer.socket === socket) {
+          this.peers.delete(id);
+          changed = true;
+        }
+      }
+      if (changed) {
+        this.notifyPeers();
+        this.notifyState();
+      }
+      return true;
+    }
+    return false;
+  }
+
   handleMessage(msg: RealtimeMessage<T>): void {
     if (msg.clientId === this.profile.clientId) return;
     if (msg.type === "cursor") {
@@ -349,7 +508,7 @@ export class RealtimeChannel<T extends StampedElement> {
       });
       this.notifyPeers();
     } else if (msg.type === "join") {
-      this.upsertPeer(msg.clientId, { name: msg.name, color: msg.color });
+      this.upsertPeer(msg.clientId, withSocket({ name: msg.name, color: msg.color }, msg.socket));
       this.notifyPeers();
       this.notifyState();
       // Existing members answer so the newcomer sees them without waiting for a cursor —
@@ -357,8 +516,34 @@ export class RealtimeChannel<T extends StampedElement> {
       // someone back from a dropped connection is still known here, but no longer knows
       // anyone. Answered with presence, which is never answered, so it cannot echo.
       this.sendPresence();
+      // And with what they lack, as Excalidraw sends its scene to whoever joins: the
+      // server has only what has been saved, which is not yet everything on screen here.
+      if (msg.have && this.sync) {
+        void this.send({
+          type: "sync",
+          clientId: this.profile.clientId,
+          to: msg.clientId,
+          elements: this.sync.missing(msg.have),
+          have: this.sync.inventory(),
+        });
+      }
+    } else if (msg.type === "sync") {
+      if (msg.to !== this.profile.clientId) return;
+      if (Array.isArray(msg.elements) && msg.elements.length > 0) {
+        const patch = { elements: msg.elements };
+        this.patchListeners.forEach((fn) => fn(patch));
+      }
+      // What we have that they lack — whatever we did while our link was down, which
+      // never reached them. A patch, never answered, so it cannot echo.
+      if (msg.have && this.sync) {
+        const lacking = this.sync.missing(msg.have);
+        if (lacking.length > 0) this.sendPatch({ elements: lacking });
+      }
     } else if (msg.type === "presence") {
-      this.upsertPeer(msg.clientId, { name: msg.name, color: msg.color, claims: msg.claims ?? {} });
+      this.upsertPeer(
+        msg.clientId,
+        withSocket({ name: msg.name, color: msg.color, claims: msg.claims ?? {} }, msg.socket),
+      );
       this.notifyPeers();
       this.notifyState();
     } else if (msg.type === "preview") {
@@ -470,6 +655,10 @@ export class RealtimeChannel<T extends StampedElement> {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    if (this.linkTimer) {
+      clearInterval(this.linkTimer);
+      this.linkTimer = null;
+    }
     if (this.ws) {
       const socket = this.ws;
       const leave: RealtimeMessage<T> = { type: "leave", clientId: this.profile.clientId };
@@ -490,6 +679,14 @@ export class RealtimeChannel<T extends StampedElement> {
     this.notifyState();
     this.setStatus("disconnected");
   }
+}
+
+/** `update`, with the peer's connection when they said which it is. */
+function withSocket<P extends object>(
+  update: P,
+  socket: string | undefined,
+): P & { socket?: string } {
+  return typeof socket === "string" ? { ...update, socket } : update;
 }
 
 export type { SealedEnvelope };

@@ -756,6 +756,21 @@
   let previewSent = false;
   let previewJson = "";
   let previewAt = 0;
+  /**
+   * The text being typed, while the editor is open. Streamed like a gesture, so the words
+   * appear on everyone's screen as they are written — and held, so nobody moves or erases
+   * a text from under the person typing it.
+   */
+  let textDraft: { id: string; text: string } | null = null;
+
+  /** What the gesture in progress — or the text being typed — looks like right now. */
+  function gestureNow(current: DrawEngine): StampedElement[] {
+    if (textDraft) {
+      const typed = current.textPreview(textDraft.id, textDraft.text);
+      return typed ? [typed as unknown as StampedElement] : [];
+    }
+    return current.gestureElements() as unknown as StampedElement[];
+  }
 
   function startPreviews(): void {
     if (!previewRaf) previewRaf = requestAnimationFrame(previewTick);
@@ -764,7 +779,7 @@
   function previewTick(): void {
     previewRaf = 0;
     if (!engine || !realtime) return;
-    const running = dragging || engine.linearInProgress();
+    const running = dragging || engine.linearInProgress() || textDraft !== null;
     if (!running || peers.length === 0) {
       if (previewSent) {
         realtime.sendPreviewEnd();
@@ -776,10 +791,10 @@
       realtime.connectionStatus === "connected" &&
       performance.now() - previewAt >= previewInterval(previewJson.length)
     ) {
-      const elements = engine.gestureElements();
+      const elements = gestureNow(engine);
       const json = JSON.stringify(elements);
       if (elements.length > 0 && json !== previewJson) {
-        realtime.sendPreview(elements as unknown as StampedElement[]);
+        realtime.sendPreview(elements);
         previewSent = true;
         previewJson = json;
         previewAt = performance.now();
@@ -789,9 +804,15 @@
   }
 
   /** Merges a peer's patch — from the socket, or from the server when catching up. */
-  function applyRemote(patch: ScenePatch<StampedElement>): void {
+  function applyRemote(incoming: ScenePatch<StampedElement>): void {
     if (!engine) return;
-    if (!patch.elements?.length && !patch.order?.length) return;
+    if (!incoming.elements?.length && !incoming.order?.length) return;
+    // Pictures its sender left off, because this client has them: put back before
+    // anything reads the patch, or the autosave would save an image without its picture.
+    const elements = liveBroadcast.withPictures(incoming.elements ?? []);
+    const patch: ScenePatch<StampedElement> = incoming.order
+      ? { elements, order: incoming.order }
+      : { elements };
     // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote edits
     // through it duplicated every one of them — and because the result was then
     // broadcast back, two clients grew the board without bound.
@@ -889,6 +910,18 @@
         });
         // What was selected before the link existed is held from now.
         if (engine) claimSelected(engine.getSelectedElements().map((element) => element.id));
+        // Whoever joins is sent what they lack, and this client is on joining: the
+        // server has only what has been saved. Sent first, so all of it is known here.
+        realtime.setSceneSync({
+          inventory: () => {
+            flushLive();
+            return liveBroadcast.inventory();
+          },
+          missing: (have) => {
+            flushLive();
+            return liveBroadcast.missing(have);
+          },
+        });
         unsubStatus = realtime.onStatus((next) => {
           const reconnected = next === "connected" && liveHistory.everConnected;
           if (liveStatus === "connecting" && next === "disconnected") {
@@ -1311,7 +1344,14 @@
       {engine}
       request={textEdit}
       fontSizePx={(textEdit.fontSize * zoom) / 100}
-      onDone={() => (textEdit = null)}
+      onDraft={(id, text) => {
+        textDraft = { id, text };
+        if (realtime) startPreviews();
+      }}
+      onDone={() => {
+        textEdit = null;
+        textDraft = null;
+      }}
     />
   {/if}
 

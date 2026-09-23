@@ -504,3 +504,260 @@ describe("realtimeClient sending", () => {
     channel.disconnect();
   });
 });
+
+describe("realtimeClient keeping everyone up to date", () => {
+  type El = {
+    id: string;
+    version: number;
+    versionNonce: number;
+    updated: number;
+    isDeleted: boolean;
+  };
+  const el = (id: string, version = 1): El => ({
+    id,
+    version,
+    versionNonce: version,
+    updated: 1,
+    isDeleted: false,
+  });
+
+  class FakeSocket {
+    static OPEN = 1;
+    static CONNECTING = 0;
+    static made: FakeSocket[] = [];
+    readyState = 0;
+    bufferedAmount = 0;
+    onopen: (() => void) | null = null;
+    onclose: (() => void) | null = null;
+    onmessage: ((event: { data: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    sent: string[] = [];
+    closed = false;
+    constructor(readonly url: string) {
+      FakeSocket.made.push(this);
+    }
+    open(): void {
+      this.readyState = 1;
+      this.onopen?.();
+    }
+    receive(data: string): void {
+      this.onmessage?.({ data });
+    }
+    send(data: string): void {
+      this.sent.push(data);
+    }
+    close(): void {
+      this.readyState = 3;
+      this.closed = true;
+    }
+    /** What it was sent, read back — pings included. */
+    messages(): { type: string; [key: string]: unknown }[] {
+      return this.sent.map((wire) => JSON.parse(wire) as { type: string });
+    }
+  }
+
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  function browser(): void {
+    FakeSocket.made = [];
+    vi.stubGlobal("window", {
+      location: { href: "http://localhost:5273/boards/abc" },
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    });
+    vi.stubGlobal("sessionStorage", { getItem: () => "user_copied", setItem: () => undefined });
+    vi.stubGlobal("WebSocket", FakeSocket);
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("is someone new in every page, even a tab duplicated with its session", () => {
+    // A duplicated tab copies sessionStorage. Two pages sharing an id each dropped the
+    // other's frames as their own echo, and never saw each other's edits.
+    browser();
+    const first = new RealtimeChannel("abc");
+    const second = new RealtimeChannel("abc");
+    expect(first.profile.clientId).not.toBe(second.profile.clientId);
+    expect(first.profile.clientId).not.toBe("user_copied");
+  });
+
+  it("says what it has on joining, and is answered with what it lacks", async () => {
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    channel.setSceneSync({ inventory: () => ({ a: [1, 1] }), missing: () => [] });
+    const received: El[][] = [];
+    channel.onRemotePatch((patch) => received.push(patch.elements));
+    channel.connect("ws://api/live");
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    await tick();
+    expect(socket.messages()[0]).toMatchObject({ type: "join", have: { a: [1, 1] } });
+
+    channel.handleMessage({
+      type: "sync",
+      clientId: "ana",
+      to: "someone else",
+      elements: [el("x")],
+    });
+    channel.handleMessage({
+      type: "sync",
+      clientId: "ana",
+      to: channel.profile.clientId,
+      elements: [el("b")],
+    });
+    expect(received, "only what was sent to it").toEqual([[el("b")]]);
+    channel.disconnect();
+  });
+
+  it("answers a join with what the newcomer lacks and what it has", async () => {
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    const asked: unknown[] = [];
+    channel.setSceneSync({
+      inventory: () => ({ a: [3, 3] }),
+      missing: (have) => {
+        asked.push(have);
+        return [el("a", 3)];
+      },
+    });
+    channel.connect("ws://api/live");
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+
+    channel.handleMessage({
+      type: "join",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      have: { a: [1, 1] },
+    });
+    await tick();
+
+    expect(asked).toEqual([{ a: [1, 1] }]);
+    expect(socket.messages().find((msg) => msg.type === "sync")).toEqual({
+      type: "sync",
+      clientId: channel.profile.clientId,
+      to: "ana",
+      elements: [el("a", 3)],
+      have: { a: [3, 3] },
+    });
+    channel.disconnect();
+  });
+
+  it("sends back what a peer who answered lacks, as an ordinary patch", async () => {
+    // What was drawn here while the link was down never reached them.
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    channel.setSceneSync({ inventory: () => ({}), missing: () => [el("offline", 2)] });
+    channel.connect("ws://api/live");
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+
+    channel.handleMessage({
+      type: "sync",
+      clientId: "ana",
+      to: channel.profile.clientId,
+      elements: [],
+      have: {},
+    });
+    await tick();
+
+    expect(socket.messages().find((msg) => msg.type === "patch")).toMatchObject({
+      patch: { elements: [el("offline", 2)] },
+    });
+    channel.disconnect();
+  });
+
+  it("forgets at once what someone held when the server says their connection went", async () => {
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    let holds: string[][] = [];
+    channel.onPeerState((peers) => (holds = peers.map((peer) => Object.keys(peer.claims))));
+    channel.connect("ws://api/live");
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    socket.receive('{"type":"welcome","socket":"7"}');
+    await tick();
+    expect(socket.messages().at(-1), "says which connection is its own").toMatchObject({
+      type: "presence",
+      socket: "7",
+    });
+
+    channel.handleMessage({
+      type: "presence",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      claims: { A: 1 },
+      socket: "3",
+    });
+    expect(holds).toEqual([["A"]]);
+    await channel.receiveFrame('{"type":"gone","socket":"4"}');
+    expect(holds, "someone else's connection").toEqual([["A"]]);
+    await channel.receiveFrame('{"type":"gone","socket":"3"}');
+    expect(holds).toEqual([]);
+    channel.disconnect();
+  });
+
+  it("gives up on a link that stopped answering, and opens another", async () => {
+    // A laptop lid shut, a network changed: the socket still reads as open.
+    vi.useFakeTimers();
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    const seen: string[] = [];
+    channel.onStatus((status) => seen.push(status));
+    channel.connect("ws://api/live");
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+
+    vi.advanceTimersByTime(5_000);
+    expect(socket.sent.at(-1)).toBe('{"type":"ping"}');
+    socket.receive('{"type":"pong"}');
+    // From here nothing arrives.
+    vi.advanceTimersByTime(5_000);
+    expect(socket.closed, "given up on while it still answered").toBe(false);
+    vi.advanceTimersByTime(15_000);
+
+    expect(socket.closed).toBe(true);
+    expect(seen.at(-1) === "disconnected" || FakeSocket.made.length > 1).toBe(true);
+    vi.advanceTimersByTime(1_000);
+    expect(FakeSocket.made, "a new link").toHaveLength(2);
+    channel.disconnect();
+  });
+
+  it("does not hold a server that never answers pings to them", () => {
+    vi.useFakeTimers();
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    channel.connect("ws://api/live");
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    vi.advanceTimersByTime(60_000);
+    expect(socket.closed).toBe(false);
+    expect(FakeSocket.made).toHaveLength(1);
+    channel.disconnect();
+  });
+
+  it("drops cursors and previews behind a clogged link, never edits", async () => {
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    channel.connect("ws://api/live");
+    const socket = FakeSocket.made[0]!;
+    socket.open();
+    await tick();
+    socket.sent = [];
+    socket.bufferedAmount = 10 * 1024 * 1024;
+
+    channel.sendCursor(1, 2);
+    channel.sendPreview([el("a")]);
+    channel.sendPatch({ elements: [el("a", 2)] });
+    channel.sendPreviewEnd();
+    await tick();
+
+    expect(socket.messages().map((msg) => msg.type)).toEqual(["patch", "preview-end"]);
+    channel.disconnect();
+  });
+});

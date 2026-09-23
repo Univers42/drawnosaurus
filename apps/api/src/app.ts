@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { assertAuthModeSupported } from "./auth.ts";
 import { registerBoardRoutes } from "./boards/routes.ts";
 import { registerLiveRoutes } from "./boards/live.ts";
+import { PictureStore } from "./boards/pictures.ts";
 import { BoardRepository } from "./boards/repository.ts";
 import type { Config } from "./config.ts";
 import { registerErrorHandler } from "./errors.ts";
@@ -64,7 +65,8 @@ export async function buildApp({
     }
   });
 
-  registerBoardRoutes(app, { repo: new BoardRepository(mongo.boards), config });
+  const repo = new BoardRepository(mongo.boards, new PictureStore(mongo.pictures));
+  registerBoardRoutes(app, { repo, config });
   registerLiveRoutes(app);
   registerShareRoutes(app, config);
 

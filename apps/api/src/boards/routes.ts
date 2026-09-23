@@ -48,7 +48,7 @@ export function registerBoardRoutes(app: FastifyInstance, { repo, config }: Boar
     const slug = slugSchema.parse((request.params as { slug: string }).slug);
     const { include } = boardQuerySchema.parse(request.query);
 
-    const doc = await repo.findBySlug(owner, slug);
+    const doc = await repo.read(owner, slug);
 
     return await reply
       .header("ETag", etagFor(doc.rev))
@@ -69,7 +69,7 @@ export function registerBoardRoutes(app: FastifyInstance, { repo, config }: Boar
     const rev = expected === "*" ? (await repo.findBySlug(owner, slug)).rev : expected;
     const doc = await repo.replace(owner, slug, body.elements, rev, body.title);
 
-    return await reply.header("ETag", etagFor(doc.rev)).send(toBoard(doc));
+    return await reply.header("ETag", etagFor(doc.rev)).send(toBoard(await repo.withPictures(doc)));
   });
 
   /**

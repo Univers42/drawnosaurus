@@ -158,7 +158,18 @@ result: what a peer holds is untouchable, exactly like a locked element (select,
 eraser, text edit, undo), and previews are painted as live but never enter the scene, history or
 autosave (`engine/crates/draw-engine/src/engine/peers.rs`). A preview carries the pre-gesture
 version, so a commit outranks it whichever arrives first. Frames go out in send order: sealing
-is async, and a preview landing after its end would freeze a shape mid-move.
+is async, and a preview landing after its end would freeze a shape mid-move. A text being typed
+is streamed the same way (`engine.textPreview`).
+
+The server only has what has been saved, so a `join` carries the newcomer's inventory (each
+id with its stamp) and everyone there answers with a `sync` of what it lacks plus their own
+inventory, which the newcomer answers with what _they_ lack — the same exchange brings a
+client back from a dropped link (`liveBroadcast.ts` › `inventory` / `missing`). The live route
+stays blind but answers `{"type":"ping"}`; a client that stops hearing anything reconnects,
+because a dead link can read as open for minutes. It also sends plaintext `welcome` / `gone`
+naming its own sockets, so what someone held is let go the moment their page goes. Client ids
+are per page, never stored: a duplicated tab copies `sessionStorage`. Pictures go to each side
+once (`docs/reference/images.md`).
 
 ### Web app shape
 
