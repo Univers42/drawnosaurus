@@ -26,9 +26,23 @@ COPY engine/pkg ./engine/pkg
 RUN test -f engine/pkg/draw_engine.js \
 	|| (echo "engine/pkg is missing: run 'make wasm' before building this image" >&2 && exit 1)
 
+# Declared here, after install, so a new commit invalidates only the build layer and not
+# the dependency cache. Vite bakes VITE_* into the bundle; `src/lib/build.ts` reads it.
+ARG BUILD_APP_SHA=unknown
+ARG BUILD_ENGINE_SHA=unknown
+ENV VITE_BUILD_APP_SHA=$BUILD_APP_SHA
+ENV VITE_BUILD_ENGINE_SHA=$BUILD_ENGINE_SHA
+
 RUN pnpm --filter @drawnosaurus/web build
 
 FROM node:22-bookworm-slim AS runtime
+
+# The same stamp as a label, so `make stale` can read what a running container was built
+# from without opening the app. ARGs do not cross stages, hence the redeclaration.
+ARG BUILD_APP_SHA=unknown
+ARG BUILD_ENGINE_SHA=unknown
+LABEL org.opencontainers.image.revision=$BUILD_APP_SHA \
+      drawnosaurus.engine.revision=$BUILD_ENGINE_SHA
 
 WORKDIR /app
 

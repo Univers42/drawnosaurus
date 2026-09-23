@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { BUILD, describeBuild } from "../build.ts";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
   import MainMenuIcon from "./MainMenuIcon.svelte";
@@ -325,6 +326,11 @@
         {/each}
       </div>
     </div>
+
+    <div class="dropdown-menu-separator" role="separator"></div>
+    <!-- Which build this is. Without it, a stack left running while commits landed looks
+         exactly like a fix that did not work. `make stale` compares it with the checkout. -->
+    <div class="build-stamp" data-testid="build-stamp">{describeBuild(BUILD)}</div>
   </div>
 </div>
 
@@ -450,6 +456,14 @@
   .dropdown-menu-item-custom {
     margin-top: 0.5rem;
     padding: 0 0.5rem 0.25rem;
+  }
+
+  .build-stamp {
+    padding: 4px 12px 6px;
+    font-size: 11px;
+    font-family: ui-monospace, monospace;
+    color: var(--muted);
+    user-select: text;
   }
 
   .menu-section-label {

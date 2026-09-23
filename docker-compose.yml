@@ -40,6 +40,11 @@ services:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      # Which commits the image is built from. Worked out by the Makefile on the host,
+      # because .git is not in the build context. `unknown` when built without it.
+      args:
+        BUILD_APP_SHA: ${BUILD_APP_SHA:-unknown}
+        BUILD_ENGINE_SHA: ${BUILD_ENGINE_SHA:-unknown}
     environment:
       PORT: "3000"
       # Read at runtime, not baked in, so one image can point anywhere. It must be the
