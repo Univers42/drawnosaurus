@@ -1,7 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { DrawCanvas } from "@osionos/draw-engine/svelte";
-  import { DARK_THEME, DEFAULT_ELEMENT_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
+  import {
+    DARK_THEME,
+    DEFAULT_ELEMENT_STYLE,
+    IDENTITY,
+    LIGHT_THEME,
+  } from "@osionos/draw-engine/types";
   import type {
     Camera,
     DrawElement,
@@ -145,7 +150,9 @@
   let textEdit = $state<TextEditRequest | null>(null);
   let zoom = $state(100);
   let contentVisible = $state(true);
-  let currentCamera = $state<Camera | undefined>(undefined);
+  // Seeded to identity so peer-cursor broadcast works before the first pan/zoom.
+  // The engine only emits onCameraChange when the camera actually moves.
+  let currentCamera = $state<Camera>(IDENTITY);
   let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
   let eraserTrailSvgPath = $state("");
   let stickyStartPoint: { x: number; y: number } | null = null;
@@ -715,7 +722,7 @@
     hoverPending = { x: sx, y: sy };
     lastPointer = { x: sx, y: sy };
 
-    if (realtime && currentCamera) {
+    if (realtime) {
       // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
       cursorPending = {
         x: (sx - currentCamera.x) / currentCamera.scale,
@@ -872,6 +879,8 @@
       {onCameraChange}
       onReady={(next) => {
         engine = next;
+        currentCamera = next.camera;
+        zoom = zoomPercent(next.camera.scale);
         next.setGrid(grid);
         next.setObjectsSnap(objectsSnap);
         syncStyle(next);

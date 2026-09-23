@@ -222,12 +222,11 @@ export class RealtimeChannel<T extends StampedElement> {
 
   private async send(msg: RealtimeMessage<T>): Promise<void> {
     if (!this.ws || !this.sessionReady || this.ws.readyState !== WebSocket.OPEN) {
-      // Keep the latest join/leave; queue patches/cursors so early strokes aren't lost.
-      if (msg.type === "join" || msg.type === "leave") {
+      // Keep the latest join/leave/cursor; queue patches so early strokes aren't lost.
+      if (msg.type === "join" || msg.type === "leave" || msg.type === "cursor") {
         this.pendingOutbound = this.pendingOutbound.filter((m) => m.type !== msg.type);
       }
       this.pendingOutbound.push(msg);
-      // Bound cursor spam while reconnecting.
       if (this.pendingOutbound.length > 64) {
         this.pendingOutbound = this.pendingOutbound.slice(-48);
       }
@@ -319,8 +318,10 @@ export class RealtimeChannel<T extends StampedElement> {
         clientId: msg.clientId,
         name: msg.name,
         color: msg.color,
-        x: existing?.x ?? 0,
-        y: existing?.y ?? 0,
+        // Keep a known cursor; otherwise leave unset so the overlay does not park
+        // newcomers at the canvas origin until their first move arrives.
+        x: existing?.x ?? Number.NaN,
+        y: existing?.y ?? Number.NaN,
         lastActive: Date.now(),
       });
       this.notifyPeers();
