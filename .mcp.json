@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "editor-inspector": {
+      "command": "node",
+      "args": ["tools/editor-inspector/src/index.ts"],
+      "env": {
+        "PLAYWRIGHT_BROWSERS_PATH": "/sgoinfre/students/dlesieur/.cache/ms-playwright"
+      }
+    }
+  }
+}

@@ -390,8 +390,11 @@
     try {
       const parsed = JSON.parse(engine.exportJson());
       const elements: DrawElement[] = Array.isArray(parsed?.elements) ? parsed.elements : [];
-      if (hit.groupId) {
-        const grouped = elements.filter((el) => el.groupId === hit.groupId && !el.isDeleted);
+      // The outermost group, so dimming covers the whole thing rather than one level
+      // of it. `groupIds` runs innermost first, so the last entry is the outer one.
+      const outermost = hit.groupIds?.at(-1);
+      if (outermost) {
+        const grouped = elements.filter((el) => !el.isDeleted && el.groupIds?.includes(outermost));
         if (grouped.length > 0) toDim = grouped;
       } else {
         const boundTexts = elements.filter((el) => el.containerId === hit.id && !el.isDeleted);
