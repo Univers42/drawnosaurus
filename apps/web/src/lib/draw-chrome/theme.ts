@@ -152,6 +152,57 @@ export function persistGridPreference(
   }
 }
 
+const OBJECTS_SNAP_STORAGE_KEY = "drawnosaurus:objects-snap";
+
+/**
+ * Whether a moving selection snaps to other elements. **Off** unless it was turned on,
+ * as Excalidraw's `objectsSnapModeEnabled` is, and persisted as theirs is: a way of
+ * working, not a property of one drawing.
+ */
+export function readObjectsSnapPreference(storage?: Pick<Storage, "getItem"> | undefined): boolean {
+  try {
+    return storage?.getItem(OBJECTS_SNAP_STORAGE_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function persistObjectsSnapPreference(
+  storage: Pick<Storage, "setItem"> | undefined,
+  on: boolean,
+): void {
+  try {
+    storage?.setItem(OBJECTS_SNAP_STORAGE_KEY, String(on));
+  } catch {
+    // As with the grid: not persisting beats failing the click.
+  }
+}
+
+/** The two ways a drag can be pulled into place, which the menu keeps apart. */
+export interface SnapModes {
+  objectsSnap: boolean;
+  grid: GridPreference;
+}
+
+/**
+ * Snapping to objects and the grid exclude each other: turning either **on** turns the
+ * other off, as Excalidraw's toggles do (`actionToggleObjectsSnapMode.tsx:22-23`,
+ * `actionToggleGridMode.tsx:23-24`).
+ *
+ * Not only for parity. The engine lets a snapping grid win outright, so with both on
+ * the objects switch would read "on" and do nothing — a setting that lies.
+ */
+export function toggleObjectsSnap(modes: SnapModes): SnapModes {
+  const objectsSnap = !modes.objectsSnap;
+  return { objectsSnap, grid: objectsSnap ? { ...modes.grid, enabled: false } : modes.grid };
+}
+
+export function pickGridMode(modes: SnapModes, patch: Partial<GridPreference>): SnapModes {
+  const grid = { ...modes.grid, ...patch };
+  const turnedOn = grid.enabled && !modes.grid.enabled;
+  return { objectsSnap: turnedOn ? false : modes.objectsSnap, grid };
+}
+
 /**
  * Resolve engine chrome from the host tokens. The engine stays token-agnostic.
  *

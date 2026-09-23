@@ -34,6 +34,7 @@ declare global {
       getSelection(): string[];
       getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
       setGrid(grid: { enabled?: boolean }): void;
+      getObjectsSnap(): boolean;
       /** Replaces the whole scene — used to place geometry too small to draw by hand. */
       loadScene(json: string): void;
       groupSelection(): void;
@@ -69,6 +70,8 @@ export interface SceneElement {
   /** Rectangles: an explicit corner radius from the in-place handle. */
   cornerRadius?: number;
   roundness?: number | null;
+  /** The reconciliation stamp: every saved edit moves it. */
+  version?: number;
 }
 
 /** Every `PATCH /v1/**` body the page has sent, in order, per page. */

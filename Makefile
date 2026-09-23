@@ -39,6 +39,14 @@ export MONGO_PORT ?= 27019
 export DEV_WEB_PORT ?= 5373
 export DEV_API_PORT ?= 4373
 
+# What the images are built from. `.git` is not in the Docker build context, so the
+# image cannot find out for itself; these go in as build args, are shown at the foot of
+# the main menu, and label the image so `make stale` can compare it with the checkout.
+# `-dirty` marks uncommitted changes, which is exactly when a SHA alone would lie.
+# `:(exclude)engine` because the submodule has its own stamp.
+export BUILD_APP_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet HEAD -- . ':(exclude)engine' 2>/dev/null || echo -dirty)
+export BUILD_ENGINE_SHA := $(shell git -C engine rev-parse --short HEAD 2>/dev/null || echo unknown)$(shell git -C engine diff --quiet HEAD 2>/dev/null || echo -dirty)
+
 CYAN  := \033[36m
 GREEN := \033[32m
 RESET := \033[0m
@@ -172,6 +180,24 @@ build: $(ENGINE_PKG) ## Build the api and web images
 up: $(ENGINE_PKG) ## Start mongo + api + web
 	$(DC) up -d --build mongo api web
 	@echo -e "$(GREEN)✔ up: web http://localhost:$(WEB_PORT)  api http://localhost:$(API_PORT)$(RESET)"
+	@echo -e "$(GREEN)  built from app $(BUILD_APP_SHA) · engine $(BUILD_ENGINE_SHA)$(RESET)"
+
+# Is the running web container built from what is checked out? It exists because a
+# container left up while commits land serves the old code, and nothing says so — it
+# looks exactly like a fix that did not work. That cost three rounds of debugging a tree
+# that no longer had the bug. Exits 1 when stale, so it can gate other targets.
+stale: ## Is the running stack built from this checkout? Exits 1 if not
+	@id=$$($(DC) ps -q web 2>/dev/null); \
+	if [ -z "$$id" ]; then echo "web is not running — nothing to be stale"; exit 0; fi; \
+	app=$$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' $$id); \
+	engine=$$(docker inspect --format '{{ index .Config.Labels "drawnosaurus.engine.revision" }}' $$id); \
+	echo "running:    app $${app:-unstamped} · engine $${engine:-unstamped}"; \
+	echo "checked out: app $(BUILD_APP_SHA) · engine $(BUILD_ENGINE_SHA)"; \
+	if [ "$$app" = "$(BUILD_APP_SHA)" ] && [ "$$engine" = "$(BUILD_ENGINE_SHA)" ]; then \
+		echo -e "$(GREEN)✔ current$(RESET)"; \
+	else \
+		echo -e "\033[31m✖ stale — run 'make up' to rebuild$(RESET)"; exit 1; \
+	fi
 
 down: ## Stop and remove containers
 	$(DC) down
@@ -222,4 +248,4 @@ clean: ## Remove containers, volumes, images, and build output
 .PHONY: all help submodules wasm install lock typecheck lint format test \
 	test-integration test-e2e conformance parity parity-deps quality verify dev build up \
 	down logs shell clean \
-	oracle oracle-fixtures bench inspector-smoke
+	oracle oracle-fixtures bench inspector-smoke stale

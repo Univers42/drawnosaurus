@@ -92,6 +92,42 @@ describe("SceneDiffTracker", () => {
     expect(undo?.elements[0]).toMatchObject({ id: "a", isDeleted: false, version: 5 });
   });
 
+  it("re-stamps a resurrection that only ties with its tombstone", () => {
+    // A tie is decided by the nonce, and the element could stay deleted server-side.
+    const tracker = new SceneDiffTracker();
+    tracker.reset([el("a", 3)]);
+    const deletion = tracker.diff([], 500, nonce);
+    if (deletion !== null) tracker.acknowledge(deletion);
+
+    const undo = tracker.diff([el("a", 4)], 600, nonce);
+
+    expect(undo?.elements[0]).toMatchObject({ id: "a", version: 5, versionNonce: 777 });
+  });
+
+  it("drops the picture from a tombstone", () => {
+    const tracker = new SceneDiffTracker();
+    tracker.reset([el("photo", 1, { dataUrl: "data:image/png;base64,AAAA" } as never)]);
+
+    const deletion = tracker.diff([], 500, nonce);
+
+    expect(deletion?.elements[0]).toMatchObject({ id: "photo", isDeleted: true });
+    expect(deletion?.elements[0]).not.toHaveProperty("dataUrl");
+  });
+
+  it("sends a resurrection the engine already stamped above the tombstone as it is", () => {
+    // The engine re-stamps an undo. Minting a second stamp on top would leave the host
+    // and the engine disagreeing, and the engine's next edit would then be refused.
+    const tracker = new SceneDiffTracker();
+    tracker.reset([el("a", 3)]);
+    const deletion = tracker.diff([], 500, nonce);
+    if (deletion !== null) tracker.acknowledge(deletion);
+
+    const restored = { ...el("a", 5), versionNonce: 4242 };
+    const undo = tracker.diff([restored], 600, nonce);
+
+    expect(undo?.elements[0]).toEqual(restored);
+  });
+
   it("sends an explicit order when the stack is rearranged", () => {
     const tracker = new SceneDiffTracker();
     tracker.reset([el("a"), el("b"), el("c")]);

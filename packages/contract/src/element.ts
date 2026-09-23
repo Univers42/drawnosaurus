@@ -3,6 +3,7 @@ import {
   MAX_COLOR_LENGTH,
   MAX_GROUP_DEPTH,
   MAX_ID_LENGTH,
+  MAX_IMAGE_DATA_URL_LENGTH,
   MAX_POINTS_PER_ELEMENT,
   MAX_TEXT_LENGTH,
 } from "./limits.ts";
@@ -59,6 +60,20 @@ const finiteInt = finite.refine((value) => Number.isInteger(value), {
 const color = z.string().min(1).max(MAX_COLOR_LENGTH);
 
 const point = z.tuple([finite, finite]);
+
+/**
+ * An image's picture: a base64 `data:image/…` URL and nothing else.
+ *
+ * Only ever decoded by an `<img>` and drawn into a canvas, where an SVG's scripts do not
+ * run; the pattern still refuses anything that is not a picture, so a crafted document
+ * cannot use the field to carry a `javascript:` or remote URL into the page.
+ */
+const imageDataUrl = z
+  .string()
+  .max(MAX_IMAGE_DATA_URL_LENGTH)
+  .regex(/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/]*={0,2}$/, {
+    message: "must be a base64 data:image URL",
+  });
 
 export const drawElementSchema = z.object({
   id: z.string().min(1).max(MAX_ID_LENGTH),
@@ -117,6 +132,10 @@ export const drawElementSchema = z.object({
   // back, so a document is in the old shape at most once.
   groupId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   locked: z.boolean().optional(),
+  // The picture an image element shows. Without it here zod stripped it on the way in,
+  // so every image saved as an empty frame and came back after a reload as the grey
+  // placeholder.
+  dataUrl: imageDataUrl.optional(),
 
   // The reconciliation stamp. `version` counts edits, `versionNonce` is random
   // per edit and breaks ties between concurrent writers.

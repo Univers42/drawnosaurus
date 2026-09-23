@@ -38,6 +38,8 @@
         { key: "⌘ -", desc: "Zoom out" },
         { key: "⌘ 0", desc: "Reset zoom" },
         { key: "⇧ 1", desc: "Zoom to fit" },
+        { key: "⌥ S", desc: "Snap to objects" },
+        { key: "Hold ⌘", desc: "Invert snapping while dragging" },
       ],
     },
   ];

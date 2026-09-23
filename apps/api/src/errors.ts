@@ -27,6 +27,20 @@ export const notFound = (message = "board not found"): ApiError =>
 
 export const conflict = (message: string): ApiError => new ApiError(409, "conflict", message);
 
+/**
+ * A write that would take a board past what one MongoDB document can hold.
+ *
+ * Its own code because the client can do nothing by retrying: the same patch will be
+ * refused again. Distinct from Fastify's 413 for an oversized *request*, which is about
+ * one body rather than the board it lands in.
+ */
+export const boardTooLarge = (): ApiError =>
+  new ApiError(
+    413,
+    "board_too_large",
+    "the board would exceed the 16MB a board can hold; images are stored inside it",
+  );
+
 export const preconditionRequired = (message: string): ApiError =>
   new ApiError(428, "precondition_required", message);
 

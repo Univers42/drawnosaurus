@@ -11,12 +11,26 @@ import { SceneDiffTracker, type ScenePatch, type StampedElement } from "./sceneD
  * so it would resend the same elements.
  */
 
-export type AutosaveStatus = "idle" | "pending" | "saving" | "error";
+/**
+ * `error` is a failure worth retrying — offline, a 5xx. `too-large` and `refused` are
+ * answers: the server will refuse the same patch again, so it is not retried until
+ * something changes.
+ */
+export type AutosaveStatus = "idle" | "pending" | "saving" | "error" | "too-large" | "refused";
+
+/** What a failed send means, as far as retrying goes. */
+export type FailureKind = "retry" | "too-large" | "refused";
 
 export interface AutosaverOptions<T extends StampedElement> {
   readScene: () => readonly T[];
   send: (patch: ScenePatch<T>) => Promise<void>;
   onStatus?: (status: AutosaveStatus) => void;
+  /**
+   * Tells a failure worth retrying from a final answer. Without it every failure was
+   * retried, forever: a board over its size limit was sent again every thirty seconds
+   * for as long as the tab stayed open, each attempt refused the same way.
+   */
+  classify?: (error: unknown) => FailureKind;
   debounceMs?: number;
   now?: () => number;
   nonce?: () => number;
@@ -110,8 +124,20 @@ export class SceneAutosaver<T extends StampedElement> {
       } else {
         this.setStatus("idle");
       }
-    } catch {
+    } catch (error) {
       this.inFlight = false;
+      const kind = this.options.classify?.(error) ?? "retry";
+      if (kind !== "retry") {
+        // Not acknowledged, so it goes out again with the next change — which is the
+        // only thing that can make the answer different. Nothing is armed until then.
+        this.retryMs = FIRST_RETRY_MS;
+        this.setStatus(kind);
+        if (this.dirty) {
+          this.dirty = false;
+          this.notify();
+        }
+        return;
+      }
       this.setStatus("error");
       // The patch was not acknowledged, so the next diff rebuilds it from scratch —
       // which also picks up whatever the user drew while we were failing.

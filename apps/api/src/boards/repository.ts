@@ -1,4 +1,4 @@
-import type { Collection } from "mongodb";
+import { BSON, type Collection } from "mongodb";
 import {
   applyOrder,
   liveElements,
@@ -8,7 +8,7 @@ import {
   type BoardSummary,
   type DrawElementDto,
 } from "@drawnosaurus/contract";
-import { conflict, notFound } from "../errors.ts";
+import { boardTooLarge, conflict, notFound } from "../errors.ts";
 import type { BoardDoc, BoardFields } from "../mongo.ts";
 import { cursorFilter, decodeCursor, encodeCursor } from "./cursor.ts";
 import { toSummary } from "./presenter.ts";
@@ -31,6 +31,35 @@ export interface PatchResult {
  * pathological hot board returns 409 instead of spinning.
  */
 const MAX_WRITE_ATTEMPTS = 4;
+
+/**
+ * MongoDB's ceiling on one document. A board is one document with its elements inline —
+ * pictures included — so this is the ceiling on a board.
+ *
+ * Checked before writing rather than recognised afterwards, because past it the failure
+ * has no single shape: a little over, the server refuses the update; further over, the
+ * driver cannot even serialise the command and throws a bare `RangeError`. Both used to
+ * surface as a 500.
+ */
+const MAX_DOCUMENT_BYTES = 16 * 1024 * 1024;
+
+/**
+ * A tombstone without its picture.
+ *
+ * Nothing draws a deleted element, and a picture is most of an image's size. Kept, every
+ * deleted photo went on counting against the board's 16MB, so deleting images never made
+ * room — and a board that had held a few photos refused the next one while looking empty.
+ * Applied to everything written, so boards that already carry them are cleaned on their
+ * next save.
+ */
+function withoutTombstonePictures(elements: DrawElementDto[]): DrawElementDto[] {
+  return elements.map((element) => {
+    if (!element.isDeleted || element.dataUrl === undefined) return element;
+    const tombstone = { ...element };
+    delete tombstone.dataUrl;
+    return tombstone;
+  });
+}
 
 export class BoardRepository {
   private readonly boards: Collection<BoardFields>;
@@ -153,6 +182,7 @@ export class BoardRepository {
     elements: DrawElementDto[],
     title?: string,
   ): Promise<BoardDoc | null> {
+    elements = withoutTombstonePictures(elements);
     const patch: Record<string, unknown> = {
       elements,
       bounds: sceneBounds(elements),
@@ -160,6 +190,12 @@ export class BoardRepository {
       updatedAt: new Date(),
     };
     if (title !== undefined) patch.title = title;
+
+    if (
+      BSON.calculateObjectSize({ ...current, ...patch, rev: current.rev + 1 }) > MAX_DOCUMENT_BYTES
+    ) {
+      throw boardTooLarge();
+    }
 
     return await this.boards.findOneAndUpdate(
       { _id: current._id, rev: current.rev },

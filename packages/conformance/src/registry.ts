@@ -86,7 +86,7 @@ export const RULES: readonly Rule[] = [
     section: "Shapes",
     text: /disable snapping/,
     status: "gap",
-    why: "Holding ctrl/cmd to bypass snapping mid-drag. `snap_move` exists and is tested; the modifier is not threaded through the pointer path.",
+    why: "Half done. Ctrl/Cmd now inverts snapping to objects for a move (ci_objects_snap.rs, e2e/objectsSnap.spec.ts). It does not yet release the grid: Excalidraw passes a null grid size to getGridPoint while it is held, so drawing and resizing on a snapping grid go free, and ours stay on the grid.",
   },
   {
     section: "Shapes",
@@ -163,8 +163,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "📐 Alignment & distribution",
     text: /bypass snapping/,
-    status: "gap",
-    why: "Same missing modifier as the shape tools — see the Shapes rule above.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_objects_snap.rs`, "e2e/objectsSnap.spec.ts"],
   },
   {
     section: "📐 Alignment & distribution",
@@ -189,6 +189,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🖼️ Images",
+    text: /`I` — Image tool/,
+    status: "out-of-scope",
+    why: "The same cheat-sheet error as under Essential shortcuts: Excalidraw's TOOLS table gives the image tool a digit (9) and no letter — see ci_shortcuts.rs.",
+  },
+  {
+    section: "🖼️ Images",
     text: /crop|Crop/,
     status: "gap",
     why: "No crop mode. Images resize and move; cropping needs a second rect on the element and a mode in the interaction state machine.",
@@ -196,7 +202,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "🖼️ Images",
     status: "covered",
-    tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`],
+    tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`, "e2e/image.spec.ts"],
   },
   {
     section: "🧩 Frames",
@@ -298,7 +304,7 @@ export const RULES: readonly Rule[] = [
     section: "🔲 Grid",
     text: /custom grid spacing|disable snapping/,
     status: "gap",
-    why: "Grid size and step are in the model and settable, but no UI exposes them, and the bypass modifier is not threaded through the drag path.",
+    why: "Spacing is offered as a fixed set of sizes in the menu, not a custom value. Ctrl/Cmd inverts snapping to objects but does not yet release the grid — see the Shapes rule above.",
   },
   {
     section: "🔲 Grid",
@@ -417,6 +423,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /Snap to nearby objects/,
+    status: "gap",
+    why: "Snapping to objects, and its Ctrl/Cmd inversion, applies to moving a selection only (ci_objects_snap.rs). Drawing and resizing snap to the grid but not to other elements, where Excalidraw's snapNewElement and snapResizingElements (App.tsx:13375, :13499) do.",
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
     status: "covered",
     tests: [
       `${ENGINE}/ci_pointer.rs`,
@@ -479,8 +491,19 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "10. Images",
+    text: /Image IDs|Image file store/,
+    status: "gap",
+    why: "The picture rides on the element as a data: URL rather than in a file store keyed by id. Everything works through it, but a board is one Mongo document, so two or three large pictures reach the 16MB ceiling — now refused with a 413 (apps/api/tests/integration/images.test.ts) rather than a 500. See docs/reference/images.md.",
+  },
+  {
+    section: "10. Images",
     status: "covered",
-    tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`],
+    tests: [
+      `${ENGINE}/ci_image.rs`,
+      `${WEB}/draw-chrome/imageFile.test.ts`,
+      "e2e/image.spec.ts",
+      "apps/api/tests/integration/images.test.ts",
+    ],
   },
   {
     section: "11. Sticky notes",
@@ -577,7 +600,12 @@ export const RULES: readonly Rule[] = [
   {
     section: "19. Snapping",
     status: "covered",
-    tests: [`${ENGINE}/ci_snapping.rs`, `${ENGINE}/ci_grid.rs`],
+    tests: [
+      `${ENGINE}/ci_snapping.rs`,
+      `${ENGINE}/ci_grid.rs`,
+      `${ENGINE}/ci_objects_snap.rs`,
+      "e2e/objectsSnap.spec.ts",
+    ],
   },
   {
     section: "20. Fill and stroke system",
@@ -662,14 +690,28 @@ export const RULES: readonly Rule[] = [
     section: "29. Undo / redo",
     text: /Branch|Collaboration-aware|Text editing transactions/,
     status: "gap",
-    why: "History is a linear snapshot stack. Branching and collaboration-aware history need the operation model from §41.",
+    why: "History is a linear snapshot stack; branching needs the operation model from §41. Undo is partly collaboration-aware: it restores only the elements its own step changed and goes out as a new edit, so it no longer reverts a peer's work elsewhere (ci_version_stamps.rs). It is whole-element, though — undoing your change to an element a peer has since edited restores all of it, where Excalidraw's deltas restore only the properties you changed.",
   },
-  { section: "29. Undo / redo", status: "covered", tests: [`${ENGINE}/ci_history.rs`] },
+  {
+    section: "29. Undo / redo",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_history.rs`,
+      `${ENGINE}/ci_version_stamps.rs`,
+      "e2e/versionStamps.spec.ts",
+    ],
+  },
   {
     section: "30. Clipboard",
-    text: /Image paste|External paste|image\/png|text\/html/,
+    text: /Image paste|image\/png/,
+    status: "covered",
+    tests: ["e2e/image.spec.ts"],
+  },
+  {
+    section: "30. Clipboard",
+    text: /External paste|text\/html/,
     status: "gap",
-    why: "Internal copy/paste round-trips with id regeneration; rich external formats do not.",
+    why: "Internal copy/paste round-trips with id regeneration, and a pasted image file is placed; other rich external formats are not read.",
   },
   { section: "30. Clipboard", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
   {

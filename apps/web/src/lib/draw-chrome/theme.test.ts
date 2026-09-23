@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { LIGHT_THEME } from "@osionos/draw-engine/types";
 import {
+  DEFAULT_GRID_PREFERENCE,
+  persistObjectsSnapPreference,
   persistThemePreference,
+  pickGridMode,
+  readObjectsSnapPreference,
   readThemePreference,
   resolveThemeMode,
   themeFromCss,
+  toggleObjectsSnap,
 } from "./theme.ts";
 
 describe("theme mode persistence", () => {
@@ -103,5 +108,76 @@ describe("canvas background", () => {
     expect(tinted.theme.grid).toBe(plain.theme.grid);
     expect(tinted.theme.accent).toBe(plain.theme.accent);
     expect(tinted.ink).toBe(plain.ink);
+  });
+});
+
+describe("snapping to objects", () => {
+  const memory = () => {
+    const store = new Map<string, string>();
+    return {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    };
+  };
+
+  it("is off when nothing was stored, as Excalidraw ships it", () => {
+    expect(readObjectsSnapPreference(memory())).toBe(false);
+    expect(readObjectsSnapPreference(undefined)).toBe(false);
+  });
+
+  it("remembers being turned on, and off again", () => {
+    const storage = memory();
+    persistObjectsSnapPreference(storage, true);
+    expect(readObjectsSnapPreference(storage)).toBe(true);
+    persistObjectsSnapPreference(storage, false);
+    expect(readObjectsSnapPreference(storage)).toBe(false);
+  });
+
+  it("reads anything unexpected as off, rather than snapping by surprise", () => {
+    const storage = memory();
+    storage.setItem("drawnosaurus:objects-snap", "yes");
+    expect(readObjectsSnapPreference(storage)).toBe(false);
+  });
+
+  it("survives storage that throws", () => {
+    const throwing = {
+      getItem: () => {
+        throw new Error("denied");
+      },
+      setItem: () => {
+        throw new Error("denied");
+      },
+    };
+    expect(readObjectsSnapPreference(throwing)).toBe(false);
+    expect(() => persistObjectsSnapPreference(throwing, true)).not.toThrow();
+  });
+});
+
+describe("snap modes exclude each other", () => {
+  const gridOn = { ...DEFAULT_GRID_PREFERENCE, enabled: true };
+  const gridOff = { ...DEFAULT_GRID_PREFERENCE, enabled: false };
+
+  it("turning object snapping on hides the grid", () => {
+    expect(toggleObjectsSnap({ objectsSnap: false, grid: gridOn })).toEqual({
+      objectsSnap: true,
+      grid: gridOff,
+    });
+  });
+
+  it("turning it off leaves the grid alone", () => {
+    expect(toggleObjectsSnap({ objectsSnap: true, grid: gridOff }).grid).toEqual(gridOff);
+  });
+
+  it("showing the grid turns object snapping off", () => {
+    expect(pickGridMode({ objectsSnap: true, grid: gridOff }, { enabled: true })).toEqual({
+      objectsSnap: false,
+      grid: gridOn,
+    });
+  });
+
+  it("other grid changes leave object snapping alone", () => {
+    const modes = { objectsSnap: true, grid: gridOff };
+    expect(pickGridMode(modes, { size: 40 }).objectsSnap).toBe(true);
+    expect(pickGridMode(modes, { enabled: false }).objectsSnap).toBe(true);
   });
 });
