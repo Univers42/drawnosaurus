@@ -7,7 +7,12 @@ import { registerShareRoutes, roleOf, shareInfoFor } from "../../src/share.ts";
 import { Tunnel, type TunnelProcess } from "../../src/tunnel.ts";
 
 const base = { MONGO_URL: "mongodb://localhost:27017" } satisfies NodeJS.ProcessEnv;
-const LAN = ["http://c2r19s1.42madrid.com:5273", "http://10.12.19.1:5273"];
+const LAN = [
+  { origin: "http://c2r19s1.42madrid.com:5273", over: "wired" },
+  { origin: "http://10.12.19.1:5273", over: "wired" },
+] as const;
+/** As `scripts/lan.sh` writes them. */
+const LAN_ENV = "wired|http://c2r19s1.42madrid.com:5273,wired|http://10.12.19.1:5273";
 
 /** A stand-in for cloudflared: what it writes is what the test says. */
 function fakeCloudflared() {
@@ -71,11 +76,24 @@ describe("the network links make up passes in", () => {
     const config = loadConfig({
       ...base,
       SHARE_LAN_ORIGINS:
-        "http://c2r19s1.42madrid.com:5273, not a url ,javascript:alert(1),http://10.12.19.1:5273/",
+        "wired|http://c2r19s1.42madrid.com:5273, not a url ,wired|javascript:alert(1),wired|http://10.12.19.1:5273/",
     });
     expect(config.shareLanOrigins).toEqual(LAN);
     expect(loadConfig(base).shareLanOrigins).toEqual([]);
     expect(loadConfig(base).tunnelTarget).toBeNull();
+  });
+
+  it("say which network each goes over, and nothing they cannot know", () => {
+    const read = (value: string) =>
+      loadConfig({ ...base, SHARE_LAN_ORIGINS: value }).shareLanOrigins;
+    expect(read("wifi|http://192.168.1.20:5274")).toEqual([
+      { origin: "http://192.168.1.20:5274", over: "wifi" },
+    ]);
+    // Set by hand, the old way: no kind, so no claim about who can open it.
+    expect(read("http://10.12.19.1:5274")).toEqual([
+      { origin: "http://10.12.19.1:5274", over: "unknown" },
+    ]);
+    expect(read("ethernet|http://10.12.19.1:5274"), "a kind nobody knows").toEqual([]);
   });
 });
 
@@ -231,7 +249,7 @@ describe("the routes", () => {
     const server = Fastify({ logger: false });
     registerShareRoutes(
       server,
-      loadConfig({ ...base, SHARE_LAN_ORIGINS: LAN.join(",") }),
+      loadConfig({ ...base, SHARE_LAN_ORIGINS: LAN_ENV }),
       tunnelWith(cloudflared),
     );
     return { server, cloudflared };

@@ -1,8 +1,8 @@
 # Drawing together
 
 **In one sentence:** open a board, press **Share** (top right), and send the first link.
-Whoever opens it draws on the board with you, live — from another computer on the wired
-network, on the Wi-Fi, or anywhere on the internet. Nothing to install, no account.
+Whoever opens it draws on the board with you, live — from another computer on your
+network, or from anywhere through the internet link. Nothing to install, no account.
 
 ## Where to find everything
 
@@ -10,34 +10,46 @@ network, on the Wi-Fi, or anywhere on the internet. Nothing to install, no accou
 | ------------------------------------- | ------------------------------------------------------------------- |
 | The link to send                      | A board → **Share** → the first link, with its **Copy link** button |
 | The same link for a phone or a tablet | The **QR** button next to it: they scan it with their camera        |
+| A link for someone on the Wi-Fi       | **Share** → **Share on the internet** (see below why)               |
 | A link for someone far away           | **Share** → **Share on the internet**                               |
 | The network link, from the terminal   | `make up` prints it on its last lines                               |
 | This guide                            | `docs/collaboration.md`, and **Share** → **How does this work?**    |
 
-## On the same network — wired or Wi-Fi
+## On the same network
 
 1. On the computer that runs drawnosaurus: `make up`. It ends with the link for your
-   network:
+   network, and which network that is:
 
    ```
    ✔ up: http://localhost:5273
-     for people on your network, wired or Wi-Fi: http://c2r19s1.42madrid.com:5274
+     for people on the wired network: http://c2r19s1.42madrid.com:5274
+     this computer is not on the Wi-Fi: for anyone there, or elsewhere, run 'make share'
    ```
 
 2. Open a board at `http://localhost:5273`, press **Share**, press **Copy link**.
 3. Send it — chat, mail, anything — or press **QR** and let them scan it.
 4. They open it and you draw together. Every change is saved on your computer.
 
-**One link for the wired network and the Wi-Fi.** The first link uses your computer's
-_name_, not its address: at 42 Madrid every seat has one (`c2r19s1.42madrid.com`), given
-out by the school's DNS. Any device that uses that DNS — the lab computers, and normally
-the school Wi-Fi — finds your computer by that name, and it keeps working if your
-computer's address changes. (Checked from the wired network; whether the Wi-Fi can reach
-the lab network at all is the school's choice — see
-[When it does not work](#when-it-does-not-work).) Where the network gives computers no
-name — at home, usually — the first link is the address (`http://192.168.1.20:5274`),
-and **Other links** often has the `.local` name as well. When the computer is on the
-wired network and the Wi-Fi at once, there is a link for each.
+**By name.** The first link uses your computer's _name_, not its address: at 42 Madrid
+every seat has one (`c2r19s1.42madrid.com`), given out by the school's DNS, and it keeps
+working if your computer's address changes. Where the network gives computers no name —
+at home, usually — the first link is the address (`http://192.168.1.20:5274`), and
+**Other links** often has the `.local` name as well.
+
+**The wired network and the Wi-Fi are two networks.** A link reaches your computer over
+the network your computer is on, and the dialog says which — `make up` looks at the
+interface each address belongs to. A lab computer is on the wired network only, and the
+school keeps the Wi-Fi apart from it: a laptop on the Wi-Fi cannot reach `10.12.x.x` at
+all, by name or by address, and the page simply never loads. Nothing on your computer
+changes that. **For someone on the Wi-Fi, use Share on the internet** — it goes around.
+At home, where the router joins its Wi-Fi and its cables into one network, the network
+link works from both. A computer that is on the wired network and the Wi-Fi at once gets
+a link for each.
+
+`virbr0` (`192.168.122.1`), in `ip addr`, is not the Wi-Fi: it is a virtual network that
+libvirt makes for virtual machines inside this computer, and nothing outside can reach
+it. The Wi-Fi card is the `wl…` interface (`wlp3s0` here); `ip -4 addr show wlp3s0`
+shows no address while it is not connected.
 
 Why port 5274, when you use 5273? 5273 only answers this computer; 5274 is the door for
 everyone else, and it only lets them into the boards they have links to (see
@@ -61,6 +73,27 @@ works from networks you do not control. The link is offered only once Cloudflare
 publishes the new name, so the first person to open it is not told it does not exist. It
 is made for a working session, not for hosting: Cloudflare may slow a tunnel that is used
 heavily.
+
+## Working on the same thing
+
+- **You see what the others do while they do it.** A shape someone is drawing grows on
+  your screen as they draw it; one they are moving, resizing or turning moves on yours
+  before they let go. Their cursor and name follow their mouse.
+- **What someone has selected is theirs until they let go.** It is outlined in their
+  colour with their name on it, and nobody else can select it, move it, resize it, edit
+  its text, delete it or erase it — the eraser passes over it, and undo leaves it as they
+  have it. A click on it says who is working on it. When they select something else, it
+  is anyone's again.
+- **Two people reaching for the same shape at once:** the one who took it first keeps it
+  — both screens agree — and the other lets go without their change being applied.
+- **A text shows while it is typed**, word by word, and nobody else can touch it until
+  it is finished.
+- **Whoever arrives gets everything on the board**, including what the others drew a
+  moment ago and has not been saved yet: the people already there send it. A picture or a
+  video is sent once; moving it afterwards sends only where it went.
+- **When someone leaves** — closes the tab, reloads, loses their connection — what they
+  held is released at once. A tab duplicated from another is a second person, and the two
+  see each other.
 
 ## Can it be fully automatic?
 
@@ -102,9 +135,10 @@ curl http://c2r19s1.42madrid.com:5274/healthz
 the link was copied whole. If it hangs or is refused, something between the two computers
 blocks it:
 
-- the school's Wi-Fi and wired network may be kept apart, and many Wi-Fi networks stop
-  the devices on them from talking to each other. Nothing on your computer changes that —
-  use **Share on the internet**, which goes around it;
+- they are on the Wi-Fi and your computer is on the wired network: at school the two are
+  kept apart (see [On the same network](#on-the-same-network)), and many Wi-Fi networks
+  also stop the devices on them from talking to each other. Nothing on your computer
+  changes that — use **Share on the internet**, which goes around it;
 - a firewall on the computer running drawnosaurus. If you administer it:
   `sudo ufw allow 5274/tcp` (Ubuntu), or allow incoming connections for Docker (macOS).
 
@@ -122,8 +156,15 @@ make up LAN_IPS=192.168.1.20
 Cloudflare. The message says what happened; there is no way around it from here.
 
 **The header says "Connection lost — reconnecting…":** the live link dropped. It
-reconnects by itself, and nothing drawn in the meantime is lost — it is sent once the
-link is back. If it stays, check the stack is up: `docker compose ps`.
+reconnects by itself, and nothing drawn in the meantime is lost on either side: once the
+link is back, each side sends the other what it missed. A link that dies without closing
+— a laptop lid shut, a network changed — is noticed within about fifteen seconds and
+reopened. If it stays, check the stack is up: `docker compose ps`.
+
+**A video or a frame's name was missing after reloading a board saved before this was
+fixed:** the server used to drop an embed's address, a frame's name and what was inside a
+frame. Open the board once in the browser that made it: its local copy still has them,
+and they are put back and saved again.
 
 **"Only the computer running drawnosaurus can do that":** the home page, or deleting a
 board, from another computer. That is on purpose — open boards from their links.

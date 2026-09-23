@@ -110,6 +110,40 @@ export interface Board {
  */
 export const OPEN_CANVAS = { left: 440, top: 170, right: 1160, bottom: 650 } as const;
 
+/**
+ * A relay standing in for the API's live route (`apps/api/src/boards/live.ts`): every
+ * frame goes to every other page that joined it, a ping is answered, and each socket is
+ * named to itself on opening and to the others when it closes. Pass `join` as
+ * `openBoard`'s `live` handler on each page.
+ *
+ * `frames` holds what was relayed, sealed, and none of the relay's own words.
+ */
+export function relay() {
+  const sockets = new Map<WebSocketRoute, string>();
+  const frames: string[] = [];
+  let named = 0;
+  const join = (socket: WebSocketRoute) => {
+    named += 1;
+    const id = String(named);
+    sockets.set(socket, id);
+    socket.send(`{"type":"welcome","socket":"${id}"}`);
+    socket.onMessage((message) => {
+      const text = String(message);
+      if (text === '{"type":"ping"}') {
+        socket.send('{"type":"pong"}');
+        return;
+      }
+      frames.push(text);
+      for (const other of sockets.keys()) if (other !== socket) other.send(text);
+    });
+    socket.onClose(() => {
+      sockets.delete(socket);
+      for (const other of sockets.keys()) other.send(`{"type":"gone","socket":"${id}"}`);
+    });
+  };
+  return { join, frames };
+}
+
 /** Navigates to a board with the API stubbed out, and waits for the engine to mount. */
 export async function openBoard(
   page: Page,

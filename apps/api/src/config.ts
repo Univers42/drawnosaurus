@@ -1,3 +1,5 @@
+import type { LanLink, NetworkKind } from "@drawnosaurus/contract";
+
 /**
  * Environment is read once, here, and validated. A missing connection string is a
  * startup failure rather than a 500 on the first request.
@@ -18,11 +20,12 @@ export interface Config {
   devOwnerId: string;
   /**
    * Where people on the local network reach this drawnosaurus — the gateway's origin
-   * on each LAN address, such as `http://10.12.19.1:5273`. Set by `make up`, which is
-   * the only thing that can see the host's addresses: inside the container there are
-   * none but the container's own. Empty when nobody said.
+   * on each LAN address, such as `http://10.12.19.1:5273`, and the kind of network it
+   * goes over. Set by `make up`, which is the only thing that can see the host's
+   * addresses: inside the container there are none but the container's own. Empty when
+   * nobody said.
    */
-  shareLanOrigins: string[];
+  shareLanOrigins: LanLink[];
   /**
    * Where the internet tunnel sends requests — the gateway's internet entrance — see
    * `tunnel.ts`. Unset where there is no tunnel to offer: tests, `make dev`.
@@ -49,21 +52,32 @@ function intOr(value: string | undefined, fallback: number): number {
   return parsed;
 }
 
-/** A comma-separated list of origins; anything that is not one is dropped. */
-function origins(value: string | undefined): string[] {
+const KINDS: readonly string[] = ["wired", "wifi", "unknown"] satisfies NetworkKind[];
+
+/**
+ * A comma-separated list of origins, each `KIND|ORIGIN` as `scripts/lan.sh` writes it —
+ * `wired|http://10.12.19.1:5274` — or a bare origin, whose network is then unknown.
+ * Anything that is not one is dropped.
+ */
+function origins(value: string | undefined): LanLink[] {
   if (!value) return [];
-  return value
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => {
-      try {
-        const url = new URL(entry);
-        return (url.protocol === "http:" || url.protocol === "https:") && url.pathname === "/";
-      } catch {
-        return false;
+  const links: LanLink[] = [];
+  for (const raw of value.split(",")) {
+    const entry = raw.trim();
+    const bar = entry.indexOf("|");
+    const kind = bar > 0 ? entry.slice(0, bar) : "unknown";
+    const origin = bar > 0 ? entry.slice(bar + 1) : entry;
+    if (!KINDS.includes(kind)) continue;
+    try {
+      const url = new URL(origin);
+      if ((url.protocol === "http:" || url.protocol === "https:") && url.pathname === "/") {
+        links.push({ origin: url.origin, over: kind as NetworkKind });
       }
-    })
-    .map((entry) => new URL(entry).origin);
+    } catch {
+      // Not an origin.
+    }
+  }
+  return links;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {

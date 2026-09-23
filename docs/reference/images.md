@@ -55,10 +55,24 @@ keeps a `fileId` on the element and the bytes in a separate `BinaryFiles` store;
 better end state. Ours makes save, load, undo, copy/paste, export and realtime work with
 no new plumbing, at the cost of scene size.
 
-That cost has a hard edge: **a board is one MongoDB document**, so the pictures share its
-16MB. One element may carry at most `MAX_IMAGE_DATA_URL_LENGTH` (6MB, a little over the
-4MB file limit once base64 is paid). What keeps that workable, each found by review and
-each pinned by a test:
+On the wire, that is. **Stored, each picture is its own document** (`apps/api/src/boards/
+pictures.ts`): a board is one MongoDB document with a 16MB ceiling, which inline pictures
+reached at two or three photos. The element keeps only a key — the board's id and the
+SHA-256 of the `data:` URL — and the picture is put back on the way out, so neither the
+client nor the wire changed (`images.test.ts` › keeps every one of them). One element may
+carry at most `MAX_IMAGE_DATA_URL_LENGTH` (6MB, a little over the 4MB file limit once base64
+is paid).
+
+**A picture is sent once per image.** It never changes once an image has one, so the
+autosave and the live link leave off a picture the other side is known to have
+(`PictureLedger`, `autosave/pictures.ts`), and every side keeps the picture it has for an
+edit that arrives without one — the server (`keepPictures`), the engine
+(`inherit_picture`, `ci_live_sync.rs`) and the page (`fillPictures`). Moving a photo used
+to send the photo, to the server and to everyone in the room, who each saved it again. A
+peer's drag is streamed without it too; the painter draws the picture it already decoded
+for that element.
+
+What else keeps that workable, each found by review and each pinned by a test:
 
 - **Deleted pictures give their room back.** A tombstone used to keep its `dataUrl`, so a
   board that had once held three photos refused the next one while showing none. The
@@ -69,8 +83,8 @@ each pinned by a test:
   picture is its own request, after everything else (`split.ts`). One the server refuses
   refuses only itself; the edits beside it have already been merged. Two new photos no
   longer exceed the 8MB body limit together.
-- **A refusal is an answer, not a retry.** A 413 — the board over 16MB, measured as BSON
-  before the write — used to be retried every thirty seconds forever. It now stops, and the
+- **A refusal is an answer, not a retry.** A 413 — the board's shapes and text over 16MB,
+  measured as BSON before the write — used to be retried every thirty seconds forever. It now stops, and the
   header reads "Not saved — board over 16 MB" until the next change (`autosaver.test.ts`).
 - **The local draft cannot stop the autosave.** `localStorage` holds about five million
   characters; a board with a few photos is past that, and the draft's `setItem` threw
@@ -78,12 +92,15 @@ each pinned by a test:
   "Saved". The draft now lives in IndexedDB, written a change at a time off the frame
   that made it, and a failed write is dropped rather than thrown (`draftStore.test.ts`).
 
-The fix for the ceiling itself is a file store keyed by id. Recorded as a gap in the
-conformance registry ("Image IDs", "Image file store").
+The wire still carries the picture on the element rather than a file id, and nothing
+removes a picture no element names any more. Recorded as a gap in the conformance registry
+("Image IDs", "Image file store").
 
 ## Rendering
 
-**IMPLEMENTATION DETAIL** — decoded `<img>`s are cached by `data:` URL in `wasm/paint.rs`.
+**IMPLEMENTATION DETAIL** — decoded `<img>`s are cached by element id in `wasm/paint.rs`,
+with the URL's length to notice a change. Keyed by the URL itself, every frame that painted
+an image hashed megabytes of it.
 The first paint finds the image still decoding and draws the placeholder frame; `onload`
 must then **invalidate the static layer**, not only request a frame — the layer plan would
 otherwise reuse the cached bitmap with the placeholder in it until something else moved.

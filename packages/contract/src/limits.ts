@@ -21,6 +21,8 @@ export const MAX_ID_LENGTH = 128;
 export const MAX_TEXT_LENGTH = 10_000;
 export const MAX_COLOR_LENGTH = 64;
 export const MAX_TITLE_LENGTH = 200;
+/** An embed's address. Long enough for any real link, signed ones included. */
+export const MAX_URL_LENGTH = 4096;
 
 /** List endpoints paginate; this is the ceiling a caller can ask for. */
 export const MAX_PAGE_SIZE = 100;

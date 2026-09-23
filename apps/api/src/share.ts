@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import type { ShareInfo, ShareRole } from "@drawnosaurus/contract";
+import type { LanLink, ShareInfo, ShareRole } from "@drawnosaurus/contract";
 import type { Config } from "./config.ts";
 import { Tunnel } from "./tunnel.ts";
 
@@ -31,13 +31,13 @@ export function roleOf(request: Pick<FastifyRequest, "headers">): ShareRole {
 /** What `role` is told. */
 export function shareInfoFor(
   role: ShareRole,
-  lanOrigins: readonly string[],
+  lanOrigins: readonly LanLink[],
   tunnel: Tunnel,
 ): ShareInfo {
   const { state, origin, message } = tunnel.current;
   return {
     // Someone on the internet has no use for the machine's network addresses.
-    lan: role === "internet" ? [] : [...lanOrigins],
+    lan: role === "internet" ? [] : lanOrigins.map((link) => ({ ...link })),
     public: state === "on" ? origin : null,
     // Why it failed is for the person who can do something about it.
     tunnel: role === "host" && message ? { state, message } : { state },
