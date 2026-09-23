@@ -37,7 +37,9 @@ Everything runs in Docker via the Makefile; there is no host Node requirement fo
 | `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate |
 | `make shell`                          | bash in the tooling container                            |
 
-Host ports are non-standard (5273/4300/27019/5373/4373) because a sibling stack owns the usual ones.
+Host ports are non-standard (5273/4300/27019/5373/4373, and 5473 for the browser suite's own
+Vite) because a sibling stack owns the usual ones. The suite's port is kept apart from `make dev`'s
+so the two can run at once — the editor-inspector needs the dev stack while specs run.
 Override per invocation: `make up API_PORT=4500 WEB_PORT=5500`.
 
 **Running one test.** Inside `make shell`, or directly on the host:

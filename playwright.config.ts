@@ -11,7 +11,10 @@ import { defineConfig, devices } from "@playwright/test";
  * fail because the thing it measures changed.
  */
 
-const PORT = Number(process.env.E2E_PORT ?? 4373);
+// 5473, deliberately not 4373. `make dev` puts its API on 4373, so the two collided: the
+// browser suite could not start while the dev stack — which the editor-inspector needs —
+// was up, and failed with "port already in use" rather than anything about the tests.
+const PORT = Number(process.env.E2E_PORT ?? 5473);
 const HOST = process.env.E2E_HOST ?? "127.0.0.1";
 const BASE_URL = process.env.E2E_BASE_URL ?? `http://${HOST}:${PORT}`;
 
