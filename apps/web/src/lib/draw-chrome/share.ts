@@ -1,4 +1,9 @@
-import { isAddressHost, isLoopbackHost, type ShareInfo } from "@drawnosaurus/contract";
+import {
+  isAddressHost,
+  isLoopbackHost,
+  type NetworkKind,
+  type ShareInfo,
+} from "@drawnosaurus/contract";
 
 /**
  * Which links the Share dialog offers, what it says about each, and copying one.
@@ -15,6 +20,8 @@ export interface ShareLink {
   kind: "network" | "internet" | "this-computer";
   /** For a network link: by the computer's name, or by its address. */
   via?: "name" | "address";
+  /** For a network link: the kind of network it reaches this computer over. */
+  over?: NetworkKind;
   url: string;
 }
 
@@ -33,8 +40,8 @@ interface PageLocation {
  * - A page already opened from another computer — a colleague's — offers first the
  *   address it was opened at: that one is known to work for them.
  * - Then the network links, in the server's order: the computer's name first, which
- *   works from the wired network and the Wi-Fi alike and survives a change of address,
- *   then its addresses.
+ *   survives a change of address, then its addresses — each saying which network it goes
+ *   over, because that is who can open it.
  * - Then the internet link, while it is on: it works from anywhere, but goes through
  *   Cloudflare, so on the same network the network link is the better one to send.
  * - With nothing else, the page's own address, for what it is: this computer only.
@@ -42,12 +49,17 @@ interface PageLocation {
 export function shareLinks(page: PageLocation, info: ShareInfo | null): ShareLink[] {
   const rest = `${page.pathname}${page.search}${page.hash}`;
   const links: ShareLink[] = [];
+  const overOf = (origin: string): NetworkKind =>
+    info?.lan.find((link) => sameOrigin(link.origin, origin))?.over ?? "unknown";
   const add = (kind: ShareLink["kind"], origin: string): void => {
     const base = origin.replace(/\/$/, "");
     const url = `${base}${rest}`;
     if (links.some((link) => link.url === url)) return;
     const link: ShareLink = { kind, url };
-    if (kind === "network") link.via = isAddressHost(new URL(base).host) ? "address" : "name";
+    if (kind === "network") {
+      link.via = isAddressHost(new URL(base).host) ? "address" : "name";
+      link.over = overOf(base);
+    }
     links.push(link);
   };
 
@@ -55,7 +67,7 @@ export function shareLinks(page: PageLocation, info: ShareInfo | null): ShareLin
   if (!isLoopbackHost(here.host)) {
     add(info?.public && sameOrigin(info.public, page.origin) ? "internet" : "network", page.origin);
   }
-  for (const origin of info?.lan ?? []) add("network", origin);
+  for (const { origin } of info?.lan ?? []) add("network", origin);
   if (info?.public) add("internet", info.public);
 
   if (links.length === 0) add("this-computer", page.origin);
@@ -70,20 +82,30 @@ const sameOrigin = (a: string, b: string): boolean => {
   }
 };
 
+/** Who can open a network link: the people on the network it goes over. */
+const NETWORK_TITLE: Record<NetworkKind, string> = {
+  wired: "People on the wired network",
+  wifi: "People on this Wi-Fi",
+  unknown: "People on your network",
+};
+
 /** What the dialog says about a link: who it is for, and when to use it. */
 export function describeLink(link: ShareLink): { title: string; hint: string } {
   const host = new URL(link.url).host;
   switch (link.kind) {
-    case "network":
-      return link.via === "name"
-        ? {
-            title: "People on your network — wired or Wi-Fi",
-            hint: `Uses this computer's name, ${host}, so it keeps working if its address changes.`,
-          }
-        : {
-            title: "People on your network",
-            hint: `By this computer's address, ${host}.`,
-          };
+    case "network": {
+      const how =
+        link.via === "name"
+          ? `Uses this computer's name, ${host}, so it keeps working if its address changes.`
+          : `By this computer's address, ${host}.`;
+      // This computer is not on the Wi-Fi. Where the Wi-Fi is kept apart from the wired
+      // network — at school, usually — the link fails there without a word, so say so.
+      const caveat =
+        link.over === "wired"
+          ? " From the Wi-Fi it opens only where the Wi-Fi reaches the wired network."
+          : "";
+      return { title: NETWORK_TITLE[link.over ?? "unknown"], hint: `${how}${caveat}` };
+    }
     case "internet":
       return {
         title: "Anyone, anywhere",
@@ -95,6 +117,19 @@ export function describeLink(link: ShareLink): { title: string; hint: string } {
         hint: "Nobody else can open this address. Restart with `make up` so your network address is known.",
       };
   }
+}
+
+/**
+ * What the internet section asks, above its button: who the network links will not
+ * reach. Named plainly when this computer is on the wired network only, because that is
+ * the case where someone on the Wi-Fi gets a link that fails without a word.
+ */
+export function internetPrompt(links: readonly ShareLink[]): string {
+  const network = links.filter((link) => link.kind === "network");
+  if (network.length > 0 && network.every((link) => link.over === "wired")) {
+    return "Someone on the Wi-Fi, at home or on a phone? This computer is on the wired network only, so the links above may not reach them.";
+  }
+  return "Not on the same network — at home, or on a phone's mobile data?";
 }
 
 /**

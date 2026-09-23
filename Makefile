@@ -45,9 +45,10 @@ export DEV_API_PORT ?= 4373
 # Where other computers reach this one: its network addresses — every real interface, so
 # a computer on both the wired network and the Wi-Fi is reachable from both — and the
 # links to offer, best first: the computer's DNS name when the network's DNS knows it
-# (every seat at 42 Madrid has one, and it works from the wired network and the Wi-Fi
-# alike), then the addresses. See scripts/lan.sh. Lazy, so only the recipes that need
-# them pay for them. Override with `make up LAN_IPS="192.168.1.20 10.0.0.5"`.
+# (every seat at 42 Madrid has one), then the addresses, each marked with the network it
+# goes over — `wired|http://…` — so the dialog can say who can open it. See
+# scripts/lan.sh. Lazy, so only the recipes that need them pay for them. Override with
+# `make up LAN_IPS="192.168.1.20 10.0.0.5"`.
 LAN_IPS ?= $(shell scripts/lan.sh ips 2>/dev/null)
 # Told to the API, which tells the Share dialog. See apps/api/src/share.ts.
 export SHARE_LAN_ORIGINS = $(shell scripts/lan.sh origins $(SHARE_PORT) $(LAN_IPS) 2>/dev/null)
@@ -194,8 +195,17 @@ up: $(ENGINE_PKG) ## Start the stack: mongo + api + web behind the gateway on WE
 	$(DC) up -d --build mongo api web gateway
 	@echo -e "$(GREEN)✔ up: http://localhost:$(WEB_PORT)$(RESET)"
 	@first=$$(printf '%s' "$(SHARE_LAN_ORIGINS)" | cut -d, -f1); \
+	over=$${first%%|*}; first=$${first#*|}; \
+	case "$$over" in \
+		wired) who="people on the wired network" ;; \
+		wifi) who="people on this Wi-Fi" ;; \
+		*) who="people on your network" ;; \
+	esac; \
 	if [ -n "$$first" ]; then \
-		echo -e "$(GREEN)  for people on your network, wired or Wi-Fi: $$first$(RESET)"; \
+		echo -e "$(GREEN)  for $$who: $$first$(RESET)"; \
+		case ",$(SHARE_LAN_ORIGINS)" in *,wifi\|*) ;; *,wired\|*) \
+			echo "  this computer is not on the Wi-Fi: for anyone there, or elsewhere, run 'make share'";; \
+		esac; \
 		echo "  open a board and press Share: the link to send is at the top (docs/collaboration.md)"; \
 	else \
 		echo "  no network address found: only this computer can open it (see docs/collaboration.md)"; \
