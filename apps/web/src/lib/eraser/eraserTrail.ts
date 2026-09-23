@@ -44,8 +44,15 @@ export class EraserTrail {
     this.addPoint(x, y);
   }
 
-  /** Add a point along the stroke. */
+  /**
+   * Add a point along the stroke — only while one is being drawn.
+   *
+   * Moves keep arriving after Escape has ended the sweep and while a space-drag pans
+   * with the eraser chosen; drawing them left a live-looking trail over a gesture that
+   * was erasing nothing.
+   */
   addPoint(x: number, y: number): void {
+    if (!this.isDrawing) return;
     const now = performance.now();
     const last = this.points[this.points.length - 1];
 

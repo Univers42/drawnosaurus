@@ -5,6 +5,7 @@ import {
   camera,
   clickElement,
   focusBoard,
+  listenForPicker,
   openBoard,
   OPEN_CANVAS,
   sceneElements,
@@ -107,11 +108,11 @@ test.describe("tool shortcuts", () => {
       // The image tool opens the file picker, and a picker nobody answers is dismissed
       // at once by a headless browser — which, correctly, puts the tool back to Select.
       // Listening holds it open, as a person choosing a file does.
-      const picker = key === "9" ? page.waitForEvent("filechooser") : null;
+      const listening = key === "9" ? await listenForPicker(page) : null;
 
       await page.keyboard.press(key);
 
-      await picker;
+      await listening?.opened;
       expect(await activeTool(page)).toBe(tool);
     });
   }
@@ -437,11 +438,11 @@ test.describe("the board keeps its keys to itself", () => {
     const board = await openBoard(page);
     await focusBoard(board);
     // Held open by listening; see the digit shortcuts above.
-    const picker = page.waitForEvent("filechooser");
+    const listening = await listenForPicker(page);
 
     await page.keyboard.press("9");
 
-    await picker;
+    await listening.opened;
     expect(await activeTool(page)).toBe("image");
     const opens = await page.evaluate(
       () => (window as unknown as { __pickerOpens: { count: number } }).__pickerOpens.count,

@@ -645,8 +645,16 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "24. Eraser",
+    text: /Touch\/pen eraser support/,
+    status: "gap",
+    why: "A pen's eraser end is not recognised. Excalidraw switches to the eraser when a pointer arrives with button 5 (App.tsx:8700-8716); here the pen draws with whatever tool is active. Touch erases like a mouse.",
+  },
+  {
+    section: "24. Eraser",
     status: "covered",
     tests: [
+      `${ENGINE}/ci_eraser.rs`,
+      "e2e/eraser.spec.ts",
       `${WEB}/eraser/eraserTrail.test.ts`,
       `${ENGINE}/ci_pointer.rs`,
       `${ENGINE}/ci_history.rs`,
