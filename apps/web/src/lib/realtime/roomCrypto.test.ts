@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  deriveBoardRoomKeyBytes,
   ensureRoomKey,
   formatRoomHash,
   generateRoomKeyBytes,
   importRoomKey,
   open,
   parseRoomKeyFromHash,
+  resolveRoomKey,
   seal,
   type SealedEnvelope,
 } from "./roomCrypto.ts";
@@ -45,6 +47,38 @@ describe("roomCrypto hash helpers", () => {
   it("ensureRoomKey mints a key when the fragment is empty", () => {
     const minted = ensureRoomKey({ hash: "", pathname: "/boards/x", search: "" });
     expect(minted.byteLength).toBe(32);
+  });
+});
+
+describe("resolveRoomKey", () => {
+  it("derives the same key for the same board slug", async () => {
+    const a = await deriveBoardRoomKeyBytes("board-alpha");
+    const b = await deriveBoardRoomKeyBytes("board-alpha");
+    const c = await deriveBoardRoomKeyBytes("board-beta");
+    expect(a).toEqual(b);
+    expect(a).not.toEqual(c);
+  });
+
+  it("lets two peers without a fragment converge on one key", async () => {
+    const locA = { hash: "", pathname: "/boards/shared", search: "" };
+    const locB = { hash: "", pathname: "/boards/shared", search: "" };
+    const keyA = await resolveRoomKey("shared", locA);
+    const keyB = await resolveRoomKey("shared", locB);
+    expect(keyA).toEqual(keyB);
+    expect(keyA.byteLength).toBe(32);
+  });
+
+  it("rewrites a legacy mismatched #room= to the board-derived key", async () => {
+    const legacy = generateRoomKeyBytes();
+    const loc = {
+      hash: formatRoomHash(legacy),
+      pathname: "/boards/shared",
+      search: "",
+    };
+    const resolved = await resolveRoomKey("shared", loc);
+    const derived = await deriveBoardRoomKeyBytes("shared");
+    expect(resolved).toEqual(derived);
+    expect(resolved).not.toEqual(legacy);
   });
 });
 
@@ -98,6 +132,17 @@ describe("roomCrypto seal/open", () => {
     expect(await open(key, { v: 2, iv: "aa", ct: "bb" })).toBeNull();
     expect(await open(key, { v: 1, iv: "", ct: "" })).toBeNull();
     expect(await open(key, { v: 1, iv: "!!!", ct: "!!!" })).toBeNull();
+  });
+
+  it("board-derived keys seal and open across peers", async () => {
+    const rawA = await deriveBoardRoomKeyBytes("collab-board");
+    const rawB = await deriveBoardRoomKeyBytes("collab-board");
+    const keyA = await importRoomKey(rawA);
+    const keyB = await importRoomKey(rawB);
+    const envelope = await seal(keyA, encoder.encode('{"type":"patch"}'));
+    const opened = await open(keyB, envelope);
+    expect(opened).not.toBeNull();
+    expect(decoder.decode(opened!)).toBe('{"type":"patch"}');
   });
 });
 

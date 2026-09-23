@@ -15,8 +15,9 @@
 
   let copied = $state(false);
 
-  // Prefer the live href so the fragment room key travels with the link. The server
-  // never receives that fragment; without it, a peer cannot decrypt live frames.
+  // Prefer the live href (includes `#room=` after connect). Peers can also join from
+  // the bare board URL — the room key is derived from the slug when the fragment is
+  // absent — but sharing the full link keeps a private `#room=` override intact.
   const shareUrl = $derived(
     typeof window !== "undefined" ? window.location.href : `/boards/${slug}`,
   );
@@ -58,9 +59,9 @@
     </div>
 
     <p class="description">
-      Anyone with this link can join in real time. The link includes a secret room key (after
-      <code>#</code>) that never reaches the server, so live cursors and patches stay end-to-end
-      encrypted in transit. Board saves over HTTP are still readable by the server.
+      Anyone with this board link can draw together in real time. Live frames are sealed in the
+      browser so the realtime relay only sees ciphertext; board saves over HTTP are still readable
+      by the server.
     </p>
 
     <div class="link-box">

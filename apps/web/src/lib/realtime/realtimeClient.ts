@@ -80,6 +80,8 @@ export class RealtimeChannel<T extends StampedElement> {
   private peerSweepTimer: ReturnType<typeof setInterval> | null = null;
   private status: ConnectionStatus = "disconnected";
   private preferredUrl: string | undefined;
+  /** Outbound frames queued until AUTH+SUBSCRIBE completes. */
+  private pendingOutbound: RealtimeMessage<T>[] = [];
 
   /**
    * @param roomKey When set, every frame is AES-GCM sealed and plaintext inbound is
@@ -163,6 +165,7 @@ export class RealtimeChannel<T extends StampedElement> {
       this.sessionReady = true;
       this.connected = true;
       this.setStatus("connected");
+      void this.flushPendingOutbound();
       void this.send({
         type: "join",
         clientId: this.profile.clientId,
@@ -218,10 +221,29 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   private async send(msg: RealtimeMessage<T>): Promise<void> {
-    if (!this.ws || !this.sessionReady || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.ws || !this.sessionReady || this.ws.readyState !== WebSocket.OPEN) {
+      // Keep the latest join/leave; queue patches/cursors so early strokes aren't lost.
+      if (msg.type === "join" || msg.type === "leave") {
+        this.pendingOutbound = this.pendingOutbound.filter((m) => m.type !== msg.type);
+      }
+      this.pendingOutbound.push(msg);
+      // Bound cursor spam while reconnecting.
+      if (this.pendingOutbound.length > 64) {
+        this.pendingOutbound = this.pendingOutbound.slice(-48);
+      }
+      return;
+    }
     const payload = await this.encodePayload(msg);
     if (payload === null) return;
     this.ws.send(publishFrame(this.slug, msg.type, payload));
+  }
+
+  private async flushPendingOutbound(): Promise<void> {
+    const queued = this.pendingOutbound;
+    this.pendingOutbound = [];
+    for (const msg of queued) {
+      await this.send(msg);
+    }
   }
 
   /**
@@ -384,6 +406,7 @@ export class RealtimeChannel<T extends StampedElement> {
     }
     this.connected = false;
     this.sessionReady = false;
+    this.pendingOutbound = [];
     this.peers.clear();
     this.setStatus("disconnected");
   }

@@ -51,7 +51,7 @@
     type ConnectionStatus,
     type PeerCursor,
   } from "../realtime/realtimeClient.ts";
-  import { ensureRoomKey, importRoomKey } from "../realtime/roomCrypto.ts";
+  import { importRoomKey, resolveRoomKey } from "../realtime/roomCrypto.ts";
   import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
   import type { StampedElement } from "../autosave/sceneDiff.ts";
   import DrawHeader from "./DrawHeader.svelte";
@@ -558,11 +558,10 @@
   function handleSceneChange(json: string): void {
     onSceneChange?.(json);
     refreshEmbedFrames();
-    if (!realtime) return;
-    // Diff against what peers already have: synthesise tombstones for soft-deletes
-    // and an explicit order when z-order moved without stamp changes.
+    // Always advance the broadcaster, even before the socket is up — otherwise early
+    // deltas are dropped and later patches are computed against a stale mirror.
     const patch = liveBroadcast.ingest(json);
-    if (patch) realtime.sendPatch(patch);
+    if (patch) realtime?.sendPatch(patch);
   }
 
   onMount(() => {
@@ -601,11 +600,11 @@
     if (slug) {
       // Seed the broadcaster from the loaded scene so the first stroke is a diff.
       liveBroadcast.reset(scene.toArray() as StampedElement[]);
-      // Fragment room key never leaves the browser. Mint one if the URL has none so
-      // the share link becomes a capability URL; peers who open the same #room=
-      // derive the same AES key. The API only sees opaque sealed frames.
+      // Board-scoped room key (or `#room=` override). Same board → same AES key so
+      // peers decrypt live frames without a prior share step. The API still only
+      // sees opaque sealed frames.
       void (async () => {
-        const raw = ensureRoomKey(window.location);
+        const raw = await resolveRoomKey(slug, window.location);
         const roomKey = await importRoomKey(raw);
         if (liveCancelled) return;
         realtime = new RealtimeChannel(slug, roomKey);

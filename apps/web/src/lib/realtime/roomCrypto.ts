@@ -60,10 +60,85 @@ export function parseRoomKeyFromHash(hash: string): Uint8Array | null {
   }
 }
 
+const ROOM_KEY_STORAGE_PREFIX = "drawnosaurus:roomKey:";
+
 /**
- * Mint a room key into the page fragment when one is missing. Returns the raw
- * key bytes always present after the call. Uses history.replaceState so navigation
- * does not reload and the fragment never hits the server.
+ * Stable 32-byte material for a board slug. Every peer that opens the same board
+ * without an explicit `#room=` secret derives the same key, so live patches decrypt
+ * without requiring a shared capability link first.
+ */
+export async function deriveBoardRoomKeyBytes(slug: string): Promise<Uint8Array> {
+  const ikm = await crypto.subtle.importKey(
+    "raw",
+    textEncoder.encode(`drawnosaurus-board:${slug}`),
+    "HKDF",
+    false,
+    ["deriveBits"],
+  );
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(),
+      info: textEncoder.encode(`${HKDF_INFO}:board-room`),
+    },
+    ikm,
+    ROOM_KEY_BYTES * 8,
+  );
+  return new Uint8Array(bits);
+}
+
+function persistRoomKey(slug: string, raw: Uint8Array): void {
+  if (typeof localStorage === "undefined" || !slug) return;
+  try {
+    localStorage.setItem(`${ROOM_KEY_STORAGE_PREFIX}${slug}`, bytesToBase64Url(raw));
+  } catch {
+    // Quota / private mode — derivation still converges without storage.
+  }
+}
+
+function writeRoomHash(
+  locationLike: { hash: string; pathname: string; search: string },
+  raw: Uint8Array,
+): void {
+  const nextHash = formatRoomHash(raw, locationLike.hash);
+  if (typeof history !== "undefined") {
+    history.replaceState(null, "", `${locationLike.pathname}${locationLike.search}${nextHash}`);
+  }
+}
+
+/**
+ * Resolve the AES room material for live collab on a board.
+ *
+ * Every peer on the same slug derives the same key, so opening `/boards/{slug}`
+ * in two tabs (or browsers) decrypts live frames without a prior share step.
+ * The fragment is rewritten to mirror that key so the share link stays useful;
+ * a mismatched legacy `#room=` (from the old per-tab mint) is replaced so stuck
+ * sessions recover on reload.
+ */
+export async function resolveRoomKey(
+  slug: string,
+  locationLike: { hash: string; pathname: string; search: string },
+): Promise<Uint8Array> {
+  const derived = await deriveBoardRoomKeyBytes(slug);
+  persistRoomKey(slug, derived);
+  const fromHash = parseRoomKeyFromHash(locationLike.hash);
+  if (!fromHash || !bytesEqual(fromHash, derived)) {
+    writeRoomHash(locationLike, derived);
+  }
+  return derived;
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  let diff = 0;
+  for (let i = 0; i < a.byteLength; i++) diff |= a[i]! ^ b[i]!;
+  return diff === 0;
+}
+
+/**
+ * @deprecated Prefer {@link resolveRoomKey} — random minting made each tab a
+ * different crypto room, so live collab never converged without a shared link.
  */
 export function ensureRoomKey(locationLike: {
   hash: string;
@@ -73,10 +148,7 @@ export function ensureRoomKey(locationLike: {
   const existing = parseRoomKeyFromHash(locationLike.hash);
   if (existing) return existing;
   const raw = generateRoomKeyBytes();
-  const nextHash = formatRoomHash(raw, locationLike.hash);
-  if (typeof history !== "undefined" && typeof location !== "undefined") {
-    history.replaceState(null, "", `${locationLike.pathname}${locationLike.search}${nextHash}`);
-  }
+  writeRoomHash(locationLike, raw);
   return raw;
 }
 
