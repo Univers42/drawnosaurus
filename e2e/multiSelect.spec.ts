@@ -1,0 +1,250 @@
+import { expect, test } from "./fixtures.ts";
+import {
+  OPEN_CANVAS,
+  openBoard,
+  pickTool,
+  regionInk,
+  sceneElements,
+  selection,
+  type Board,
+} from "./board.ts";
+
+/**
+ * The chrome that wraps a selection.
+ *
+ * `ci_multi_select.rs` pins the *logic* — what a marquee catches, what shift adds and
+ * removes, what a drag carries — and all fifteen of those passed without a line of the
+ * engine changing. What no engine test can see is whether any of it is **drawn**: the
+ * selection can be perfectly correct and still show nothing, which is precisely the
+ * report this file exists to answer.
+ *
+ * # How it measures
+ *
+ * Two rectangles with a gap between them, selected together. The frame that wraps them
+ * runs across the *gap*, where there is otherwise nothing at all — so a thin patch over
+ * the gap is empty when nothing is selected and has ink in it when the frame is there.
+ * Whole-canvas ink cannot answer this: a one-pixel outline around shapes that are already
+ * drawn moves that number by less than antialiasing does.
+ *
+ * Every case takes its control from the same patch before selecting, rather than from a
+ * remembered constant, so a change in theme, DPR or antialiasing moves both numbers
+ * together and the comparison survives it.
+ */
+
+/**
+ * Canvas-relative. Two boxes with a gap between them, and **at different heights**.
+ *
+ * The heights differ on purpose. Level with each other, the group frame's top edge and
+ * the lower box's own border land on the same line, and no measurement can tell which of
+ * the two it is looking at — which is the whole question below.
+ */
+const LEFT = { x: OPEN_CANVAS.left + 60, y: OPEN_CANVAS.top + 60, w: 140, h: 110 };
+const RIGHT = { x: OPEN_CANVAS.left + 320, y: OPEN_CANVAS.top + 190, w: 140, h: 110 };
+
+function at(board: Board, x: number, y: number): { x: number; y: number } {
+  return { x: board.box.x + x, y: board.box.y + y };
+}
+
+async function drawBox(board: Board, box: typeof LEFT): Promise<void> {
+  const { page } = board;
+  await pickTool(page, "Rectangle");
+  const from = at(board, box.x, box.y);
+  const to = at(board, box.x + box.w, box.y + box.h);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 6 });
+  await page.mouse.up();
+}
+
+/** Drops whatever the last gesture left selected. */
+async function deselect(board: Board): Promise<void> {
+  await pickTool(board.page, "Select");
+  await board.page.mouse.click(
+    board.box.x + OPEN_CANVAS.right - 30,
+    board.box.y + OPEN_CANVAS.bottom - 30,
+  );
+  await board.page.waitForTimeout(120);
+}
+
+/**
+ * The patch the frame's top edge crosses, over the gap between the two boxes.
+ *
+ * Generous vertically — the frame sits a few pixels above the shapes and the exact offset
+ * is the painter's business, not this test's — and strictly inside the gap horizontally,
+ * so no part of either rectangle can contribute to it whatever the band's height.
+ */
+const GAP_BAND = {
+  left: LEFT.x + LEFT.w + 20,
+  top: LEFT.y - 24,
+  right: RIGHT.x - 20,
+  bottom: LEFT.y + 4,
+};
+
+/**
+ * The patch the *lower* box's own border crosses, and nothing else can.
+ *
+ * It sits above that box but far below the group frame's top edge, which is up at the
+ * higher box; and it is inset from the box's sides, so the group frame's verticals miss
+ * it too. Ink here means the element got a border of its own.
+ */
+const OWN_BORDER_BAND = {
+  left: RIGHT.x + 20,
+  top: RIGHT.y - 16,
+  right: RIGHT.x + RIGHT.w - 20,
+  bottom: RIGHT.y - 2,
+};
+
+async function drawTwoBoxes(page: Parameters<typeof openBoard>[0]): Promise<Board> {
+  const board = await openBoard(page);
+  await drawBox(board, LEFT);
+  await drawBox(board, RIGHT);
+  await deselect(board);
+  return board;
+}
+
+/** Rubber-bands around both boxes. */
+async function marqueeBoth(board: Board): Promise<void> {
+  const { page } = board;
+  await pickTool(page, "Select");
+  const from = at(board, LEFT.x - 30, LEFT.y - 40);
+  const to = at(board, RIGHT.x + RIGHT.w + 30, RIGHT.y + RIGHT.h + 30);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+}
+
+test.describe("the frame around a multi-selection", () => {
+  test("is actually drawn", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+
+    const empty = await regionInk(page, GAP_BAND);
+    await marqueeBoth(board);
+
+    expect(await selection(page), "both boxes should be selected").toHaveLength(2);
+    const framed = await regionInk(page, GAP_BAND);
+    expect(
+      framed,
+      `the frame should put ink across the gap: ${empty} before, ${framed} after`,
+    ).toBeGreaterThan(empty + 0.01);
+  });
+
+  test("goes away again when the selection is dropped", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+    const empty = await regionInk(page, GAP_BAND);
+
+    await marqueeBoth(board);
+    expect(await regionInk(page, GAP_BAND)).toBeGreaterThan(empty + 0.01);
+
+    await deselect(board);
+    expect(
+      await regionInk(page, GAP_BAND),
+      "nothing selected, nothing drawn over the gap",
+    ).toBeCloseTo(empty, 2);
+  });
+
+  /**
+   * Each selected element keeps a border of its own, inside the group frame.
+   *
+   * Excalidraw draws both: a border per selected element
+   * (`interactiveScene.ts:1922-1948`) and, separately, the dotted box around their common
+   * bounds (`:2027-2052`). We drew only the second, so once two things were selected you
+   * could see *that* a region was selected but not *which* shapes in it were — and with a
+   * shape outside the marquee sitting inside its bounds, no way at all to tell it apart
+   * from one that was caught.
+   */
+  test("puts a border around each selected element, not just around the group", async ({
+    page,
+  }) => {
+    const board = await drawTwoBoxes(page);
+    const empty = await regionInk(page, OWN_BORDER_BAND);
+
+    await marqueeBoth(board);
+
+    expect(await selection(page)).toHaveLength(2);
+    const bordered = await regionInk(page, OWN_BORDER_BAND);
+    expect(
+      bordered,
+      `the lower box should have its own border: ${empty} before, ${bordered} after`,
+    ).toBeGreaterThan(empty + 0.01);
+  });
+
+  /**
+   * The control that separates "the group frame is missing" from "no selection chrome
+   * draws at all" — the two look identical from the report and need different fixes.
+   */
+  test("a single shape gets its frame too", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+    // A patch just above the left box, where only its own frame can reach.
+    const band = {
+      left: LEFT.x + 20,
+      top: LEFT.y - 24,
+      right: LEFT.x + LEFT.w - 20,
+      bottom: LEFT.y - 4,
+    };
+    const empty = await regionInk(page, band);
+
+    await pickTool(page, "Select");
+    const edge = at(board, LEFT.x + LEFT.w / 2, LEFT.y);
+    await page.mouse.click(edge.x, edge.y);
+    await page.waitForTimeout(150);
+
+    expect(await selection(page)).toHaveLength(1);
+    expect(await regionInk(page, band)).toBeGreaterThan(empty + 0.01);
+  });
+});
+
+test.describe("multi-select gestures reach the engine", () => {
+  test("shift-click adds a second shape", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+    await pickTool(page, "Select");
+
+    const first = at(board, LEFT.x + LEFT.w / 2, LEFT.y);
+    await page.mouse.click(first.x, first.y);
+    expect(await selection(page)).toHaveLength(1);
+
+    const second = at(board, RIGHT.x + RIGHT.w / 2, RIGHT.y);
+    await page.keyboard.down("Shift");
+    await page.mouse.click(second.x, second.y);
+    await page.keyboard.up("Shift");
+    await page.waitForTimeout(120);
+
+    expect(await selection(page), "shift should have added rather than replaced").toHaveLength(2);
+  });
+
+  test("shift-click takes one back out", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+    await marqueeBoth(board);
+    expect(await selection(page)).toHaveLength(2);
+
+    const second = at(board, RIGHT.x + RIGHT.w / 2, RIGHT.y);
+    await page.keyboard.down("Shift");
+    await page.mouse.click(second.x, second.y);
+    await page.keyboard.up("Shift");
+    await page.waitForTimeout(120);
+
+    expect(await selection(page)).toHaveLength(1);
+  });
+
+  test("dragging one member carries the other", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+    await marqueeBoth(board);
+
+    const before = (await sceneElements(page)).map((el) => el.x);
+
+    const grab = at(board, LEFT.x + LEFT.w / 2, LEFT.y);
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 5; step += 1) {
+      await page.mouse.move(grab.x + (70 * step) / 5, grab.y);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+
+    const after = (await sceneElements(page)).map((el) => el.x);
+    expect(after, "both boxes should still be on the board").toHaveLength(2);
+    expect(after[0]! - before[0]!, "the one that was grabbed").toBeCloseTo(70, 0);
+    expect(after[1]! - before[1]!, "and the one that was not").toBeCloseTo(70, 0);
+  });
+});

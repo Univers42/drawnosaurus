@@ -95,6 +95,16 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "Lines & arrows",
+    // The two halves of placing a path by hand. `Click repeatedly` and the gesture that
+    // ends it were already swept up by the section rule below, which names none of the
+    // tests for them — so the matrix called them covered while a click left nothing on
+    // the board at all.
+    text: /multi-point/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_line_multipoint.rs`, "e2e/lineMultipoint.spec.ts"],
+  },
+  {
+    section: "Lines & arrows",
     text: /Cycle\/change arrow type|fixed point/,
     status: "gap",
     why: "Arrow-type cycling and Alt-to-bind-at-a-fixed-point both need the elbow-arrow work; `fixed_point` is carried on the binding struct but nothing sets it.",
@@ -103,6 +113,17 @@ export const RULES: readonly Rule[] = [
     section: "Lines & arrows",
     status: "covered",
     tests: [`${ENGINE}/ci_linear_anchor.rs`, `${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_pointer.rs`],
+  },
+  {
+    section: "🖱️ Selection",
+    // Building a selection out of more than one thing, and seeing what is in it. Split
+    // out of the section rule because that one names the single-element tests, and a
+    // marquee, a shift-click and the chrome around the result are a different subject
+    // with different failure modes — the engine had all three right while the painter
+    // drew no outline around any of the members.
+    text: /Shift \+ click|selection box|Select all/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_multi_select.rs`, `${ENGINE}/ci_lasso.rs`, "e2e/multiSelect.spec.ts"],
   },
   {
     section: "🖱️ Selection",

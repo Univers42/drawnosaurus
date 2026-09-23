@@ -270,6 +270,54 @@ export function canvasInk(page: Page): Promise<number> {
 }
 
 /**
+ * How much ink is inside one region, as a fraction of that region's pixels.
+ *
+ * `canvasInk` answers the same question about the whole canvas, which is too blunt for
+ * chrome: a selection frame is a one-pixel outline around a shape that is itself already
+ * drawn, so it moves the whole-canvas number by a fraction of a percent and any threshold
+ * that could see it would also see antialiasing move. Pointed at a patch that should be
+ * *empty* unless the chrome is there, the same measurement becomes decisive.
+ *
+ * Canvas-relative CSS pixels, converted to the backing store here, so a caller can name
+ * the box it is asking about without knowing the device pixel ratio.
+ */
+export function regionInk(
+  page: Page,
+  region: { left: number; top: number; right: number; bottom: number },
+): Promise<number> {
+  return page.evaluate((area) => {
+    const canvas = document.querySelector("canvas");
+    if (!canvas) throw new Error("no canvas");
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("no 2d context");
+    const box = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / box.width;
+    const scaleY = canvas.height / box.height;
+    const x0 = Math.round(area.left * scaleX);
+    const y0 = Math.round(area.top * scaleY);
+    const w = Math.round((area.right - area.left) * scaleX);
+    const h = Math.round((area.bottom - area.top) * scaleY);
+    if (w <= 0 || h <= 0) throw new Error("empty region");
+
+    // The same background reference the other two use: the canvas corner, which is off
+    // the drawing, so it holds in either theme.
+    const corner = ctx.getImageData(0, 0, 1, 1).data;
+    const { data } = ctx.getImageData(x0, y0, w, h);
+    let ink = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (
+        Math.abs(data[i]! - corner[0]!) > 12 ||
+        Math.abs(data[i + 1]! - corner[1]!) > 12 ||
+        Math.abs(data[i + 2]! - corner[2]!) > 12
+      ) {
+        ink += 1;
+      }
+    }
+    return ink / (w * h);
+  }, region);
+}
+
+/**
  * Where the ink inside a region sits horizontally, as a fraction across it.
  *
  * `canvasInk` answers "is anything there", which alignment cannot use: moving text from
