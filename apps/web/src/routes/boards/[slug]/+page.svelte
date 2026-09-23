@@ -10,6 +10,7 @@
     type FailureKind,
   } from "$lib/autosave/autosaver.ts";
   import { DraftStore, indexedDbBackend } from "$lib/autosave/draftStore.ts";
+  import { SceneMirror } from "$lib/autosave/sceneMirror.ts";
   import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
 
@@ -19,8 +20,11 @@
   let status = $state<AutosaveStatus>("idle");
   let title = $state("Board");
 
-  /** Latest elements the engine reported; the autosaver reads this, never the DOM. */
-  let live: DrawElement[] = [];
+  /**
+   * Latest elements the engine reported, found by id; the autosaver reads this, never
+   * the DOM. See `sceneMirror.ts` for why it is changed in place.
+   */
+  const live = new SceneMirror<DrawElement>();
 
   const storage = (): Storage | undefined =>
     typeof localStorage === "undefined" ? undefined : localStorage;
@@ -44,7 +48,8 @@
   }
 
   const saver = new SceneAutosaver<DrawElement>({
-    readScene: () => live,
+    readScene: () => live.elements,
+    lookup: live.lookup,
     send: async (patch) => {
       // Deliberately NOT caught. The autosaver needs the rejection: it is what leaves
       // the patch unacknowledged and arms the retry. Swallowing it here made the
@@ -84,7 +89,7 @@
       }
 
       saver.tracker.reset(elements);
-      live = elements;
+      live.replace(elements);
       scene = new Scene(elements);
     })();
 
@@ -128,26 +133,23 @@
     }
 
     if (isDelta(parsed)) {
-      applyDelta(parsed);
-      drafts.record(slug, parsed.updated, parsed.removed, live);
+      const appended = live.apply(parsed);
+      saver.tracker.noteChanged(parsed.updated.map((element) => element.id));
+      saver.tracker.noteChanged(parsed.removed);
+      // A delta never rearranges the stack: all it can do is put new elements on top.
+      drafts.record(slug, parsed.updated, parsed.removed, { appended });
     } else {
       const elements = elementsFromJson(json);
       if (elements === null) return;
       // A whole scene — an undo, a reorder. Only what it actually changed goes to the
       // draft: undo on a big board would otherwise rewrite every element.
-      const before = new Map(live.map((element) => [element.id, element]));
-      const changed = elements.filter((element) => {
-        const previous = before.get(element.id);
-        return (
-          !previous ||
-          previous.version !== element.version ||
-          previous.versionNonce !== element.versionNonce
-        );
-      });
-      const present = new Set(elements.map((element) => element.id));
-      const removed = live.map((element) => element.id).filter((id) => !present.has(id));
-      live = elements;
-      drafts.record(slug, changed, removed, live);
+      const { changed, removed } = live.replace(
+        elements,
+        (before, after) =>
+          before.version === after.version && before.versionNonce === after.versionNonce,
+      );
+      saver.tracker.noteEverything();
+      drafts.record(slug, changed, removed, { order: live.elements.map((element) => element.id) });
     }
 
     saver.notify();
@@ -163,34 +165,6 @@
     typeof value === "object" &&
     value !== null &&
     (value as { type?: unknown }).type === "osidraw-delta";
-
-  function applyDelta(delta: SceneDelta): void {
-    // Plain objects rather than Map/Set: these are function-local lookups, not
-    // reactive state, and Svelte's lint rightly steers reactive collections elsewhere.
-    const removed: Record<string, true> = {};
-    for (const id of delta.removed) removed[id] = true;
-
-    const pending: Record<string, DrawElement> = {};
-    for (const element of delta.updated) pending[element.id] = element;
-
-    // Rebuilt in place so z-order is preserved: the engine only sends a delta when the
-    // order has not changed, so position in this array still means what it did.
-    const next: DrawElement[] = [];
-    for (const element of live) {
-      if (removed[element.id]) continue;
-      const replacement = pending[element.id];
-      if (replacement) {
-        next.push(replacement);
-        delete pending[element.id];
-      } else {
-        next.push(element);
-      }
-    }
-    // Whatever is left is new, and new elements go on top.
-    for (const element of Object.values(pending)) next.push(element);
-
-    live = next;
-  }
 </script>
 
 <svelte:head><title>{title} · drawnosaurus</title></svelte:head>

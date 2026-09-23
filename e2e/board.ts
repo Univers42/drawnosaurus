@@ -44,11 +44,15 @@ declare global {
       applyRemotePatch(json: string): boolean;
       debugSnapshot(): {
         interaction: { markedForErasure: string[] };
-        rendering: { scrolls: number; dirty: boolean };
+        rendering: { redraws: number; scrolls: number; dirty: boolean };
       };
       /** Replaces the whole scene — used to place geometry too small to draw by hand. */
-      loadScene(json: string): void;
+      loadScene(json: string): boolean;
       groupSelection(): void;
+      /** Places an embed as the dialog does; the new element's id, or null if refused. */
+      insertEmbed(url: string, x: number, y: number): string | null;
+      /** The embeds on screen and where their frames go, as JSON. */
+      embedFramesJson(): string;
     };
   }
 }

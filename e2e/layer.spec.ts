@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { focusBoard, openBoard, pickTool, type Board } from "./board.ts";
+import { clickElement, focusBoard, openBoard, pickTool, type Board } from "./board.ts";
 
 /**
  * The static layer, checked in pixels.
@@ -249,5 +249,112 @@ test.describe("the static layer", () => {
     );
 
     expect(await pixels(board), "a new shape did not reach the canvas").not.toBe(before);
+  });
+});
+
+/** How many times the engine has drawn its picture of the board from scratch. */
+function redraws(board: Board): Promise<number> {
+  return board.page.evaluate(() => window.__drawEngine!.debugSnapshot().rendering.redraws);
+}
+
+const twoFrames = (board: Board) =>
+  board.page.evaluate(
+    () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+  );
+
+test.describe("adding to the board paints on top of the picture", () => {
+  // Most changes to a big board are an element added on top: a shape drawn, a paste,
+  // every Ctrl+D of a stack of copies. The picture of the board is then the old picture
+  // with the new element painted over it — so it is painted over it, instead of the
+  // whole board being drawn again. On 9,000 shapes that was ten milliseconds of
+  // rasterising per duplicate, for one new shape.
+  //
+  // Each case checks both halves: that the board was not drawn again, and that what is
+  // on the canvas is exactly what drawing it again produces.
+
+  test("a duplicate is painted over the picture, exactly", async ({ page }) => {
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await clickElement(board, 2);
+    await twoFrames(board);
+
+    const before = await redraws(board);
+    await page.keyboard.press("Control+d");
+    await twoFrames(board);
+    const shown = await pixels(board);
+
+    expect(await redraws(board), "the whole board was drawn again for one copy").toBe(before);
+    await forceFullRedraw(board);
+    expect(shown, "painting on top differs from drawing it all again").toBe(await pixels(board));
+  });
+
+  test("a shape being drawn never draws the board again, and ends exact", async ({ page }) => {
+    // While it is drawn, the rest of the board is the picture already on screen; when it
+    // ends, the shape is painted onto that picture. At no point is the board redrawn.
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await pickTool(page, "Rectangle");
+    await twoFrames(board);
+
+    const before = await redraws(board);
+    await page.mouse.move(board.box.x + 520, board.box.y + 470);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + 700, board.box.y + 600, { steps: 6 });
+    await twoFrames(board);
+    expect(await redraws(board), "starting the shape drew the whole board again").toBe(before);
+    await page.mouse.up();
+    await twoFrames(board);
+    const shown = await pixels(board);
+
+    expect(await redraws(board), "finishing the shape drew the whole board again").toBe(before);
+    await forceFullRedraw(board);
+    expect(shown, "painting on top differs from drawing it all again").toBe(await pixels(board));
+  });
+
+  test("an Alt-drag copy never draws the board again, and ends exact", async ({ page }) => {
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await pickTool(page, "Select");
+    const top = await page.evaluate(() => {
+      const engine = window.__drawEngine!;
+      const elements = JSON.parse(engine.exportJson()).elements;
+      const last = elements[elements.length - 1];
+      const { x, y, scale } = engine.camera;
+      // Its top edge: a shape with no background is held by its outline.
+      return { x: (last.x + last.width / 2) * scale + x, y: last.y * scale + y };
+    });
+    await twoFrames(board);
+
+    const before = await redraws(board);
+    await page.mouse.move(board.box.x + top.x, board.box.y + top.y);
+    await page.keyboard.down("Alt");
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + top.x + 60, board.box.y + top.y + 40, { steps: 6 });
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    await twoFrames(board);
+    const shown = await pixels(board);
+
+    expect(
+      JSON.parse(await page.evaluate(() => window.__drawEngine!.exportJson())).elements,
+    ).toHaveLength(4);
+    expect(await redraws(board), "the copy drew the whole board again").toBe(before);
+    await forceFullRedraw(board);
+    expect(shown, "painting on top differs from drawing it all again").toBe(await pixels(board));
+  });
+
+  test("a change to something already drawn draws it all again", async ({ page }) => {
+    // The other direction: an element that is part of the picture cannot be painted
+    // over it, because its old self is in there.
+    const board = await openBoard(page);
+    await drawBoard(board);
+    await clickElement(board, 0);
+    await twoFrames(board);
+
+    const before = await redraws(board);
+    await page.keyboard.press("ArrowRight");
+    await twoFrames(board);
+
+    expect(await redraws(board)).toBeGreaterThan(before);
   });
 });

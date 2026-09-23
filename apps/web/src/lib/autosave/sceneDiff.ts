@@ -48,12 +48,33 @@ function predictOrder<T extends StampedElement>(
   patch: readonly T[],
 ): string[] {
   const removed = new Set(patch.filter((element) => element.isDeleted).map((e) => e.id));
-  const kept = order.filter((id) => !removed.has(id));
+  const kept = removed.size > 0 ? order.filter((id) => !removed.has(id)) : [...order];
+  // A set, not `order.includes` per element: that was the board's length times the
+  // patch's — 13 million comparisons to drop a stack of 1,500 shapes on a board of 9,000,
+  // a 60ms stall at the end of the drag.
+  const present = new Set(order);
   const appended = patch
-    .filter((element) => !element.isDeleted && !order.includes(element.id))
+    .filter((element) => !element.isDeleted && !present.has(element.id))
     .map((element) => element.id);
 
   return [...kept, ...appended];
+}
+
+/** The tombstone that tells the server an element it has was deleted. */
+function tombstoneOf<T extends StampedElement>(previous: T, now: number, nonce: () => number): T {
+  const tombstone: T = {
+    ...previous,
+    isDeleted: true,
+    version: previous.version + 1,
+    versionNonce: nonce(),
+    updated: now,
+  };
+  // Nothing draws a tombstone, and an image's picture is most of its size: sent with it,
+  // every deleted photo went on counting against the board's 16MB, and deleting images
+  // never made room. Undo does not need it — the engine keeps its own copy and sends the
+  // whole element back.
+  delete (tombstone as { dataUrl?: unknown }).dataUrl;
+  return tombstone;
 }
 
 export class SceneDiffTracker<T extends StampedElement> {
@@ -61,11 +82,46 @@ export class SceneDiffTracker<T extends StampedElement> {
   private known = new Map<string, T>();
   /** Last acknowledged LIVE id sequence — the server's z-order as we understand it. */
   private order: string[] = [];
+  /**
+   * The ids changed since the last acknowledged diff, each with the note it came in, or
+   * `null` when something happened that only comparing everything can see.
+   *
+   * The engine says what changed; the tracker used to ignore that and compare every
+   * element on the board against what the server has, on every save and every live
+   * send. On 9,000 shapes that was a millisecond and a half per Ctrl+D, twice. With the
+   * ids it looks at those and nothing else. A whole scene arriving — an undo, a reorder,
+   * a file opened — can change anything, and puts it back to comparing everything.
+   */
+  private touched: Map<string, number> | null = new Map();
+  /** Counts notes, so an acknowledgement can tell which ones its diff covered. */
+  private notes = 0;
+  /** The patch last returned by `diff`, and the note it was built at. */
+  private lastDiff: { patch: ScenePatch<T>; at: number; full: boolean } | null = null;
 
   /** Adopt the server's truth: initial load, or a reload after a conflict. */
   reset(elements: readonly T[]): void {
     this.known = new Map(elements.map((element) => [element.id, element]));
     this.order = elements.filter((element) => !element.isDeleted).map((element) => element.id);
+    this.touched = new Map();
+    this.lastDiff = null;
+  }
+
+  /**
+   * These ids changed — in place, or new on top, or deleted. Only what a delta from the
+   * engine can say: nothing moved in the stack.
+   */
+  noteChanged(ids: Iterable<string>): void {
+    this.notes += 1;
+    if (this.touched === null) return;
+    // A map keeps the place of an id's first note, so it is walked in the order ids were
+    // first seen — which, for new elements, is the order they went on top.
+    for (const id of ids) this.touched.set(id, this.notes);
+  }
+
+  /** Something changed that only a full comparison can find. */
+  noteEverything(): void {
+    this.notes += 1;
+    this.touched = null;
   }
 
   /**
@@ -74,55 +130,83 @@ export class SceneDiffTracker<T extends StampedElement> {
    * `now` and `nonce` are injected rather than read from the ambient clock so a
    * synthesised stamp is reproducible in a test.
    */
-  diff(current: readonly T[], now: number, nonce: () => number): ScenePatch<T> | null {
+  diff(
+    current: readonly T[],
+    now: number,
+    nonce: () => number,
+    lookup?: (id: string) => T | undefined,
+  ): ScenePatch<T> | null {
+    const patch =
+      this.touched !== null && lookup
+        ? this.diffTouched(this.touched, lookup, now, nonce)
+        : this.diffAll(current, now, nonce);
+    this.lastDiff = patch ? { patch, at: this.notes, full: this.touched === null } : null;
+    if (!patch) this.settle(this.notes, this.touched === null);
+    return patch;
+  }
+
+  /** What `diff` does when told which ids changed: those, and nothing else. */
+  private diffTouched(
+    touched: ReadonlyMap<string, number>,
+    lookup: (id: string) => T | undefined,
+    now: number,
+    nonce: () => number,
+  ): ScenePatch<T> | null {
+    const changed: T[] = [];
+    for (const id of touched.keys()) {
+      const element = lookup(id);
+      if (element && !element.isDeleted) {
+        const next = this.changeOf(element, now, nonce);
+        if (next) changed.push(next);
+        continue;
+      }
+      const previous = this.known.get(id);
+      if (previous && !previous.isDeleted) changed.push(tombstoneOf(previous, now, nonce));
+    }
+    // Nothing moved in the stack — the engine sends a delta only when nothing did — and
+    // new elements went on top in the order they were noted, which is the order the
+    // server will append them in. So the prediction is the order, and none is sent.
+    return changed.length === 0 ? null : { elements: changed };
+  }
+
+  /** How `element` differs from what the server has, as the element to send — or null. */
+  private changeOf(element: T, now: number, nonce: () => number): T | null {
+    const previous = this.known.get(element.id);
+    if (previous === undefined) return element;
+    // A resurrection — undo of a delete — that does not outrank the tombstone we sent
+    // would lose to it and stay deleted server-side, so it is re-stamped here. Only
+    // then: the engine now stamps an undo above whatever it restores over, and a host
+    // stamp minted on top of that would never reach the engine, so its next edit of
+    // the element would carry a lower version than the server's and be refused. The
+    // branch stays for boards restored from an older engine or a local draft.
+    if (previous.isDeleted && element.version <= previous.version) {
+      return {
+        ...element,
+        version: Math.max(element.version, previous.version) + 1,
+        versionNonce: nonce(),
+        updated: now,
+      };
+    }
+    if (previous.version !== element.version || previous.versionNonce !== element.versionNonce) {
+      return element;
+    }
+    return null;
+  }
+
+  /** Comparing everything: the scene as it is against everything the server has. */
+  private diffAll(current: readonly T[], now: number, nonce: () => number): ScenePatch<T> | null {
     const live = current.filter((element) => !element.isDeleted);
     const changed: T[] = [];
 
     for (const element of live) {
-      const previous = this.known.get(element.id);
-
-      if (previous === undefined) {
-        changed.push(element);
-        continue;
-      }
-
-      // A resurrection — undo of a delete — that does not outrank the tombstone we sent
-      // would lose to it and stay deleted server-side, so it is re-stamped here. Only
-      // then: the engine now stamps an undo above whatever it restores over, and a host
-      // stamp minted on top of that would never reach the engine, so its next edit of
-      // the element would carry a lower version than the server's and be refused. The
-      // branch stays for boards restored from an older engine or a local draft.
-      if (previous.isDeleted && element.version <= previous.version) {
-        changed.push({
-          ...element,
-          version: Math.max(element.version, previous.version) + 1,
-          versionNonce: nonce(),
-          updated: now,
-        });
-        continue;
-      }
-
-      if (previous.version !== element.version || previous.versionNonce !== element.versionNonce) {
-        changed.push(element);
-      }
+      const next = this.changeOf(element, now, nonce);
+      if (next) changed.push(next);
     }
 
     const present = new Set(live.map((element) => element.id));
     for (const [id, previous] of this.known) {
       if (present.has(id) || previous.isDeleted) continue;
-      const tombstone: T = {
-        ...previous,
-        isDeleted: true,
-        version: previous.version + 1,
-        versionNonce: nonce(),
-        updated: now,
-      };
-      // Nothing draws a tombstone, and an image's picture is most of its size: sent
-      // with it, every deleted photo went on counting against the board's 16MB, and
-      // deleting images never made room. Undo does not need it — the engine keeps its
-      // own copy and sends the whole element back.
-      delete (tombstone as { dataUrl?: unknown }).dataUrl;
-      changed.push(tombstone);
+      changed.push(tombstoneOf(previous, now, nonce));
     }
 
     const predicted = predictOrder(this.order, changed);
@@ -142,6 +226,27 @@ export class SceneDiffTracker<T extends StampedElement> {
     const nextOrder = patch.order ?? predictOrder(this.order, patch.elements);
     for (const element of patch.elements) this.known.set(element.id, element);
     this.order = nextOrder;
+    // What the last diff looked at is now settled — unless it has been noted again since.
+    // A patch that did not come from a diff (a peer's, adopted) settles nothing.
+    if (this.lastDiff?.patch === patch) {
+      this.settle(this.lastDiff.at, this.lastDiff.full);
+      this.lastDiff = null;
+    }
+  }
+
+  /** Forgets the notes up to `at`, which a diff covered and the server now has. */
+  private settle(at: number, full: boolean): void {
+    if (this.touched === null) {
+      // Back to notes only if nothing needing a full comparison came in since.
+      if (full && at === this.notes) this.touched = new Map();
+      return;
+    }
+    for (const [id, note] of this.touched) if (note <= at) this.touched.delete(id);
+  }
+
+  /** Visible for diagnostics: the z-order we believe the server holds. */
+  get serverOrder(): readonly string[] {
+    return this.order;
   }
 
   /** Visible for diagnostics: how many ids we believe the server holds. */

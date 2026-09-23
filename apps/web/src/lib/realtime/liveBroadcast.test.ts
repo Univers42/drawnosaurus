@@ -87,9 +87,11 @@ describe("changes made while the socket is down", () => {
 
     const patch = broadcaster.takePatch(900, () => 5);
 
-    expect(patch?.elements.map((e) => [e.id, e.isDeleted])).toEqual([
-      ["b", false],
+    // In any order: where a new element lands is decided by the order the server keeps,
+    // not by its place in the patch.
+    expect(patch?.elements.map((e) => [e.id, e.isDeleted]).sort()).toEqual([
       ["a", true],
+      ["b", false],
     ]);
     expect(
       broadcaster.takePatch(901, () => 6),

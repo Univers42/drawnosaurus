@@ -15,14 +15,20 @@ export interface DraftElement {
   id: string;
 }
 
+/** How a change moved the stack: a whole new order, or ids put on top of it. */
+export type StackChange = { order: readonly string[] } | { appended: readonly string[] };
+
 /** Where drafts live. IndexedDB in the browser; a map in tests. */
 export interface DraftBackend {
-  /** Applies one batch: elements to put, ids to delete, and the z-order when it moved. */
+  /**
+   * Applies one batch: elements to put, ids to delete, and how the stack moved — a new
+   * order, ids to add on top of the stored one, or nothing.
+   */
   write(
     slug: string,
     puts: readonly DraftElement[],
     deletes: readonly string[],
-    order: readonly string[] | null,
+    stack: StackChange | null,
   ): Promise<void>;
   /** Everything stored for a board, or null when there is nothing. */
   read(slug: string): Promise<{ elements: DraftElement[]; order: string[] } | null>;
@@ -41,8 +47,10 @@ const defaultSchedule: Schedule = (run) => {
 export class DraftStore {
   private readonly puts = new Map<string, DraftElement>();
   private readonly deletes = new Set<string>();
-  private order: string[] | null = null;
-  private lastOrder: string[] = [];
+  /** A new order for the whole stack, pending. */
+  private order: readonly string[] | null = null;
+  /** Ids put on top since the order last written, pending, in the order they went. */
+  private appended: string[] = [];
   private slug = "";
   private scheduled = false;
   private writing: Promise<void> = Promise.resolve();
@@ -53,22 +61,25 @@ export class DraftStore {
   ) {}
 
   /**
-   * Notes what one scene change did. `live` is the board after it, in z-order: the
-   * order is stored only when it differs from what was last stored, which on the common
-   * path — an edit that reorders nothing — is never.
+   * Notes what one scene change did, and how it moved the stack: `{ order }` for a
+   * change that rearranged it — an undo, a reorder — and `{ appended }` for everything
+   * else, where the only movement is new elements going on top.
+   *
+   * The whole order used to come with every change, and comparing it with the last one
+   * stored was a pass over the board per keystroke.
    */
   record(
     slug: string,
     updated: readonly DraftElement[],
     removed: readonly string[],
-    live: readonly DraftElement[],
+    stack: StackChange,
   ): void {
     if (!slug) return;
     if (slug !== this.slug) {
       this.puts.clear();
       this.deletes.clear();
       this.order = null;
-      this.lastOrder = [];
+      this.appended = [];
       this.slug = slug;
     }
     for (const element of updated) {
@@ -79,28 +90,40 @@ export class DraftStore {
       this.puts.delete(id);
       this.deletes.add(id);
     }
-    const ids = live.map((element) => element.id);
-    if (!sameIds(ids, this.lastOrder)) this.order = ids;
+    if ("order" in stack) {
+      // A whole order includes whatever was appended before it.
+      this.order = stack.order;
+      this.appended = [];
+    } else if (stack.appended.length > 0) {
+      if (this.order) this.order = [...this.order, ...stack.appended];
+      else this.appended.push(...stack.appended);
+    }
     this.arm();
   }
 
   /** Writes whatever is pending now — for page hide. */
   async flush(): Promise<void> {
-    if (!this.slug || (this.puts.size === 0 && this.deletes.size === 0 && !this.order)) {
+    const nothing =
+      this.puts.size === 0 && this.deletes.size === 0 && !this.order && this.appended.length === 0;
+    if (!this.slug || nothing) {
       await this.writing;
       return;
     }
     const slug = this.slug;
     const puts = [...this.puts.values()];
     const deletes = [...this.deletes];
-    const order = this.order;
+    const stack: StackChange | null = this.order
+      ? { order: this.order }
+      : this.appended.length > 0
+        ? { appended: this.appended }
+        : null;
     this.puts.clear();
     this.deletes.clear();
     this.order = null;
-    if (order) this.lastOrder = order;
+    this.appended = [];
     // One write at a time, in order: a later batch must not land before an earlier one.
     this.writing = this.writing
-      .then(() => this.backend.write(slug, puts, deletes, order))
+      .then(() => this.backend.write(slug, puts, deletes, stack))
       .catch(() => {
         // Best effort. The server is the record; a draft that failed to write is a
         // fallback lost, not work lost.
@@ -122,7 +145,7 @@ export class DraftStore {
           byId.delete(id);
         }
       }
-      // Anything the order does not mention yet — written before its order was.
+      // Anything the order does not name — a write that failed half way. Kept, on top.
       ordered.push(...byId.values());
       return ordered.length > 0 ? ordered : null;
     } catch {
@@ -140,10 +163,11 @@ export class DraftStore {
   }
 }
 
-function sameIds(a: readonly string[], b: readonly string[]): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
-  return true;
+/** The stored order with `stack` applied. */
+export function applyStack(stored: readonly string[], stack: StackChange): string[] {
+  if ("order" in stack) return [...stack.order];
+  const present = new Set(stored);
+  return [...stored, ...stack.appended.filter((id) => !present.has(id))];
 }
 
 const DB_NAME = "drawnosaurus-drafts";
@@ -179,13 +203,21 @@ export function indexedDbBackend(): DraftBackend {
     });
 
   return {
-    async write(slug, puts, deletes, order) {
+    async write(slug, puts, deletes, stack) {
       const database = await db();
       const tx = database.transaction([ELEMENTS, BOARDS], "readwrite");
       const elements = tx.objectStore(ELEMENTS);
       for (const element of puts) elements.put({ slug, id: element.id, element });
       for (const id of deletes) elements.delete([slug, id]);
-      if (order) tx.objectStore(BOARDS).put({ slug, order: [...order] });
+      if (stack) {
+        // Read and written in the same transaction, so two batches cannot interleave.
+        const boards = tx.objectStore(BOARDS);
+        const current = boards.get(slug);
+        current.onsuccess = () => {
+          const stored = (current.result as { order?: string[] } | undefined)?.order ?? [];
+          boards.put({ slug, order: applyStack(stored, stack) });
+        };
+      }
       await done(tx);
     },
     async read(slug) {
