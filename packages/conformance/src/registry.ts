@@ -376,7 +376,13 @@ export const RULES: readonly Rule[] = [
   {
     section: "👥 Collaboration",
     status: "covered",
-    tests: [`${WEB}/realtime/realtime.test.ts`, `${ENGINE}/ci_remote_patch.rs`],
+    tests: [
+      `${WEB}/realtime/realtime.test.ts`,
+      `${WEB}/realtime/roomCrypto.test.ts`,
+      `${WEB}/draw-chrome/share.test.ts`,
+      "e2e/share.spec.ts",
+      `${ENGINE}/ci_remote_patch.rs`,
+    ],
   },
 
   // ------------------------------------------------- shortkey.md, closing sections
@@ -802,7 +808,9 @@ export const RULES: readonly Rule[] = [
       `${WEB}/realtime/realtime.test.ts`,
       `${WEB}/realtime/liveBroadcast.test.ts`,
       `${WEB}/draw-chrome/status.test.ts`,
+      `${WEB}/draw-chrome/share.test.ts`,
       "e2e/live.spec.ts",
+      "e2e/share.spec.ts",
       `${ENGINE}/ci_remote_patch.rs`,
     ],
   },

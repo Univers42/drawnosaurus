@@ -114,7 +114,11 @@ export const OPEN_CANVAS = { left: 440, top: 170, right: 1160, bottom: 650 } as 
 export async function openBoard(
   page: Page,
   slug = "e2e",
-  options: { live?: (socket: WebSocketRoute) => void } = {},
+  options: {
+    live?: (socket: WebSocketRoute) => void;
+    /** A fragment to open the board with — `#room=…`, to join another page's room. */
+    hash?: string;
+  } = {},
 ): Promise<Board> {
   // The realtime channel. Left unhandled it fails to connect and reconnects on a timer
   // for the length of the run — background work under every assertion, and pages of proxy
@@ -151,7 +155,7 @@ export async function openBoard(
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
 
-  await page.goto(`/boards/${slug}`);
+  await page.goto(`/boards/${slug}${options.hash ?? ""}`);
 
   const canvas = page.locator("canvas").first();
   await expect(canvas).toBeVisible();

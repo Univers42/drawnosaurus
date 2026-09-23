@@ -1,5 +1,11 @@
 import { env } from "$env/dynamic/public";
-import type { Board, BoardList, BoardSummary, OsidrawFile } from "@drawnosaurus/contract";
+import type {
+  Board,
+  BoardList,
+  BoardSummary,
+  OsidrawFile,
+  ShareInfo,
+} from "@drawnosaurus/contract";
 import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
 
 /**
@@ -63,6 +69,9 @@ export const listBoards = (limit?: number, cursor?: string): Promise<BoardList> 
   const suffix = query.size === 0 ? "" : `?${query.toString()}`;
   return request<BoardList>(`/v1/boards${suffix}`);
 };
+
+/** Where other people can reach this drawnosaurus, for the Share dialog. */
+export const getShareInfo = (): Promise<ShareInfo> => request<ShareInfo>("/v1/share");
 
 export const createBoard = (title: string): Promise<BoardSummary> =>
   request<BoardSummary>("/v1/boards", { method: "POST", body: JSON.stringify({ title }) });
