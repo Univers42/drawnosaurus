@@ -1,6 +1,6 @@
-import type { Page, WebSocketRoute } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { OPEN_CANVAS, openBoard, pickTool, sceneElements, type Board } from "./board.ts";
+import { OPEN_CANVAS, openBoard, pickTool, relay, sceneElements, type Board } from "./board.ts";
 
 /**
  * Drawing together from another computer: the Share dialog's links, and the live link
@@ -21,7 +21,7 @@ import { OPEN_CANVAS, openBoard, pickTool, sceneElements, type Board } from "./b
  */
 
 interface ShareAnswer {
-  lan: string[];
+  lan: { origin: string; over: "wired" | "wifi" | "unknown" }[];
   public: string | null;
   tunnel?: { state: string; message?: string };
   canManage?: boolean;
@@ -30,6 +30,9 @@ interface ShareAnswer {
 const NAME = "http://c2r19s1.42madrid.com:5273";
 const ADDRESS = "http://10.12.19.1:5273";
 const PUBLIC = "https://keen-lamp-rise.trycloudflare.com";
+/** This computer as `make up` finds it at school: on the wired network only. */
+const BY_NAME = { origin: NAME, over: "wired" } as const;
+const BY_ADDRESS = { origin: ADDRESS, over: "wired" } as const;
 
 async function stubShare(page: Page, answer: ShareAnswer) {
   // After openBoard's catch-all, so it is asked first.
@@ -55,17 +58,20 @@ const links = (page: Page) =>
 const primary = (page: Page) => page.locator(".link-row--primary input");
 
 test.describe("the Share dialog", () => {
-  test("puts the computer's name first — the link for the wired network and the Wi-Fi", async ({
-    page,
-  }) => {
+  test("puts the computer's name first, and says it is for the wired network", async ({ page }) => {
     await openBoard(page);
-    await stubShare(page, { lan: [NAME, ADDRESS], public: null });
+    await stubShare(page, { lan: [BY_NAME, BY_ADDRESS], public: null });
     await openShare(page);
 
     await expect(primary(page)).toHaveValue(
       /^http:\/\/c2r19s1\.42madrid\.com:5273\/boards\/e2e#room=[A-Za-z0-9_-]{43}$/,
     );
-    await expect(page.locator(".link-row--primary")).toContainText("wired or Wi-Fi");
+    // Not "wired or Wi-Fi": this computer is not on the Wi-Fi, and at school the Wi-Fi
+    // cannot reach the wired network — a link offered there failed without a word.
+    await expect(page.locator(".link-row--primary .link-title")).toHaveText(
+      "People on the wired network",
+    );
+    await expect(page.getByText(/wired network only/)).toBeVisible();
     // The address, for when the name does not open, one click away.
     await expect(page.getByText("Other links (1)")).toBeVisible();
     const offered = await links(page);
@@ -77,7 +83,7 @@ test.describe("the Share dialog", () => {
 
   test("shows a QR code of the link, for a phone on the Wi-Fi", async ({ page }) => {
     await openBoard(page);
-    await stubShare(page, { lan: [NAME], public: null });
+    await stubShare(page, { lan: [BY_NAME], public: null });
     await openShare(page);
 
     await page
@@ -94,7 +100,7 @@ test.describe("the Share dialog", () => {
     let state: "off" | "starting" | "on" = "off";
     let asked = 0;
     const answer = () => ({
-      lan: [NAME],
+      lan: [BY_NAME],
       public: state === "on" ? PUBLIC : null,
       tunnel: { state },
       canManage: true,
@@ -135,7 +141,7 @@ test.describe("the Share dialog", () => {
 
   test("offers no internet button to a guest", async ({ page }) => {
     await openBoard(page);
-    await stubShare(page, { lan: [NAME], public: null, canManage: false });
+    await stubShare(page, { lan: [BY_NAME], public: null, canManage: false });
     await openShare(page);
     await expect(primary(page)).toHaveValue(/c2r19s1/);
     await expect(page.getByRole("button", { name: "Share on the internet" })).toHaveCount(0);
@@ -150,21 +156,6 @@ test.describe("the Share dialog", () => {
     await expect(page.locator('[data-kind="this-computer"]')).toContainText("make up");
   });
 });
-
-/** A relay standing in for the API's live route: every frame goes to every other page. */
-function relay() {
-  const sockets: WebSocketRoute[] = [];
-  const frames: string[] = [];
-  const join = (socket: WebSocketRoute) => {
-    sockets.push(socket);
-    socket.onMessage((message) => {
-      const text = String(message);
-      frames.push(text);
-      for (const other of sockets) if (other !== socket) other.send(text);
-    });
-  };
-  return { join, frames };
-}
 
 async function drawBox(board: Board, at: { x: number; y: number }) {
   const { page, box } = board;

@@ -83,8 +83,8 @@ test("what is done while the link is down reaches peers once it is back", async 
   await board.page.keyboard.press("Delete");
 
   await expect.poll(() => live.sockets.length, { timeout: 5_000 }).toBe(2);
-  // Announced, then the delete.
+  // Announced — who we are, and what we hold — then the delete.
   await expect
     .poll(() => live.received[1] ?? 0, { message: "the offline delete was sent on reconnect" })
-    .toBeGreaterThanOrEqual(2);
+    .toBeGreaterThanOrEqual(3);
 });

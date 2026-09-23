@@ -69,9 +69,13 @@ export {
 export {
   isAddressHost,
   isLoopbackHost,
+  lanLinkSchema,
+  networkKindSchema,
   shareInfoSchema,
   shareRoleSchema,
   tunnelStateSchema,
+  type LanLink,
+  type NetworkKind,
   type ShareInfo,
   type ShareRole,
   type TunnelState,

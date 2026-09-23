@@ -305,3 +305,178 @@ describe("realtimeClient reconnecting", () => {
     expect(listeners.has("online"), "and stops listening when closed").toBe(false);
   });
 });
+
+describe("realtimeClient holds and gestures", () => {
+  type El = {
+    id: string;
+    version: number;
+    versionNonce: number;
+    updated: number;
+    isDeleted: boolean;
+  };
+  const el = (id: string): El => ({
+    id,
+    version: 1,
+    versionNonce: 1,
+    updated: 1,
+    isDeleted: false,
+  });
+
+  it("reports what a peer holds and is doing, and not every cursor move", () => {
+    const channel = new RealtimeChannel<El>("abc");
+    const states: { claims: Record<string, number>; preview?: readonly El[] }[][] = [];
+    channel.onPeerState((peers) =>
+      states.push(peers.map(({ claims, preview }) => ({ claims, preview }))),
+    );
+    states.length = 0;
+
+    channel.handleMessage({
+      type: "cursor",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      x: 1,
+      y: 2,
+    });
+    expect(states, "a cursor move is not news for the engine").toHaveLength(0);
+
+    channel.handleMessage({
+      type: "presence",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      claims: { A: 5 },
+    });
+    channel.handleMessage({ type: "preview", clientId: "ana", elements: [el("A")] });
+    channel.handleMessage({ type: "preview-end", clientId: "ana" });
+    expect(states).toEqual([
+      [{ claims: { A: 5 }, preview: undefined }],
+      [{ claims: { A: 5 }, preview: [el("A")] }],
+      [{ claims: { A: 5 }, preview: undefined }],
+    ]);
+
+    channel.handleMessage({ type: "leave", clientId: "ana" });
+    expect(states.at(-1), "and lets go of it all when they leave").toEqual([]);
+  });
+
+  it("keeps the cursor it had when presence arrives, and the name when a preview does", () => {
+    const channel = new RealtimeChannel<El>("abc");
+    let peers: { name: string; x: number; claims: Record<string, number> }[] = [];
+    channel.onPeers((list) => (peers = list));
+    channel.handleMessage({
+      type: "cursor",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      x: 40,
+      y: 2,
+    });
+    channel.handleMessage({
+      type: "presence",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      claims: { A: 1 },
+    });
+    channel.handleMessage({ type: "preview", clientId: "ana", elements: [el("A")] });
+    expect(peers.map(({ name, x, claims }) => ({ name, x, claims }))).toEqual([
+      { name: "Ana", x: 40, claims: { A: 1 } },
+    ]);
+  });
+});
+
+describe("realtimeClient sending", () => {
+  class FakeSocket {
+    static OPEN = 1;
+    static CONNECTING = 0;
+    static made: FakeSocket[] = [];
+    readyState = 0;
+    onopen: (() => void) | null = null;
+    onclose: (() => void) | null = null;
+    onmessage: ((event: { data: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    sent: string[] = [];
+    constructor(readonly url: string) {
+      FakeSocket.made.push(this);
+    }
+    send(data: string): void {
+      this.sent.push(data);
+    }
+    close(): void {
+      this.readyState = 3;
+    }
+  }
+
+  function connected(): { channel: RealtimeChannel<never>; socket: FakeSocket } {
+    FakeSocket.made = [];
+    vi.stubGlobal("window", {
+      location: { href: "http://localhost:5273/boards/abc" },
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    });
+    vi.stubGlobal("sessionStorage", { getItem: () => null, setItem: () => undefined });
+    vi.stubGlobal("WebSocket", FakeSocket);
+    const channel = new RealtimeChannel<never>("abc");
+    channel.connect("ws://api/live");
+    const socket = FakeSocket.made[0]!;
+    socket.readyState = 1;
+    socket.onopen?.();
+    return { channel, socket };
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("writes frames in the order they were sent, however long each takes to seal", async () => {
+    // A preview written after its end would leave a shape frozen mid-move on every
+    // other screen. Sealing is asynchronous, and a large frame can take longer.
+    const { channel, socket } = connected();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    socket.sent = [];
+    const encode = channel.encodeOutbound.bind(channel);
+    let first = true;
+    channel.encodeOutbound = async (msg) => {
+      if (first) {
+        first = false;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      return encode(msg);
+    };
+
+    channel.sendPreview([]);
+    channel.sendPreviewEnd();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    expect(socket.sent.map((wire) => (JSON.parse(wire) as { type: string }).type)).toEqual([
+      "preview",
+      "preview-end",
+    ]);
+    channel.disconnect();
+  });
+
+  it("says what it holds on joining, answers every join with it, and forgets peers when the link drops", async () => {
+    const { channel, socket } = connected();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const types = () => socket.sent.map((wire) => (JSON.parse(wire) as { type: string }).type);
+    expect(types()).toEqual(["join", "presence"]);
+
+    channel.setClaims({ A: 3 });
+    channel.handleMessage({ type: "join", clientId: "ana", name: "Ana", color: "#e03131" });
+    channel.handleMessage({ type: "join", clientId: "ana", name: "Ana", color: "#e03131" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const presences = socket.sent
+      .map((wire) => JSON.parse(wire) as { type: string; claims?: Record<string, number> })
+      .filter((msg) => msg.type === "presence");
+    expect(presences.at(-1)!.claims).toEqual({ A: 3 });
+    expect(presences, "a known peer back from a drop is answered too").toHaveLength(4);
+
+    let peers: unknown[] = ["x"];
+    channel.onPeerState((list) => (peers = list));
+    expect(peers).toHaveLength(1);
+    socket.readyState = 3;
+    socket.onclose?.();
+    expect(peers).toEqual([]);
+    channel.disconnect();
+  });
+});
