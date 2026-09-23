@@ -35,3 +35,17 @@ export const DEFAULT_PAGE_SIZE = 24;
  * validate.
  */
 export const MAX_GROUP_DEPTH = 32;
+
+/**
+ * The longest image a single element may carry, as its `data:` URL.
+ *
+ * The web app refuses files over 4MB after shrinking them to 1440px, and base64 costs a
+ * third on top: 4MB of bytes is about 5.6MB of URL. Six leaves headroom for the header
+ * and stays under the 8MB request body limit, so one image always fits in one autosave.
+ *
+ * It does **not** make a board of many images fit: a board is one MongoDB document and
+ * the images live inline in it, so the 16MB document ceiling is reached at two or three
+ * large pictures. The fix for that is a file store keyed by id, as Excalidraw has; see
+ * `docs/reference/images.md`.
+ */
+export const MAX_IMAGE_DATA_URL_LENGTH = 6 * 1024 * 1024;

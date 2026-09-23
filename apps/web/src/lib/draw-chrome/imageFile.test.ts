@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   IMAGE_ACCEPT,
+  IMAGE_MAX_SIDE,
+  needsDownscale,
+  scaledToFit,
   IMAGE_MAX_BYTES,
   IMAGE_MIME_TYPES,
   describeRejection,
@@ -81,5 +84,33 @@ describe("dropping several files at once", () => {
     // top — and it should be the order you dropped them.
     const picked = imagesFrom([file("image/webp"), file("image/png")]);
     expect(picked.map((f) => f.type)).toEqual(["image/webp", "image/png"]);
+  });
+});
+
+describe("shrinking large images before the size check", () => {
+  it("leaves an image that already fits alone", () => {
+    expect(scaledToFit(800, 600)).toEqual({ width: 800, height: 600 });
+    expect(scaledToFit(1440, 900)).toEqual({ width: 1440, height: 900 });
+  });
+
+  it("brings the longer side down to the limit and keeps the proportions", () => {
+    expect(scaledToFit(4032, 3024)).toEqual({ width: 1440, height: 1080 });
+    expect(scaledToFit(3024, 4032)).toEqual({ width: 1080, height: 1440 });
+  });
+
+  it("never upscales and never produces a zero side", () => {
+    expect(scaledToFit(10, 10)).toEqual({ width: 10, height: 10 });
+    expect(scaledToFit(100_000, 1)).toEqual({ width: 1440, height: 1 });
+  });
+
+  it("uses Excalidraw's limit", () => {
+    expect(IMAGE_MAX_SIDE).toBe(1440);
+  });
+
+  it("shrinks raster images past the limit and never SVG", () => {
+    expect(needsDownscale("image/jpeg", 4032, 3024)).toBe(true);
+    expect(needsDownscale("image/png", 1440, 1440)).toBe(false);
+    expect(needsDownscale("image/svg+xml", 9000, 9000)).toBe(false);
+    expect(needsDownscale("IMAGE/SVG+XML", 9000, 9000)).toBe(false);
   });
 });
