@@ -73,6 +73,14 @@ export const listBoards = (limit?: number, cursor?: string): Promise<BoardList> 
 /** Where other people can reach this drawnosaurus, for the Share dialog. */
 export const getShareInfo = (): Promise<ShareInfo> => request<ShareInfo>("/v1/share");
 
+/** Opens the internet link. Only the computer running drawnosaurus may. */
+export const startTunnel = (): Promise<ShareInfo> =>
+  request<ShareInfo>("/v1/share/tunnel", { method: "POST" });
+
+/** Closes the internet link. */
+export const stopTunnel = (): Promise<ShareInfo> =>
+  request<ShareInfo>("/v1/share/tunnel", { method: "DELETE" });
+
 export const createBoard = (title: string): Promise<BoardSummary> =>
   request<BoardSummary>("/v1/boards", { method: "POST", body: JSON.stringify({ title }) });
 

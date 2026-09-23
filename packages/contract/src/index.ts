@@ -66,4 +66,13 @@ export {
   SUPPORTED_OSIDRAW_VERSION,
 } from "./limits.ts";
 
-export { isLoopbackHost, isPrivateHost, shareInfoSchema, type ShareInfo } from "./share.ts";
+export {
+  isAddressHost,
+  isLoopbackHost,
+  shareInfoSchema,
+  shareRoleSchema,
+  tunnelStateSchema,
+  type ShareInfo,
+  type ShareRole,
+  type TunnelState,
+} from "./share.ts";

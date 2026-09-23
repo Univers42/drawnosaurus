@@ -18,7 +18,8 @@
   "dependencies": {
     "@drawnosaurus/contract": "workspace:*",
     "@noble/ciphers": "^2.4.0",
-    "@noble/hashes": "^2.4.0"
+    "@noble/hashes": "^2.4.0",
+    "uqr": "^0.1.3"
   },
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.3.4",

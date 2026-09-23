@@ -33,11 +33,13 @@ services:
       # ports); the Vite dev proxy is same-origin and needs none of this.
       CORS_ORIGIN: "*"
       AUTH_MODE: dev
-      # Where people on the network reach the gateway, worked out by `make up` from the
-      # host — inside this container there are no addresses but its own. See share.ts.
+      # Where people on the network reach the gateway, best first — the computer's DNS
+      # name, then its addresses — worked out by `make up` on the host (scripts/lan.sh):
+      # inside this container there are no addresses but its own. See share.ts.
       SHARE_LAN_ORIGINS: ${SHARE_LAN_ORIGINS:-}
-      # The tunnel `make share` starts says its public name here; no tunnel, no answer.
-      SHARE_TUNNEL_METRICS: http://tunnel:2000
+      # Where the internet link the Share dialog opens sends requests: the gateway's
+      # internet entrance. See tunnel.ts.
+      SHARE_TUNNEL_TARGET: http://gateway:82
     depends_on:
       mongo:
         condition: service_healthy
@@ -65,7 +67,8 @@ services:
       - api
 
   # The one address everything is reached at — the app and /v1 on the same origin, from
-  # any name this computer is reached by. See docker/gateway/Caddyfile.
+  # any name this computer is reached by. Who is asking is decided by which entrance a
+  # connection arrived at; see docker/gateway/Caddyfile.
   gateway:
     image: caddy:2.10.2-alpine
     volumes:
@@ -74,30 +77,12 @@ services:
       - api
       - web
     ports:
-      # Every interface, on purpose: this is the port colleagues on the network open.
-      - "${WEB_PORT:-5273}:80"
-
-  # The stack on the internet, for `make share`: a Cloudflare quick tunnel, which needs
-  # no account and no open port — it dials out. Its public name is random and is new
-  # each time it starts. Off unless asked for.
-  tunnel:
-    image: cloudflare/cloudflared:2025.9.1
-    profiles: ["share"]
-    # http2 rather than QUIC: QUIC is UDP, which school and office networks often drop,
-    # and then the tunnel never comes up. http2 goes out on 443 like any web page.
-    command:
-      [
-        "tunnel",
-        "--no-autoupdate",
-        "--protocol",
-        "http2",
-        "--metrics",
-        "0.0.0.0:2000",
-        "--url",
-        "http://gateway:80",
-      ]
-    depends_on:
-      - gateway
+      # This computer's entrance, on 127.0.0.1 only: nobody else can connect to it.
+      - "127.0.0.1:${WEB_PORT:-5273}:80"
+      # Everyone else's, on every interface — wired, Wi-Fi, whatever address this computer
+      # has today — which is what the links in the Share dialog point at. Its own port:
+      # rootless Docker cannot publish one port on two addresses.
+      - "${SHARE_PORT:-5274}:81"
 
   # Ephemeral runner for install/typecheck/lint/test. The repo is bind-mounted so
   # results land on the host; only the pnpm download cache is a volume.

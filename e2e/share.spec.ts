@@ -20,10 +20,25 @@ import { OPEN_CANVAS, openBoard, pickTool, sceneElements, type Board } from "./b
  * `docs/collaboration.md` says how it was checked end to end.
  */
 
-async function stubShare(page: Page, answer: { lan: string[]; public: string | null }) {
+interface ShareAnswer {
+  lan: string[];
+  public: string | null;
+  tunnel?: { state: string; message?: string };
+  canManage?: boolean;
+}
+
+const NAME = "http://c2r19s1.42madrid.com:5273";
+const ADDRESS = "http://10.12.19.1:5273";
+const PUBLIC = "https://keen-lamp-rise.trycloudflare.com";
+
+async function stubShare(page: Page, answer: ShareAnswer) {
   // After openBoard's catch-all, so it is asked first.
   await page.route("**/v1/share", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(answer) }),
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ tunnel: { state: "off" }, canManage: true, ...answer }),
+    }),
   );
 }
 
@@ -37,36 +52,93 @@ const links = (page: Page) =>
     .locator(".link-row input")
     .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
 
+const primary = (page: Page) => page.locator(".link-row--primary input");
+
 test.describe("the Share dialog", () => {
-  test("offers the network address, never this computer's", async ({ page }) => {
+  test("puts the computer's name first — the link for the wired network and the Wi-Fi", async ({
+    page,
+  }) => {
     await openBoard(page);
-    await stubShare(page, { lan: ["http://10.12.19.1:5273"], public: null });
+    await stubShare(page, { lan: [NAME, ADDRESS], public: null });
     await openShare(page);
 
-    await expect(page.locator('[data-kind="network"] input')).toHaveValue(
-      /^http:\/\/10\.12\.19\.1:5273\/boards\/e2e#room=[A-Za-z0-9_-]{43}$/,
+    await expect(primary(page)).toHaveValue(
+      /^http:\/\/c2r19s1\.42madrid\.com:5273\/boards\/e2e#room=[A-Za-z0-9_-]{43}$/,
     );
+    await expect(page.locator(".link-row--primary")).toContainText("wired or Wi-Fi");
+    // The address, for when the name does not open, one click away.
+    await expect(page.getByText("Other links (1)")).toBeVisible();
     const offered = await links(page);
     expect(
       offered.some((url) => /127\.0\.0\.1|localhost/.test(url)),
       offered.join(),
     ).toBe(false);
-    // And how to reach someone outside the network.
-    await expect(page.getByText("make share")).toBeVisible();
   });
 
-  test("offers the internet link when the tunnel is up", async ({ page }) => {
+  test("shows a QR code of the link, for a phone on the Wi-Fi", async ({ page }) => {
     await openBoard(page);
-    await stubShare(page, {
-      lan: ["http://10.12.19.1:5273"],
-      public: "https://keen-lamp-rise.trycloudflare.com",
+    await stubShare(page, { lan: [NAME], public: null });
+    await openShare(page);
+
+    await page
+      .locator(".link-row--primary")
+      .getByRole("button", { name: /QR code/ })
+      .click();
+    const qr = page.getByAltText("QR code of the link");
+    await expect(qr).toBeVisible();
+    expect(await qr.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
+  });
+
+  test("opens the internet link from its button, and offers it once it is on", async ({ page }) => {
+    await openBoard(page);
+    let state: "off" | "starting" | "on" = "off";
+    let asked = 0;
+    const answer = () => ({
+      lan: [NAME],
+      public: state === "on" ? PUBLIC : null,
+      tunnel: { state },
+      canManage: true,
+    });
+    await page.route("**/v1/share", (route) => {
+      // On after a couple of questions, as a real tunnel comes up after a few seconds.
+      if (state === "starting" && ++asked >= 2) state = "on";
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(answer()),
+      });
+    });
+    await page.route("**/v1/share/tunnel", (route) => {
+      state = route.request().method() === "POST" ? "starting" : "off";
+      return route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify(answer()),
+      });
     });
     await openShare(page);
 
+    await page.getByRole("button", { name: "Share on the internet" }).click();
+    await expect(page.getByText(/Opening a public link/)).toBeVisible();
     await expect(page.locator('[data-kind="internet"] input')).toHaveValue(
       /^https:\/\/keen-lamp-rise\.trycloudflare\.com\/boards\/e2e#room=/,
+      { timeout: 10_000 },
     );
-    await expect(page.locator(".link-row")).toHaveCount(2);
+    // Where it was opened — not filed away under "Other links", where it looked as if
+    // pressing the button had done nothing.
+    await expect(page.locator('[data-kind="internet"] input')).toBeVisible();
+
+    await page.getByRole("button", { name: "Stop sharing on the internet" }).click();
+    await expect(page.locator('[data-kind="internet"]')).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Share on the internet" })).toBeVisible();
+  });
+
+  test("offers no internet button to a guest", async ({ page }) => {
+    await openBoard(page);
+    await stubShare(page, { lan: [NAME], public: null, canManage: false });
+    await openShare(page);
+    await expect(primary(page)).toHaveValue(/c2r19s1/);
+    await expect(page.getByRole("button", { name: "Share on the internet" })).toHaveCount(0);
   });
 
   test("says so when a link would work on this computer only", async ({ page }) => {

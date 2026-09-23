@@ -4,26 +4,37 @@
 # running the stack that is true; on a colleague's it is their own machine, where
 # nothing is listening, so a board opened from another computer could not load, save or
 # go live. Behind this gateway every request goes back to wherever the page came from —
-# localhost, a LAN address, a tunnel's public name — and a link works from all of them.
-# Websockets pass through `reverse_proxy` untouched, so the live link does too.
+# localhost, a network name or address, a tunnel's public name — and a link works from
+# all of them. Websockets pass through `reverse_proxy` untouched, so the live link does.
+#
+# # Who is asking
+#
+# Decided by where the connection ARRIVED, never by anything in the request:
+#
+#   :80  published on 127.0.0.1:5273      this computer          everything
+#   :81  published on every interface     people on the network  the boards they have links to
+#        at :5274 (SHARE_PORT)
+#   :82  inside Docker, for the tunnel     people on the internet the boards they have links to
+#
+# It used to be decided by the Host header, which a browser cannot fake and `curl -H`
+# can: anyone on the network could list and delete every board by claiming to be
+# localhost. The source address cannot be used instead — under rootless Docker every
+# connection arrives from the same bridge address, yours and theirs alike. The port a
+# connection was made TO cannot be faked, and only this computer can reach 127.0.0.1.
+#
+# The API is told which it is, in X-Drawnosaurus-Role, set here — overwriting whatever a
+# client sent.
 {
 	admin off
 	auto_https off
 	persist_config off
 }
 
-:80 {
-	# Guests — anyone reaching this computer by another name than localhost, over the
-	# network or through the tunnel — open and edit the boards they are given links to.
-	# Listing every board, creating and deleting are for the computer running it.
-	@guestManages expression `!({host} in ["localhost", "127.0.0.1", "::1"]) && ((({method} == "GET" || {method} == "HEAD" || {method} == "POST") && {path} == "/v1/boards") || ({method} == "DELETE" && {path}.startsWith("/v1/boards/")))`
-	handle @guestManages {
-		header Content-Type application/json
-		respond `{"error":{"code":"host_only","message":"Only the computer running drawnosaurus can list, create or delete boards. Open a board from the link you were given."}}` 403
-	}
-
+(app) {
 	handle /v1/* {
-		reverse_proxy api:4000
+		reverse_proxy api:4000 {
+			header_up X-Drawnosaurus-Role {args[0]}
+		}
 	}
 
 	handle /healthz {
@@ -33,4 +44,28 @@
 	handle {
 		reverse_proxy web:3000
 	}
+}
+
+# Guests open and edit the boards they are given links to. Listing every board, creating
+# and deleting, and opening or closing the internet link, are for this computer.
+(guests) {
+	@hostOnly expression `(({method} == "GET" || {method} == "HEAD" || {method} == "POST") && {path} == "/v1/boards") || ({method} == "DELETE" && {path}.startsWith("/v1/boards/")) || ({method} != "GET" && {method} != "HEAD" && {path}.startsWith("/v1/share/"))`
+	handle @hostOnly {
+		header Content-Type application/json
+		respond `{"error":{"code":"host_only","message":"Only the computer running drawnosaurus can do that. Open a board from the link you were given."}}` 403
+	}
+}
+
+:80 {
+	import app host
+}
+
+:81 {
+	import guests
+	import app guest
+}
+
+:82 {
+	import guests
+	import app internet
 }

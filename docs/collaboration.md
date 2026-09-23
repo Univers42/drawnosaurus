@@ -1,65 +1,74 @@
 # Drawing together
 
-One computer runs drawnosaurus; everyone else opens a link in their browser. Nothing to
-install on the other computers, no account anywhere. Pick the case that fits:
+**In one sentence:** open a board, press **Share** (top right), and send the first link.
+Whoever opens it draws on the board with you, live — from another computer on the wired
+network, on the Wi-Fi, or anywhere on the internet. Nothing to install, no account.
 
-| Where your colleague is            | What you run            | The link looks like                                                          |
-| ---------------------------------- | ----------------------- | ---------------------------------------------------------------------------- |
-| On the same Wi-Fi or wired network | `make up`               | `http://10.12.19.1:5273/boards/4w355vfvgm#room=…`                            |
-| Anywhere on the internet           | `make up`, `make share` | `https://proper-ensure-suse-moss.trycloudflare.com/boards/4w355vfvgm#room=…` |
+## Where to find everything
 
-In both cases the link comes from the board's **Share** button — never from the address
-bar, which says `localhost` and would send your colleague to their own computer.
+| What                                  | Where                                                               |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| The link to send                      | A board → **Share** → the first link, with its **Copy link** button |
+| The same link for a phone or a tablet | The **QR** button next to it: they scan it with their camera        |
+| A link for someone far away           | **Share** → **Share on the internet**                               |
+| The network link, from the terminal   | `make up` prints it on its last lines                               |
+| This guide                            | `docs/collaboration.md`, and **Share** → **How does this work?**    |
 
-## On the same network (LAN or Wi-Fi)
+## On the same network — wired or Wi-Fi
 
-1. On the computer that runs drawnosaurus:
-
-   ```sh
-   make up
-   ```
-
-   It ends with the address other computers reach it at:
+1. On the computer that runs drawnosaurus: `make up`. It ends with the link for your
+   network:
 
    ```
    ✔ up: http://localhost:5273
-     on your network: http://10.12.19.1:5273  (docs/collaboration.md)
+     for people on your network, wired or Wi-Fi: http://c2r19s1.42madrid.com:5274
    ```
 
-2. Open a board (from `http://localhost:5273`), press **Share** at the top right, and copy
-   the link under **People on your network**.
-3. Send it to your colleague — chat, mail, anything. They open it in their browser.
-4. Draw. Each of you sees the other's cursor and every change as it happens, and the
-   board is saved on your computer.
+2. Open a board at `http://localhost:5273`, press **Share**, press **Copy link**.
+3. Send it — chat, mail, anything — or press **QR** and let them scan it.
+4. They open it and you draw together. Every change is saved on your computer.
 
-## Over the internet
+**One link for the wired network and the Wi-Fi.** The first link uses your computer's
+_name_, not its address: at 42 Madrid every seat has one (`c2r19s1.42madrid.com`), given
+out by the school's DNS. Any device that uses that DNS — the lab computers, and normally
+the school Wi-Fi — finds your computer by that name, and it keeps working if your
+computer's address changes. (Checked from the wired network; whether the Wi-Fi can reach
+the lab network at all is the school's choice — see
+[When it does not work](#when-it-does-not-work).) Where the network gives computers no
+name — at home, usually — the first link is the address (`http://192.168.1.20:5274`),
+and **Other links** often has the `.local` name as well. When the computer is on the
+wired network and the Wi-Fi at once, there is a link for each.
 
-1. With the stack running (`make up`):
+Why port 5274, when you use 5273? 5273 only answers this computer; 5274 is the door for
+everyone else, and it only lets them into the boards they have links to (see
+[Who can do what](#who-can-do-what)). The links always carry the right port.
 
-   ```sh
-   make share
-   ```
+## Anywhere on the internet
 
-   ```
-   ✔ on the internet: https://proper-ensure-suse-moss.trycloudflare.com
-   ```
+1. In the **Share** dialog, press **Share on the internet**. About ten seconds later a
+   second link appears there, `https://….trycloudflare.com/…`.
+2. Send that one. It works from any network — another school, home, a phone on mobile
+   data.
+3. When you are done: **Stop sharing on the internet**. The link stops working at once.
+   Restarting drawnosaurus (`make up`) closes it too. The next one gets a new address,
+   so an old link cannot be reused.
 
-2. Press **Share** on the board: a second link appears under **Anyone on the internet**.
-   Send that one.
-3. When you are done:
+From a terminal it is `make share` and `make unshare`.
 
-   ```sh
-   make unshare
-   ```
+It is a Cloudflare _quick tunnel_: drawnosaurus dials out to Cloudflare, which gives it a
+public HTTPS address — no account, and no port to open on any router or firewall, so it
+works from networks you do not control. The link is offered only once Cloudflare's DNS
+publishes the new name, so the first person to open it is not told it does not exist. It
+is made for a working session, not for hosting: Cloudflare may slow a tunnel that is used
+heavily.
 
-   The address stops working at once. Each `make share` gets a new random one, so an old
-   link cannot be reused later.
+## Can it be fully automatic?
 
-This is a Cloudflare _quick tunnel_: the tunnel container dials out to Cloudflare, which
-gives it a public HTTPS address and passes requests back through. No account, no port to
-open on your router or firewall — it works from networks you do not control, such as a
-school's. It is made for a working session, not for hosting a site: the address changes
-every time, and Cloudflare may slow a tunnel down if it is used heavily.
+Everything but the sending. drawnosaurus finds your computer's name and addresses, builds
+the links with the room key in them, puts the best one first, opens the internet link on
+a click, and shows a QR code. What it cannot do is make the link appear on your
+colleague's screen by itself: a browser has no way to look around the network for
+drawnosaurus, so someone has to send them the link — or show them the QR code.
 
 ## Who can do what
 
@@ -68,86 +77,88 @@ every time, and Cloudflare may slow a tunnel down if it is used heavily.
 | Open and edit the board the link points to |          yes          |        yes         |
 | See the list of all boards                 |          yes          |         no         |
 | Create or delete boards                    |          yes          |         no         |
+| Open or close the internet link            |          yes          |         no         |
 
 - **A link is a key.** Anyone who has it can open and edit that board — send it only to
   the people you want there.
 - **Live changes are end-to-end encrypted.** The part of the link after `#room=` is the
   room key. Browsers never send what follows a `#` to a server, so the live link carries
-  only sealed frames that neither drawnosaurus's server nor Cloudflare can read. The saved
-  board itself is stored readable, on your computer.
-- **Only the port you share is open.** Other computers reach port 5273 and nothing else:
-  the API's own port and the database are bound to this computer only.
-- `make unshare` closes the internet link. `make down` stops everything.
+  only sealed frames that neither drawnosaurus's server nor Cloudflare can read. The
+  saved board itself is stored readable, on your computer.
+- **Nothing else is open.** Other computers reach port 5274 and nothing more: port 5273,
+  the API and the database answer this computer only.
 
 ## When it does not work
 
-**The link does not open on the other computer.** From that computer, run:
+**The link does not open on the other computer.** Try the other links, under **Other
+links** — the address instead of the name, or the other way round. To see whether the
+network is the problem, on that computer:
 
 ```sh
-curl http://10.12.19.1:5273/healthz
+curl http://c2r19s1.42madrid.com:5274/healthz
 ```
 
-(with the address `make up` printed). `{"status":"ok"}` means the network is fine — check
+(with your computer's name or address). `{"status":"ok"}`: the network is fine — check
 the link was copied whole. If it hangs or is refused, something between the two computers
 blocks it:
 
-- many school, office and guest Wi-Fi networks isolate the machines on them from one
-  another. Nothing on your computer can change that — use `make share` instead, which
-  goes around it;
+- the school's Wi-Fi and wired network may be kept apart, and many Wi-Fi networks stop
+  the devices on them from talking to each other. Nothing on your computer changes that —
+  use **Share on the internet**, which goes around it;
 - a firewall on the computer running drawnosaurus. If you administer it:
-  `sudo ufw allow 5273/tcp` (Ubuntu), or allow incoming connections for Docker (macOS).
+  `sudo ufw allow 5274/tcp` (Ubuntu), or allow incoming connections for Docker (macOS).
 
-**`make up` printed no address, or the wrong one** — several network interfaces, a VPN:
-find the right one (`ip -4 addr` or `hostname -I` on Linux, `ipconfig getifaddr en0` on
-macOS) and pass it:
+**The first link is not the right one** — several networks, a VPN: find the right
+address (`ip -4 addr` or `hostname -I` on Linux, `ipconfig getifaddr en0` on macOS) and
+start with it:
 
 ```sh
-make up LAN_IP=192.168.1.20
+make up LAN_IPS=192.168.1.20
 ```
 
-**Port 5273 is taken:** `make up WEB_PORT=5500`. The links follow.
+**Port 5274 is taken:** `make up SHARE_PORT=5500`. The links follow.
 
-**`make share` says the tunnel did not come up:** the network blocks outgoing
-connections to Cloudflare. `docker compose --profile share logs tunnel` says why.
+**Share on the internet says it did not open:** the network blocks connections to
+Cloudflare. The message says what happened; there is no way around it from here.
 
 **The header says "Connection lost — reconnecting…":** the live link dropped. It
 reconnects by itself, and nothing drawn in the meantime is lost — it is sent once the
 link is back. If it stays, check the stack is up: `docker compose ps`.
 
-**Only the board list fails, with "Only the computer running drawnosaurus can list…":**
-you opened the home page from another computer. That is on purpose — open boards from
-their links.
+**"Only the computer running drawnosaurus can do that":** the home page, or deleting a
+board, from another computer. That is on purpose — open boards from their links.
 
 ## How it works
 
 ```
- your browser ──┐
- colleague's ───┼──▶ gateway :5273 ──┬──▶ web   (the app)
- via tunnel ────┘    (Caddy)         └──▶ api   (/v1, and the live websocket) ──▶ mongo
+ you, on this computer ── 127.0.0.1:5273 ──▶ gateway :80 ─┐
+ the network ──────────── any address:5274 ─▶ gateway :81 ─┼─▶ web (the app)
+ the internet ── Cloudflare ── tunnel ──────▶ gateway :82 ─┘   api (/v1, live websocket) ─▶ mongo
 ```
 
-- **One address for everything.** The gateway (`docker/gateway/Caddyfile`) serves the app
-  and its API on the same origin, so a page talks back to wherever it was opened from —
-  `localhost`, `10.12.19.1`, or the tunnel's name — and one link works from all of them.
-  It is also what keeps guests to the boards they are given.
+- **One origin.** The gateway (`docker/gateway/Caddyfile`) serves the app and its API
+  together, so a page talks back to wherever it was opened from — `localhost`, the
+  computer's name, an address, the tunnel's name — and one link works from all of them.
+- **Who is asking is where they came in.** Each entrance tells the API who is on the
+  other side, and guests are kept to the boards they have links to. Nothing in a request
+  can change that: a door cannot be faked the way a header can.
 - **The Share dialog asks the server where it can be reached** (`GET /v1/share`): the
-  network address `make up` found, and the tunnel's public address when `make share` is
-  running. Someone arriving through the tunnel is not told the network address.
-- **Plain `http://` on the network is enough.** Browsers only offer their built-in
-  cryptography to `https://` pages and to `localhost`, so a colleague opening
-  `http://10.12.19.1:5273` has none. The live link then uses the same encryption written
-  in JavaScript (`@noble/ciphers`, `@noble/hashes`): same key, same sealed frames, so the
-  two of you read each other either way.
+  name and addresses `make up` found (`scripts/lan.sh`), and the internet link while it
+  is open. Someone arriving from the internet is not told the network addresses.
+- **Plain `http://` on the network is enough.** Browsers offer their built-in
+  cryptography only to `https://` pages and `localhost`, so a colleague opening
+  `http://c2r19s1.42madrid.com:5274` has none. The live link then uses the same
+  encryption written in JavaScript (`@noble/ciphers`, `@noble/hashes`): same key, same
+  sealed frames, so the two of you read each other either way.
 
-Checked end to end on the real stack: a browser on `localhost` and one on
-`http://10.12.19.1:5273` (no built-in cryptography) drawing on the same board, then the
-same through a `make share` tunnel — each saw the other's shapes, and the board was saved
-with both. `e2e/share.spec.ts` keeps the parts a browser spec can reach from coming back:
-the Share dialog's links, and two pages drawing together when one of them has no Web
-Crypto.
+Checked end to end on the real stack, in browsers driven through the dialog: the link
+Share recommended opened on another browser over plain http by the computer's name, the
+two drew together; **Share on the internet** gave a link in twelve seconds, a third
+browser opened it at once and all three saw each other's shapes; **Stop** closed it.
+`e2e/share.spec.ts` keeps what a browser spec can reach from coming back.
 
 ## While developing
 
-`make dev` serves the app with hot reload on port 5373. It is reachable from the network
-too (`http://10.12.19.1:5373`), but without the gateway: nobody's access is limited, and
-there is no tunnel. Use `make up` to work with someone else.
+`make dev` serves the app with hot reload on port 5373, reachable from the network too
+(`http://10.12.19.1:5373`), but without the gateway: nobody's access is limited, and there
+is no internet link. Use `make up` to work with someone else.
