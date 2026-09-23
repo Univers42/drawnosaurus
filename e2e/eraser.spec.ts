@@ -384,3 +384,139 @@ test.describe("erasing a pile of copies", () => {
     expect(await sceneElements(page)).toHaveLength(10);
   });
 });
+
+test.describe("the eraser's fade on screen", () => {
+  /** How far from white the canvas is at a canvas-relative point. */
+  function strengthAt(page: Page, at: { x: number; y: number }): Promise<number> {
+    return page.evaluate((at) => {
+      const canvas = document.querySelector("canvas")!;
+      const scale = canvas.width / canvas.getBoundingClientRect().width;
+      const [r, g, b] = canvas
+        .getContext("2d")!
+        .getImageData(Math.round(at.x * scale), Math.round(at.y * scale), 1, 1).data;
+      return 255 * 3 - (r! + g! + b!);
+    }, at);
+  }
+
+  test("Escape puts the colour back, not only the marks", async ({ page }) => {
+    // The marks list can be empty while the painter still shows a faded layer; this
+    // reads the pixels.
+    const board = await openBoard(page);
+    await pileOfCopies(page, 1);
+    await pickTool(page, "Eraser");
+    const middle = { x: 720, y: 370 };
+    const solid = await strengthAt(page, middle);
+
+    await sweep(board, false);
+    await expect.poll(() => strengthAt(page, middle)).toBeLessThan(solid * 0.35);
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+
+    await expect.poll(() => strengthAt(page, middle)).toBeGreaterThan(solid * 0.9);
+  });
+
+  /**
+   * A frame's child that sticks out of it is painted inside a clip, and restoring the
+   * clip put the canvas alpha back behind the painter's back. The next marked shape
+   * found the faded alpha still "set" in the painter's cache and was drawn at full
+   * strength.
+   */
+  test("a marked shape painted after a clipped frame child still fades", async ({ page }) => {
+    const board = await openBoard(page);
+    await page.evaluate(() => {
+      const engine = window.__drawEngine!;
+      const { scale } = engine.camera;
+      const at = (x: number, y: number) => engine.screenToWorld(x, y);
+      const base = {
+        angle: 0,
+        strokeColor: "#1e1e1e",
+        fillStyle: "solid",
+        strokeWidth: 2,
+        strokeStyle: "solid",
+        roughness: 0,
+        opacity: 100,
+        roundness: null,
+        seed: 1,
+        version: 1,
+        versionNonce: 1,
+        updated: 0,
+        isDeleted: false,
+      };
+      const box = (id: string, x: number, y: number, w: number, h: number, extra = {}) => ({
+        ...base,
+        id,
+        type: "rectangle",
+        ...at(x, y),
+        width: w / scale,
+        height: h / scale,
+        backgroundColor: "#ffc9c9",
+        ...extra,
+      });
+      const elements = [
+        {
+          ...box("frame", 600, 250, 300, 200),
+          type: "frame",
+          backgroundColor: "transparent",
+          name: "F",
+        },
+        // In the frame, and sticking out of its right edge: painted inside a clip.
+        box("child", 850, 300, 150, 80, { frameId: "frame" }),
+        // Outside the frame, after the child in paint order.
+        box("after", 650, 500, 100, 60),
+      ];
+      engine.loadScene(JSON.stringify({ type: "osidraw", version: 1, source: "e2e", elements }));
+    });
+    await pickTool(page, "Eraser");
+    const { box } = board;
+    const after = { x: 700, y: 530 };
+    const solid = await strengthAt(page, after);
+
+    // Through the child's outside part, down clear of the frame, then across the shape.
+    await page.mouse.move(box.x + 990, box.y + 340);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 940, box.y + 340, { steps: 4 });
+    await page.mouse.move(box.x + 940, box.y + 530, { steps: 6 });
+    await page.mouse.move(box.x + 620, box.y + 530, { steps: 8 });
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.__drawEngine!.debugSnapshot().interaction.markedForErasure),
+      )
+      .toEqual(["after", "child"]);
+
+    await expect
+      .poll(() => strengthAt(page, after), { message: "the shape after the clip fades too" })
+      .toBeLessThan(solid * 0.35);
+    await page.mouse.up();
+  });
+
+  test("the trail stops with Escape, though the button is still down", async ({ page }) => {
+    const board = await openBoard(page);
+    await pileOfCopies(page, 1);
+    await pickTool(page, "Eraser");
+    const { box } = board;
+
+    await sweep(board, false);
+    await expect(page.locator(".eraser-trail-canvas"), "setup: a trail while sweeping").toHaveCount(
+      1,
+    );
+    await page.keyboard.press("Escape");
+    // Long enough for what was drawn before Escape to fade out.
+    await page.waitForTimeout(400);
+
+    // Sampled after each move, a frame later, and not retried: a trail decays in a
+    // fifth of a second, so a waiting assertion would always end up seeing none.
+    const seen: number[] = [];
+    for (let step = 1; step <= 6; step += 1) {
+      await page.mouse.move(box.x + 700, box.y + 400 + step * 30);
+      await page.evaluate(
+        () =>
+          new Promise<void>((done) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => done())),
+          ),
+      );
+      seen.push(await page.locator(".eraser-trail-canvas").count());
+    }
+    expect(seen, "no trail drawn after Escape").toEqual([0, 0, 0, 0, 0, 0]);
+    await page.mouse.up();
+  });
+});

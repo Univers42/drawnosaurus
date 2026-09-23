@@ -478,7 +478,6 @@
     }
   }
 
-
   /** Returning `true` claims the gesture, so the engine does not also act on it. */
   function handleCanvasPointerDown(point: { x: number; y: number }): boolean | void {
     if (tool === "eraser") {

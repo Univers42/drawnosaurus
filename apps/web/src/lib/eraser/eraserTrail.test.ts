@@ -17,6 +17,23 @@ describe("EraserTrail", () => {
     expect(path).toContain("a ");
   });
 
+  it("ignores points once the stroke has stopped, or before it starts", () => {
+    // After Escape, or during a pan with the eraser chosen, moves keep coming; a trail
+    // drawn from them looks like erasing that is not happening.
+    const trail = new EraserTrail({ streamline: 0, decayTime: 1e9 });
+    trail.addPoint(5, 5);
+    expect(trail.computePath()).toBe("");
+
+    trail.start(10, 10);
+    trail.addPoint(50, 50);
+    const drawn = trail.computePath();
+    trail.stop();
+    trail.addPoint(90, 90);
+    trail.addPoint(130, 130);
+
+    expect(trail.computePath()).toBe(drawn);
+  });
+
   it("generates smooth outline path for multiple points", () => {
     const trail = new EraserTrail({ streamline: 0 });
     trail.start(10, 10);
