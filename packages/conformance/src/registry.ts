@@ -209,6 +209,17 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🖼️ Images",
+    text: /flip\/rotation controls/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_flip.rs`,
+      `${ENGINE}/ci_image.rs`,
+      `${ENGINE}/ci_handles.rs`,
+      "e2e/flip.spec.ts",
+    ],
+  },
+  {
+    section: "🖼️ Images",
     status: "covered",
     tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`, "e2e/image.spec.ts"],
   },
@@ -709,6 +720,15 @@ export const RULES: readonly Rule[] = [
     section: "27. Keyboard system",
     status: "covered",
     tests: [`${ENGINE}/ci_shortcuts.rs`, "engine/src/host/keys.test.ts", "e2e/shortcuts.spec.ts"],
+  },
+  {
+    // One engine call, `flipSelection`, made by the shortcut, the context menu and the
+    // panel alike — what the section asks of an action. Addressing it by name is the
+    // section's gap, below.
+    section: "28. Command/action architecture",
+    text: /^Flip$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_flip.rs`, "engine/src/host/keys.test.ts", "e2e/flip.spec.ts"],
   },
   {
     section: "28. Command/action architecture",
