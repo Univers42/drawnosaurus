@@ -28,6 +28,7 @@
     themeMode = "light",
     selectedCount,
     selection = [],
+    sceneRevision = 0,
     tool = "select",
     engine,
     onApply,
@@ -36,6 +37,8 @@
     selectedCount: number;
     /** The selected elements, for deciding which controls apply. */
     selection?: readonly DrawElement[];
+    /** Changes with every scene change, for what the selection alone does not say. */
+    sceneRevision?: number;
     tool?: ExtendedTool;
     engine: DrawEngine | null;
     themeMode?: ThemeMode;
@@ -53,13 +56,15 @@
    * selection: an arrow offered a fill style it cannot have, a line offered corner
    * rounding it has no corners for, and a text element offered a dash pattern.
    */
-  const can = $derived(
-    getShapeActions(tool, selection, style.backgroundColor, {
-      // Read when the selection changes, as `selectionIsGroup` is below.
+  const can = $derived.by(() => {
+    // Asked again on every scene change too: ungroup, lock, undo or a peer's edit changes
+    // the blocks the same selection makes, and no selection event says so.
+    void sceneRevision;
+    return getShapeActions(tool, selection, style.backgroundColor, {
       canAlign: selection.length > 0 && (engine?.canAlign() ?? false),
       canDistribute: selection.length > 0 && (engine?.canDistribute() ?? false),
-    }),
-  );
+    });
+  });
 
   /** The arrowheads of the selected arrow, if the selection is one. */
   const arrowheads = $derived.by(() => {

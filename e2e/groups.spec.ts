@@ -205,8 +205,9 @@ test.describe("Ctrl+G", () => {
  * elements that are a group and a shape offer align and not distribute.
  */
 test.describe("align and distribute", () => {
-  test("count a group as one", async ({ page }) => {
-    const board = await openBoard(page);
+  /** Boxes 0+1 grouped, then the group and box 2 selected: two blocks, three elements. */
+  async function selectGroupAndBox(board: Board): Promise<void> {
+    const { page } = board;
     await drawFilledBoxes(board, 3);
     await focusBoard(board);
     await clickBox(board, 0);
@@ -217,6 +218,11 @@ test.describe("align and distribute", () => {
     await clickBox(board, 0);
     await clickBox(board, 2, true);
     expect(await selection(page), "the group and the third box").toHaveLength(3);
+  }
+
+  test("count a group as one", async ({ page }) => {
+    const board = await openBoard(page);
+    await selectGroupAndBox(board);
 
     const distribute = page.getByRole("button", { name: "Distribute horizontally" });
     await expect(distribute, "two blocks have nothing between them to space").toHaveCount(0);
@@ -230,5 +236,21 @@ test.describe("align and distribute", () => {
     expect(a!.x, "the group is one block").toBeCloseTo(first!.x, 1);
     expect(b!.x, "so its second box keeps its place").toBeCloseTo(second!.x, 1);
     expect(c!.x, "the lone box meets the group's left edge").toBeCloseTo(a!.x, 1);
+  });
+
+  // Ungrouping holds the same three elements, now three blocks, and no selection event
+  // says so: asked only when the selection changed, the panel kept offering what the
+  // group had allowed.
+  test("ask again when the blocks change under the same selection", async ({ page }) => {
+    const board = await openBoard(page);
+    await selectGroupAndBox(board);
+    const distribute = page.getByRole("button", { name: "Distribute horizontally" });
+    await expect(distribute, "setup: two blocks").toHaveCount(0);
+
+    await page.getByRole("button", { name: "Ungroup selection" }).click();
+    await page.waitForTimeout(140);
+
+    expect(await selection(page), "the same three, ungrouped").toHaveLength(3);
+    await expect(distribute, "three blocks, three to space").toHaveCount(1);
   });
 });

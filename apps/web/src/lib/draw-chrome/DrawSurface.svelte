@@ -129,6 +129,12 @@
   let selectedCount = $state(0);
   /** The selected elements, so the panel can decide which controls apply. */
   let selection = $state.raw<DrawElement[]>([]);
+  /**
+   * Counts scene changes, ours and peers'. What the panel offers can change under the
+   * same selection — ungrouping it makes more blocks to align — and no selection event
+   * says so.
+   */
+  let sceneRevision = $state(0);
 
   /**
    * Whether a pointer gesture is in flight on the canvas.
@@ -703,6 +709,7 @@
   }
 
   function handleSceneChange(json: string): void {
+    sceneRevision += 1;
     onSceneChange?.(json);
     refreshEmbedFrames();
     if (!realtime) return;
@@ -839,6 +846,7 @@
     };
     if (patch.order) payload.order = patch.order;
     if (!engine.applyRemotePatch(JSON.stringify(payload))) return;
+    sceneRevision += 1;
     liveBroadcast.adoptRemote(patch);
     // Order-only patches carry no elements; exportJson is the safe host sync.
     // Otherwise a delta keeps tombstones visible to the autosave tracker.
@@ -1342,6 +1350,7 @@
       style={activeStyle}
       {selectedCount}
       {selection}
+      {sceneRevision}
       {tool}
       {engine}
       {themeMode}
