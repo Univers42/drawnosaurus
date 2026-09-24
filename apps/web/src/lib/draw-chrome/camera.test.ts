@@ -1,5 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { worldToScreen, zoomPercent } from "./camera.ts";
+import { screenFontPx, worldToScreen, zoomPercent } from "./camera.ts";
+
+describe("screenFontPx", () => {
+  it("scales a world font size by the zoom", () => {
+    expect(screenFontPx(20, 16, 100)).toBe(20);
+    expect(screenFontPx(20, 16, 250)).toBe(50);
+  });
+
+  it("falls back to the element's size when the request carries none", () => {
+    // What an engine that sent `font_size` looked like to a host reading `fontSize`: a
+    // NaN font size, which is invalid CSS, so the editor drew in the browser's 13.33px.
+    expect(screenFontPx(undefined, 28, 100)).toBe(28);
+    expect(screenFontPx(Number.NaN, 28, 200)).toBe(56);
+    expect(screenFontPx(Number.POSITIVE_INFINITY, 28, 100)).toBe(28);
+    expect(screenFontPx(0, 28, 100)).toBe(28);
+  });
+
+  it("is never NaN, whatever it is given", () => {
+    expect(screenFontPx(undefined, Number.NaN, 100)).toBe(20);
+  });
+});
 
 describe("zoomPercent", () => {
   it("treats scale 1 as 100%", () => {

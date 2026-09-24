@@ -490,11 +490,23 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_text_align.rs`, "e2e/textAlign.spec.ts"],
   },
+  // The editor the engine asks the host to open: its size, alignment and wrap width come
+  // from the request, whose wire names the engine pins.
+  {
+    section: "9. Text",
+    text: /Text editing mode|Font size|Double click edit/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text.rs`,
+      `${ENGINE}/ci_text_model_compat.rs`,
+      "e2e/textEditRequest.spec.ts",
+    ],
+  },
   {
     section: "9. Text",
     text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Wrapping|Fixed-width|Font family|inside arrows/,
     status: "gap",
-    why: "Bold, italic, letter spacing, line height and per-element font family. These do wait on real font metrics — vendored faces gated on document.fonts.ready, risk R1 — because each changes how wide a glyph is, and measuring before the face loads mis-sizes every text element permanently.",
+    why: "Bold, italic, letter spacing, line height and per-element font family. An element can carry fontFamily and lineHeight (ci_text_model_compat.rs, and the contract keeps them), but nothing draws or measures with them yet. That waits on real font metrics — vendored faces gated on document.fonts.ready, risk R1 — because each changes how wide a glyph is, and measuring before the face loads mis-sizes every text element permanently.",
   },
   { section: "9. Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
