@@ -43,6 +43,10 @@ describe("stickyNotes", () => {
     expect(shadow.opacity).toBe(16);
     expect(shadow.roundness).toBe(12);
     expect(shadow.groupIds).toEqual(note.groupIds);
+    // Beside the note's right and bottom edges the shadow's outline is nearer than the
+    // note's, and an arrow end binds the nearest outline — but never a locked shape.
+    expect(shadow.locked).toBe(true);
+    expect(note.locked).toBeUndefined();
 
     expect(drawElementSchema.safeParse(note).success).toBe(true);
     expect(drawElementSchema.safeParse(text).success).toBe(true);

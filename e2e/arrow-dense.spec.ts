@@ -169,3 +169,55 @@ test.describe("an arrow aimed into a Ctrl+D pack", () => {
     ).toEqual([null]);
   });
 });
+
+test.describe("an arrow aimed beside a sticky note", () => {
+  /**
+   * A note from the N tool is a group whose filled shadow sits three units down and right
+   * of it, underneath. Beside the note's right edge the shadow's outline is nearer than
+   * the note's, so the nearest-outline rule would bind the shadow — in orbit, three units
+   * off the note, or inside it, a waypoint, up to three units out. A locked shape is never
+   * a candidate (dc2c16d9), and the shadow is locked, so the note is what binds.
+   */
+  test("a click beside its right edge binds the note and finishes", async ({ page }) => {
+    const board = await openBoard(page);
+    const centre = {
+      x: board.box.x + OPEN_CANVAS.left + 400,
+      y: board.box.y + OPEN_CANVAS.top + 200,
+    };
+    await focusBoard(board);
+    await pickTool(page, "Sticky Note");
+    await page.mouse.click(centre.x, centre.y);
+    await page.keyboard.press("Escape");
+    const rects = (await sceneElements(page)).filter((el) => el.type === "rectangle");
+    expect(
+      rects.map((el) => el.backgroundColor),
+      "the shadow, then the note",
+    ).toEqual(["#000000", "#ffdf6b"]);
+    const [shadow, note] = [rects[0]!, rects[1]!];
+    const name = (id: string | null | undefined) =>
+      id === note.id ? "note" : id === shadow.id ? "shadow" : (id ?? null);
+
+    const outcomes = [];
+    for (const beyond of [2.5, 6, 12]) {
+      await pickTool(page, "Arrow");
+      const from = await onPage(board, note.x - 250, note.y + note.height / 2);
+      const to = await onPage(board, note.x + note.width + beyond, note.y + note.height / 2);
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.click(from.x, from.y);
+      await page.mouse.move(to.x, to.y, { steps: 12 });
+      await page.waitForTimeout(60);
+      await page.mouse.click(to.x, to.y);
+      await page.waitForTimeout(120);
+      const finished = (await activeTool(page)) === "select";
+      // A waypoint instead: Escape finishes the path there.
+      if (!finished) await page.keyboard.press("Escape");
+      const arrows = (await sceneElements(page)).filter((el) => el.type === "arrow") as Bound[];
+      const arrow = arrows.at(-1)!;
+      outcomes.push({ beyond, finished, end: name(arrow.endBinding), mode: arrow.endBindMode });
+      await page.keyboard.press("Escape");
+    }
+    expect(outcomes).toEqual(
+      [2.5, 6, 12].map((beyond) => ({ beyond, finished: true, end: "note", mode: "orbit" })),
+    );
+  });
+});
