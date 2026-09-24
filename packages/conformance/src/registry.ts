@@ -200,8 +200,19 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🗂️ Layers / ordering",
+    text: /Shift \+ [[\]]`/,
+    status: "out-of-scope",
+    why: "The cheat sheet is wrong here. Excalidraw binds Ctrl+Shift+] / [ to bring to FRONT / send to BACK on Windows and Linux (actionZindex.tsx), and a step forward / backward to Ctrl+] / [ — both bound as the oracle has them, see keys.test.ts and e2e/zorder.spec.ts.",
+  },
+  {
+    section: "🗂️ Layers / ordering",
     status: "covered",
-    tests: [`${ENGINE}/ci_edit.rs`, "engine/src/host/keys.test.ts"],
+    tests: [
+      `${ENGINE}/ci_edit.rs`,
+      `${ENGINE}/ci_zorder.rs`,
+      "engine/src/host/keys.test.ts",
+      "e2e/zorder.spec.ts",
+    ],
   },
   {
     section: "🔒 Locking",
@@ -649,8 +660,16 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "17. Z-order",
+    // Frames, groups, labels and the entered group as the oracle's own zindex.test.tsx
+    // pins them; undo and redo of a reorder in ci_version_stamps.rs.
     status: "covered",
-    tests: [`${ENGINE}/ci_edit.rs`, `${ENGINE}/ci_group_structure.rs`],
+    tests: [
+      `${ENGINE}/ci_edit.rs`,
+      `${ENGINE}/ci_group_structure.rs`,
+      `${ENGINE}/ci_zorder.rs`,
+      `${ENGINE}/ci_version_stamps.rs`,
+      "e2e/zorder.spec.ts",
+    ],
   },
   {
     section: "18. Binding system",
