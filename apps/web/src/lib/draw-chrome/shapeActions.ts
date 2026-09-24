@@ -152,11 +152,24 @@ export interface ShapeActions {
   distribute: boolean;
 }
 
+/**
+ * Whether align and distribute would move anything — the engine's `canAlign()` and
+ * `canDistribute()`. Asked of the engine because the answer is in units, not elements:
+ * a group is one unit, a lone group is what it holds, and a frame refuses both.
+ */
+export interface Arrangeable {
+  canAlign: boolean;
+  canDistribute: boolean;
+}
+
+const NOTHING_TO_ARRANGE: Arrangeable = { canAlign: false, canDistribute: false };
+
 export function getShapeActions(
   activeTool: ExtendedTool,
   selected: readonly Pick<DrawElement, "type" | "backgroundColor" | "boundTextId">[],
   /** The style that would be applied to the next thing drawn. */
   nextBackgroundColor: string,
+  arrangeable: Arrangeable = NOTHING_TO_ARRANGE,
 ): ShapeActions {
   const forToolOrSelection = (predicate: (kind: Kind) => boolean): boolean =>
     predicate(activeTool) || selected.some((element) => predicate(element.type));
@@ -199,7 +212,7 @@ export function getShapeActions(
     layers: hasSelection,
     mirror: hasSelection,
     group: hasSelection,
-    align: selected.length > 1,
-    distribute: selected.length > 2,
+    align: arrangeable.canAlign,
+    distribute: arrangeable.canDistribute,
   };
 }

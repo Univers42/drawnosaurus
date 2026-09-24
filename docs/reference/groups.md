@@ -71,6 +71,18 @@ press is the one empty selection that keeps it, as the oracle's does
 multi-selection narrows to that member's group at the current level; any move makes it
 a drag and keeps everything (`drag.hasOccurred`, `App.tsx:10918-10921`, `:12183-12190`).
 
+**VERIFIED** — a shift-press on something already held changes nothing until the
+release: a click then takes it out, a drag moves everything held, it included
+(`App.tsx:9656-9660`, `:12183-12260`). A shift-press on something not held adds it at
+once, so it can be dragged in the same gesture.
+
+**VERIFIED** — a press inside the selection's box picks the selection up, hit or hole:
+a selected element is hit anywhere in its box and several in their common box
+(`App.tsx:6782-6806`, `:9783-9806`), and the cursor says so. A drag from there moves it;
+a release with no drag was a click on nothing and lets go of it and of the edited group
+(`App.tsx:12344-12387`). A line or arrow edited by its points has no box, and so none to
+press in (`hasBoundingBox`, `transformHandles.ts:328-353`).
+
 **VERIFIED** — deleting inside the edited group keeps it open holding its first member,
 steps up a level once it is down to one, or leaves it holding the survivor
 (`actionDeleteSelected.tsx:130-204`). **IMPLEMENTATION DETAIL, deliberate divergence:**
@@ -107,15 +119,44 @@ layer.
   one thing: they are not grouped with each other, and a group left holding one
   labelled shape is still that group (`actionGroup.tsx:73-83`).
 
-**VERIFIED** — a locked member travels with its group (move, resize, rotate, nudge),
-but is never picked up on its own; the oracle drags every selected element and refuses
-only when all are locked (`App.tsx:10899-10904`).
+**VERIFIED** — a locked member travels with its group (move, resize, rotate, nudge,
+align, distribute), but is never picked up on its own; the oracle drags every selected
+element and refuses only when all are locked (`App.tsx:10899-10904`), and its align and
+distribute have no lock filter.
+
+**VERIFIED** — align and distribute move groups, not elements
+(`getSelectedElementsByGroup`, `groups.ts:417-466`): each selected group is one block,
+cut one level in when a single group is all that is selected, and at the edited group's
+level while one is edited; a label rides with its shape. Distribute spaces the blocks
+by equal gaps and, when they overlap too much for any gap, spaces their centres between
+the two blocks at the ends, which stay (`distribute.ts:46-100`). Align needs two blocks,
+distribute three, and neither is offered while a frame is selected
+(`actionAlign.tsx:50-51`, `actionDistribute.tsx:43-44`). The inspector asks the engine
+(`canAlign`, `canDistribute`) rather than counting elements, and asks again on every
+scene change, since ungroup, lock, undo or a peer's edit changes the blocks under the
+same selection: two grouped elements and a third beside them are two blocks, so align
+is offered and distribute is not.
 
 **VERIFIED** — frames: a group joins or leaves a frame whole; deleting a frame keeps its
 children, out of any frame, and selects them (`actionDeleteSelected.tsx:115-122`);
 grouping across a frame's edge takes the group out (`actionGroup.tsx:138-150`). Align,
 distribute, flip and lock leave membership alone, as the oracle's do outside a drag
 (`frame.ts:845-855`). A child a peer holds stays put when its frame moves.
+
+**VERIFIED** — membership is judged for what a gesture changed, and every member of a
+group it changed; a frame moved, resized or drawn judges the whole board. The oracle
+judges the selection on release (`updateFrameMembershipOfSelectedElements`,
+`App.tsx:12064`). An unrelated click never rewrites membership elsewhere — so a child
+aligned out of its frame stays that frame's until it is itself dragged. What a commit
+creates — drawn, typed, pasted, duplicated, dropped in — is judged where it lands, as
+the oracle gives a new element the frame it is created in (`App.tsx:10442-10465`,
+`App.duplicate.ts:124-135`); a pasted or duplicated frame adopts nothing it lands on.
+
+**VERIFIED** — part of the edited group dragged into or out of a frame leaves that
+group, and the edited group is let go (`updateGroupIdsAfterEditingGroup`,
+`App.tsx:11993-12060`). Each moved member keeps only the groups inside the edited one,
+so a group nested in it and dragged whole keeps its own id; a group left with one member
+dissolves. A label goes with its shape, and a member a peer holds keeps its groups.
 
 ## Where we diverge, and why
 
@@ -126,6 +167,10 @@ distribute, flip and lock leave membership alone, as the oracle's do outside a d
 | Ctrl+Shift+G      | ungroup one level    | same                                             |
 | shift-marquee out | keeps the group      | leaves it and takes whole top-level groups       |
 | frame membership  | pointer + overlap    | containment, the group's box taken whole         |
+| edited part moved | clears lone groups   | dissolves only the groups the move left alone    |
+| into a frame      | board-wide           |                                                  |
+| its labels        | stay in the group    | leave with their shapes                          |
+| align boxes       | rotated bounds       | unrotated bounds (`scene_bounds`)                |
 
 The Ctrl+G divergence is deliberate and requested. The oracle's no-op leaves the key with
 no inverse, so there is no way out of a group with the key you reached for; making it a
@@ -135,7 +180,22 @@ nothing is lost.
 The oracle keeps the edited group when a shift-marquee reaches outside it
 (`App.tsx:11331-11345`), which holds part of that group beside whole groups outside it —
 the state Ctrl+G turns into groups that overlap instead of nesting. The frame rule is
-this engine's older model (`ci_frame.rs`), applied to a group as a whole.
+this engine's older model (`ci_frame.rs`), applied to a group as a whole; the dragged
+part of an edited group is judged by its own box the same way, not by the frame under
+the pointer, and a selection that holds every member of its top-level group is a whole
+group joining a frame, which keeps its groups.
+
+When part of the edited group leaves, the oracle strips every group id from any element
+whose outermost group has fewer than two members anywhere on the board. Here only the
+groups that move emptied are dissolved: a lone group elsewhere is someone else's state,
+and rewriting it would stamp and send elements the gesture never touched. The oracle
+also hands that surgery the selection without its labels (`App.tsx:12001`), so a
+label stays in the group its shape left and keeps it alive; here it leaves with its
+shape, as every other group operation takes it.
+
+Align measures unrotated boxes, where the oracle measures a rotated element by the box
+round what it covers — older than this work, and shared with every other `scene_bounds`
+caller.
 
 ## Mental model (§4 of `prompts.md`)
 
@@ -159,12 +219,7 @@ this engine's older model (`ci_frame.rs`), applied to a group as a whole.
 
 ## Open
 
-**VERIFIED, not implemented** — when part of the edited group is dragged into or out of
-a frame, the oracle takes that part out of the group (`updateGroupIdsAfterEditingGroup`,
-`App.tsx:12000-12060`). Here the group's membership is decided as a whole.
-
-**Not done** — align, distribute and flip still skip a locked member
-(`edit/align.rs`, `edit/flip.rs`), where the oracle's have no lock filter; z-order is not
-frame-aware (`zindex.ts` frame ranges); shift-click toggles on press rather than on
-release; a click on empty canvas inside the selection's frame keeps the selection, which
-the oracle drops (`App.tsx:12367-12387`) and `e2e/grabSelected.spec.ts` pins.
+**Not done** — flip still skips a locked member (`edit/flip.rs`), where the oracle's has
+no lock filter; z-order is not frame-aware (`zindex.ts` frame ranges); a shift-press on
+an unselected element inside the selection's box adds it at once, where the oracle
+waits for the release (`App.tsx:9656-9660`).

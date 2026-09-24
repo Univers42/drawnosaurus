@@ -114,15 +114,25 @@ describe("arrangement controls", () => {
     expect(none.mirror).toBe(false);
   });
 
-  it("align needs two, distribute needs three", () => {
-    const one = actions("select", [el("rectangle")]);
-    const two = actions("select", [el("rectangle"), el("ellipse")]);
+  it("offers align and distribute exactly when the engine says they would do something", () => {
+    // The engine counts units — a group is one, a lone group is what it holds — and
+    // refuses a frame, so the element count answers wrong both ways: two grouped
+    // shapes are one unit, and a frame with a shape beside it aligns nothing.
+    const four = [el("rectangle"), el("ellipse"), el("diamond"), el("rectangle")];
+    const units = (canAlign: boolean, canDistribute: boolean) =>
+      getShapeActions("select", four, "transparent", { canAlign, canDistribute });
+
+    expect(units(true, false).align).toBe(true);
+    expect(units(true, false).distribute).toBe(false);
+    expect(units(false, false).align).toBe(false);
+    expect(units(true, true).distribute).toBe(true);
+  });
+
+  it("offers neither without the engine's word", () => {
     const three = actions("select", [el("rectangle"), el("ellipse"), el("diamond")]);
 
-    expect(one.align).toBe(false);
-    expect(two.align).toBe(true);
-    expect(two.distribute).toBe(false);
-    expect(three.distribute).toBe(true);
+    expect(three.align).toBe(false);
+    expect(three.distribute).toBe(false);
   });
 });
 

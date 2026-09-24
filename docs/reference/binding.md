@@ -25,9 +25,15 @@ to ±10 as the engine clamps) and `startBindMode` / `endBindMode`, beside the ex
 `startBinding` / `endBinding` ids (`packages/contract/src/element.ts`). All optional and
 undefaulted: an arrow bound before anchors existed carries none of them and reads as the
 centre, in orbit — on the same line between the two centres it was always drawn on. Its
-ends move by a few units, to Excalidraw's gap, the first time anything on the board is
-committed, and that commit restamps it once. `set_anchor` is the only writer of the three
-fields, so a released end never keeps an anchor.
+ends move by a few units, to Excalidraw's gap, the first time it or a shape it is bound
+to is part of a commit, and are stamped with that commit. An edit elsewhere on the board
+leaves it as stored: bindings are refreshed for what a commit touched, a peer's patch
+included (`refresh_bindings_in_place`, as `align.ts:45-48` updates only what moved).
+Undo and redo count as touching what they put back, so an arrow bound to a restored
+shape follows it, stamped with the step — one a peer drew after the undone edit
+included (`ElementsDelta.applyTo`, `delta.ts:2044-2047,2107-2114`).
+`set_anchor` is the only writer of the three fields, so a released end never keeps an
+anchor.
 
 **VERIFIED, fixed** — the engine used to store only the id and aim every end along the
 line between the two shapes' centres, ignoring `angle`. So a turned shape left its

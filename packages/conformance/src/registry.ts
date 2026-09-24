@@ -182,8 +182,15 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "📐 Alignment & distribution",
+    // Groups move as one block, spaced by equal gaps, and the inspector offers either
+    // only when the engine says it would move something.
     status: "covered",
-    tests: [`${ENGINE}/ci_edit.rs`, `${ENGINE}/ci_snapping.rs`],
+    tests: [
+      `${ENGINE}/ci_edit.rs`,
+      `${ENGINE}/ci_align_units.rs`,
+      `${ENGINE}/ci_snapping.rs`,
+      "e2e/groups.spec.ts",
+    ],
   },
   {
     section: "🗂️ Layers / ordering",
@@ -224,7 +231,13 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Frames carry a name and render it, but nothing edits it, and export has no per-frame mode.",
   },
-  { section: "🧩 Frames", status: "covered", tests: [`${ENGINE}/ci_frame.rs`] },
+  {
+    section: "🧩 Frames",
+    status: "covered",
+    // ci_group_locks_frames.rs: what is drawn or pasted inside a frame joins it and moves
+    // with it; groups join and leave whole.
+    tests: [`${ENGINE}/ci_frame.rs`, `${ENGINE}/ci_group_locks_frames.rs`],
+  },
   {
     section: "🔗 Element linking",
     status: "gap",
@@ -560,7 +573,11 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "See the Frames rule: naming is stored and drawn but not editable, and export has no frame mode.",
   },
-  { section: "12. Frames", status: "covered", tests: [`${ENGINE}/ci_frame.rs`] },
+  {
+    section: "12. Frames",
+    status: "covered",
+    tests: [`${ENGINE}/ci_frame.rs`, `${ENGINE}/ci_group_locks_frames.rs`],
+  },
   {
     section: "13. Embeds",
     text: /Lock|Loading state|Error state|Export fallback|View-only/,

@@ -14,6 +14,9 @@ import { OPEN_CANVAS, openBoard, pickTool, sceneElements, type Board } from "./b
  * is deliberate — an empty rectangle over a diagram must not swallow every click in the
  * area it covers — but it was applied to the *selected* shape too, where it meant an
  * empty rectangle could only be moved by aiming at its outline.
+ *
+ * A drag from the hole moves the selection; a click there, with no drag, is a click on
+ * nothing and lets it go, as Excalidraw does (`App.tsx:12344-12387`).
  */
 
 /** Canvas-relative, clear of every floating panel. */
@@ -117,7 +120,7 @@ test.describe("an empty shape that is selected", () => {
     expect(after.y - before.y).toBeCloseTo(40, 0);
   });
 
-  test("keeps the selection when the middle is merely clicked", async ({ page }) => {
+  test("lets go when the middle is merely clicked", async ({ page }) => {
     const board = await openBoard(page);
     await drawEmptyRect(board);
     await selectByOutline(board);
@@ -128,11 +131,11 @@ test.describe("an empty shape that is selected", () => {
     await page.waitForTimeout(150);
 
     expect(
-      await page.evaluate(() => window.__drawEngine!.getSelection().length),
-      "a click inside the selection must not drop it",
-    ).toBe(1);
+      await page.evaluate(() => window.__drawEngine!.getSelection()),
+      "a click in the hole, with no drag, is a click on nothing",
+    ).toEqual([]);
     const after = await rect(board);
-    expect(after.x).toBeCloseTo(before.x, 1);
+    expect(after.x, "a click is not a drag").toBeCloseTo(before.x, 1);
   });
 
   /**

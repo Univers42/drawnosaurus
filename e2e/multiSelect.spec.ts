@@ -305,6 +305,33 @@ test.describe("multi-select gestures reach the engine", () => {
     expect(after[0]! - before[0]!, "the one that was grabbed").toBeCloseTo(70, 0);
     expect(after[1]! - before[1]!, "and the one that was not").toBeCloseTo(70, 0);
   });
+
+  /**
+   * Shift on a held member takes it out on the release, and only if nothing moved, so a
+   * shift-drag still carries everything (`ci_multi_select.rs`). Taken out on the press,
+   * the drag moved the other box and left the grabbed one behind.
+   */
+  test("a shift-drag from a held member carries both", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+    await marqueeBoth(board);
+    const before = (await sceneElements(page)).map((el) => el.x);
+
+    const grab = at(board, RIGHT.x + RIGHT.w / 2, RIGHT.y);
+    await page.keyboard.down("Shift");
+    await page.mouse.move(grab.x, grab.y);
+    await page.mouse.down();
+    for (let step = 1; step <= 5; step += 1) {
+      await page.mouse.move(grab.x + (70 * step) / 5, grab.y);
+    }
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+    await page.waitForTimeout(150);
+
+    const after = (await sceneElements(page)).map((el) => el.x);
+    expect(after[1]! - before[1]!, "the one that was grabbed").toBeCloseTo(70, 0);
+    expect(after[0]! - before[0]!, "and the one that was not").toBeCloseTo(70, 0);
+    expect(await selection(page), "a drag takes nothing out").toHaveLength(2);
+  });
 });
 
 /**
