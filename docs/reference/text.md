@@ -5,19 +5,37 @@ Markers: **OBSERVED**, **VERIFIED**, **INFERRED**, **IMPLEMENTATION DETAIL**, **
 ## One wrapper, ported from the oracle
 
 **VERIFIED**: every soft wrap in the engine goes through one function,
-`DrawEngine::wrap_text_to_width` (`engine/crates/draw-engine/src/engine/text.rs`). That
-covers a label in its container, a dragged-out fixed-width text, and every rewrap after
-a resize. The function is a thin adapter over `crate::text`
+`DrawEngine::wrap_text_to_width` (`engine/crates/draw-engine/src/engine/text.rs`). It
+runs when the text of a label or a dragged-out fixed-width text is set, and only then:
+`set_element_text` (the editor's commit), `text_preview` (what peers see while it is
+typed) and `set_text_box_width`. The function is a thin adapter over `crate::text`
 (`engine/crates/draw-engine/src/text/`). That module is a line-for-line port of
 Excalidraw's `packages/element/src/textWrapping.ts` at the pinned SHA:
 
 - `parse_tokens`: the oracle's break rules and emoji sequences;
-- `wrap_text` / `wrap_lines`;
-- `normalize_text`.
+- `wrap_text` / `wrap_lines`.
 
 The old wrapper split on single spaces and broke a long word by re-measuring each longer
-prefix. **OBSERVED**: it wrapped 517 of the 2,407 cases the engine path is checked on
-differently from the oracle.
+prefix. **OBSERVED**: it matched the oracle on only 517 of the 2,407 cases the engine
+path is checked on; 1,890 differed.
+
+## What does not rewrap yet
+
+**VERIFIED** (an engine probe, and `with_text` is the wrapper's only caller): a resize
+does not rewrap text.
+
+- **A container resize** gives its label the new width and keeps its lines
+  (`layout_label`, `engine/crates/draw-engine/src/scene/binding.rs`). A label in a
+  300-wide rectangle dragged to 100 wide ends up 84 wide, holding a line 274 wide.
+- **A fixed-width text resized by its handle** takes the new width and keeps its lines.
+- **Widening never unwraps.** `set_text_box_width` rewraps, but nothing in the host
+  calls it. It also rewraps `text`, which already holds the wrapped lines: narrowing
+  adds breaks, and widening keeps all of them.
+
+Excalidraw keeps the source in `originalText` and wraps from it on every resize:
+`redrawTextBoundingBox` (`textElement.ts:94-98`), `handleBindTextResize`
+(`textElement.ts:192-196`) and `resizeSingleTextElement` (`resizeElements.ts:371-375`).
+Here that waits on the engine keeping `originalText` and wrapping from it on a resize.
 
 ## How it is held to the oracle
 
@@ -62,7 +80,7 @@ then reverted, each failed it:
 - offsets lead back to the source;
 - no line is wider than the width unless it holds an emoji;
 - measuring stays linear in the text length;
-- the memo answers a rewrap, and stays bounded.
+- the memo answers a rewrap, and stays bounded in lines and in bytes.
 
 ## Measuring
 
@@ -72,8 +90,20 @@ engine keeps a `MeasureCache` (`text/measure.rs`). It holds:
 - **char widths**, per font and per char;
 - **wrapped hard lines**, per font and width.
 
-The wrapped lines are capped at `MEMO_LIMIT` = 4,096, and the whole memo clears when it
-fills. The engine clears the whole cache when its measure hook is replaced.
+The wrapped lines are capped at `MEMO_LIMIT` = 4,096 hard lines and at `MEMO_BYTES` =
+1 MiB of text (each hard line, its wrapped lines and their structs). The whole memo
+clears when either fills. The engine clears the whole cache when its measure hook is
+replaced.
+
+The byte cap is there because, with a peer watching, every keystroke into a label is
+previewed, and each preview memoises the whole hard line typed so far. **OBSERVED** with
+a byte-counting allocator, wrapping every prefix of a 9,980-char paragraph at 290 px
+through the memo, as typing it into a label does:
+
+- **Capped by count only**: 50.7 MB live in the memo afterwards, 78.9 MB at the peak.
+- **Capped by bytes too**: 0.5 MB live, 1.1 MB at the peak.
+
+Wasm memory never shrinks, so the peak is what the page keeps.
 
 What is measured, and how, follows the oracle:
 
@@ -138,3 +168,6 @@ tables are regenerated with the fixture, never by hand.
 
 Adding the crate to the wasm would cost another 125,540 bytes (70,643 gzipped) for what
 the browser already does. That is why the crate is a native-only dependency.
+
+The two builds with the port are engine `f1ec4d5`. The memo's byte cap came after:
+1,392,949 bytes (437,346 gzipped) with NFC from the platform.
