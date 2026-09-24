@@ -34,20 +34,22 @@ describe("the sandbox an embed runs in", () => {
   it("never grants same-origin by default", () => {
     // `allow-scripts` plus `allow-same-origin` lets a frame remove its own sandbox, so
     // the pair is a decision, not a default.
-    const sandbox = sandboxFor({ allowSameOrigin: false });
+    const sandbox = sandboxFor({ kind: "generic", allowSameOrigin: false });
     expect(sandbox).toContain("allow-scripts");
     expect(sandbox).not.toContain("allow-same-origin");
   });
 
   it("grants it only when the engine said to", () => {
-    expect(sandboxFor({ allowSameOrigin: true })).toContain("allow-same-origin");
+    expect(sandboxFor({ kind: "generic", allowSameOrigin: true })).toContain("allow-same-origin");
   });
 
   it("never grants top-level navigation", () => {
     // A framed page that can navigate the top level can replace the whole board with
     // itself, which is the worst thing an embed can do.
-    for (const allowSameOrigin of [true, false]) {
-      expect(sandboxFor({ allowSameOrigin })).not.toContain("allow-top-navigation");
+    for (const kind of ["video", "generic"] as const) {
+      for (const allowSameOrigin of [true, false]) {
+        expect(sandboxFor({ kind, allowSameOrigin })).not.toContain("allow-top-navigation");
+      }
     }
   });
 });
@@ -66,8 +68,18 @@ describe("what a frame is loaded with", () => {
     expect(EMBED_ALLOW).toContain("encrypted-media");
   });
 
-  it("lets a link out of the frame open as an ordinary tab", () => {
-    expect(sandboxFor({ allowSameOrigin: true })).toContain("allow-popups-to-escape-sandbox");
+  it("lets a page's link out of the frame open as an ordinary tab", () => {
+    expect(sandboxFor({ kind: "generic", allowSameOrigin: true })).toContain(
+      "allow-popups-to-escape-sandbox",
+    );
+  });
+
+  it("keeps a player on the board: a click on its title or a suggestion goes nowhere", () => {
+    // YouTube's embed sends those to youtube.com and cannot be told otherwise.
+    const sandbox = sandboxFor({ kind: "video", allowSameOrigin: true });
+    expect(sandbox).not.toContain("allow-popups");
+    expect(sandbox).toContain("allow-scripts");
+    expect(sandbox).toContain("allow-same-origin");
   });
 
   it("tells Twitch which site is embedding it, and nobody else", () => {

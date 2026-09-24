@@ -88,17 +88,17 @@ export interface EmbedFrame {
  * origin, so the grant lets its player use its own storage — but a `srcdoc` document
  * would have ours, and never gets it.
  *
- * `allow-popups-to-escape-sandbox` so that "Watch on YouTube" opens an ordinary tab
- * rather than one still sandboxed, where the site refuses to run.
+ * No popups for a player. YouTube's embed sends a click on its title, its channel or a
+ * suggested video to youtube.com, and offers no way to play it in place instead; the
+ * frame is another site's, so the click cannot be caught either. Refusing the popup is
+ * what keeps someone on the board — everything the player does in place still works.
+ *
+ * A page keeps them, with `allow-popups-to-escape-sandbox` so a link out of it opens an
+ * ordinary tab rather than one still sandboxed, where the site refuses to run.
  */
-export function sandboxFor(frame: Pick<EmbedFrame, "allowSameOrigin">): string {
-  const permissions = [
-    "allow-scripts",
-    "allow-popups",
-    "allow-popups-to-escape-sandbox",
-    "allow-presentation",
-    "allow-forms",
-  ];
+export function sandboxFor(frame: Pick<EmbedFrame, "kind" | "allowSameOrigin">): string {
+  const permissions = ["allow-scripts", "allow-presentation", "allow-forms"];
+  if (frame.kind !== "video") permissions.push("allow-popups", "allow-popups-to-escape-sandbox");
   if (frame.allowSameOrigin) permissions.push("allow-same-origin");
   return permissions.join(" ");
 }
