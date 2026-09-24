@@ -50,6 +50,8 @@ Everything runs in Docker via the Makefile; there is no host Node requirement fo
 | `make test-e2e`                       | Playwright, **on the host** (installs chromium first)         |
 | `make conformance`                    | the `prompt/*.md` coverage matrix                             |
 | `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate      |
+| `make stale`                          | exits 1 if the running stack isn't built from this checkout   |
+| `make parity`                         | `perf/` benchmark against Excalidraw (`make parity-deps` 1st) |
 | `make shell`                          | bash in the tooling container                                 |
 
 Host ports are non-standard (5273/4300/27019/5373/4373, and 5473 for the browser suite's own
@@ -173,7 +175,7 @@ once (`docs/reference/images.md`).
 
 ### Web app shape
 
-`apps/web/src/lib/draw-chrome/` is the editor chrome. `DrawSurface.svelte` (~1k lines) is the
+`apps/web/src/lib/draw-chrome/` is the editor chrome. `DrawSurface.svelte` (~1.4k lines) is the
 orchestrator that mounts the engine and owns tool/theme/selection state; everything testable is
 factored into plain `.ts` modules beside it (`tools.ts`, `menu.ts`, `theme.ts`, `inspector.ts`,
 `style.ts`, `camera.ts`, `shapeActions.ts`, …) each with a `.test.ts`. **Unit tests target the `.ts`
@@ -238,6 +240,8 @@ spec stubs `/v1/**` and the websocket in `e2e/board.ts`. Kept out of `make quali
   source into its import graph; `apps/api` and `packages/contract` keep the full set.
 - **Integration tests run against a real mongod, never a mock**, and fail loudly without `MONGO_URL`
   rather than skipping — a skipped test reads as a passing one.
+- A container left up while commits land keeps serving the old code, which looks exactly like a
+  fix that didn't work. Run `make stale` before debugging against `make up`.
 - `make dev` sets `VITE_USE_POLLING=1`: this checkout is bind-mounted from a network filesystem where
   inotify does not reach, and without polling Vite serves what it compiled at startup — a silent
   failure that survives rebuilds and looks like a change that was never made.
