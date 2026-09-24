@@ -55,6 +55,28 @@ descends exactly one level, to any depth.
 **VERIFIED** — leaving (`App.tsx:9641-9650`): a press on an element _not_ in the edited
 group clears `editingGroupId` and the selection.
 
+**VERIFIED** — Escape steps out **one** level, into the group directly around, holding
+it; only from the outermost does it let go (`actionDeselect.ts:36-62`, `:72-111`).
+
+**VERIFIED** — the edited group is a claim about the selection: it holds only while
+something is held, all of it is inside, and the group still has two live members. The
+oracle drops it on an empty selection (`App.tsx:12889-12902`), a press outside it,
+select-all (`actionSelectAll.ts:49`) and once the group is gone (`delta.ts:806-818`).
+Here `set_selection` enforces it (`edit::keeps_editing`), and so do a peer's patch, a
+loaded scene and the eraser (`revalidate_editing`), rather than each way out. A lasso
+press is the one empty selection that keeps it, as the oracle's does
+(`lasso/index.ts:72-89`): the loop is resolved at that level on release.
+
+**VERIFIED** — a click (press and release with no move) on a member of a
+multi-selection narrows to that member's group at the current level; any move makes it
+a drag and keeps everything (`drag.hasOccurred`, `App.tsx:10918-10921`, `:12183-12190`).
+
+**VERIFIED** — deleting inside the edited group keeps it open holding its first member,
+steps up a level once it is down to one, or leaves it holding the survivor
+(`actionDeleteSelected.tsx:130-204`). **IMPLEMENTATION DETAIL, deliberate divergence:**
+only a member that is neither locked nor held by a peer is picked; the oracle takes the
+first sibling whatever it is, which here would hand a locked element to the next Delete.
+
 ## Grouping and ungrouping
 
 **OBSERVED** — **Ctrl+G on a selection that is already exactly one group does nothing.**
@@ -66,6 +88,35 @@ layer.
 (`removeFromSelectedGroups`, `groups.ts:327-330`). Observed:
 `A [g1, g2] → [g1]`, `C [g2] → []`. Inner groups survive an outer ungroup.
 
+## Structure the operations keep
+
+**VERIFIED** — a group is one run of the stack:
+
+- grouping gathers the members directly under the topmost one, in one undo step
+  (`actionGroup.tsx:170-186`);
+- z-order steps over a neighbouring group as one block, and inside an entered group
+  moves only within it (`zindex.ts:205-311`, `:443-553`);
+- a copy made inside the edited group keeps that group and every level around it, with
+  fresh ids only for the levels inside (`getNewGroupIdsForDuplication`,
+  `groups.ts:397-413`), and goes directly above the group. **IMPLEMENTATION DETAIL:** the
+  oracle puts each copy directly above its own source (`duplicate.ts:322-348`); above the
+  group is the same run. Any other copy goes on top of the board, as before;
+- a label carries its shape's groups — when grouped, and when made
+  (`App.tsx:7081`) — sits directly above its shape (`:7103-7108`), and moves and is
+  stepped over with it (`zindex.ts:51-54`, `:91-130`). A shape and its own label are
+  one thing: they are not grouped with each other, and a group left holding one
+  labelled shape is still that group (`actionGroup.tsx:73-83`).
+
+**VERIFIED** — a locked member travels with its group (move, resize, rotate, nudge),
+but is never picked up on its own; the oracle drags every selected element and refuses
+only when all are locked (`App.tsx:10899-10904`).
+
+**VERIFIED** — frames: a group joins or leaves a frame whole; deleting a frame keeps its
+children, out of any frame, and selects them (`actionDeleteSelected.tsx:115-122`);
+grouping across a frame's edge takes the group out (`actionGroup.tsx:138-150`). Align,
+distribute, flip and lock leave membership alone, as the oracle's do outside a drag
+(`frame.ts:845-855`). A child a peer holds stays put when its frame moves.
+
 ## Where we diverge, and why
 
 |                   | oracle               | ours                                             |
@@ -73,11 +124,18 @@ layer.
 | model             | `groupIds: string[]` | `group_ids: Vec<String>`, same order and meaning |
 | Ctrl+G on a group | no-op                | **toggles**: ungroups one level                  |
 | Ctrl+Shift+G      | ungroup one level    | same                                             |
+| shift-marquee out | keeps the group      | leaves it and takes whole top-level groups       |
+| frame membership  | pointer + overlap    | containment, the group's box taken whole         |
 
 The Ctrl+G divergence is deliberate and requested. The oracle's no-op leaves the key with
 no inverse, so there is no way out of a group with the key you reached for; making it a
 toggle costs nothing and makes it self-undoing. Ctrl+Shift+G still matches the oracle, so
 nothing is lost.
+
+The oracle keeps the edited group when a shift-marquee reaches outside it
+(`App.tsx:11331-11345`), which holds part of that group beside whole groups outside it —
+the state Ctrl+G turns into groups that overlap instead of nesting. The frame rule is
+this engine's older model (`ci_frame.rs`), applied to a group as a whole.
 
 ## Mental model (§4 of `prompts.md`)
 
@@ -101,8 +159,12 @@ nothing is lost.
 
 ## Open
 
-**UNKNOWN** — what the reference does when an element is dragged _out_ of an edited group,
-and whether an empty group id is garbage-collected from other members. Not investigated.
+**VERIFIED, not implemented** — when part of the edited group is dragged into or out of
+a frame, the oracle takes that part out of the group (`updateGroupIdsAfterEditingGroup`,
+`App.tsx:12000-12060`). Here the group's membership is decided as a whole.
 
-**UNKNOWN** — whether `Escape` exits one level or all of them. The source has
-`editingGroupId: null` on several Escape paths, which suggests all; not observed.
+**Not done** — align, distribute and flip still skip a locked member
+(`edit/align.rs`, `edit/flip.rs`), where the oracle's have no lock filter; z-order is not
+frame-aware (`zindex.ts` frame ranges); shift-click toggles on press rather than on
+release; a click on empty canvas inside the selection's frame keeps the selection, which
+the oracle drops (`App.tsx:12367-12387`) and `e2e/grabSelected.spec.ts` pins.
