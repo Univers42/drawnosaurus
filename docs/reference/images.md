@@ -109,6 +109,27 @@ otherwise reuse the cached bitmap with the placeholder in it until something els
 nothing at all for an image with no picture yet, rather than a broken reference
 (`ci_image.rs`).
 
+## Flip
+
+**VERIFIED** — a flipped image mirrors its pixels, as Excalidraw's does. The oracle keeps
+width and height positive and multiplies a `scale: [sx, sy]` field by -1 on the flipped
+axis (`element/src/resizeElements.ts:1484-1489`); its painter translates to the element's
+centre, rotates, then scales by it (`element/src/renderElement.ts:820-837` at 1118751f).
+Ours stores the same fact as a **negative width or height**: `element_matrix` in
+`wasm/paint.rs` applies it as a scale of -1 in the same order — centre, rotation, mirror —
+and the SVG export writes the same `translate · rotate · scale` (`export/svg.rs` ›
+`image_transform`). One transform, stored two ways: a turned picture flipped turns the
+other way and mirrors about its own centre, and flipped twice is exactly as it was.
+
+A `scale` field was deliberately not added to `packages/contract`: it would be a wire
+change with nothing to gain, and a negative extent already round-trips through the server
+(`finite` allows it). Every other box kind keeps a positive extent on a flip (`resize.md`
+› Flip).
+
+Pinned by `ci_flip.rs` › `an_image_mirrors_its_pixels_and_an_embed_does_not`, `ci_image.rs`
+› `a_flipped_image_exports_flipped` and `e2e/flip.spec.ts` › an image's pixels swap sides.
+An embed is the opposite case: moved and turned, its page never mirrored.
+
 ## Unknown
 
 - **UNKNOWN** — behaviour at the 16MB edge for boards created before the size check,
