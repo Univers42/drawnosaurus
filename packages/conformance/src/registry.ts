@@ -101,7 +101,13 @@ export const RULES: readonly Rule[] = [
     // the board at all.
     text: /multi-point/,
     status: "covered",
-    tests: [`${ENGINE}/ci_line_multipoint.rs`, "e2e/lineMultipoint.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_line_multipoint.rs`,
+      "e2e/lineMultipoint.spec.ts",
+      // A click or a double click that ends an arrow on a shape, in a pack of them.
+      `${ENGINE}/ci_binding_dense.rs`,
+      "e2e/arrow-dense.spec.ts",
+    ],
   },
   {
     section: "Lines & arrows",
@@ -242,8 +248,10 @@ export const RULES: readonly Rule[] = [
     tests: [
       `${ENGINE}/ci_binding.rs`,
       `${ENGINE}/ci_binding_overlap.rs`,
+      `${ENGINE}/ci_binding_dense.rs`,
       `${ENGINE}/ci_linear_anchor.rs`,
       `${ENGINE}/ci_style.rs`,
+      "e2e/arrow-dense.spec.ts",
     ],
   },
   {
@@ -601,7 +609,7 @@ export const RULES: readonly Rule[] = [
     // the turn entirely.
     text: /priority|suggestion|visuali|rotating target/i,
     status: "covered",
-    tests: [`${ENGINE}/ci_binding_anchor.rs`],
+    tests: [`${ENGINE}/ci_binding_anchor.rs`, `${ENGINE}/ci_binding_dense.rs`],
   },
   {
     section: "18. Binding system",
@@ -616,7 +624,11 @@ export const RULES: readonly Rule[] = [
   {
     section: "18. Binding system",
     status: "covered",
-    tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_binding_overlap.rs`],
+    tests: [
+      `${ENGINE}/ci_binding.rs`,
+      `${ENGINE}/ci_binding_overlap.rs`,
+      `${ENGINE}/ci_binding_dense.rs`,
+    ],
   },
   {
     section: "19. Snapping",
