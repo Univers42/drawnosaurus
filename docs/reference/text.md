@@ -5,12 +5,13 @@ Markers: **OBSERVED**, **VERIFIED**, **INFERRED**, **IMPLEMENTATION DETAIL**, **
 ## One wrapper, ported from the oracle
 
 **VERIFIED**: every soft wrap in the engine goes through one function,
-`DrawEngine::wrap_text_to_width` (`engine/crates/draw-engine/src/engine/text.rs`). It
-runs when the text of a label or a dragged-out fixed-width text is set, and only then:
-`set_element_text` (the editor's commit), `text_preview` (what peers see while it is
-typed) and `set_text_box_width`. The function is a thin adapter over `crate::text`
-(`engine/crates/draw-engine/src/text/`). That module is a line-for-line port of
-Excalidraw's `packages/element/src/textWrapping.ts` at the pinned SHA:
+`text::layout::layout_text` (`engine/crates/draw-engine/src/text/layout.rs`, see
+`text-model.md` › Layout), which wraps with `Measure::wrap` over the memo. It runs whenever a
+text's words or its room change: `set_element_text` (the editor's commit), `text_preview`
+(what peers see while it is typed), `set_text_box_width`, a font size, family or alignment
+change, `relayout_text` and `fonts_loaded`. The wrap itself is `crate::text`
+(`engine/crates/draw-engine/src/text/`), a line-for-line port of Excalidraw's
+`packages/element/src/textWrapping.ts` at the pinned SHA:
 
 - `parse_tokens`: the oracle's break rules and emoji sequences;
 - `wrap_text` / `wrap_lines`.
@@ -21,23 +22,19 @@ path is checked on; 1,890 differed.
 
 ## What does not rewrap yet
 
-**VERIFIED** (an engine probe, and `with_text` is the wrapper's only caller): a resize
-does not rewrap text.
+**VERIFIED** (an engine probe): a resize handle does not rewrap text yet.
 
-- **A container resize** gives its label the new width and keeps its lines
-  (`layout_label`, `engine/crates/draw-engine/src/scene/binding.rs`). A label in a
-  300-wide rectangle dragged to 100 wide ends up 84 wide, holding a line 274 wide.
+- **A container resize** moves its label (`layout_label`,
+  `engine/crates/draw-engine/src/scene/binding.rs`, position only) and keeps its lines.
 - **A fixed-width text resized by its handle** takes the new width and keeps its lines.
-- **Widening never unwraps.** `set_text_box_width` rewraps, but nothing in the host
-  calls it. It rewraps `source_text`, which for a text without `originalText` (every
-  text this engine makes) is `text`, already holding the wrapped lines: narrowing adds
-  breaks, and widening keeps all of them.
 
-Excalidraw keeps the source in `originalText` and wraps from it on every resize:
-`redrawTextBoundingBox` (`textElement.ts:94-98`), `handleBindTextResize`
-(`textElement.ts:192-196`) and `resizeSingleTextElement` (`resizeElements.ts:371-375`).
-Here the engine keeps an `originalText` it is given in step (`text-model.md`), but
-gives new text none and wraps from it on no resize yet.
+The resize package calls `relayout_text(container or text id)` after a resize, then
+commits: that re-wraps from `originalText`, which every text now carries, so widening
+unwraps and narrowing grows the shape (`ci_text_model.rs` › relayout wraps the source, not
+the drawn lines). Excalidraw does the
+same on every resize: `redrawTextBoundingBox` (`textElement.ts@1118751f:94-98`),
+`handleBindTextResize` (`:192-196`) and `resizeSingleTextElement`
+(`resizeElements.ts@1118751f:371-375`).
 
 ## How it is held to the oracle
 
@@ -90,7 +87,12 @@ then reverted, each failed it:
 engine keeps a `MeasureCache` (`text/measure.rs`). It holds:
 
 - **char widths**, per font and per char;
-- **wrapped hard lines**, per font and width.
+- **wrapped hard lines**, per font and width;
+- **line widths**, per font and line, capped at 4 × `MEMO_LIMIT` lines and `MEMO_BYTES`.
+
+A font is its size and family (`FontKey`); the hook the browser answers is
+`measure_font_line`, which sets the canvas font to the family's stack
+(`text::font::font_string`) only when it changes.
 
 The wrapped lines are capped at `MEMO_LIMIT` = 4,096 hard lines and at `MEMO_BYTES` =
 1 MiB of text (each hard line, its wrapped lines and their structs). The whole memo
@@ -139,15 +141,14 @@ What is measured, and how, follows the oracle:
   benches, the `unicode-normalization` crate stands in. Only a hard line that wraps is
   normalised, as in the oracle; a line that fits is kept verbatim.
 
-**IMPLEMENTATION DETAIL, ponytail**: the engine's measure hook floors every width at 4 px
-(`measure_via_ctx`, `src/wasm/mod.rs`). So a char measured alone that is narrower than 4 px
-wraps as 4 px wide: a zero-width char, or a space at a small size. The oracle has no
-floor. A per-font measure that returns the real width replaces the hook when fonts land.
+**VERIFIED**: the measure hook returns the browser's width, with no floor (the old 4 px
+floor went with `measure_via_ctx`).
 
-**INFERRED**: the oracle clears a font's char widths when that font finishes loading
-(`fonts/Fonts.ts:136`). Text is still drawn in the system stack (`FontKey::LEGACY`), so
-nothing loads and nothing needs clearing yet. Once fonts load, the host must clear the
-cache on that event.
+**VERIFIED**: the oracle clears a font's char widths when that font finishes loading
+(`fonts/Fonts.ts@1118751f:136`). Here the host calls `engine.fontsLoaded()` on
+`document.fonts`' `loadingdone` and `ready` (`apps/web/src/lib/draw-chrome/fonts.ts`); it
+clears the whole cache and re-lays every text in a family, unstamped (`text-model.md` ›
+Layout).
 
 ## Unicode version
 

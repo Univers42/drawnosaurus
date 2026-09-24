@@ -534,21 +534,35 @@ export const RULES: readonly Rule[] = [
       "e2e/textEditRequest.spec.ts",
     ],
   },
-  // Wrapping, carved out of the gap below, which is about font metrics. The wrap itself
-  // no longer is: it is Excalidraw's textWrapping.ts ported line for line and replayed
-  // against fixtures that file generates (docs/reference/text.md). What keeps both lines a
-  // gap is that only setting a text wraps it; no resize does.
+  // Laid out as Excalidraw lays it out (docs/reference/text-model.md › Layout): a label
+  // wrapped inside its shape's text box and the shape grown to hold it, an arrow's label at
+  // the oracle's width with the stroke cut under it, free text sized to its lines, and
+  // each family's own line height drawn, measured and exported.
+  {
+    section: "9. Text",
+    text: /Text inside shapes|inside arrows|Auto-resize|[Ll]ine height/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text_model.rs`,
+      `${ENGINE}/ci_export.rs`,
+      "e2e/textLayout.spec.ts",
+      "e2e/textEditRequest.spec.ts",
+    ],
+  },
+  // Wrapping, carved out of the gap below. The wrap is Excalidraw's textWrapping.ts ported
+  // line for line (docs/reference/text.md), and every layout wraps from originalText. What
+  // keeps both lines a gap is that no resize handle lays the text out yet.
   {
     section: "9. Text",
     text: /Wrapping|Fixed-width/,
     status: "gap",
-    why: "Text wraps as Excalidraw's does when it is set: a label as it is typed, and a dragged-out fixed-width column (ci_text_wrap_oracle.rs, ci_text_box.rs). No resize rewraps it. A resized container keeps its label's lines (layout_label), a column resized by its handle keeps its lines, and widening never unwraps: `text` holds the wrapped lines, and nothing wraps from originalText yet (an element can carry it, ci_text_model_compat.rs, but new text is not given one), which Excalidraw does on every resize (textElement.ts:94-98, 192-196, resizeElements.ts:371-375).",
+    why: "Text wraps as Excalidraw's does, from originalText, whenever its words or its room change: typed, a font size, family or alignment change, a column's width set, a font arriving (ci_text_wrap_oracle.rs, ci_text_box.rs, ci_text_model.rs). A resize handle does not call relayout_text yet, so a resized shape keeps its label's lines and a column resized by its handle keeps its lines, where Excalidraw re-wraps on every resize (textElement.ts@1118751f:94-98, 192-196, resizeElements.ts@1118751f:371-375). The resize package calls it.",
   },
   {
     section: "9. Text",
-    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Font family|inside arrows/,
+    text: /IME|Bold|Italic|[Ll]etter spacing|Font family/,
     status: "gap",
-    why: "Bold, italic, letter spacing, line height and per-element font family. An element can carry fontFamily and lineHeight (ci_text_model_compat.rs, and the contract keeps them), but nothing draws or measures with them yet. That waits on real font metrics — vendored faces gated on document.fonts.ready, risk R1 — because each changes how wide a glyph is, and measuring before the face loads mis-sizes every text element permanently.",
+    why: "Font family: text is drawn, measured and exported in its family (ci_text_model.rs, e2e/textLayout.spec.ts) and the faces whose licence their files state are shipped (apps/web/static/fonts/LICENSES.md), but there is no picker yet, and Excalifont, the default, is not shipped. Bold, italic and letter spacing: Excalidraw has none of them either. IME: the overlay is a plain textarea, untested with composition.",
   },
   { section: "9. Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
