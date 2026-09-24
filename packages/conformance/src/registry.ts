@@ -722,15 +722,6 @@ export const RULES: readonly Rule[] = [
     tests: [`${ENGINE}/ci_shortcuts.rs`, "engine/src/host/keys.test.ts", "e2e/shortcuts.spec.ts"],
   },
   {
-    // One engine call, `flipSelection`, made by the shortcut, the context menu and the
-    // panel alike — what the section asks of an action. Addressing it by name is the
-    // section's gap, below.
-    section: "28. Command/action architecture",
-    text: /^Flip$/,
-    status: "covered",
-    tests: [`${ENGINE}/ci_flip.rs`, "engine/src/host/keys.test.ts", "e2e/flip.spec.ts"],
-  },
-  {
     section: "28. Command/action architecture",
     status: "gap",
     why: "The engine exposes methods, not named actions. Nothing addressable by name means no command palette and no single place a shortcut, a menu item and a button agree on — design.md is right that this is the load-bearing one.",
