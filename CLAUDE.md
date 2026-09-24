@@ -38,21 +38,21 @@ thing crossing between them is an `.osidraw` scene document.
 Everything runs in Docker via the Makefile; there is no host Node requirement for the gate.
 `make help` lists every target.
 
-| Command                               | What it does                                                  |
-| ------------------------------------- | ------------------------------------------------------------- |
-| `make all`                            | submodule → WASM → deps → quality gate → running stack        |
+| Command                               | What it does                                                   |
+| ------------------------------------- | -------------------------------------------------------------- |
+| `make all`                            | submodule → WASM → deps → quality gate → running stack         |
 | `make up`                             | gateway + mongo + realtime + api + web (:5273 / :5274 / :4402) |
-| `make share` / `make unshare`         | put the running stack on the internet / take it off           |
-| `make dev`                            | Vite + API + realtime hot stack (:5373 / :4373 / :4473)       |
-| `make verify`                         | what CI runs: `quality` + integration tests                   |
-| `make quality`                        | typecheck + lint + format + unit tests                        |
-| `make test` / `make test-integration` | unit tests / API tests against a real mongod                  |
-| `make test-e2e`                       | Playwright, **on the host** (installs chromium first)         |
-| `make conformance`                    | the `prompt/*.md` coverage matrix                             |
-| `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate      |
-| `make stale`                          | exits 1 if the running stack isn't built from this checkout   |
-| `make parity`                         | `perf/` benchmark against Excalidraw (`make parity-deps` 1st) |
-| `make shell`                          | bash in the tooling container                                 |
+| `make share` / `make unshare`         | put the running stack on the internet / take it off            |
+| `make dev`                            | Vite + API + realtime hot stack (:5373 / :4373 / :4473)        |
+| `make verify`                         | what CI runs: `quality` + integration tests                    |
+| `make quality`                        | typecheck + lint + format + unit tests                         |
+| `make test` / `make test-integration` | unit tests / API tests against a real mongod                   |
+| `make test-e2e`                       | Playwright, **on the host** (installs chromium first)          |
+| `make conformance`                    | the `prompt/*.md` coverage matrix                              |
+| `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate       |
+| `make stale`                          | exits 1 if the running stack isn't built from this checkout    |
+| `make parity`                         | `perf/` benchmark against Excalidraw (`make parity-deps` 1st)  |
+| `make shell`                          | bash in the tooling container                                  |
 
 Host ports are non-standard (5273/4300/27019/4402/5373/4373/4473, and 5473 for the browser suite's own
 Vite) because a sibling stack owns the usual ones. The suite's port is kept apart from `make dev`'s

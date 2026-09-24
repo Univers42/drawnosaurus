@@ -330,7 +330,9 @@ describe("realtimeClient reconnecting", () => {
     const socket = FakeSocket.made[0]!;
     socket.open();
     // Connected only after AUTH_OK + SUBSCRIBED — the TCP open alone is still "connecting".
-    socket.onmessage?.({ data: JSON.stringify({ type: "AUTH_OK", conn_id: "c1", server_time: "t" }) });
+    socket.onmessage?.({
+      data: JSON.stringify({ type: "AUTH_OK", conn_id: "c1", server_time: "t" }),
+    });
     socket.onmessage?.({ data: JSON.stringify({ type: "SUBSCRIBED", sub_id: "live", seq: 0 }) });
     socket.drop();
 
@@ -498,14 +500,23 @@ describe("realtimeClient sending", () => {
   /** Collab payloads from PUBLISH frames (skips AUTH and other control). */
   function collabTypes(socket: FakeSocket): string[] {
     return socket.sent
-      .map((wire) => JSON.parse(wire) as { type?: string; event_type?: string; payload?: { type?: string } })
+      .map(
+        (wire) =>
+          JSON.parse(wire) as { type?: string; event_type?: string; payload?: { type?: string } },
+      )
       .filter((frame) => frame.type === "PUBLISH")
       .map((frame) => frame.event_type ?? frame.payload?.type ?? "");
   }
 
   function collabPayloads(socket: FakeSocket): { type: string; claims?: Record<string, number> }[] {
     return socket.sent
-      .map((wire) => JSON.parse(wire) as { type?: string; payload?: { type: string; claims?: Record<string, number> } })
+      .map(
+        (wire) =>
+          JSON.parse(wire) as {
+            type?: string;
+            payload?: { type: string; claims?: Record<string, number> };
+          },
+      )
       .filter((frame) => frame.type === "PUBLISH" && frame.payload)
       .map((frame) => frame.payload!);
   }
@@ -634,7 +645,13 @@ describe("realtimeClient keeping everyone up to date", () => {
     /** Collab payloads from PUBLISH frames — pings and AUTH are separate. */
     messages(): { type: string; [key: string]: unknown }[] {
       return this.sent
-        .map((wire) => JSON.parse(wire) as { type?: string; payload?: { type: string; [key: string]: unknown } })
+        .map(
+          (wire) =>
+            JSON.parse(wire) as {
+              type?: string;
+              payload?: { type: string; [key: string]: unknown };
+            },
+        )
         .filter((frame) => frame.type === "PUBLISH" && frame.payload)
         .map((frame) => frame.payload!);
     }

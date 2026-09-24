@@ -440,7 +440,12 @@ export class RealtimeChannel<T extends StampedElement> {
   private send(msg: RealtimeMessage<T>): Promise<void> {
     const socket = this.ws;
     if (!socket || !this.sessionReady || socket.readyState !== WebSocket.OPEN) {
-      if (msg.type === "join" || msg.type === "leave" || msg.type === "cursor" || msg.type === "presence") {
+      if (
+        msg.type === "join" ||
+        msg.type === "leave" ||
+        msg.type === "cursor" ||
+        msg.type === "presence"
+      ) {
         this.pendingOutbound = this.pendingOutbound.filter((m) => m.type !== msg.type);
       }
       this.pendingOutbound.push(msg);

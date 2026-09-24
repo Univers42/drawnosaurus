@@ -173,7 +173,10 @@ describe("roomCrypto without a secure context", () => {
   it("derives the same board room key with or without Web Crypto", async () => {
     const withSubtle = await deriveBoardRoomKeyBytes("lan-board");
     const real = globalThis.crypto.subtle;
-    Object.defineProperty(globalThis.crypto, "subtle", { configurable: true, get: () => undefined });
+    Object.defineProperty(globalThis.crypto, "subtle", {
+      configurable: true,
+      get: () => undefined,
+    });
     try {
       const without = await deriveBoardRoomKeyBytes("lan-board");
       expect(without).toEqual(withSubtle);
