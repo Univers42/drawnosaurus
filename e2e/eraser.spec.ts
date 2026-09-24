@@ -51,13 +51,13 @@ test.describe("eraser", () => {
     // the topmost element and stops needs one pass per copy, and each pass looks like it
     // did nothing.
     //
-    // Ctrl+D offsets each copy by +12,+12, so the copies are a diagonal staircase rather
+    // Ctrl+D offsets each copy by +10,+10, so the copies are a diagonal staircase rather
     // than a single pile — and the stroke below is the diagonal through their corners, so
     // it crosses every one of their outlines. (A transparent shape is erased by its
     // outline, the same rule that governs selecting one.)
     const board = await openBoard(page);
     const origin = { x: 600, y: 280 };
-    const step = 12;
+    const step = 10;
     const copies = 10;
 
     await pickTool(page, "Rectangle");
