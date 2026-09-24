@@ -141,4 +141,31 @@ test.describe("an arrow aimed into a Ctrl+D pack", () => {
       "the label opened on the new arrow",
     ).toEqual([arrow.id]);
   });
+
+  test("a double click whose first click binds in orbit types a free text, not a label", async ({
+    page,
+  }) => {
+    const board = await openBoard(page);
+    const { pack, lone } = await packAndLone(board);
+    // As above: 2.3 above the fourth square's top edge, inside the three under it. The
+    // first click binds the fourth in orbit and finishes; the end moves onto its outline,
+    // along the line to the lone square, away from the pointer — so the double click is
+    // not on the arrow, and excalidraw.com types a free text there.
+    const square = pack[3]!;
+    const target = await onPage(board, square.x + square.width / 2 + 1.3, square.y - 2.3);
+    await startPathTo(board, lone, target);
+
+    await page.mouse.dblclick(target.x, target.y);
+    await page.waitForTimeout(150);
+
+    expect(await activeTool(page)).toBe("select");
+    const arrow = await theArrow(board);
+    expect(arrow.endBinding).toBe(square.id);
+    expect(arrow.endBindMode).toBe("orbit");
+    const texts = (await sceneElements(page)).filter((el) => el.type === "text");
+    expect(
+      texts.map((el) => el.containerId ?? null),
+      "a free text, on no square and not on the arrow",
+    ).toEqual([null]);
+  });
 });
