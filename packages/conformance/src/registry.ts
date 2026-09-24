@@ -225,7 +225,13 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Frames carry a name and render it, but nothing edits it, and export has no per-frame mode.",
   },
-  { section: "🧩 Frames", status: "covered", tests: [`${ENGINE}/ci_frame.rs`] },
+  {
+    section: "🧩 Frames",
+    status: "covered",
+    // ci_group_locks_frames.rs: what is drawn or pasted inside a frame joins it and moves
+    // with it; groups join and leave whole.
+    tests: [`${ENGINE}/ci_frame.rs`, `${ENGINE}/ci_group_locks_frames.rs`],
+  },
   {
     section: "🔗 Element linking",
     status: "gap",
@@ -537,7 +543,11 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "See the Frames rule: naming is stored and drawn but not editable, and export has no frame mode.",
   },
-  { section: "12. Frames", status: "covered", tests: [`${ENGINE}/ci_frame.rs`] },
+  {
+    section: "12. Frames",
+    status: "covered",
+    tests: [`${ENGINE}/ci_frame.rs`, `${ENGINE}/ci_group_locks_frames.rs`],
+  },
   {
     section: "13. Embeds",
     text: /Lock|Loading state|Error state|Export fallback|View-only/,
