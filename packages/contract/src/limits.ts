@@ -19,6 +19,18 @@ export const MAX_POINTS_PER_ELEMENT = 10_000;
 
 export const MAX_ID_LENGTH = 128;
 export const MAX_TEXT_LENGTH = 10_000;
+/**
+ * The highest font family id a text may carry. Excalidraw's run 1–10 today; the headroom
+ * lets a newer client's font survive a trip through the server, which keeps the id and
+ * leaves drawing an unknown one to the engine (it falls back to the system stack).
+ */
+export const MAX_FONT_FAMILY = 64;
+/**
+ * A text's line height, as a multiple of its font size. Excalidraw's families use 1.15
+ * to 1.25; outside this range lines overlap or drift apart past any use.
+ */
+export const MIN_LINE_HEIGHT = 0.5;
+export const MAX_LINE_HEIGHT = 4;
 export const MAX_COLOR_LENGTH = 64;
 export const MAX_TITLE_LENGTH = 200;
 /** An embed's address. Long enough for any real link, signed ones included. */

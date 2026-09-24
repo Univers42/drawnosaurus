@@ -14,6 +14,29 @@ afterAll(async () => {
   await harness.close();
 });
 
+/** A label as boards saved before the text model carry it. */
+const LEGACY_LABEL = {
+  type: "text",
+  text: "hello\nworld",
+  fontSize: 20,
+  containerId: "box",
+} as const;
+/** The same label with every text model field. */
+const TEXT_MODEL = {
+  ...LEGACY_LABEL,
+  originalText: "hello world",
+  fontFamily: 5,
+  lineHeight: 1.15,
+  wrap: false,
+} as const;
+
+async function elementsById(slug: string): Promise<Map<unknown, Record<string, unknown>>> {
+  const board = (await app.inject({ method: "GET", url: `/v1/boards/${slug}` })).json() as {
+    scene: { elements: Record<string, unknown>[] };
+  };
+  return new Map(board.scene.elements.map((el) => [el.id, el]));
+}
+
 describe("board lifecycle", () => {
   it("creates, reads back, and exposes the rev as an ETag", async () => {
     const created = await app.inject({
@@ -112,6 +135,20 @@ describe("element reconciliation", () => {
     expect(byId.get("frame")?.name).toBe("Sprint 12");
     expect(byId.get("video")?.embedUrl).toBe("https://www.youtube.com/embed/abc");
     expect(byId.get("note")?.frameId).toBe("frame");
+  });
+
+  it("gives back a text's source, family, line height and wrap, and adds none", async () => {
+    // Stripped on the way in, a label would lose its source text on every save and come
+    // back with its soft line breaks turned into hard ones.
+    const slug = await createBoard(app);
+    const modern = element({ id: "modern", ...TEXT_MODEL });
+    const legacy = element({ id: "legacy", ...LEGACY_LABEL });
+    expect((await patch(slug, { elements: [modern, legacy] })).statusCode).toBe(200);
+
+    const byId = await elementsById(slug);
+    expect(byId.get("modern")).toEqual(modern);
+    // Nothing is defaulted on the way through: absent is what every older board carries.
+    expect(byId.get("legacy")).toEqual(legacy);
   });
 
   it("keeps the newer stamp and reports the stale write as rejected", async () => {
@@ -261,6 +298,21 @@ describe("full replace", () => {
 
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toMatchObject({ title: "Renamed", elementCount: 1 });
+  });
+
+  it("keeps a text's source, family, line height and wrap", async () => {
+    const slug = await createBoard(app);
+    const modern = element({ id: "modern", ...TEXT_MODEL });
+
+    const replaced = await app.inject({
+      method: "PUT",
+      url: `/v1/boards/${slug}`,
+      headers: { "if-match": "*" },
+      payload: { type: "osidraw", version: 1, elements: [modern] },
+    });
+
+    expect(replaced.statusCode).toBe(200);
+    expect((await elementsById(slug)).get("modern")).toEqual(modern);
   });
 
   it("accepts * for a caller that just wants to overwrite", async () => {
