@@ -14,7 +14,7 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { DrawPeer } from "@osionos/draw-engine/types";
   import { cursorForTool, styleOf } from "./style.ts";
-  import { zoomPercent } from "./camera.ts";
+  import { screenFontPx, zoomPercent } from "./camera.ts";
   import {
     persistCanvasBackground,
     persistThemePreference,
@@ -1362,7 +1362,7 @@
     <DrawTextEditor
       {engine}
       request={textEdit}
-      fontSizePx={(textEdit.fontSize * zoom) / 100}
+      fontSizePx={screenFontPx(textEdit.fontSize, engine.getFontSize(), zoom)}
       onDraft={(id, text) => {
         textDraft = { id, text };
         if (realtime) startPreviews();
