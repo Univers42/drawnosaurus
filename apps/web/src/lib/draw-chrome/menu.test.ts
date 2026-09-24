@@ -54,6 +54,19 @@ describe("menuElementFromSelection", () => {
     ).toBeNull();
   });
 
+  it("offers to vectorize one image, and only one that is unlocked", () => {
+    const image = el({ id: "i", type: "image" });
+    expect(menuElementFromSelection([image], false, false)?.vectorizeId).toBe("i");
+    expect(menuElementFromSelection([image], true, false)?.vectorizeId).toBeNull();
+    expect(
+      menuElementFromSelection([image, el({ id: "r", type: "rectangle" })], false, false)
+        ?.vectorizeId,
+    ).toBeNull();
+    expect(
+      menuElementFromSelection([el({ id: "e", type: "embed" })], false, false)?.vectorizeId,
+    ).toBeNull();
+  });
+
   it("returns null on empty canvas", () => {
     expect(menuElementFromSelection([], false, false)).toBeNull();
   });

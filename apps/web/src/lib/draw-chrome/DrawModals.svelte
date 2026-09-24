@@ -8,6 +8,7 @@
   import DrawShareModal from "./DrawShareModal.svelte";
   import DrawShortcutsDialog from "./DrawShortcutsDialog.svelte";
   import DrawContextMenu from "./DrawContextMenu.svelte";
+  import VectorizeDialog from "./VectorizeDialog.svelte";
 
   let {
     engine,
@@ -37,6 +38,9 @@
     onEditEmbedLink: (id: string) => void;
   } = $props();
 
+  /** The image the Vectorize dialog is open for — opened from the context menu only. */
+  let vectorizeId = $state<string | null>(null);
+
   /**
    * One Escape handler for every layer instead of one inside each dialog. These stack
    * — export and mermaid are opened *from* the main menu — so the key has to dismiss
@@ -47,6 +51,7 @@
     if (event.key !== "Escape") return;
 
     if (menu) menu = null;
+    else if (vectorizeId) vectorizeId = null;
     else if (showExport) showExport = false;
     else if (showMermaid) showMermaid = false;
     else if (showShare) showShare = false;
@@ -76,6 +81,10 @@
   <DrawShortcutsDialog onClose={() => (showShortcuts = false)} />
 {/if}
 
+{#if vectorizeId}
+  <VectorizeDialog {engine} imageId={vectorizeId} onClose={() => (vectorizeId = null)} />
+{/if}
+
 {#if menu}
   <DrawContextMenu
     x={menu.x}
@@ -94,6 +103,10 @@
     onEditLink={(id) => {
       menu = null;
       onEditEmbedLink(id);
+    }}
+    onVectorize={(id) => {
+      menu = null;
+      vectorizeId = id;
     }}
     onClose={() => {
       menu = null;

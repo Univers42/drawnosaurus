@@ -12,6 +12,7 @@
     onPickArrowhead,
     onRun,
     onEditLink,
+    onVectorize,
     onClose,
   }: {
     x: number;
@@ -20,6 +21,7 @@
     onPickArrowhead: (patch: { start?: Arrowhead; end?: Arrowhead }) => void;
     onRun: (action: (engine: DrawEngine, at: { x: number; y: number }) => void) => void;
     onEditLink: (id: string) => void;
+    onVectorize: (id: string) => void;
     onClose: () => void;
   } = $props();
 
@@ -84,6 +86,14 @@
     {@const id = element.embedId}
     <button type="button" role="menuitem" onclick={() => onEditLink(id)}>
       <span>Edit link…</span>
+    </button>
+    <div class="rule" aria-hidden="true"></div>
+  {/if}
+
+  {#if element?.vectorizeId}
+    {@const id = element.vectorizeId}
+    <button type="button" role="menuitem" onclick={() => onVectorize(id)}>
+      <span>Vectorize image…</span>
     </button>
     <div class="rule" aria-hidden="true"></div>
   {/if}

@@ -19,6 +19,8 @@ export interface MenuElementInfo {
   grouped: boolean;
   /** The embed whose link can be changed: one, alone and unlocked. */
   embedId: string | null;
+  /** The image that can be vectorized: one, alone and unlocked. */
+  vectorizeId: string | null;
 }
 
 export const ARROWHEAD_KINDS: Arrowhead[] = ["none", "arrow", "triangle", "dot", "diamond", "bar"];
@@ -62,6 +64,7 @@ export function menuElementFromSelection(
   if (selected.length === 0) return null;
 
   const linear = selected.find((element) => isLinearElement(element));
+  const only = selected.length === 1 && !locked ? selected[0] : undefined;
   return {
     linear: linear
       ? {
@@ -72,7 +75,7 @@ export function menuElementFromSelection(
     locked,
     multi: selected.length > 1,
     grouped,
-    embedId:
-      selected.length === 1 && selected[0]?.type === "embed" && !locked ? selected[0].id : null,
+    embedId: only?.type === "embed" ? only.id : null,
+    vectorizeId: only?.type === "image" ? only.id : null,
   };
 }
