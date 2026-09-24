@@ -21,6 +21,7 @@
     showShare = $bindable(false),
     showShortcuts = $bindable(false),
     onInsertMermaid,
+    onEditEmbedLink,
   }: {
     engine: DrawEngine | null;
     slug?: string;
@@ -33,6 +34,7 @@
     showShare: boolean;
     showShortcuts: boolean;
     onInsertMermaid: (elements: DrawElementDto[]) => void;
+    onEditEmbedLink: (id: string) => void;
   } = $props();
 
   /**
@@ -88,6 +90,10 @@
     onRun={(action) => {
       if (engine && menu) action(engine, engine.screenToWorld(menu.x, menu.y));
       menu = null;
+    }}
+    onEditLink={(id) => {
+      menu = null;
+      onEditEmbedLink(id);
     }}
     onClose={() => {
       menu = null;

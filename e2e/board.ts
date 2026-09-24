@@ -147,6 +147,77 @@ export function stubRealtimeHandshake(socket: WebSocketRoute): void {
   });
 }
 
+/**
+ * A relay standing in for engine/realtime: AUTH/SUBSCRIBE, every PUBLISH becomes an
+ * EVENT for every other page, PING is answered, and each socket is named on AUTH_OK and
+ * announced as `gone` when it closes. Pass `join` as `openBoard`'s `live` handler on
+ * each page.
+ *
+ * `frames` holds the sealed (or plaintext) collab payloads that were relayed — none of
+ * the handshake or control words.
+ */
+export function relay() {
+  const sockets = new Map<WebSocketRoute, string>();
+  const frames: string[] = [];
+  let named = 0;
+  const join = (socket: WebSocketRoute) => {
+    named += 1;
+    const id = String(named);
+    sockets.set(socket, id);
+    socket.onMessage((message) => {
+      let msg: {
+        type?: string;
+        sub_id?: string;
+        topic?: string;
+        event_type?: string;
+        payload?: unknown;
+      };
+      try {
+        msg = JSON.parse(String(message)) as typeof msg;
+      } catch {
+        return;
+      }
+      if (msg.type === "AUTH") {
+        socket.send(
+          JSON.stringify({
+            type: "AUTH_OK",
+            conn_id: id,
+            server_time: new Date().toISOString(),
+          }),
+        );
+        return;
+      }
+      if (msg.type === "SUBSCRIBE") {
+        socket.send(
+          JSON.stringify({
+            type: "SUBSCRIBED",
+            sub_id: msg.sub_id ?? "live",
+            seq: 0,
+          }),
+        );
+        return;
+      }
+      if (msg.type === "PING") {
+        socket.send(JSON.stringify({ type: "PONG", server_time: new Date().toISOString() }));
+        return;
+      }
+      if (msg.type !== "PUBLISH") return;
+      frames.push(JSON.stringify(msg.payload ?? null));
+      const event = JSON.stringify({
+        type: "EVENT",
+        topic: msg.topic,
+        event: { event_type: msg.event_type, payload: msg.payload },
+      });
+      for (const other of sockets.keys()) if (other !== socket) other.send(event);
+    });
+    socket.onClose(() => {
+      sockets.delete(socket);
+      for (const other of sockets.keys()) other.send(`{"type":"gone","socket":"${id}"}`);
+    });
+  };
+  return { join, frames };
+}
+
 /** Navigates to a board with the API stubbed out, and waits for the engine to mount. */
 export async function openBoard(
   page: Page,

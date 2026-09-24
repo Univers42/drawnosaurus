@@ -1,4 +1,4 @@
-import { MongoClient, type Collection, type Db, type WithId } from "mongodb";
+import { MongoClient, type Collection, type Db, type ObjectId, type WithId } from "mongodb";
 import type { DrawElementDto, WorldBounds } from "@drawnosaurus/contract";
 
 /**
@@ -17,7 +17,7 @@ export interface BoardFields {
   ownerId: string;
   /** `.osidraw` envelope version, not the element stamp. */
   schemaVersion: number;
-  elements: DrawElementDto[];
+  elements: StoredElement[];
   bounds: WorldBounds | null;
   elementCount: number;
   /** Bumped on every write. Drives ETag / If-Match and the internal write retry. */
@@ -30,10 +30,31 @@ export interface BoardFields {
 /** A board as it comes back from a read. */
 export type BoardDoc = WithId<BoardFields>;
 
+/**
+ * An element as it is kept: an image's picture replaced by `picture`, the key of the
+ * document in `pictures` that holds it. See `boards/pictures.ts`.
+ */
+export type StoredElement = DrawElementDto & { picture?: string };
+
+/**
+ * One picture, out of its board's document: a board is one document, and MongoDB's
+ * 16MB ceiling on one was reached at two or three photos kept inline.
+ *
+ * `_id` is the board's id and the SHA-256 of the `data:` URL, so the same picture
+ * dropped twice on a board is kept once, and nothing outside the board can name it.
+ */
+export interface PictureDoc {
+  _id: string;
+  boardId: ObjectId;
+  dataUrl: string;
+  createdAt: Date;
+}
+
 export interface MongoHandle {
   client: MongoClient;
   db: Db;
   boards: Collection<BoardFields>;
+  pictures: Collection<PictureDoc>;
   close: () => Promise<void>;
 }
 
@@ -42,8 +63,9 @@ export async function connectMongo(url: string, dbName: string): Promise<MongoHa
   await client.connect();
   const db = client.db(dbName);
   const boards = db.collection<BoardFields>("boards");
+  const pictures = db.collection<PictureDoc>("pictures");
 
-  return { client, db, boards, close: () => client.close() };
+  return { client, db, boards, pictures, close: () => client.close() };
 }
 
 /**

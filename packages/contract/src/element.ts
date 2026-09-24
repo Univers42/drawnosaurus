@@ -6,6 +6,7 @@ import {
   MAX_IMAGE_DATA_URL_LENGTH,
   MAX_POINTS_PER_ELEMENT,
   MAX_TEXT_LENGTH,
+  MAX_URL_LENGTH,
 } from "./limits.ts";
 
 /**
@@ -38,6 +39,8 @@ export const STROKE_STYLES = ["solid", "dashed", "dotted"] as const;
 export const ARROWHEADS = ["none", "arrow", "triangle", "dot", "diamond", "bar"] as const;
 export const TEXT_ALIGNS = ["left", "center", "right"] as const;
 export const VERTICAL_ALIGNS = ["top", "middle", "bottom"] as const;
+/** How an arrow end sits on its shape: exactly on its anchor, or a gap clear of the outline. */
+export const BIND_MODES = ["inside", "orbit"] as const;
 
 /**
  * Rejects NaN and both infinities. Written as a refine rather than `.finite()`
@@ -60,6 +63,14 @@ const finiteInt = finite.refine((value) => Number.isInteger(value), {
 const color = z.string().min(1).max(MAX_COLOR_LENGTH);
 
 const point = z.tuple([finite, finite]);
+
+/**
+ * Where on a shape an arrow end is anchored: a ratio of the shape's unrotated width and
+ * height, `[0.5, 0.5]` its centre. Bounded as the engine clamps it
+ * (`FIXED_POINT_BOUND`), so a document cannot put an arrow end unboundedly far away.
+ */
+const anchorRatio = finite.min(-10).max(10);
+const fixedPoint = z.tuple([anchorRatio, anchorRatio]);
 
 /**
  * An image's picture: a base64 `data:image/…` URL and nothing else.
@@ -104,6 +115,13 @@ export const drawElementSchema = z.object({
 
   startBinding: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   endBinding: z.string().max(MAX_ID_LENGTH).nullable().optional(),
+  // Where each bound end sits on its shape, and how. Optional and undefaulted: an arrow
+  // saved before anchors existed carries neither, which the engine reads as the centre in
+  // orbit — exactly how every such arrow was always drawn.
+  startFixedPoint: fixedPoint.optional(),
+  endFixedPoint: fixedPoint.optional(),
+  startBindMode: z.enum(BIND_MODES).optional(),
+  endBindMode: z.enum(BIND_MODES).optional(),
   startArrowhead: z.enum(ARROWHEADS).optional(),
   endArrowhead: z.enum(ARROWHEADS).optional(),
 
@@ -132,10 +150,21 @@ export const drawElementSchema = z.object({
   // back, so a document is in the old shape at most once.
   groupId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   locked: z.boolean().optional(),
+  // The frame an element belongs to, and a frame's label. Missing here, both were
+  // stripped on the way in: after a reload nothing was inside any frame, so moving a
+  // frame left its contents behind, and every frame had lost its name.
+  frameId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
+  name: z.string().max(MAX_TEXT_LENGTH).nullable().optional(),
   // The picture an image element shows. Without it here zod stripped it on the way in,
   // so every image saved as an empty frame and came back after a reload as the grey
   // placeholder.
   dataUrl: imageDataUrl.optional(),
+  // The page an embed shows — a video, a document. The same story as `dataUrl`: absent
+  // from this schema, it was stripped, and every embed came back from the server as an
+  // empty box, for whoever opened the board next. Bounded and nothing more: the engine
+  // re-checks it against its list of providers before anything is framed
+  // (`scene/embed.rs`), so this is not where a page is let in.
+  embedUrl: z.string().max(MAX_URL_LENGTH).nullable().optional(),
 
   // The reconciliation stamp. `version` counts edits, `versionNonce` is random
   // per edit and breaks ties between concurrent writers.

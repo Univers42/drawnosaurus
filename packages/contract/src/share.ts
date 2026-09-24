@@ -16,13 +16,29 @@ export type ShareRole = z.infer<typeof shareRoleSchema>;
 export const tunnelStateSchema = z.enum(["off", "starting", "on", "failed", "unavailable"]);
 export type TunnelState = z.infer<typeof tunnelStateSchema>;
 
+/**
+ * The kind of network a link reaches this computer over, which is who can open it.
+ *
+ * A computer on the wired network only is out of reach of a laptop on the Wi-Fi wherever
+ * the two networks are kept apart — at 42 Madrid they are — and a link offered to both
+ * then fails for one of them without a word. `unknown` when nothing could tell.
+ */
+export const networkKindSchema = z.enum(["wired", "wifi", "unknown"]);
+export type NetworkKind = z.infer<typeof networkKindSchema>;
+
+export const lanLinkSchema = z.object({
+  origin: z.string().url(),
+  over: networkKindSchema,
+});
+export type LanLink = z.infer<typeof lanLinkSchema>;
+
 export const shareInfoSchema = z.object({
   /**
    * Origins on the local network, best first: the computer's DNS name when the network
-   * has one — `http://c2r19s1.42madrid.com:5273`, which works from the wired network and
-   * the Wi-Fi alike — then its addresses.
+   * has one — `http://c2r19s1.42madrid.com:5273` — then its addresses, each with the
+   * network it goes over.
    */
-  lan: z.array(z.string().url()),
+  lan: z.array(lanLinkSchema),
   /** The public origin through the tunnel, while it is on, or null. */
   public: z.string().url().nullable(),
   /** The internet link: off, starting, on, failed (with why), or not offered here. */

@@ -7,11 +7,14 @@
     engine,
     request,
     fontSizePx,
+    onDraft,
     onDone,
   }: {
     engine: DrawEngine;
     request: TextEditRequest;
     fontSizePx: number;
+    /** The text as it stands, on opening and at every keystroke — for the others to see. */
+    onDraft?: (id: string, text: string) => void;
     onDone: () => void;
   } = $props();
 
@@ -29,6 +32,7 @@
     node?.focus();
     node?.select();
     autoResize();
+    onDraft?.(request.id, value);
   });
 
   // Padding and border of the textarea itself, which sit outside the text box.
@@ -83,6 +87,7 @@
   oninput={(event) => {
     value = event.currentTarget.value;
     autoResize();
+    onDraft?.(request.id, value);
   }}
   onblur={() => {
     finish();

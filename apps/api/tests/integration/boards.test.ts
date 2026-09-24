@@ -94,6 +94,26 @@ describe("element reconciliation", () => {
     });
   });
 
+  it("gives back an embed's page, a frame's name and what is in a frame", async () => {
+    // Each was stripped on the way in: every video came back an empty box, every frame
+    // empty and nameless, for whoever opened the board next.
+    const slug = await createBoard(app);
+    const sent = [
+      element({ id: "frame", type: "frame", name: "Sprint 12" }),
+      element({ id: "video", type: "embed", embedUrl: "https://www.youtube.com/embed/abc" }),
+      element({ id: "note", frameId: "frame" }),
+    ];
+    expect((await patch(slug, { elements: sent })).statusCode).toBe(200);
+
+    const board = (await app.inject({ method: "GET", url: `/v1/boards/${slug}` })).json() as {
+      scene: { elements: Record<string, unknown>[] };
+    };
+    const byId = new Map(board.scene.elements.map((el) => [el.id, el]));
+    expect(byId.get("frame")?.name).toBe("Sprint 12");
+    expect(byId.get("video")?.embedUrl).toBe("https://www.youtube.com/embed/abc");
+    expect(byId.get("note")?.frameId).toBe("frame");
+  });
+
   it("keeps the newer stamp and reports the stale write as rejected", async () => {
     const slug = await createBoard(app);
     await patch(slug, { elements: [element({ id: "a", version: 5, x: 500 })] });

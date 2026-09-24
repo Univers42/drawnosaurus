@@ -32,9 +32,10 @@ make help    # every target
 Then open **http://localhost:5273**. The API is on **http://localhost:4300**, for tools on this
 computer only.
 
-**Drawing with someone on another computer** — wired, Wi-Fi, or anywhere on the internet — is one
-link from the board's **Share** button (with a QR code, and a button for the internet link): see
-**[docs/collaboration.md](docs/collaboration.md)**.
+**Drawing with someone on another computer** — on your network, or anywhere through the internet
+link — is one link from the board's **Share** button (with a QR code, and a button for the internet
+link). Each of you sees the other's shapes move as they move them, and what one has selected the
+other cannot touch. See **[docs/collaboration.md](docs/collaboration.md)**.
 
 > Host ports default to 5273/4300/27019/4402 instead of the usual 5173/4000/27017 because the sibling
 > osionos stack already owns those. Override per invocation: `make up API_PORT=4500 WEB_PORT=5500 REALTIME_PORT=4502`.

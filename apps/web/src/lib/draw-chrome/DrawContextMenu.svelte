@@ -11,6 +11,7 @@
     element,
     onPickArrowhead,
     onRun,
+    onEditLink,
     onClose,
   }: {
     x: number;
@@ -18,6 +19,7 @@
     element: MenuElementInfo | null;
     onPickArrowhead: (patch: { start?: Arrowhead; end?: Arrowhead }) => void;
     onRun: (action: (engine: DrawEngine, at: { x: number; y: number }) => void) => void;
+    onEditLink: (id: string) => void;
     onClose: () => void;
   } = $props();
 
@@ -75,6 +77,14 @@
       active={element.linear.end}
       onSelect={(kind) => onPickArrowhead({ end: kind })}
     />
+    <div class="rule" aria-hidden="true"></div>
+  {/if}
+
+  {#if element?.embedId}
+    {@const id = element.embedId}
+    <button type="button" role="menuitem" onclick={() => onEditLink(id)}>
+      <span>Edit link…</span>
+    </button>
     <div class="rule" aria-hidden="true"></div>
   {/if}
 

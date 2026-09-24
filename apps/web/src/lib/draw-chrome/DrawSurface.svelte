@@ -1,12 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { DrawCanvas } from "@osionos/draw-engine/svelte";
-  import {
-    DARK_THEME,
-    DEFAULT_ELEMENT_STYLE,
-    IDENTITY,
-    LIGHT_THEME,
-  } from "@osionos/draw-engine/types";
+  import { DARK_THEME, DEFAULT_ELEMENT_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
     DrawElement,
@@ -17,6 +12,7 @@
     TextEditRequest,
   } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
+  import type { DrawPeer } from "@osionos/draw-engine/types";
   import { cursorForTool, styleOf } from "./style.ts";
   import { zoomPercent } from "./camera.ts";
   import {
@@ -49,6 +45,7 @@
     frameStyle,
     isClick,
     isFrameCentre,
+    framesToMount,
     parseEmbedFrames,
     playMessage,
     sandboxFor,
@@ -66,8 +63,15 @@
   import {
     RealtimeChannel,
     type ConnectionStatus,
+    type Peer,
     type PeerCursor,
   } from "../realtime/realtimeClient.ts";
+  import {
+    claimSelection,
+    previewInterval,
+    resolvePeers,
+    type Claims,
+  } from "../realtime/peerClaims.ts";
   import { importRoomKey, resolveRoomKey } from "../realtime/roomCrypto.ts";
   import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
   import type { StampedElement, ScenePatch } from "../autosave/sceneDiff.ts";
@@ -79,7 +83,7 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
-  import { NOTICE_TEXT } from "./notices.ts";
+  import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
   import DrawModals from "./DrawModals.svelte";
@@ -171,9 +175,7 @@
   let textEdit = $state<TextEditRequest | null>(null);
   let zoom = $state(100);
   let contentVisible = $state(true);
-  // Seeded to identity so peer-cursor broadcast works before the first pan/zoom.
-  // The engine only emits onCameraChange when the camera actually moves.
-  let currentCamera = $state<Camera>(IDENTITY);
+  let currentCamera = $state<Camera | undefined>(undefined);
   let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
   let eraserTrailSvgPath = $state("");
   let stickyStartPoint: { x: number; y: number } | null = null;
@@ -201,6 +203,10 @@
   let liveHistory = $state({ everConnected: false, everFailed: false });
   const liveText = $derived(slug ? liveLabel(liveStatus, liveHistory) : null);
   const liveBroadcast = new LiveSceneBroadcaster<StampedElement>();
+  /** What peers hold and are doing, as the live link last said — see `syncPeers`. */
+  let peerStates: Peer<StampedElement>[] = [];
+  /** What the engine was last told, so a repeat is not a repaint. */
+  let toldEngine = "";
   let raf = 0;
   let pending: Camera | null = null;
   // The tool's cursor is the floor; the engine's hover answer wins when it has one, and
@@ -469,6 +475,8 @@
   }
 
   let showEmbed = $state(false);
+  /** The embed whose link the dialog is changing, rather than adding a new one. */
+  let editingEmbed = $state<{ id: string; url: string } | null>(null);
   /**
    * The live frames, in screen pixels, as the engine reports them.
    *
@@ -493,9 +501,13 @@
   /** The press that may turn out to be a click on an embed. */
   let embedPress: { x: number; y: number; at: number } | null = null;
   const embedIframes: Record<string, HTMLIFrameElement> = {};
+  /** The embeds that have been on screen, and so stay mounted — see `framesToMount`. */
+  const seenEmbeds = new Set<string>();
 
   function refreshEmbedFrames(): void {
-    embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : [];
+    embedFrames = engine
+      ? framesToMount(parseEmbedFrames(engine.embedFramesJson()), seenEmbeds)
+      : [];
     if (activeEmbed && !embedFrames.some((frame) => frame.id === activeEmbed)) {
       activeEmbed = null;
     }
@@ -604,6 +616,15 @@
       !event ||
       (event.button === 0 && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey);
     embedPress = plain ? { x: point.x, y: point.y, at: performance.now() } : null;
+    if (realtime && engine) {
+      // A press on something another person holds does nothing to it; say why, rather
+      // than leave it looking like the board stopped responding.
+      if (tool === "select" || tool === "eraser") {
+        const holder = engine.peerAt(point.x, point.y);
+        if (holder) notify(heldNotice(peerStates.find((p) => p.clientId === holder)?.name));
+      }
+      startPreviews();
+    }
     if (tool === "eraser") {
       // Only the trail is drawn here. What the sweep marks, how it fades and what the
       // release deletes are the engine's (`engine/eraser.rs`), so the press goes through
@@ -684,13 +705,7 @@
   function handleSceneChange(json: string): void {
     onSceneChange?.(json);
     refreshEmbedFrames();
-    // Observe even before the socket is up — otherwise early deltas are dropped and
-    // later patches are computed against a stale mirror. Only take (and mark sent)
-    // when the link can carry the patch; flushLive drains the rest on reconnect.
-    if (!realtime) {
-      liveBroadcast.observe(json);
-      return;
-    }
+    if (!realtime) return;
     liveBroadcast.observe(json);
     flushLive();
   }
@@ -709,10 +724,102 @@
     if (patch) realtime.sendPatch(patch);
   }
 
+  /**
+   * Tells the engine who holds what and what they are doing, once every claim has been
+   * settled against ours — see `peerClaims.ts`. Only when that changed: the engine
+   * repaints on every call.
+   */
+  function syncPeers(): void {
+    if (!engine || !realtime) return;
+    const resolved = resolvePeers(
+      { clientId: realtime.profile.clientId, claims: realtime.ownClaims },
+      peerStates,
+    );
+    const told = JSON.stringify(resolved);
+    if (told === toldEngine) return;
+    toldEngine = told;
+    engine.setPeers(resolved as unknown as DrawPeer[]);
+  }
+
+  /** Says what we now hold: the selection, each element with when it was taken. */
+  function claimSelected(ids: readonly string[]): void {
+    if (!realtime) return;
+    const previous: Claims = realtime.ownClaims;
+    const next = claimSelection(previous, ids, Date.now());
+    const same =
+      Object.keys(next).length === Object.keys(previous).length &&
+      Object.keys(next).every((id) => id in previous);
+    if (same) return;
+    realtime.setClaims(next);
+    // Ours changed, so who wins a race may have too.
+    syncPeers();
+  }
+
+  // Our gesture in progress, streamed to peers while it runs so a shape moves on their
+  // screens as it moves on ours. At most once per `previewInterval`, only when something
+  // changed and someone is there to see it, and ended once the gesture is: after its
+  // commit, which went out as a patch from the pointer-up itself.
+  let previewRaf = 0;
+  let previewSent = false;
+  let previewJson = "";
+  let previewAt = 0;
+  /**
+   * The text being typed, while the editor is open. Streamed like a gesture, so the words
+   * appear on everyone's screen as they are written — and held, so nobody moves or erases
+   * a text from under the person typing it.
+   */
+  let textDraft: { id: string; text: string } | null = null;
+
+  /** What the gesture in progress — or the text being typed — looks like right now. */
+  function gestureNow(current: DrawEngine): StampedElement[] {
+    if (textDraft) {
+      const typed = current.textPreview(textDraft.id, textDraft.text);
+      return typed ? [typed as unknown as StampedElement] : [];
+    }
+    return current.gestureElements() as unknown as StampedElement[];
+  }
+
+  function startPreviews(): void {
+    if (!previewRaf) previewRaf = requestAnimationFrame(previewTick);
+  }
+
+  function previewTick(): void {
+    previewRaf = 0;
+    if (!engine || !realtime) return;
+    const running = dragging || engine.linearInProgress() || textDraft !== null;
+    if (!running || peers.length === 0) {
+      if (previewSent) {
+        realtime.sendPreviewEnd();
+        previewSent = false;
+        previewJson = "";
+      }
+      if (!running) return;
+    } else if (
+      realtime.connectionStatus === "connected" &&
+      performance.now() - previewAt >= previewInterval(previewJson.length)
+    ) {
+      const elements = gestureNow(engine);
+      const json = JSON.stringify(elements);
+      if (elements.length > 0 && json !== previewJson) {
+        realtime.sendPreview(elements);
+        previewSent = true;
+        previewJson = json;
+        previewAt = performance.now();
+      }
+    }
+    previewRaf = requestAnimationFrame(previewTick);
+  }
+
   /** Merges a peer's patch — from the socket, or from the server when catching up. */
-  function applyRemote(patch: ScenePatch<StampedElement>): void {
+  function applyRemote(incoming: ScenePatch<StampedElement>): void {
     if (!engine) return;
-    if (!patch.elements?.length && !patch.order?.length) return;
+    if (!incoming.elements?.length && !incoming.order?.length) return;
+    // Pictures its sender left off, because this client has them: put back before
+    // anything reads the patch, or the autosave would save an image without its picture.
+    const elements = liveBroadcast.withPictures(incoming.elements ?? []);
+    const patch: ScenePatch<StampedElement> = incoming.order
+      ? { elements, order: incoming.order }
+      : { elements };
     // Merge by id, never paste. `pasteJson` mints fresh ids, so feeding remote edits
     // through it duplicated every one of them — and because the result was then
     // broadcast back, two clients grew the board without bound.
@@ -786,15 +893,16 @@
     media.addEventListener("change", onSystemThemeChange);
 
     let unsubPeers: (() => void) | undefined;
+    let unsubPeerState: (() => void) | undefined;
     let unsubStatus: (() => void) | undefined;
     let unsubPatch: (() => void) | undefined;
     let liveCancelled = false;
     if (slug) {
       // Seed the broadcaster from the loaded scene so the first stroke is a diff.
       liveBroadcast.reset(scene.toArray() as StampedElement[]);
-      // Board-scoped room key (or `#room=` override). Same board → same AES key so
-      // peers decrypt live frames without a prior share step. The API still only
-      // sees opaque sealed frames.
+      // Fragment room key never leaves the browser. Mint one if the URL has none so
+      // the share link becomes a capability URL; peers who open the same #room=
+      // derive the same AES key. The API only sees opaque sealed frames.
       void (async () => {
         const raw = await resolveRoomKey(slug, window.location);
         const roomKey = await importRoomKey(raw);
@@ -802,6 +910,24 @@
         realtime = new RealtimeChannel(slug, roomKey);
         unsubPeers = realtime.onPeers((list) => {
           peers = list;
+        });
+        unsubPeerState = realtime.onPeerState((list) => {
+          peerStates = list;
+          syncPeers();
+        });
+        // What was selected before the link existed is held from now.
+        if (engine) claimSelected(engine.getSelectedElements().map((element) => element.id));
+        // Whoever joins is sent what they lack, and this client is on joining: the
+        // server has only what has been saved. Sent first, so all of it is known here.
+        realtime.setSceneSync({
+          inventory: () => {
+            flushLive();
+            return liveBroadcast.inventory();
+          },
+          missing: (have) => {
+            flushLive();
+            return liveBroadcast.missing(have);
+          },
         });
         unsubStatus = realtime.onStatus((next) => {
           const reconnected = next === "connected" && liveHistory.everConnected;
@@ -825,6 +951,7 @@
       liveCancelled = true;
       media.removeEventListener("change", onSystemThemeChange);
       unsubPeers?.();
+      unsubPeerState?.();
       unsubStatus?.();
       unsubPatch?.();
       realtime?.disconnect();
@@ -834,6 +961,7 @@
   onDestroy(() => {
     if (raf) cancelAnimationFrame(raf);
     if (cursorRaf) cancelAnimationFrame(cursorRaf);
+    if (previewRaf) cancelAnimationFrame(previewRaf);
     eraserTrail.clear();
     realtime?.disconnect();
   });
@@ -891,7 +1019,7 @@
     hoverButtons = e.buttons !== 0;
     lastPointer = { x: sx, y: sy };
 
-    if (realtime) {
+    if (realtime && currentCamera) {
       // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
       cursorPending = {
         x: (sx - currentCamera.x) / currentCamera.scale,
@@ -1057,6 +1185,9 @@
       {onCameraChange}
       onReady={(next) => {
         engine = next;
+        // Known from the start rather than from the first pan: the cursor we send and
+        // the peers' cursors we draw are both placed with it, and without it ours was
+        // never sent and theirs sat at the corner until someone moved the camera.
         currentCamera = next.camera;
         zoom = zoomPercent(next.camera.scale);
         next.setGrid(grid);
@@ -1064,6 +1195,8 @@
         syncStyle(next);
         exposeForDevTools(next);
         refreshEmbedFrames();
+        toldEngine = "";
+        syncPeers();
         onReady?.(next);
       }}
       onToolChange={(next: DrawTool) => {
@@ -1080,6 +1213,7 @@
         selectedCount = ids.length;
         selection = engine?.getSelectedElements() ?? [];
         syncStyle(engine);
+        claimSelected(ids);
       }}
       onNotice={(notice) => notify(NOTICE_TEXT[notice])}
       onRequestTextEdit={(request) => {
@@ -1166,7 +1300,19 @@
     <p class="image-notice" role="status">{imageNotice}</p>
   {/if}
 
-  {#if showEmbed}
+  {#if editingEmbed}
+    {@const { id, url } = editingEmbed}
+    <DrawEmbedModal
+      {engine}
+      initial={url}
+      onInsert={(next) => {
+        if (engine?.setEmbedUrl(id, next)) refreshEmbedFrames();
+      }}
+      onClose={() => {
+        editingEmbed = null;
+      }}
+    />
+  {:else if showEmbed}
     <DrawEmbedModal
       {engine}
       onInsert={insertEmbed}
@@ -1218,7 +1364,14 @@
       {engine}
       request={textEdit}
       fontSizePx={(textEdit.fontSize * zoom) / 100}
-      onDone={() => (textEdit = null)}
+      onDraft={(id, text) => {
+        textDraft = { id, text };
+        if (realtime) startPreviews();
+      }}
+      onDone={() => {
+        textEdit = null;
+        textDraft = null;
+      }}
     />
   {/if}
 
@@ -1233,6 +1386,10 @@
     bind:showMermaid
     bind:showShare
     bind:showShortcuts
+    onEditEmbedLink={(id) => {
+      const url = embedFrames.find((frame) => frame.id === id)?.url;
+      if (url) editingEmbed = { id, url };
+    }}
     onInsertMermaid={(elements) => {
       if (engine) engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements }));
     }}

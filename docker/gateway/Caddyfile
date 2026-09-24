@@ -41,6 +41,12 @@
 		reverse_proxy api:4000
 	}
 
+	# Live collab (engine/realtime). Same origin as the page so network and tunnel
+	# guests do not need a host-only realtime URL.
+	handle /ws {
+		reverse_proxy realtime:4000
+	}
+
 	handle {
 		reverse_proxy web:3000
 	}

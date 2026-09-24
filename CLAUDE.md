@@ -38,18 +38,21 @@ thing crossing between them is an `.osidraw` scene document.
 Everything runs in Docker via the Makefile; there is no host Node requirement for the gate.
 `make help` lists every target.
 
-| Command                               | What it does                                             |
-| ------------------------------------- | -------------------------------------------------------- |
-| `make all`                            | submodule → WASM → deps → quality gate → running stack   |
-| `make up`                             | mongo + realtime + api + web (:5273 / :4402 / :4300 / :27019) |
-| `make dev`                            | Vite + API + realtime hot stack (:5373 / :4373 / :4473)      |
-| `make verify`                         | what CI runs: `quality` + integration tests              |
-| `make quality`                        | typecheck + lint + format + unit tests                   |
-| `make test` / `make test-integration` | unit tests / API tests against a real mongod             |
-| `make test-e2e`                       | Playwright, **on the host** (installs chromium first)    |
-| `make conformance`                    | the `prompt/*.md` coverage matrix                        |
-| `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate |
-| `make shell`                          | bash in the tooling container                            |
+| Command                               | What it does                                                  |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `make all`                            | submodule → WASM → deps → quality gate → running stack        |
+| `make up`                             | gateway + mongo + realtime + api + web (:5273 / :5274 / :4402) |
+| `make share` / `make unshare`         | put the running stack on the internet / take it off           |
+| `make dev`                            | Vite + API + realtime hot stack (:5373 / :4373 / :4473)       |
+| `make verify`                         | what CI runs: `quality` + integration tests                   |
+| `make quality`                        | typecheck + lint + format + unit tests                        |
+| `make test` / `make test-integration` | unit tests / API tests against a real mongod                  |
+| `make test-e2e`                       | Playwright, **on the host** (installs chromium first)         |
+| `make conformance`                    | the `prompt/*.md` coverage matrix                             |
+| `make wasm`                           | force-rebuild `engine/pkg` after touching the Rust crate      |
+| `make stale`                          | exits 1 if the running stack isn't built from this checkout   |
+| `make parity`                         | `perf/` benchmark against Excalidraw (`make parity-deps` 1st) |
+| `make shell`                          | bash in the tooling container                                 |
 
 Host ports are non-standard (5273/4300/27019/4402/5373/4373/4473, and 5473 for the browser suite's own
 Vite) because a sibling stack owns the usual ones. The suite's port is kept apart from `make dev`'s
@@ -147,9 +150,32 @@ scoped by its result, so cross-owner access is impossible by construction. `AUTH
 request to one owner; `AUTH_MODE=bearer` refuses to boot rather than serve everything to everyone.
 Replacing auth is a change to `resolveOwner` and nothing else.
 
+### Live: holds and previews
+
+Beside patches, the live link carries `presence` (what each person has selected, each element
+with when they took it) and `preview` / `preview-end` (a gesture in progress, streamed at most
+every `previewInterval`). `apps/web/src/lib/realtime/peerClaims.ts` settles a race — earlier
+claim, then smaller client id — identically on every side, and `engine.setPeers` enforces the
+result: what a peer holds is untouchable, exactly like a locked element (select, marquee,
+eraser, text edit, undo), and previews are painted as live but never enter the scene, history or
+autosave (`engine/crates/draw-engine/src/engine/peers.rs`). A preview carries the pre-gesture
+version, so a commit outranks it whichever arrives first. Frames go out in send order: sealing
+is async, and a preview landing after its end would freeze a shape mid-move. A text being typed
+is streamed the same way (`engine.textPreview`).
+
+The server only has what has been saved, so a `join` carries the newcomer's inventory (each
+id with its stamp) and everyone there answers with a `sync` of what it lacks plus their own
+inventory, which the newcomer answers with what _they_ lack — the same exchange brings a
+client back from a dropped link (`liveBroadcast.ts` › `inventory` / `missing`). The live route
+stays blind but answers `{"type":"ping"}`; a client that stops hearing anything reconnects,
+because a dead link can read as open for minutes. It also sends plaintext `welcome` / `gone`
+naming its own sockets, so what someone held is let go the moment their page goes. Client ids
+are per page, never stored: a duplicated tab copies `sessionStorage`. Pictures go to each side
+once (`docs/reference/images.md`).
+
 ### Web app shape
 
-`apps/web/src/lib/draw-chrome/` is the editor chrome. `DrawSurface.svelte` (~1k lines) is the
+`apps/web/src/lib/draw-chrome/` is the editor chrome. `DrawSurface.svelte` (~1.4k lines) is the
 orchestrator that mounts the engine and owns tool/theme/selection state; everything testable is
 factored into plain `.ts` modules beside it (`tools.ts`, `menu.ts`, `theme.ts`, `inspector.ts`,
 `style.ts`, `camera.ts`, `shapeActions.ts`, …) each with a `.test.ts`. **Unit tests target the `.ts`
@@ -214,6 +240,8 @@ spec stubs `/v1/**` and the websocket in `e2e/board.ts`. Kept out of `make quali
   source into its import graph; `apps/api` and `packages/contract` keep the full set.
 - **Integration tests run against a real mongod, never a mock**, and fail loudly without `MONGO_URL`
   rather than skipping — a skipped test reads as a passing one.
+- A container left up while commits land keeps serving the old code, which looks exactly like a
+  fix that didn't work. Run `make stale` before debugging against `make up`.
 - `make dev` sets `VITE_USE_POLLING=1`: this checkout is bind-mounted from a network filesystem where
   inotify does not reach, and without polling Vite serves what it compiled at startup — a silent
   failure that survives rebuilds and looks like a change that was never made.

@@ -6,6 +6,7 @@ import {
   frameInnerStyle,
   frameSrc,
   frameStyle,
+  framesToMount,
   isClick,
   isFrameCentre,
   parseEmbedFrames,
@@ -33,20 +34,22 @@ describe("the sandbox an embed runs in", () => {
   it("never grants same-origin by default", () => {
     // `allow-scripts` plus `allow-same-origin` lets a frame remove its own sandbox, so
     // the pair is a decision, not a default.
-    const sandbox = sandboxFor({ allowSameOrigin: false });
+    const sandbox = sandboxFor({ kind: "generic", allowSameOrigin: false });
     expect(sandbox).toContain("allow-scripts");
     expect(sandbox).not.toContain("allow-same-origin");
   });
 
   it("grants it only when the engine said to", () => {
-    expect(sandboxFor({ allowSameOrigin: true })).toContain("allow-same-origin");
+    expect(sandboxFor({ kind: "generic", allowSameOrigin: true })).toContain("allow-same-origin");
   });
 
   it("never grants top-level navigation", () => {
     // A framed page that can navigate the top level can replace the whole board with
     // itself, which is the worst thing an embed can do.
-    for (const allowSameOrigin of [true, false]) {
-      expect(sandboxFor({ allowSameOrigin })).not.toContain("allow-top-navigation");
+    for (const kind of ["video", "generic"] as const) {
+      for (const allowSameOrigin of [true, false]) {
+        expect(sandboxFor({ kind, allowSameOrigin })).not.toContain("allow-top-navigation");
+      }
     }
   });
 });
@@ -65,8 +68,18 @@ describe("what a frame is loaded with", () => {
     expect(EMBED_ALLOW).toContain("encrypted-media");
   });
 
-  it("lets a link out of the frame open as an ordinary tab", () => {
-    expect(sandboxFor({ allowSameOrigin: true })).toContain("allow-popups-to-escape-sandbox");
+  it("lets a page's link out of the frame open as an ordinary tab", () => {
+    expect(sandboxFor({ kind: "generic", allowSameOrigin: true })).toContain(
+      "allow-popups-to-escape-sandbox",
+    );
+  });
+
+  it("keeps a player on the board: a click on its title or a suggestion goes nowhere", () => {
+    // YouTube's embed sends those to youtube.com and cannot be told otherwise.
+    const sandbox = sandboxFor({ kind: "video", allowSameOrigin: true });
+    expect(sandbox).not.toContain("allow-popups");
+    expect(sandbox).toContain("allow-scripts");
+    expect(sandbox).toContain("allow-same-origin");
   });
 
   it("tells Twitch which site is embedding it, and nobody else", () => {
@@ -176,5 +189,29 @@ describe("the list shown when a link is refused", () => {
       expect(host, host).not.toContain("/");
       expect(host, host).not.toContain(":");
     }
+  });
+});
+
+describe("framesToMount", () => {
+  it("keeps a frame that has been seen once it scrolls out of view", () => {
+    const seen = new Set<string>();
+    expect(framesToMount([frame({ visible: true })], seen)).toHaveLength(1);
+    // Unmounting it here is what stopped a playing video on a pan.
+    expect(framesToMount([frame({ visible: false })], seen)).toHaveLength(1);
+  });
+
+  it("never mounts a frame nobody has seen", () => {
+    expect(framesToMount([frame({ visible: false })], new Set())).toEqual([]);
+  });
+
+  it("forgets a frame that left the board", () => {
+    const seen = new Set<string>();
+    framesToMount([frame({ visible: true })], seen);
+    framesToMount([], seen);
+    expect(framesToMount([frame({ visible: false })], seen)).toEqual([]);
+  });
+
+  it("mounts every frame from an engine that does not say", () => {
+    expect(framesToMount([frame()], new Set())).toHaveLength(1);
   });
 });

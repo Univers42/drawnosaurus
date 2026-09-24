@@ -17,6 +17,8 @@ export interface MenuElementInfo {
   locked: boolean;
   multi: boolean;
   grouped: boolean;
+  /** The embed whose link can be changed: one, alone and unlocked. */
+  embedId: string | null;
 }
 
 export const ARROWHEAD_KINDS: Arrowhead[] = ["none", "arrow", "triangle", "dot", "diamond", "bar"];
@@ -70,5 +72,7 @@ export function menuElementFromSelection(
     locked,
     multi: selected.length > 1,
     grouped,
+    embedId:
+      selected.length === 1 && selected[0]?.type === "embed" && !locked ? selected[0].id : null,
   };
 }

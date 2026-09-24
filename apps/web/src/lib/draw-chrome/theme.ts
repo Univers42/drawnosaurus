@@ -220,10 +220,11 @@ export function themeFromCss(
       background: canvasBackground ?? read("--surface", fallback.background),
       grid: read("--line", fallback.grid),
       accent: read("--accent", fallback.accent),
-      // Not a host token: the binding highlight is Excalidraw's own constant, and
-      // matching it is the point. It comes from the fallback theme rather than from
-      // the page's palette.
+      // Not host tokens: the binding highlight and its midpoint dot are Excalidraw's own
+      // constants, and matching them is the point. They come from the fallback theme
+      // rather than from the page's palette.
       bindingHighlight: fallback.bindingHighlight,
+      bindingMidpoint: fallback.bindingMidpoint,
     },
     ink: read("--ink", "#1e1e1e"),
   };

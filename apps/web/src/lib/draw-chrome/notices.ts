@@ -19,3 +19,11 @@ export const NOTICE_TEXT: Record<DrawNotice, string> = {
   "fill-region-not-closed": "Couldn't find an enclosed region to fill here.",
   "fill-region-too-complex": "This region is too complex to fill.",
 };
+
+/**
+ * What a click on something another person holds says, instead of doing nothing: whose
+ * it is, and that it comes back on its own. See `engine/peers.rs`.
+ */
+export function heldNotice(name: string | undefined): string {
+  return `${name?.trim() || "Someone"} is working on this — it is theirs until they let go.`;
+}

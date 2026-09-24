@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IDENTITY, type Camera } from "@osionos/draw-engine/types";
+  import type { Camera } from "@osionos/draw-engine/types";
   import type { PeerCursor } from "../realtime/realtimeClient.ts";
   import { worldToScreen } from "./camera.ts";
 
@@ -12,12 +12,13 @@
   } = $props();
 
   function toScreen(x: number, y: number): { sx: number; sy: number } {
-    return worldToScreen(camera ?? IDENTITY, x, y);
+    if (!camera) return { sx: x, sy: y };
+    return worldToScreen(camera, x, y);
   }
 </script>
 
 <div class="peer-cursors-layer" aria-hidden="true">
-  {#each peers.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y)) as peer (peer.clientId)}
+  {#each peers.filter((peer) => peer.pointed) as peer (peer.clientId)}
     {@const { sx, sy } = toScreen(peer.x, peer.y)}
     <div class="cursor-wrapper" style:transform="translate({sx}px, {sy}px)">
       <svg class="cursor-icon" viewBox="0 0 16 16" width="20" height="20" fill={peer.color}>

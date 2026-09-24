@@ -42,6 +42,18 @@ describe("clampMenuPosition", () => {
 });
 
 describe("menuElementFromSelection", () => {
+  it("offers to change the link of one embed, and only one that is unlocked", () => {
+    const embed = el({ id: "e", type: "embed" });
+    expect(menuElementFromSelection([embed], false, false)?.embedId).toBe("e");
+    expect(menuElementFromSelection([embed], true, false)?.embedId).toBeNull();
+    expect(
+      menuElementFromSelection([embed, el({ id: "r", type: "rectangle" })], false, false)?.embedId,
+    ).toBeNull();
+    expect(
+      menuElementFromSelection([el({ id: "r", type: "rectangle" })], false, false)?.embedId,
+    ).toBeNull();
+  });
+
   it("returns null on empty canvas", () => {
     expect(menuElementFromSelection([], false, false)).toBeNull();
   });

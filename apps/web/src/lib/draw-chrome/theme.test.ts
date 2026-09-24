@@ -63,6 +63,7 @@ describe("themeFromCss", () => {
         // Carried from the fallback, not read from the page: it is Excalidraw's
         // constant and matching it exactly is the whole point.
         bindingHighlight: LIGHT_THEME.bindingHighlight,
+        bindingMidpoint: LIGHT_THEME.bindingMidpoint,
       },
       ink: "#1e1e1e",
     });

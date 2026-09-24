@@ -80,6 +80,9 @@ services:
       # Empty: the API is on the page's own origin, behind the gateway. It used to be
       # http://localhost:4300, which on a colleague's computer is their own machine.
       PUBLIC_API_URL: ""
+      # Empty too: live collab is `/ws` on the same origin, proxied by the gateway to
+      # the realtime service. A host-only `ws://localhost:4402` would fail for network guests.
+      PUBLIC_REALTIME_WS_URL: ""
     depends_on:
       - api
 
@@ -90,7 +93,6 @@ services:
     image: caddy:2.10.2-alpine
     volumes:
       - ./docker/gateway/Caddyfile:/etc/caddy/Caddyfile:ro
-      PUBLIC_REALTIME_WS_URL: ws://localhost:${REALTIME_PORT:-4402}/ws
     depends_on:
       - api
       - realtime

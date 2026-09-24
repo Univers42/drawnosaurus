@@ -74,6 +74,8 @@ export interface EmbedFrame {
   angle: number;
   /** The camera's zoom. */
   scale: number;
+  /** Whether any of it is on screen. Absent from an older engine, which culled instead. */
+  visible?: boolean;
 }
 
 /**
@@ -86,17 +88,17 @@ export interface EmbedFrame {
  * origin, so the grant lets its player use its own storage — but a `srcdoc` document
  * would have ours, and never gets it.
  *
- * `allow-popups-to-escape-sandbox` so that "Watch on YouTube" opens an ordinary tab
- * rather than one still sandboxed, where the site refuses to run.
+ * No popups for a player. YouTube's embed sends a click on its title, its channel or a
+ * suggested video to youtube.com, and offers no way to play it in place instead; the
+ * frame is another site's, so the click cannot be caught either. Refusing the popup is
+ * what keeps someone on the board — everything the player does in place still works.
+ *
+ * A page keeps them, with `allow-popups-to-escape-sandbox` so a link out of it opens an
+ * ordinary tab rather than one still sandboxed, where the site refuses to run.
  */
-export function sandboxFor(frame: Pick<EmbedFrame, "allowSameOrigin">): string {
-  const permissions = [
-    "allow-scripts",
-    "allow-popups",
-    "allow-popups-to-escape-sandbox",
-    "allow-presentation",
-    "allow-forms",
-  ];
+export function sandboxFor(frame: Pick<EmbedFrame, "kind" | "allowSameOrigin">): string {
+  const permissions = ["allow-scripts", "allow-presentation", "allow-forms"];
+  if (frame.kind !== "video") permissions.push("allow-popups", "allow-popups-to-escape-sandbox");
   if (frame.allowSameOrigin) permissions.push("allow-same-origin");
   return permissions.join(" ");
 }
@@ -230,6 +232,22 @@ export function playMessage(url: string): string | null {
     return JSON.stringify({ method: "play" });
   }
   return null;
+}
+
+/**
+ * The frames to mount: each one once it has been on screen, and from then on until it
+ * leaves the board.
+ *
+ * An `<iframe>` unmounted is a page destroyed, so a video panned or zoomed out of view
+ * stopped. One never seen is never loaded, so a board with thirty videos still runs only
+ * the players someone looked at — Excalidraw's `initializedEmbeds`. `seen` is updated in
+ * place and forgets an embed that is gone, so an undone deletion starts afresh.
+ */
+export function framesToMount(frames: EmbedFrame[], seen: Set<string>): EmbedFrame[] {
+  const live = new Set(frames.map((frame) => frame.id));
+  for (const id of seen) if (!live.has(id)) seen.delete(id);
+  for (const frame of frames) if (frame.visible !== false) seen.add(frame.id);
+  return frames.filter((frame) => seen.has(frame.id));
 }
 
 /** Parse what `engine.embedFrames()` returns, tolerating anything unexpected. */

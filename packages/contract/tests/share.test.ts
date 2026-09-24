@@ -40,7 +40,10 @@ describe("isAddressHost", () => {
 describe("shareInfoSchema", () => {
   it("takes network origins, the internet link or none, and the tunnel's state", () => {
     const info = shareInfoSchema.parse({
-      lan: ["http://c2r19s1.42madrid.com:5273", "http://10.12.19.1:5273"],
+      lan: [
+        { origin: "http://c2r19s1.42madrid.com:5273", over: "wired" },
+        { origin: "http://10.12.19.1:5273", over: "wired" },
+      ],
       public: "https://keen-lamp-rise.trycloudflare.com",
       tunnel: { state: "on" },
       canManage: true,
@@ -48,7 +51,7 @@ describe("shareInfoSchema", () => {
     expect(info.lan).toHaveLength(2);
     expect(() =>
       shareInfoSchema.parse({
-        lan: ["not a url"],
+        lan: [{ origin: "not a url", over: "wired" }],
         public: null,
         tunnel: { state: "off" },
         canManage: false,
@@ -60,6 +63,27 @@ describe("shareInfoSchema", () => {
         public: null,
         tunnel: { state: "sideways" },
         canManage: false,
+      }),
+    ).toThrow();
+  });
+
+  it("says which network each link goes over, so the dialog can say who can open it", () => {
+    const link = { origin: "http://10.12.19.1:5273", over: "wifi" };
+    const parse = (over: string) =>
+      shareInfoSchema.parse({
+        lan: [{ ...link, over }],
+        public: null,
+        tunnel: { state: "off" },
+        canManage: true,
+      });
+    for (const over of ["wired", "wifi", "unknown"]) expect(parse(over).lan[0]!.over).toBe(over);
+    expect(() => parse("ethernet")).toThrow();
+    expect(() =>
+      shareInfoSchema.parse({
+        lan: [link.origin],
+        public: null,
+        tunnel: { state: "off" },
+        canManage: true,
       }),
     ).toThrow();
   });
