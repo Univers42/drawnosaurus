@@ -39,6 +39,8 @@ export const STROKE_STYLES = ["solid", "dashed", "dotted"] as const;
 export const ARROWHEADS = ["none", "arrow", "triangle", "dot", "diamond", "bar"] as const;
 export const TEXT_ALIGNS = ["left", "center", "right"] as const;
 export const VERTICAL_ALIGNS = ["top", "middle", "bottom"] as const;
+/** How an arrow end sits on its shape: exactly on its anchor, or a gap clear of the outline. */
+export const BIND_MODES = ["inside", "orbit"] as const;
 
 /**
  * Rejects NaN and both infinities. Written as a refine rather than `.finite()`
@@ -61,6 +63,14 @@ const finiteInt = finite.refine((value) => Number.isInteger(value), {
 const color = z.string().min(1).max(MAX_COLOR_LENGTH);
 
 const point = z.tuple([finite, finite]);
+
+/**
+ * Where on a shape an arrow end is anchored: a ratio of the shape's unrotated width and
+ * height, `[0.5, 0.5]` its centre. Bounded as the engine clamps it
+ * (`FIXED_POINT_BOUND`), so a document cannot put an arrow end unboundedly far away.
+ */
+const anchorRatio = finite.min(-10).max(10);
+const fixedPoint = z.tuple([anchorRatio, anchorRatio]);
 
 /**
  * An image's picture: a base64 `data:image/…` URL and nothing else.
@@ -105,6 +115,13 @@ export const drawElementSchema = z.object({
 
   startBinding: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   endBinding: z.string().max(MAX_ID_LENGTH).nullable().optional(),
+  // Where each bound end sits on its shape, and how. Optional and undefaulted: an arrow
+  // saved before anchors existed carries neither, which the engine reads as the centre in
+  // orbit — exactly how every such arrow was always drawn.
+  startFixedPoint: fixedPoint.optional(),
+  endFixedPoint: fixedPoint.optional(),
+  startBindMode: z.enum(BIND_MODES).optional(),
+  endBindMode: z.enum(BIND_MODES).optional(),
   startArrowhead: z.enum(ARROWHEADS).optional(),
   endArrowhead: z.enum(ARROWHEADS).optional(),
 

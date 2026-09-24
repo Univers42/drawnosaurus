@@ -75,6 +75,29 @@ describe("the element schema against the engine's element", () => {
     expect(inside.frameId).toBe("frame-1");
   });
 
+  it("keeps where an arrow end is anchored, and bounds it", () => {
+    const arrow = drawElementSchema.parse(
+      element({
+        type: "arrow",
+        startBinding: "a",
+        startFixedPoint: [0.25, 1],
+        startBindMode: "inside",
+        endBinding: "b",
+        endFixedPoint: [0, 0.5],
+        endBindMode: "orbit",
+      }),
+    );
+    expect(arrow.startFixedPoint).toEqual([0.25, 1]);
+    expect(arrow.startBindMode).toBe("inside");
+    expect(arrow.endFixedPoint).toEqual([0, 0.5]);
+    expect(arrow.endBindMode).toBe("orbit");
+
+    expect(drawElementSchema.safeParse(element({ startFixedPoint: [11, 0.5] })).success).toBe(
+      false,
+    );
+    expect(drawElementSchema.safeParse({ ...element(), endBindMode: "skip" }).success).toBe(false);
+  });
+
   it("bounds an embed's address", () => {
     const long = `https://example.com/${"a".repeat(5000)}`;
     expect(drawElementSchema.safeParse(element({ type: "embed", embedUrl: long })).success).toBe(

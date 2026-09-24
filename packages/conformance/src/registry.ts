@@ -105,9 +105,17 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "Lines & arrows",
-    text: /Cycle\/change arrow type|fixed point/,
+    text: /Cycle\/change arrow type/,
     status: "gap",
-    why: "Arrow-type cycling and Alt-to-bind-at-a-fixed-point both need the elbow-arrow work; `fixed_point` is carried on the binding struct but nothing sets it.",
+    why: "Arrow-type cycling needs the elbow-arrow work.",
+  },
+  {
+    section: "Lines & arrows",
+    // Ctrl/Cmd and Alt while binding. The section rule below used to claim both while
+    // nothing read either key for binding at all.
+    text: /Prevent automatic binding|fixed point|automatic binding position/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding_anchor.rs`],
   },
   {
     section: "Lines & arrows",
@@ -220,7 +228,7 @@ export const RULES: readonly Rule[] = [
     section: "➡️ Advanced arrows",
     text: /[Ee]lbow|cardinality/,
     status: "gap",
-    why: "Elbow arrows are a milestone of their own: orthogonal routing plus the fixedPoint binding mode. Cardinality arrowheads wait on it.",
+    why: "Elbow arrows are a milestone of their own: orthogonal routing over the fixed-point bindings arrows already have. Cardinality arrowheads wait on it.",
   },
   {
     section: "➡️ Advanced arrows",
@@ -568,19 +576,32 @@ export const RULES: readonly Rule[] = [
     // it; double click enters, Escape and a click outside leave.
     text: /Nested|Enter group|Exit group|Select group/,
     status: "covered",
-    tests: [`${ENGINE}/ci_groups_nested.rs`, "e2e/groups.spec.ts"],
+    tests: [`${ENGINE}/ci_groups_nested.rs`, `${ENGINE}/ci_group_editing.rs`, "e2e/groups.spec.ts"],
   },
   {
     section: "16. Grouping",
     status: "covered",
-    tests: [`${ENGINE}/ci_edit.rs`, `${ENGINE}/ci_groups_nested.rs`, "e2e/groups.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_edit.rs`,
+      `${ENGINE}/ci_groups_nested.rs`,
+      `${ENGINE}/ci_group_structure.rs`,
+      `${ENGINE}/ci_group_locks_frames.rs`,
+      "e2e/groups.spec.ts",
+    ],
   },
-  { section: "17. Z-order", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
+  {
+    section: "17. Z-order",
+    status: "covered",
+    tests: [`${ENGINE}/ci_edit.rs`, `${ENGINE}/ci_group_structure.rs`],
+  },
   {
     section: "18. Binding system",
-    text: /priority|suggestion|visuali/i,
-    status: "gap",
-    why: "The binding *highlight* — Excalidraw strokes the candidate's own outline before you drop. Geometry is done; this is a pass in the interactive layer.",
+    // Which shape wins, the suggestion before anything is drawn, and an end that turns
+    // with its shape — the last claimed by the section rule while the attachment ignored
+    // the turn entirely.
+    text: /priority|suggestion|visuali|rotating target/i,
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding_anchor.rs`],
   },
   {
     section: "18. Binding system",
