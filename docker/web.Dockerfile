@@ -23,8 +23,8 @@ COPY engine/src ./engine/src
 COPY engine/pkg ./engine/pkg
 
 # Fail with a sentence rather than a Vite resolve error 40 lines deep.
-RUN test -f engine/pkg/draw_engine.js \
-	|| (echo "engine/pkg is missing: run 'make wasm' before building this image" >&2 && exit 1)
+RUN test -f engine/pkg/draw_engine.js && test -f engine/pkg/draw_trace.js \
+	|| (echo "engine/pkg is missing or stale: run 'make wasm' before building this image" >&2 && exit 1)
 
 # Declared here, after install, so a new commit invalidates only the build layer and not
 # the dependency cache. Vite bakes VITE_* into the bundle; `src/lib/build.ts` reads it.
