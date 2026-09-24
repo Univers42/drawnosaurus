@@ -24,12 +24,12 @@ const SHAPE = {
 
 const editor = (board: Board): Locator => board.page.locator("textarea[aria-label='Text editor']");
 
-async function drawShape(board: Board): Promise<void> {
+async function drawShape(board: Board, tool = "Rectangle", shape = SHAPE): Promise<void> {
   const { page, box } = board;
-  await pickTool(page, "Rectangle");
-  await page.mouse.move(box.x + SHAPE.left, box.y + SHAPE.top);
+  await pickTool(page, tool);
+  await page.mouse.move(box.x + shape.left, box.y + shape.top);
   await page.mouse.down();
-  await page.mouse.move(box.x + SHAPE.right, box.y + SHAPE.bottom, { steps: 8 });
+  await page.mouse.move(box.x + shape.right, box.y + shape.bottom, { steps: 8 });
   await page.mouse.up();
   await pickTool(page, "Select");
 }
@@ -62,6 +62,9 @@ function computed(node: Locator) {
       /** The width text wraps at: the box less its padding (`clientWidth` has no border). */
       contentWidth:
         textarea.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+      /** Where the text box starts on the page, inside the border and the padding. */
+      contentLeft:
+        textarea.getBoundingClientRect().left + textarea.clientLeft + parseFloat(style.paddingLeft),
       height: textarea.getBoundingClientRect().height,
     };
   });
@@ -121,4 +124,42 @@ test("a label wraps at its shape's width instead of widening", async ({ page }) 
   expect(style.contentWidth).toBeCloseTo(label!.width, 0);
   // And it grows down to show every line rather than scrolling them out of sight.
   expect(style.height).toBeGreaterThan(3 * 20 * 1.25);
+});
+
+test("a narrow shape's label wraps at the shape, not at the editor's minimum", async ({ page }) => {
+  const board = await openBoard(page);
+  // 40 wide, so its label has 24 to wrap in: less than free text's smallest editor.
+  const narrow = { ...SHAPE, right: SHAPE.left + 40 };
+  await drawShape(board, "Rectangle", narrow);
+  const node = await openLabelEditor(board);
+  const label = (await sceneElements(page)).find((element) => element.type === "text");
+
+  expect((await computed(node)).contentWidth).toBeCloseTo(label!.width, 0);
+});
+
+test("an arrow's label wraps at the arrow's width, centred on its middle", async ({ page }) => {
+  const board = await openBoard(page);
+  const arrow = { ...SHAPE, right: SHAPE.left + 500, bottom: SHAPE.top };
+  await drawShape(board, "Arrow", arrow);
+  const node = await openLabelEditor(board);
+  const empty = await computed(node);
+
+  const line = "the quick brown fox jumps over";
+  await node.fill(line);
+  const style = await computed(node);
+
+  // Its lines wrap at the arrow's width less the label padding on each side — not at
+  // the label, an 8-unit placeholder, whose editor wrapped every word onto its own line
+  // while the canvas drew them on one.
+  expect(style.contentWidth).toBeCloseTo(500 - 2 * 8, 0);
+  // So the line stays one: the editor does not grow as it is typed.
+  expect(style.height).toBe(empty.height);
+  // Centred on the arrow's middle, as the canvas centres the label's lines, give or take
+  // the editor's 7px of chrome.
+  const middle = board.box.x + (arrow.left + arrow.right) / 2;
+  expect(Math.abs(style.contentLeft + style.contentWidth / 2 - middle)).toBeLessThan(8);
+
+  await page.keyboard.press("Control+Enter");
+  const label = (await sceneElements(page)).find((element) => element.type === "text");
+  expect(label?.text, "and the canvas draws it on one line too").toBe(line);
 });

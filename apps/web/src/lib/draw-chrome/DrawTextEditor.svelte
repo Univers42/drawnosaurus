@@ -52,9 +52,9 @@
 
   function boxWidth(): number {
     if (isContainer && request.width) {
-      // Bound text is as wide as the shape holding it and wraps inside it, so the box
-      // must not grow with the text the way free-standing text does. The text box is the
-      // label's, so it wraps where the canvas does; the chrome goes around it.
+      // Bound text wraps inside the shape holding it, so the box must not grow with the
+      // text the way free-standing text does. The request carries the width the canvas
+      // wraps the lines at, so the text box is that and the chrome goes around it.
       return request.width + CHROME_PX;
     }
     // Measured by the engine, against the font the canvas draws with. This used to
@@ -140,5 +140,7 @@
        would have been typed centred and jumped right the moment the edit was committed. */
     white-space: pre-wrap;
     word-break: break-word;
+    /* Its width is the canvas's: a floor would wrap a narrow shape's label wider. */
+    min-width: 0;
   }
 </style>
