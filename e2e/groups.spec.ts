@@ -198,3 +198,37 @@ test.describe("Ctrl+G", () => {
     expect(await groupIdsOf(board, 2)).toHaveLength(0);
   });
 });
+
+/**
+ * Align and distribute move groups as blocks (`ci_align_units.rs`). What this adds is the
+ * inspector: it asks the engine what would move rather than counting elements, so three
+ * elements that are a group and a shape offer align and not distribute.
+ */
+test.describe("align and distribute", () => {
+  test("count a group as one", async ({ page }) => {
+    const board = await openBoard(page);
+    await drawFilledBoxes(board, 3);
+    await focusBoard(board);
+    await clickBox(board, 0);
+    await clickBox(board, 1, true);
+    await page.keyboard.press("Control+g");
+    await page.waitForTimeout(140);
+
+    await clickBox(board, 0);
+    await clickBox(board, 2, true);
+    expect(await selection(page), "the group and the third box").toHaveLength(3);
+
+    const distribute = page.getByRole("button", { name: "Distribute horizontally" });
+    await expect(distribute, "two blocks have nothing between them to space").toHaveCount(0);
+
+    const [first, second] = await sceneElements(page);
+    await page.getByRole("button", { name: "Align left" }).click();
+    await page.waitForTimeout(140);
+
+    // The group's left edge is the selection's, so the group stays and the box comes to it.
+    const [a, b, c] = await sceneElements(page);
+    expect(a!.x, "the group is one block").toBeCloseTo(first!.x, 1);
+    expect(b!.x, "so its second box keeps its place").toBeCloseTo(second!.x, 1);
+    expect(c!.x, "the lone box meets the group's left edge").toBeCloseTo(a!.x, 1);
+  });
+});
