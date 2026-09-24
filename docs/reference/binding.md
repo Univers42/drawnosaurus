@@ -4,9 +4,10 @@ Markers: **OBSERVED** (measured in the running editor), **VERIFIED** (read and
 measured), **INFERRED**, **IMPLEMENTATION DETAIL**, **UNKNOWN**. Oracle paths are
 relative to `third_party/excalidraw/packages/` at the SHA in `scripts/oracle-sha.txt`.
 
-The engine side lives in `engine/crates/draw-engine/src/scene/binding.rs`; its tests are
-`tests/ci_binding_anchor.rs` (the model), `ci_binding_overlap.rs` (never inside out),
-`ci_binding.rs`, `ci_arrow_drag.rs` and `ci_line_multipoint.rs`.
+The engine side lives in `engine/crates/draw-engine/src/scene/binding.rs` and
+`scene/outline_distance.rs`; its tests are `tests/ci_binding_anchor.rs` (the model),
+`ci_binding_dense.rs` (choosing among overlapping shapes), `ci_binding_overlap.rs` (never
+inside out), `ci_binding.rs`, `ci_arrow_drag.rs` and `ci_line_multipoint.rs`.
 
 ## What an end stores
 
@@ -38,15 +39,15 @@ shape's own frame (`focus_point` turns it with the shape), so both are gone.
 
 **VERIFIED** — `anchor_for_drop` transcribes `binding.ts:644-953`:
 
-| Where the end is let go                      | Binding                           |
-| -------------------------------------------- | --------------------------------- |
-| nowhere near a target                        | unbound                           |
-| near the shape the other end is bound to     | both ends `inside`, where put     |
-| inside a shape (geometric, fill-independent) | `inside`, exactly there           |
-| near one, Alt held                           | `inside`, exactly there           |
-| beside one, near a side midpoint (no grid)   | `orbit`, anchored at the midpoint |
-| beside one, otherwise                        | `orbit`, projected (below)        |
-| Ctrl/Cmd held                                | unbound (`App.tsx:5753-5761`)     |
+| Where the end is let go                     | Binding                           |
+| ------------------------------------------- | --------------------------------- |
+| nowhere near a target                       | unbound                           |
+| near the shape the other end is bound to    | both ends `inside`, where put     |
+| inside a shape's outline (fill-independent) | `inside`, exactly there           |
+| near one, Alt held                          | `inside`, exactly there           |
+| beside one, near a side midpoint (no grid)  | `orbit`, anchored at the midpoint |
+| beside one, otherwise                       | `orbit`, projected (below)        |
+| Ctrl/Cmd held                               | unbound (`App.tsx:5753-5761`)     |
 
 The projection (`element/src/utils.ts:697-787`) continues the arrow's own line — from
 the far anchor for a straight arrow, from the neighbouring point of a bent one —
@@ -57,12 +58,54 @@ height it was aimed. With Shift held the far end's orbit anchor is re-projected 
 the held angle survives (`binding.ts:933-950`). Shift and grid snapping both turn the
 midpoint snap off (`binding.ts:876-878`): it would pull the end off the angle or the grid.
 
+"Inside" is the painted outline (`is_inside`, `isPointInElement`,
+`collision.ts@1118751f:823-878`): the cut-away of a rounded corner is outside, and so is a
+point exactly on the outline — **OBSERVED** on excalidraw.com, a point on a square's edge
+binds it in orbit.
+
 A new arrow binds its tail at the press on the same terms
 (`App.tsx:10317-10339`). Whether the gesture was a drag or a click is read off the hand —
 screen pixels from press to release — never off the arrow, whose bound ends are pulled
-onto outlines and can be a few pixels apart, or collapsed, after a long drag. A path placed click by click finishes when a click binds it in
-orbit, or beside the shape it started from; a click _inside_ a shape places a waypoint,
-so a path can be routed across shapes (`App.tsx:10178-10205`).
+onto outlines and can be a few pixels apart, or collapsed, after a long drag. A path
+placed click by click finishes when a click binds it in orbit, or beside the shape it
+started from; a click _inside_ the chosen shape places a waypoint, so a path can be
+routed across shapes (`boundOutsideFromElsewhere` / `endOutsideSameElement`,
+`App.tsx@1118751f:10189-10215`; `binding.test.tsx@1118751f:240`, `:259`).
+
+**IMPLEMENTATION DETAIL, deliberate divergence** — the press is judged where it is: the
+point the hover just judged, so the outline the hover shows is what the click does
+(`ci_binding_dense.rs::the_highlight_is_what_the_click_does`). Excalidraw judges the press
+at its preview point (`multiElement.points[last]`, `App.tsx@1118751f:10170`), which its
+hover has already moved onto the outline gap of the shape it shows; re-tested there the
+point often lands inside another shape, and a click under an orbit outline places a
+waypoint instead of finishing. **OBSERVED** on excalidraw.com in a Ctrl+D pack: 13 of 48
+probes did that (the oracle finished 8 of 48 clicks, where the same rule judged at the
+press finishes every orbit).
+
+**VERIFIED** — a double click one of whose clicks finishes a click-mode path is about
+that path, never the shape under the pointer. Excalidraw's finished path is its one
+selected element when the `dblclick` arrives, so it is the only container on offer
+(`getTextBindableContainerAtPosition`, `App.tsx@1118751f:6831-6838`):
+
+| It finishes              | and lands                         | Opens                   |
+| ------------------------ | --------------------------------- | ----------------------- |
+| an arrow                 | on it, or within 30 of its middle | a label on the arrow    |
+| an arrow                 | anywhere else                     | a free text there       |
+| a line                   | anywhere                          | its points, and no text |
+| a path too short to keep | anywhere                          | nothing                 |
+
+(`App.tsx@1118751f:7199-7201`, `:7222-7234`, `:7356-7392`; `TEXT_TO_CENTER_SNAP_THRESHOLD`.)
+"Anywhere else" happens when the first click finishes, binding in orbit: the end moves
+onto the outline, along the line toward the shape's centre, away from the pointer.
+**OBSERVED** on excalidraw.com by element id and by the app's state at the `dblclick`: a
+second click that finishes on the first's waypoint labelled the arrow, inside a pack and
+over an empty board; of five double clicks whose first click bound in orbit, the two
+whose end stayed under the pointer labelled the arrow and the three whose end moved away
+typed a free text; a line opened its line editor with no text
+(`ci_binding_dense.rs::a_double_click_whose_first_click_ends_the_arrow`). The engine used
+to open a label on a shape under the pointer. It knows a double click is about the path
+by where the finishing press landed (within 35 px, `DOUBLE_TAP_POSITION_THRESHOLD`); a
+press anywhere else, a pan or another tool forgets it.
 
 **IMPLEMENTATION DETAIL, deliberate** — dropping one end on the other end's shape makes
 both `inside` only while it is there: the other end's binding as the drag found it is
@@ -102,41 +145,74 @@ scene units for every shape (`binding.ts:115-135`). A shape drawn deep inside a 
 presentation can be a unit across, and a six-unit gap floated its arrows shapes away
 from it. `binding_gap` caps the gap to a quarter of the shape's shorter side; for
 anything over 24 units — everything drawn at ordinary zoom — it is exactly Excalidraw's.
-The midpoint snap radius (16 px) and the diagonal inset are capped the same way. The
-reach for a bind is 32 screen pixels (`BINDING_HOVER_PX`), so a two-unit shape at 30× is
-as easy to hit as a sixty-unit one at 1× (`ci_binding_anchor.rs::binding_at_the_deepest_zoom`).
+The midpoint snap radius (16 px) and the diagonal inset are capped the same way.
+
+**VERIFIED** — the reach for a bind is Excalidraw's `maxBindingDistance_simple`
+(`binding.ts@1118751f:133-143`), in world units: `clamp(15 / (min(zoom, 1) · 1.5), 15, 30)`
+— 15 at zoom 1 and above, 25 at 0.4, at most 30. One number for the hover outline, the
+press that starts an arrow and the drop that ends it (`max_binding_distance`,
+`ci_binding_dense.rs::binding_reach_matches_oracle`). It replaced a reach of 32 screen
+pixels: at zoom 1 an end 16-32 units beside a shape no longer binds, zoomed in the reach
+is larger on screen than it was (450 px at 30×), and zoomed out it is smaller — 30 units
+is 3 px at 10% (`MIN_ZOOM`), where it was 32. Both are the oracle's.
 
 ## What an end can bind to
 
-**VERIFIED** — `arrow_target_among` follows `getHoveredElementForBinding`
-(`element/src/collision.ts:323-385`):
+**VERIFIED** — `arrow_target_among` transcribes the live oracle's
+`getBindingCandidates` + `getHoveredElementForBinding`
+(`element/src/collision.ts@1118751f:350-486`; #10753 4850bf33 "binding hit test based on
+distance" and dc2c16d9, two days after our pinned SHA — excalidraw.com serves 1118751f):
 
 - targets are rectangles, diamonds, ellipses, images, embeds, frames and free text
-  (`isBindableElement`, `typeChecks.ts:184-202`) — not a label, not a line or arrow,
-  not a locked element;
-- a candidate matches inside it or within the reach of its real, rotated outline — but
-  a frame only from outside, near its border, so a point inside a slide is aimed at
-  what the slide holds; and a shape inside a frame does not match where the frame clips
-  it from view (`bindingBorderTest`, `collision.ts:275-322`);
+  (`isBindableElement`, `typeChecks.ts:184-202`) — not a label, not a line or arrow;
+- each is measured by its **signed distance to its painted outline**
+  (`signed_outline_distance`: positive inside, negative outside; rounded corners are the
+  painter's quadratics, `distanceToElement`) and counts inside it, or outside within the
+  reach. A frame's corners are square, as the oracle's frames have no roundness
+  (`FRAME_STYLE.roundness: null`, `constants.ts@1118751f:209`) however ours are painted;
+  and a frame counts only from outside, so a point inside a slide is aimed at what the
+  slide holds; and a shape inside a frame is skipped where the frame clips it from view
+  (`isPointClippedByEnclosingFrame`, `collision.ts:283-298`);
 - candidates are walked top of the z-order first, and the walk **stops at the first
-  filled one the point is inside**: nothing hidden under a filled shape is bound through
-  it;
-- among what matched, the smallest `width² + height²` wins, so a shape nested inside
-  another is reachable however the two are stacked.
+  opaque one the point is inside** — a shape with a background, or a picture
+  (`isOpaqueForBinding`, `:346-348`). A locked shape is never a candidate, but an opaque
+  one still hides what is behind it (dc2c16d9);
+- the **nearest outline wins**, ties to the one on top (a stable sort). When the point
+  is inside the winner, a smaller shape it is also inside — overlapping the winner by
+  more than a quarter of its own area and under three quarters of the winner's size —
+  takes over, so a nested shape is reached from anywhere inside it. Sizes are each
+  shape's own box (`getElementBounds`, `bounds.ts@1118751f:176-209`): a turned diamond's
+  corners, a turned ellipse's curve, not the box around the turned box.
 
-**IMPLEMENTATION DETAIL, deliberate divergence** — equal sizes go to the one on top,
-which is what the eye picks; Excalidraw's stable sort then `pop()` happens to leave the
-lowest (`collision.ts:376-384`).
+So in a Ctrl+D pack of overlapping squares a point just outside one square's edge binds
+that square in orbit and a click there finishes the arrow, however many other squares the
+point is inside. Before, only a shape containing the point (or one nested in it) could
+win, so every click in a pack bound inside the topmost square around it and became a
+waypoint: 0 of 816 grid clicks in a 30-square pack finished, 457 do now; 48 of 48 probes
+measured on excalidraw.com agree, against 15 before (`ci_binding_dense.rs`).
 
-**IMPLEMENTATION DETAIL, deliberate divergence** — once the point is inside a shape,
-only that shape or one nested within it (its box inside the other's) can win.
-Excalidraw's walk stops at a filled shape the point is merely _near_, so a neighbour a
-few units off — on top, or smaller — takes a press made inside another shape; with a
-reach set in screen pixels that happened at every zoom. A shape nested in the one
-pressed is still reached from just outside its border.
+**IMPLEMENTATION DETAIL, shortcut** — a diamond's distance uses sharp vertices; the
+painted ones are rounded (at most w/32 at the tip). The frame-background occlusion of
+1118751f (`occludingFrameId`) is not ported: a frame has no background there
+(`hasBackground`), so it never applies.
 
-This replaces the two open questions this page used to carry: the tiebreak is read from
-the oracle (squared diagonal, not area), and fill does matter, but only as occlusion.
+**OBSERVED, mitigated** — a sticky note from the N tool is a group with a filled shadow
+rectangle 3 units down and right of the note, underneath. Beside the note's right or
+bottom edge the shadow's outline is the nearer one, so from about 1.5 units out to about
+18 (the reach past the shadow's edge) the rule binds the **shadow**: inside it, a
+waypoint, up to 3 units out, in orbit beyond. The oracle's rule gives the same answer on
+that scene; the previous rule bound the note once the point was outside the shadow
+(equal sizes, tie to the top). A new note's shadow is therefore **locked**
+(`createStickyNote`; `e2e/arrow-dense.spec.ts` › "an arrow aimed beside a sticky note"):
+never a candidate, and still an occluder. A group carries its locked members
+(`carried_by`, the eraser's `erased_with`) — **OBSERVED** with a new note: moved,
+duplicated, deleted and erased, its shadow went with it. **Open:** a note
+made before this change, or unlocked from the menu (which unlocks its shadow too), still
+offers the shadow. The fix is the planned single-element sticky note, whose migration
+must also rebind arrows bound to a shadow onto its note.
+
+Ctrl+D copies ten units down and right, as the oracle does (`DEFAULT_GRID_SIZE / 2`,
+`actionDuplicateSelection.tsx:78-79`); it was twelve.
 
 `bindable_among` / `bindable_at` remain for **labels** (a text placed into a container):
 rectangles, diamonds and ellipses, smallest area wins, not fill-aware.

@@ -49,6 +49,13 @@ export function createStickyNote(
   const shadowId = `sticky_shadow_${now}_${rand}`;
   const palette = STICKY_PALETTES[color] ?? STICKY_PALETTES.yellow;
 
+  // Locked, because an arrow end binds the shape whose outline is nearest, and beside the
+  // note's right and bottom edges that is the shadow's, three units further out. A locked
+  // shape is never an arrow's target, but still hides what is under it — Excalidraw's
+  // rule (dc2c16d9) — and it goes wherever its group goes.
+  // ponytail: a stop-gap until the note is one element with a painted shadow, as
+  // Excalidraw's `stickynote`; a note made before this, or unlocked from the menu, still
+  // offers its shadow.
   const shadowElement: DrawElementDto = {
     id: shadowId,
     type: "rectangle",
@@ -65,6 +72,7 @@ export function createStickyNote(
     roughness: 0,
     opacity: 16,
     roundness: 12,
+    locked: true,
     seed: Math.floor(Math.random() * 100_000),
     groupIds: [groupId],
     version: 1,
