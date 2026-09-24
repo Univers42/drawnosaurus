@@ -62,7 +62,10 @@ export interface SceneElement {
   id: string;
   type: string;
   isDeleted?: boolean;
+  strokeColor?: string;
   backgroundColor?: string;
+  strokeWidth?: number;
+  opacity?: number;
   x: number;
   y: number;
   width: number;
@@ -116,11 +119,15 @@ export const OPEN_CANVAS = { left: 440, top: 170, right: 1160, bottom: 650 } as 
  * named to itself on opening and to the others when it closes. Pass `join` as
  * `openBoard`'s `live` handler on each page.
  *
- * `frames` holds what was relayed, sealed, and none of the relay's own words.
+ * `frames` holds what was relayed, sealed, and none of the relay's own words. `hold`
+ * stops relaying what a socket sends, by the name it was given — "1" is the first page
+ * to join — which is how a spec keeps a message crossing the room for as long as it
+ * needs: the two sides of a race that is otherwise a few milliseconds wide.
  */
 export function relay() {
   const sockets = new Map<WebSocketRoute, string>();
   const frames: string[] = [];
+  const held = new Set<string>();
   let named = 0;
   const join = (socket: WebSocketRoute) => {
     named += 1;
@@ -133,6 +140,7 @@ export function relay() {
         socket.send('{"type":"pong"}');
         return;
       }
+      if (held.has(id)) return;
       frames.push(text);
       for (const other of sockets.keys()) if (other !== socket) other.send(text);
     });
@@ -141,7 +149,8 @@ export function relay() {
       for (const other of sockets.keys()) other.send(`{"type":"gone","socket":"${id}"}`);
     });
   };
-  return { join, frames };
+  const hold = (id: string) => held.add(id);
+  return { join, frames, hold };
 }
 
 /** Navigates to a board with the API stubbed out, and waits for the engine to mount. */
@@ -368,7 +377,11 @@ export async function focusBoard(board: Board): Promise<void> {
  * - a shape with a transparent background — the default — is hit on its *outline* only,
  *   so the middle of a rectangle is not on it. The top edge is.
  */
-export async function clickElement(board: Board, index: number): Promise<void> {
+export async function clickElement(
+  board: Board,
+  index: number,
+  options: { button?: "left" | "right" } = {},
+): Promise<void> {
   const at = await board.page.evaluate((which) => {
     const engine = window.__drawEngine!;
     const element = JSON.parse(engine.exportJson()).elements[which];
@@ -378,7 +391,7 @@ export async function clickElement(board: Board, index: number): Promise<void> {
       y: element.y * scale + y,
     };
   }, index);
-  await board.page.mouse.click(board.box.x + at.x, board.box.y + at.y);
+  await board.page.mouse.click(board.box.x + at.x, board.box.y + at.y, options);
 }
 
 /**
