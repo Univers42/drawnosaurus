@@ -17,7 +17,8 @@ cases, 161 steps, each citing its line).
   alone goes to the end of its frame's range, not of the board (`:543-621`) — with
   `[C1, C2, F, X]`, Bring to front on C1 gives `[C2, F, C1, X]`;
 - a **label** moves with its shape and is stepped over with it (`includeBoundTextElement`,
-  `:88-127`).
+  `:88-127`). It never moves without its shape: a label whose shape stays (locked, held
+  by a peer, or not selected) stays on it (`carried_by`, `edit/group.rs`).
 
 A frame's range is from its lowest member to its highest, whatever lies between, exactly as
 the oracle reads it (`getContiguousFrameRangeElements`, `:129-147`).
@@ -32,19 +33,23 @@ the oracle reads it (`getContiguousFrameRangeElements`, `:129-147`).
 | Ctrl + Shift + [, Ctrl/Cmd + ⌥ + [ | Send to back   |
 
 With Shift or Alt held the physical key decides (`event.code`), as the oracle's
-`actionZindex.tsx` matches it (`engine/src/host/keys.ts`).
+`actionZindex.tsx` matches it (`engine/src/host/keys.ts`). Zoom (Ctrl + = / + / - / 0) is read
+from the printed key and checked first, so Ctrl++ still zooms on a layout that puts + on a
+bracket key (Dvorak, QWERTZ). The oracle matches zoom by physical key too
+(`actionCanvas.tsx:171-173`), which there gives that chord to the z-order.
 
 ## Divergences
 
-| what                                | Excalidraw                                                                                           | here                                                                                                                                                                          |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a label's frame and groups          | the bound text carries its container's `frameId` and `groupIds` (`frame.ts:562-583`, `App.tsx:7081`) | a label carries no `frameId` (its shape holds the membership, `scene/frame.rs`) and an old one may carry no groups: both are read from its shape. The same on an oracle board |
-| a label whose shape is not live     | still finds the deleted shape (`zindex.ts:94-107`)                                                   | read as unlabelled: the engine restacks only the live stack, tombstones stay at the bottom (`Scene::set_order`)                                                               |
-| a locked element in the selection   | never there on its own — Select All skips locked elements (`actionSelectAll.ts:32-38`)               | this Select All takes them, to unlock from the menu; the command moves the carried set, so a loose locked element stays and a locked group member goes with its group         |
-| a peer's hold                       | —                                                                                                    | a frame child or label a peer holds still moves with what carries it: the stack is not stamped, so it takes nothing from their edit                                           |
-| to-the-end chords                   | Shift on Windows and Linux, Alt on macOS (`actionZindex.tsx`)                                        | both, on every platform                                                                                                                                                       |
-| a command that moves nothing        | the store records no step for unchanged elements                                                     | the same, and no scene is sent to the host                                                                                                                                    |
-| each frame's pass of Bring to front | scans the whole stack, once per frame whose children move (`getIndicesToMove`, `:36-70`)             | scans that frame's range: the same result, O(n) over the board (`cargo bench --bench editing -- reorder`)                                                                     |
+| what                                | Excalidraw                                                                                                                                                      | here                                                                                                                                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a label's frame and groups          | the bound text carries its container's `frameId` and `groupIds` (`frame.ts:562-583`, `App.tsx:7081`)                                                            | a label carries no `frameId` (its shape holds the membership, `scene/frame.rs`) and an old one may carry no groups: both are read from its shape. The same on an oracle board               |
+| a label whose shape is not live     | still finds the deleted shape (`zindex.ts:94-107`)                                                                                                              | read as unlabelled: the engine restacks only the live stack, tombstones stay at the bottom (`Scene::set_order`)                                                                             |
+| a locked element in the selection   | never there on its own — Select All skips locked elements (`actionSelectAll.ts:32-38`)                                                                          | this Select All takes them, to unlock from the menu; the command moves the carried set, so a loose locked element stays and a locked group member goes with its group                       |
+| a label in the selection            | never there: Select All skips bound text (`actionSelectAll.ts:32-38`), and a click on a label hits its shape, since bound text is not hit (`App.tsx:6726-6736`) | Select All takes labels, and a click on one selects it alone. A label moves only with its shape, so a lone label stays where it is; the oracle would have selected the shape and moved both |
+| a peer's hold                       | —                                                                                                                                                               | a frame child or label a peer holds still moves with what carries it: the stack is not stamped, so it takes nothing from their edit                                                         |
+| to-the-end chords                   | Shift on Windows and Linux, Alt on macOS (`actionZindex.tsx`)                                                                                                   | both, on every platform                                                                                                                                                                     |
+| a command that moves nothing        | the store records no step for unchanged elements                                                                                                                | the same, and no scene is sent to the host                                                                                                                                                  |
+| each frame's pass of Bring to front | scans the whole stack, once per frame whose children move (`getIndicesToMove`, `:36-70`)                                                                        | scans that frame's range: the same result, O(n) over the board (`cargo bench --bench editing -- reorder`)                                                                                   |
 
 ## Open
 
