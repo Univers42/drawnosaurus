@@ -3,6 +3,7 @@
   import type { Arrowhead } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { clampMenuPosition, type MenuElementInfo } from "./menu.ts";
+  import { shortcutLabel, zOrderShortcut } from "./shortcuts.ts";
   import DrawMenuExtremity from "./DrawMenuExtremity.svelte";
 
   let {
@@ -94,10 +95,18 @@
       role="menuitem"
       onclick={() => onRun((engine) => engine.duplicateSelection())}
     >
-      <span>Duplicate</span><span class="hint">⌘D</span>
+      <span>Duplicate</span><span class="hint">{shortcutLabel("CtrlOrCmd+D")}</span>
     </button>
     <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.copySelection())}>
-      <span>Copy</span><span class="hint">⌘C</span>
+      <span>Copy</span><span class="hint">{shortcutLabel("CtrlOrCmd+C")}</span>
+    </button>
+    <div class="rule" aria-hidden="true"></div>
+    <!-- Excalidraw's copy/paste styles (`actions/actionStyles.ts@1118751f:51-236`). -->
+    <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.copyStyles())}>
+      <span>Copy styles</span><span class="hint">{shortcutLabel("CtrlOrCmd+Alt+C")}</span>
+    </button>
+    <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.pasteStyles())}>
+      <span>Paste styles</span><span class="hint">{shortcutLabel("CtrlOrCmd+Alt+V")}</span>
     </button>
     <div class="rule" aria-hidden="true"></div>
     <button
@@ -105,28 +114,28 @@
       role="menuitem"
       onclick={() => onRun((engine) => engine.reorderSelection("front"))}
     >
-      <span>Bring to front</span><span class="hint">⌘⌥]</span>
+      <span>Bring to front</span><span class="hint">{zOrderShortcut("front")}</span>
     </button>
     <button
       type="button"
       role="menuitem"
       onclick={() => onRun((engine) => engine.reorderSelection("forward"))}
     >
-      <span>Bring forward</span><span class="hint">⌘]</span>
+      <span>Bring forward</span><span class="hint">{zOrderShortcut("forward")}</span>
     </button>
     <button
       type="button"
       role="menuitem"
       onclick={() => onRun((engine) => engine.reorderSelection("backward"))}
     >
-      <span>Send backward</span><span class="hint">⌘[</span>
+      <span>Send backward</span><span class="hint">{zOrderShortcut("backward")}</span>
     </button>
     <button
       type="button"
       role="menuitem"
       onclick={() => onRun((engine) => engine.reorderSelection("back"))}
     >
-      <span>Send to back</span><span class="hint">⌘⌥[</span>
+      <span>Send to back</span><span class="hint">{zOrderShortcut("back")}</span>
     </button>
     <div class="rule" aria-hidden="true"></div>
     <button
@@ -149,7 +158,7 @@
         role="menuitem"
         onclick={() => onRun((engine) => engine.groupSelection())}
       >
-        <span>Group</span><span class="hint">⌘G</span>
+        <span>Group</span><span class="hint">{shortcutLabel("CtrlOrCmd+G")}</span>
       </button>
     {/if}
     {#if element.grouped}
@@ -158,7 +167,7 @@
         role="menuitem"
         onclick={() => onRun((engine) => engine.ungroupSelection())}
       >
-        <span>Ungroup</span><span class="hint">⌘⇧G</span>
+        <span>Ungroup</span><span class="hint">{shortcutLabel("CtrlOrCmd+Shift+G")}</span>
       </button>
     {/if}
     <button
@@ -183,10 +192,10 @@
       role="menuitem"
       onclick={() => onRun((engine, at) => engine.pasteJson(null, at))}
     >
-      <span>Paste</span><span class="hint">⌘V</span>
+      <span>Paste</span><span class="hint">{shortcutLabel("CtrlOrCmd+V")}</span>
     </button>
     <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.selectAll())}>
-      <span>Select all</span><span class="hint">⌘A</span>
+      <span>Select all</span><span class="hint">{shortcutLabel("CtrlOrCmd+A")}</span>
     </button>
     <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.fit())}>
       <span>Zoom to fit</span><span class="hint">⇧1</span>

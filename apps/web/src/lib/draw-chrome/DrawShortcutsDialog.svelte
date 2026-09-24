@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { shortcutLabel, zOrderShortcut } from "./shortcuts.ts";
+
   let { onClose }: { onClose: () => void } = $props();
 
   const SHORTCUTS = [
@@ -29,6 +31,14 @@
         { key: "⌘ C / ⌘ V", desc: "Copy / Paste" },
         { key: "Delete / ⌫", desc: "Delete selection" },
         { key: "⌘ D", desc: "Duplicate selection" },
+        { key: shortcutLabel("CtrlOrCmd+Alt+C"), desc: "Copy styles" },
+        { key: shortcutLabel("CtrlOrCmd+Alt+V"), desc: "Paste styles" },
+        { key: zOrderShortcut("back"), desc: "Send to back" },
+        { key: zOrderShortcut("front"), desc: "Bring to front" },
+        { key: zOrderShortcut("backward"), desc: "Send backward" },
+        { key: zOrderShortcut("forward"), desc: "Bring forward" },
+        { key: "S", desc: "Stroke colour (with a selection)" },
+        { key: "G", desc: "Background colour" },
       ],
     },
     {
