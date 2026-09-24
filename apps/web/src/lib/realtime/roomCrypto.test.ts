@@ -170,6 +170,18 @@ describe("roomCrypto without a secure context", () => {
     expect((await importRoomKey(generateRoomKeyBytes())).engine).toBe("webcrypto");
   });
 
+  it("derives the same board room key with or without Web Crypto", async () => {
+    const withSubtle = await deriveBoardRoomKeyBytes("lan-board");
+    const real = globalThis.crypto.subtle;
+    Object.defineProperty(globalThis.crypto, "subtle", { configurable: true, get: () => undefined });
+    try {
+      const without = await deriveBoardRoomKeyBytes("lan-board");
+      expect(without).toEqual(withSubtle);
+    } finally {
+      Object.defineProperty(globalThis.crypto, "subtle", { configurable: true, get: () => real });
+    }
+  });
+
   it("opens what Web Crypto sealed, and seals what Web Crypto opens", async () => {
     const raw = generateRoomKeyBytes();
     const onLocalhost = await importRoomKey(raw);

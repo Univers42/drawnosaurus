@@ -77,26 +77,30 @@ export function parseRoomKeyFromHash(hash: string): Uint8Array | null {
 
 const ROOM_KEY_STORAGE_PREFIX = "drawnosaurus:roomKey:";
 
+/** What this page has for Web Crypto: none outside a secure context. */
+const pageSubtle = (): SubtleCrypto | undefined =>
+  (globalThis.crypto as Crypto | undefined)?.subtle ?? undefined;
+
 /**
  * Stable 32-byte material for a board slug. Every peer that opens the same board
  * without an explicit `#room=` secret derives the same key, so live patches decrypt
  * without requiring a shared capability link first.
+ *
+ * Uses `@noble/hashes` when `crypto.subtle` is missing (plain http LAN), matching the
+ * Web Crypto HKDF below byte for byte so a peer without SubtleCrypto still shares the
+ * same board room as one on localhost.
  */
 export async function deriveBoardRoomKeyBytes(slug: string): Promise<Uint8Array> {
-  const ikm = await crypto.subtle.importKey(
-    "raw",
-    textEncoder.encode(`drawnosaurus-board:${slug}`),
-    "HKDF",
-    false,
-    ["deriveBits"],
-  );
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: new Uint8Array(),
-      info: textEncoder.encode(`${HKDF_INFO}:board-room`),
-    },
+  const ikmMaterial = textEncoder.encode(`drawnosaurus-board:${slug}`);
+  const info = textEncoder.encode(`${HKDF_INFO}:board-room`);
+  const subtle = pageSubtle();
+  if (!subtle) {
+    // RFC 5869 with an empty salt — identical to the Web Crypto path below.
+    return hkdf(sha256, ikmMaterial, new Uint8Array(), info, ROOM_KEY_BYTES);
+  }
+  const ikm = await subtle.importKey("raw", ikmMaterial, "HKDF", false, ["deriveBits"]);
+  const bits = await subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info },
     ikm,
     ROOM_KEY_BYTES * 8,
   );
@@ -174,10 +178,6 @@ export function ensureRoomKey(locationLike: {
 export type RoomKey =
   | { readonly engine: "webcrypto"; readonly subtle: SubtleCrypto; readonly key: CryptoKey }
   | { readonly engine: "fallback"; readonly key: Uint8Array };
-
-/** What this page has for Web Crypto: none outside a secure context. */
-const pageSubtle = (): SubtleCrypto | undefined =>
-  (globalThis.crypto as Crypto | undefined)?.subtle ?? undefined;
 
 /**
  * Derives the room's AES-256-GCM key from the fragment secret.
