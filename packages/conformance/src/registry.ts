@@ -845,14 +845,48 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "35. Properties panel",
-    text: /Font picker|Links/,
+    text: /Numeric inputs/,
     status: "gap",
-    why: "Per-element font family needs vendored fonts (risk R1); links need the schema field.",
+    why: "No number fields: position, size and rotation are edited on the canvas only, and the panel has no rows for them. See docs/reference/console.md › Gaps.",
+  },
+  {
+    section: "35. Properties panel",
+    text: /Font picker/,
+    status: "gap",
+    why: "No font family row: per-element font family needs vendored fonts (risk R1) and belongs to the text-layout work.",
+  },
+  {
+    section: "35. Properties panel",
+    text: /Mixed values/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_selection_style.rs`, "e2e/console.spec.ts"],
+  },
+  {
+    section: "35. Properties panel",
+    text: /Color picker/,
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/colors.test.ts`, "e2e/console.spec.ts"],
+  },
+  {
+    section: "35. Properties panel",
+    text: /Live update|Undo integration/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_selection_style.rs`,
+      `${ENGINE}/ci_style_reach.rs`,
+      "e2e/console.spec.ts",
+    ],
   },
   {
     section: "35. Properties panel",
     status: "covered",
-    tests: [`${WEB}/draw-chrome/inspector.test.ts`, `${ENGINE}/ci_style_patch.rs`],
+    tests: [
+      `${WEB}/draw-chrome/shapeActions.test.ts`,
+      `${WEB}/draw-chrome/inspector.test.ts`,
+      `${ENGINE}/ci_selection_style.rs`,
+      `${ENGINE}/ci_style_patch.rs`,
+      "e2e/console.spec.ts",
+    ],
   },
   {
     section: "36. Links",
