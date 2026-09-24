@@ -660,6 +660,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "17. Z-order",
+    text: /Paste ordering/,
+    status: "gap",
+    why: "No test pins where a paste lands in the stack. The engine appends pasted elements on top (paste_json → Scene::add). The oracle does too, but moves what it pastes into a frame to just below that frame (duplicateAtSceneCoords → addElementsToFrame, frame.ts@1118751f:596-633). That second step is not ported: see docs/reference/zorder.md, Open.",
+  },
+  {
+    section: "17. Z-order",
     // Frames, groups, labels and the entered group as the oracle's own zindex.test.tsx
     // pins them; undo and redo of a reorder in ci_version_stamps.rs.
     status: "covered",
