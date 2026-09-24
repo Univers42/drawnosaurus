@@ -490,18 +490,15 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_text_align.rs`, "e2e/textAlign.spec.ts"],
   },
-  // Wrapping, carved out of the gap below: it is Excalidraw's textWrapping.ts ported line
-  // for line and replayed against fixtures that file generates (docs/reference/text.md).
-  // Measured with the system font stack until fonts land, as every text is.
+  // Wrapping, carved out of the gap below, which is about font metrics. The wrap itself
+  // no longer is: it is Excalidraw's textWrapping.ts ported line for line and replayed
+  // against fixtures that file generates (docs/reference/text.md). What keeps both lines a
+  // gap is that only setting a text wraps it; no resize does.
   {
     section: "9. Text",
     text: /Wrapping|Fixed-width/,
-    status: "covered",
-    tests: [
-      `${ENGINE}/ci_text_wrap_oracle.rs`,
-      `${ENGINE}/ci_text_wrap_props.rs`,
-      `${ENGINE}/ci_text_box.rs`,
-    ],
+    status: "gap",
+    why: "Text wraps as Excalidraw's does when it is set: a label as it is typed, and a dragged-out fixed-width column (ci_text_wrap_oracle.rs, ci_text_box.rs). No resize rewraps it. A resized container keeps its label's lines (layout_label), a column resized by its handle keeps its lines, and widening never unwraps: `text` holds the wrapped lines, and there is no originalText to wrap from, which Excalidraw does on every resize (textElement.ts:94-98, 192-196, resizeElements.ts:371-375).",
   },
   {
     section: "9. Text",
