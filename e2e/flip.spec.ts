@@ -30,6 +30,7 @@ interface Flipped extends SceneElement {
 interface FlipHandle {
   select(ids: string[]): void;
   insertImage(dataUrl: string, width: number, height: number, x: number, y: number): string | null;
+  setPeers(peers: { id: string; name: string; color: string; holds?: string[] }[]): void;
 }
 
 /** Canvas-relative, inside `OPEN_CANVAS`, where the scenes below are placed. */
@@ -293,7 +294,100 @@ test.describe("flip", () => {
       "and nothing of it left of that edge",
     ).toBe(0);
   });
+
+  test("a peer's name starts inside its tag whatever text was drawn before it", async ({
+    page,
+  }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    // A centred text being dragged is painted straight onto the screen, and used to leave
+    // its alignment there: the name on a peer's tag, drawn after it, sat centred on the
+    // tag's left inset, its second half missing from the tag.
+    await load(page, [
+      { id: "p", type: "rectangle", x: 100, y: 100, width: 160, height: 60 },
+      {
+        id: "t",
+        type: "text",
+        x: 100,
+        y: 300,
+        width: 200,
+        height: 25,
+        text: "centred",
+        fontSize: 20,
+        textAlign: "center",
+        backgroundColor: "transparent",
+      },
+    ]);
+    // Selected before the peer arrives, so taking it tells the host nothing new.
+    await select(page, ["t"]);
+    await page.evaluate(() => {
+      (window.__drawEngine as unknown as FlipHandle).setPeers([
+        { id: "peer", name: "Ada Lovelace", color: "#e03131", holds: ["p"] },
+      ]);
+    });
+
+    const at = { x: board.box.x + ORIGIN.x + 200, y: board.box.y + ORIGIN.y + 312 };
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await page.mouse.move(at.x + 30, at.y + 40, { steps: 4 });
+    await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => done())));
+
+    // Above the shape, clear of the trace in the peer's colour along its top edge.
+    const tag = {
+      left: ORIGIN.x + 60,
+      right: ORIGIN.x + 300,
+      top: ORIGIN.y + 50,
+      bottom: ORIGIN.y + 96,
+    };
+    const ink = await nameInTag(page, tag);
+    await page.mouse.up();
+    expect(ink.found, "no tag in the peer's colour above what they hold").toBe(true);
+    expect(ink.rightHalf, "the name reaches into the right half of its tag").toBeGreaterThan(0.05);
+  });
 });
+
+/**
+ * The peer's tag (its red pill) inside `region`, canvas-relative CSS pixels, and how much
+ * of the right half of its body is covered by the white name — clear of the rounded ends.
+ */
+function nameInTag(
+  page: Page,
+  region: { left: number; right: number; top: number; bottom: number },
+): Promise<{ found: boolean; rightHalf: number }> {
+  return page.evaluate((region) => {
+    const canvas = document.querySelector("canvas")!;
+    const ctx = canvas.getContext("2d")!;
+    const scale = canvas.width / canvas.getBoundingClientRect().width;
+    const [x0, y0] = [Math.round(region.left * scale), Math.round(region.top * scale)];
+    const w = Math.round((region.right - region.left) * scale);
+    const h = Math.round((region.bottom - region.top) * scale);
+    const { data } = ctx.getImageData(x0, y0, w, h);
+    const px = (x: number, y: number) => data.slice((y * w + x) * 4, (y * w + x) * 4 + 3);
+    const red = (x: number, y: number) => {
+      const [r, g, b] = px(x, y);
+      return r! > 200 && g! < 90 && b! < 90;
+    };
+    let [minX, minY, maxX, maxY] = [w, h, -1, -1];
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        if (!red(x, y)) continue;
+        [minX, minY] = [Math.min(minX, x), Math.min(minY, y)];
+        [maxX, maxY] = [Math.max(maxX, x), Math.max(maxY, y)];
+      }
+    }
+    if (maxX < 0) return { found: false, rightHalf: 0 };
+    const inset = Math.round(4 * scale);
+    let [lit, all] = [0, 0];
+    for (let y = minY + inset; y <= maxY - inset; y += 1) {
+      for (let x = Math.ceil((minX + maxX) / 2) + inset; x <= maxX - inset; x += 1) {
+        const [, g, b] = px(x, y);
+        all += 1;
+        if (g! > 150 && b! > 150) lit += 1;
+      }
+    }
+    return { found: true, rightHalf: all === 0 ? 0 : lit / all };
+  }, region);
+}
 
 /**
  * The middle of one colour's pixels on the canvas, canvas-relative CSS pixels — null when
