@@ -6,6 +6,7 @@ import {
   frameInnerStyle,
   frameSrc,
   frameStyle,
+  framesToMount,
   isClick,
   isFrameCentre,
   parseEmbedFrames,
@@ -176,5 +177,29 @@ describe("the list shown when a link is refused", () => {
       expect(host, host).not.toContain("/");
       expect(host, host).not.toContain(":");
     }
+  });
+});
+
+describe("framesToMount", () => {
+  it("keeps a frame that has been seen once it scrolls out of view", () => {
+    const seen = new Set<string>();
+    expect(framesToMount([frame({ visible: true })], seen)).toHaveLength(1);
+    // Unmounting it here is what stopped a playing video on a pan.
+    expect(framesToMount([frame({ visible: false })], seen)).toHaveLength(1);
+  });
+
+  it("never mounts a frame nobody has seen", () => {
+    expect(framesToMount([frame({ visible: false })], new Set())).toEqual([]);
+  });
+
+  it("forgets a frame that left the board", () => {
+    const seen = new Set<string>();
+    framesToMount([frame({ visible: true })], seen);
+    framesToMount([], seen);
+    expect(framesToMount([frame({ visible: false })], seen)).toEqual([]);
+  });
+
+  it("mounts every frame from an engine that does not say", () => {
+    expect(framesToMount([frame()], new Set())).toHaveLength(1);
   });
 });

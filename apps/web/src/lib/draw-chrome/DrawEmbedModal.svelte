@@ -12,15 +12,21 @@
 
   let {
     engine,
+    initial = "",
     onInsert,
     onClose,
   }: {
     engine: DrawEngine | null;
+    /** The link an embed already has, when this changes it rather than adding one. */
+    initial?: string;
     onInsert: (url: string) => void;
     onClose: () => void;
   } = $props();
 
-  let link = $state("");
+  // The starting value only: from here on it is what is typed.
+  // svelte-ignore state_referenced_locally
+  let link = $state(initial);
+  const editing = $derived(initial !== "");
 
   /** What the engine makes of what has been typed so far. */
   const resolved = $derived(link.trim() ? (engine?.resolveEmbed(link.trim()) ?? null) : null);
@@ -45,7 +51,7 @@
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="embed-title">
   <div class="modal-card">
     <div class="modal-header">
-      <h3 id="embed-title">Embed a web page</h3>
+      <h3 id="embed-title">{editing ? "Change the embedded link" : "Embed a web page"}</h3>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
     </div>
 
@@ -80,7 +86,7 @@
     <div class="actions">
       <button type="button" class="btn-cancel" onclick={onClose}>Cancel</button>
       <button type="button" class="btn-primary" disabled={!resolved} onclick={handleInsert}>
-        Embed
+        {editing ? "Save" : "Embed"}
       </button>
     </div>
   </div>

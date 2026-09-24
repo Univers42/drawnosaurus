@@ -74,6 +74,8 @@ export interface EmbedFrame {
   angle: number;
   /** The camera's zoom. */
   scale: number;
+  /** Whether any of it is on screen. Absent from an older engine, which culled instead. */
+  visible?: boolean;
 }
 
 /**
@@ -230,6 +232,22 @@ export function playMessage(url: string): string | null {
     return JSON.stringify({ method: "play" });
   }
   return null;
+}
+
+/**
+ * The frames to mount: each one once it has been on screen, and from then on until it
+ * leaves the board.
+ *
+ * An `<iframe>` unmounted is a page destroyed, so a video panned or zoomed out of view
+ * stopped. One never seen is never loaded, so a board with thirty videos still runs only
+ * the players someone looked at — Excalidraw's `initializedEmbeds`. `seen` is updated in
+ * place and forgets an embed that is gone, so an undone deletion starts afresh.
+ */
+export function framesToMount(frames: EmbedFrame[], seen: Set<string>): EmbedFrame[] {
+  const live = new Set(frames.map((frame) => frame.id));
+  for (const id of seen) if (!live.has(id)) seen.delete(id);
+  for (const frame of frames) if (frame.visible !== false) seen.add(frame.id);
+  return frames.filter((frame) => seen.has(frame.id));
 }
 
 /** Parse what `engine.embedFrames()` returns, tolerating anything unexpected. */

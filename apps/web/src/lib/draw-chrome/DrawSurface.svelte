@@ -45,6 +45,7 @@
     frameStyle,
     isClick,
     isFrameCentre,
+    framesToMount,
     parseEmbedFrames,
     playMessage,
     sandboxFor,
@@ -474,6 +475,8 @@
   }
 
   let showEmbed = $state(false);
+  /** The embed whose link the dialog is changing, rather than adding a new one. */
+  let editingEmbed = $state<{ id: string; url: string } | null>(null);
   /**
    * The live frames, in screen pixels, as the engine reports them.
    *
@@ -498,9 +501,13 @@
   /** The press that may turn out to be a click on an embed. */
   let embedPress: { x: number; y: number; at: number } | null = null;
   const embedIframes: Record<string, HTMLIFrameElement> = {};
+  /** The embeds that have been on screen, and so stay mounted — see `framesToMount`. */
+  const seenEmbeds = new Set<string>();
 
   function refreshEmbedFrames(): void {
-    embedFrames = engine ? parseEmbedFrames(engine.embedFramesJson()) : [];
+    embedFrames = engine
+      ? framesToMount(parseEmbedFrames(engine.embedFramesJson()), seenEmbeds)
+      : [];
     if (activeEmbed && !embedFrames.some((frame) => frame.id === activeEmbed)) {
       activeEmbed = null;
     }
@@ -1292,7 +1299,19 @@
     <p class="image-notice" role="status">{imageNotice}</p>
   {/if}
 
-  {#if showEmbed}
+  {#if editingEmbed}
+    {@const { id, url } = editingEmbed}
+    <DrawEmbedModal
+      {engine}
+      initial={url}
+      onInsert={(next) => {
+        if (engine?.setEmbedUrl(id, next)) refreshEmbedFrames();
+      }}
+      onClose={() => {
+        editingEmbed = null;
+      }}
+    />
+  {:else if showEmbed}
     <DrawEmbedModal
       {engine}
       onInsert={insertEmbed}
@@ -1366,6 +1385,10 @@
     bind:showMermaid
     bind:showShare
     bind:showShortcuts
+    onEditEmbedLink={(id) => {
+      const url = embedFrames.find((frame) => frame.id === id)?.url;
+      if (url) editingEmbed = { id, url };
+    }}
     onInsertMermaid={(elements) => {
       if (engine) engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements }));
     }}
