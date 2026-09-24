@@ -86,6 +86,8 @@
   import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
+  import { watchFonts } from "./fonts.ts";
+  import "./fonts.css";
   import DrawModals from "./DrawModals.svelte";
   import PeerCursors from "./PeerCursors.svelte";
   import "./draw-chrome.css";
@@ -179,6 +181,13 @@
   });
   let activeStyle = $state<DrawElementStyle>(DEFAULT_ELEMENT_STYLE);
   let textEdit = $state<TextEditRequest | null>(null);
+
+  // Text first laid out in a fallback's widths is re-laid once its face arrives.
+  $effect(() => {
+    const current = engine;
+    if (!current) return;
+    return watchFonts(document.fonts, () => current.fontsLoaded());
+  });
   let zoom = $state(100);
   let contentVisible = $state(true);
   let currentCamera = $state<Camera | undefined>(undefined);
