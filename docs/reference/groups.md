@@ -219,6 +219,6 @@ caller.
 
 ## Open
 
-**Not done** — z-order is not frame-aware (`zindex.ts` frame ranges); a shift-press on
-an unselected element inside the selection's box adds it at once, where the oracle
-waits for the release (`App.tsx:9656-9660`).
+**Not done** — a shift-press on an unselected element inside the selection's box adds it
+at once, where the oracle waits for the release (`App.tsx:9656-9660`). Z-order is
+frame-aware now: `zorder.md`.
