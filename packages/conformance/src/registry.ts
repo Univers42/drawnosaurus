@@ -101,7 +101,13 @@ export const RULES: readonly Rule[] = [
     // the board at all.
     text: /multi-point/,
     status: "covered",
-    tests: [`${ENGINE}/ci_line_multipoint.rs`, "e2e/lineMultipoint.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_line_multipoint.rs`,
+      "e2e/lineMultipoint.spec.ts",
+      // A click or a double click that ends an arrow on a shape, in a pack of them.
+      `${ENGINE}/ci_binding_dense.rs`,
+      "e2e/arrow-dense.spec.ts",
+    ],
   },
   {
     section: "Lines & arrows",
@@ -165,7 +171,7 @@ export const RULES: readonly Rule[] = [
     section: "🔤 Text",
     text: /wrap text where appropriate/,
     status: "gap",
-    why: "Text wrapping for bound labels, carried over from issue #4. Needs real text measurement first.",
+    why: "Pasting plain text makes no text element: the host hands it to pasteJson, which takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not.",
   },
   { section: "🔤 Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
@@ -176,8 +182,15 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "📐 Alignment & distribution",
+    // Groups move as one block, spaced by equal gaps, and the inspector offers either
+    // only when the engine says it would move something.
     status: "covered",
-    tests: [`${ENGINE}/ci_edit.rs`, `${ENGINE}/ci_snapping.rs`],
+    tests: [
+      `${ENGINE}/ci_edit.rs`,
+      `${ENGINE}/ci_align_units.rs`,
+      `${ENGINE}/ci_snapping.rs`,
+      "e2e/groups.spec.ts",
+    ],
   },
   {
     section: "🗂️ Layers / ordering",
@@ -209,6 +222,17 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🖼️ Images",
+    text: /flip\/rotation controls/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_flip.rs`,
+      `${ENGINE}/ci_image.rs`,
+      `${ENGINE}/ci_handles.rs`,
+      "e2e/flip.spec.ts",
+    ],
+  },
+  {
+    section: "🖼️ Images",
     status: "covered",
     tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`, "e2e/image.spec.ts"],
   },
@@ -218,7 +242,13 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Frames carry a name and render it, but nothing edits it, and export has no per-frame mode.",
   },
-  { section: "🧩 Frames", status: "covered", tests: [`${ENGINE}/ci_frame.rs`] },
+  {
+    section: "🧩 Frames",
+    status: "covered",
+    // ci_group_locks_frames.rs: what is drawn or pasted inside a frame joins it and moves
+    // with it; groups join and leave whole.
+    tests: [`${ENGINE}/ci_frame.rs`, `${ENGINE}/ci_group_locks_frames.rs`],
+  },
   {
     section: "🔗 Element linking",
     status: "gap",
@@ -242,8 +272,10 @@ export const RULES: readonly Rule[] = [
     tests: [
       `${ENGINE}/ci_binding.rs`,
       `${ENGINE}/ci_binding_overlap.rs`,
+      `${ENGINE}/ci_binding_dense.rs`,
       `${ENGINE}/ci_linear_anchor.rs`,
       `${ENGINE}/ci_style.rs`,
+      "e2e/arrow-dense.spec.ts",
     ],
   },
   {
@@ -490,11 +522,33 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_text_align.rs`, "e2e/textAlign.spec.ts"],
   },
+  // The editor the engine asks the host to open: its size, alignment and wrap width come
+  // from the request, whose wire names the engine pins.
   {
     section: "9. Text",
-    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Wrapping|Fixed-width|Font family|inside arrows/,
+    text: /Text editing mode|Font size|Double click edit/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text.rs`,
+      `${ENGINE}/ci_text_model_compat.rs`,
+      "e2e/textEditRequest.spec.ts",
+    ],
+  },
+  // Wrapping, carved out of the gap below, which is about font metrics. The wrap itself
+  // no longer is: it is Excalidraw's textWrapping.ts ported line for line and replayed
+  // against fixtures that file generates (docs/reference/text.md). What keeps both lines a
+  // gap is that only setting a text wraps it; no resize does.
+  {
+    section: "9. Text",
+    text: /Wrapping|Fixed-width/,
     status: "gap",
-    why: "Bold, italic, letter spacing, line height and per-element font family. These do wait on real font metrics — vendored faces gated on document.fonts.ready, risk R1 — because each changes how wide a glyph is, and measuring before the face loads mis-sizes every text element permanently.",
+    why: "Text wraps as Excalidraw's does when it is set: a label as it is typed, and a dragged-out fixed-width column (ci_text_wrap_oracle.rs, ci_text_box.rs). No resize rewraps it. A resized container keeps its label's lines (layout_label), a column resized by its handle keeps its lines, and widening never unwraps: `text` holds the wrapped lines, and nothing wraps from originalText yet (an element can carry it, ci_text_model_compat.rs, but new text is not given one), which Excalidraw does on every resize (textElement.ts:94-98, 192-196, resizeElements.ts:371-375).",
+  },
+  {
+    section: "9. Text",
+    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Font family|inside arrows/,
+    status: "gap",
+    why: "Bold, italic, letter spacing, line height and per-element font family. An element can carry fontFamily and lineHeight (ci_text_model_compat.rs, and the contract keeps them), but nothing draws or measures with them yet. That waits on real font metrics — vendored faces gated on document.fonts.ready, risk R1 — because each changes how wide a glyph is, and measuring before the face loads mis-sizes every text element permanently.",
   },
   { section: "9. Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
@@ -530,7 +584,11 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "See the Frames rule: naming is stored and drawn but not editable, and export has no frame mode.",
   },
-  { section: "12. Frames", status: "covered", tests: [`${ENGINE}/ci_frame.rs`] },
+  {
+    section: "12. Frames",
+    status: "covered",
+    tests: [`${ENGINE}/ci_frame.rs`, `${ENGINE}/ci_group_locks_frames.rs`],
+  },
   {
     section: "13. Embeds",
     text: /Lock|Loading state|Error state|Export fallback|View-only/,
@@ -601,7 +659,7 @@ export const RULES: readonly Rule[] = [
     // the turn entirely.
     text: /priority|suggestion|visuali|rotating target/i,
     status: "covered",
-    tests: [`${ENGINE}/ci_binding_anchor.rs`],
+    tests: [`${ENGINE}/ci_binding_anchor.rs`, `${ENGINE}/ci_binding_dense.rs`],
   },
   {
     section: "18. Binding system",
@@ -616,7 +674,11 @@ export const RULES: readonly Rule[] = [
   {
     section: "18. Binding system",
     status: "covered",
-    tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_binding_overlap.rs`],
+    tests: [
+      `${ENGINE}/ci_binding.rs`,
+      `${ENGINE}/ci_binding_overlap.rs`,
+      `${ENGINE}/ci_binding_dense.rs`,
+    ],
   },
   {
     section: "19. Snapping",

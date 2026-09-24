@@ -1,12 +1,15 @@
 import { z } from "zod";
 import {
   MAX_COLOR_LENGTH,
+  MAX_FONT_FAMILY,
   MAX_GROUP_DEPTH,
   MAX_ID_LENGTH,
   MAX_IMAGE_DATA_URL_LENGTH,
+  MAX_LINE_HEIGHT,
   MAX_POINTS_PER_ELEMENT,
   MAX_TEXT_LENGTH,
   MAX_URL_LENGTH,
+  MIN_LINE_HEIGHT,
 } from "./limits.ts";
 
 /**
@@ -126,6 +129,16 @@ export const drawElementSchema = z.object({
   endArrowhead: z.enum(ARROWHEADS).optional(),
 
   text: z.string().max(MAX_TEXT_LENGTH).optional(),
+  // The text model, all optional and undefaulted like the alignments below: a text saved
+  // before them carries none, and the engine reads absent as what it always drew — `text`
+  // is the source, the system font, a line height of 1.25, a label wrapped in its shape.
+  // `originalText` is the source before wrapping (`text` stays what is drawn); `fontFamily`
+  // is Excalidraw's numeric id; `lineHeight` a multiple of the font size; `wrap: false`
+  // keeps a label's hard lines and widens its shape instead.
+  originalText: z.string().max(MAX_TEXT_LENGTH).optional(),
+  fontFamily: finiteInt.min(1).max(MAX_FONT_FAMILY).optional(),
+  lineHeight: finite.min(MIN_LINE_HEIGHT).max(MAX_LINE_HEIGHT).optional(),
+  wrap: z.boolean().optional(),
   fontSize: finite.min(1).max(1000).optional(),
   // Optional rather than defaulted, and the distinction is load-bearing: absent means
   // nobody chose, which the engine resolves through the element's role — free text reads

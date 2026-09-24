@@ -35,19 +35,27 @@
     onDraft?.(request.id, value);
   });
 
-  // Padding and border of the textarea itself, which sit outside the text box.
+  // Padding and border of the textarea itself, which sit outside the text box: 6px of
+  // padding a side, and the 1.5px border as drawn at a device pixel ratio of 1, where it
+  // snaps to 1px. ponytail: at a ratio of 2 the border is 1.5px and the text box 1px
+  // narrower than the label; the editor rewrite drops the border altogether.
   const CHROME_PX = 14;
 
   function autoResize(): void {
     if (!node) return;
+    // Width first: the height is read off `scrollHeight`, which depends on where the
+    // lines wrap, which depends on the width.
+    node.style.width = `${boxWidth()}px`;
     node.style.height = "auto";
     node.style.height = `${Math.max(node.scrollHeight, fontSizePx * 1.3)}px`;
+  }
 
+  function boxWidth(): number {
     if (isContainer && request.width) {
-      // Bound text is as wide as the shape holding it and wraps inside it, so the box
-      // must not grow with the text the way free-standing text does.
-      node.style.width = `${request.width}px`;
-      return;
+      // Bound text wraps inside the shape holding it, so the box must not grow with the
+      // text the way free-standing text does. The request carries the width the canvas
+      // wraps the lines at, so the text box is that and the chrome goes around it.
+      return request.width + CHROME_PX;
     }
     // Measured by the engine, against the font the canvas draws with. This used to
     // guess `maxLineLength * fontSize * 0.65`, counting UTF-16 units — so the box was a
@@ -55,7 +63,7 @@
     // narrow for "WWWW". The text visibly jumped the moment an edit was committed,
     // because the canvas and the textarea disagreed about how wide it was.
     const measured = engine.measureText(value, fontSizePx).width;
-    node.style.width = `${Math.max(measured + CHROME_PX, 60)}px`;
+    return Math.max(measured + CHROME_PX, 60);
   }
 
   function finish(): void {
@@ -132,5 +140,7 @@
        would have been typed centred and jumped right the moment the edit was committed. */
     white-space: pre-wrap;
     word-break: break-word;
+    /* Its width is the canvas's: a floor would wrap a narrow shape's label wider. */
+    min-width: 0;
   }
 </style>
