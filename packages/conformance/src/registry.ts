@@ -165,7 +165,7 @@ export const RULES: readonly Rule[] = [
     section: "🔤 Text",
     text: /wrap text where appropriate/,
     status: "gap",
-    why: "Text wrapping for bound labels, carried over from issue #4. Needs real text measurement first.",
+    why: "Pasting plain text makes no text element: the host hands it to pasteJson, which takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not.",
   },
   { section: "🔤 Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
@@ -490,9 +490,22 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_text_align.rs`, "e2e/textAlign.spec.ts"],
   },
+  // Wrapping, carved out of the gap below: it is Excalidraw's textWrapping.ts ported line
+  // for line and replayed against fixtures that file generates (docs/reference/text.md).
+  // Measured with the system font stack until fonts land, as every text is.
   {
     section: "9. Text",
-    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Wrapping|Fixed-width|Font family|inside arrows/,
+    text: /Wrapping|Fixed-width/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text_wrap_oracle.rs`,
+      `${ENGINE}/ci_text_wrap_props.rs`,
+      `${ENGINE}/ci_text_box.rs`,
+    ],
+  },
+  {
+    section: "9. Text",
+    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Font family|inside arrows/,
     status: "gap",
     why: "Bold, italic, letter spacing, line height and per-element font family. These do wait on real font metrics — vendored faces gated on document.fonts.ready, risk R1 — because each changes how wide a glyph is, and measuring before the face loads mis-sizes every text element permanently.",
   },
