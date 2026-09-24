@@ -222,6 +222,17 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🖼️ Images",
+    text: /flip\/rotation controls/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_flip.rs`,
+      `${ENGINE}/ci_image.rs`,
+      `${ENGINE}/ci_handles.rs`,
+      "e2e/flip.spec.ts",
+    ],
+  },
+  {
+    section: "🖼️ Images",
     status: "covered",
     tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`, "e2e/image.spec.ts"],
   },

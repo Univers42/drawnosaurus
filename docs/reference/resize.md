@@ -41,3 +41,81 @@ would serve the old outline and the handle would appear to do nothing.
 
 **OBSERVED** — the SVG exporter wrote `rx = roundness` (the ignored `8`) while the canvas
 drew 32. It now calls the same `corner_radius` the canvas does.
+
+## Flip
+
+Shift+H / Shift+V, the context menu and the panel's mirror buttons all call
+`flip_selection` (`engine/crates/draw-engine/src/edit/flip.rs`). Excalidraw flips through
+`resizeMultipleElements` with `flipByX | flipByY`, a scale of 1 and the middle of the
+selection as the anchor (`actions/actionFlip.ts`, `element/src/resizeElements.ts:1209-1569`
+at the oracle SHA). Pinned by `tests/ci_flip.rs` (every kind, round trips, undo) and
+`e2e/flip.spec.ts` (keys, pixels, saved scene).
+
+**VERIFIED** — what flips is what a drag would move (`moving_selection`): a frame's
+children and a locked member of a selected group come along (`actionFlip.ts:87-94`,
+`groups.ts:94-132`). Nobody changes frame (`frame.ts:845-855`).
+
+**VERIFIED** — the mirror line is the middle of what flips as it is drawn, turned, plus
+the words on an arrow (`getCommonBoundingBox`, `actionFlip.ts:131`;
+`resizeElements.ts:1280-1310`). Each kind is measured the way the oracle's
+`getElementBounds` measures it (`bounds.ts:147-240` at 1118751f), in
+`scene/geometry.rs` › `element_outline_bounds`: an ellipse by its own curve, a diamond by
+its four corners, a line, arrow or freehand stroke by its turned points, anything else by
+its turned box. The unturned boxes put the line in the wrong place whenever a turned
+element was in the selection, and the turned box for every kind still did for a turned
+ellipse, diamond, line or stroke — 70 units off for a line stood on end
+(`ci_flip.rs` › `the_axis_is_what_each_kind_draws`).
+
+**VERIFIED** — each kind, as the oracle does it (`resizeElements.ts:1409-1497`):
+
+| kind                                            | after a flip                                                                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| rectangle, ellipse, diamond, frame, embed, text | reflected position, **same** width and height, negated angle — the stroke, hatching and glyphs are not mirrored       |
+| image                                           | reflected, and its extent goes negative on that axis — the pixels mirror (see `images.md` › Flip)                     |
+| line, arrow                                     | points mirrored about the origin, `x` reflected, width negated as before (`packages/contract/src/bounds.ts` reads it) |
+| freehand stroke                                 | points mirrored inside its own box, box reflected                                                                     |
+| label                                           | not flipped itself; follows its container, turned with it                                                             |
+
+An embed's page is never mirrored: Excalidraw only turns the iframe (`App.tsx:2046-2051`),
+and a mirrored video would show its controls and captions backwards. A text turned by
+0.3 comes back turned by -0.3, the same turn as excalidraw.com's 2π − 0.3; it used to keep
+its angle. The angle is negated and not normalised into `[0, 2π)` as the oracle's
+`normalizeRadians` does, so a second flip gives back the original number exactly.
+
+A flip that moves nothing — a lone unturned box, which is its own mirror image — is not an
+edit: no new version, nothing saved or sent, no step of undo, as the oracle's
+`mutateElement` keeps the version when no value changed (`mutateElement.ts:129-131`).
+`apply_patches` drops such a patch for align, distribute and lock as well
+(`ci_flip.rs` › `a_flip_that_changes_nothing_is_not_an_edit`).
+
+**VERIFIED** — arrows:
+
+- a selection made only of bound arrows turns them round: the resolved heads trade ends
+  and nothing moves (`actionFlip.ts:116-129`);
+- an arrow flipped with the shape an end is bound to keeps that binding, its anchor
+  mirrored in the shape's frame (`[1 − fx, fy]` for H, `[fx, 1 − fy]` for V);
+- an end bound to a shape that did not flip lets go (`resizeElements.ts:1558-1569`);
+- an arrow that did not flip, bound to a shape that did, keeps its anchor and follows the
+  shape (`updateBoundElements`).
+
+### Divergences
+
+| what                               | Excalidraw                                                                                                                                                                                                              | here                                                                                                                               |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| anchors of a straight/curved arrow | mirrored for elbow arrows only (`resizeElements.ts:1446-1474`). The path is mirrored but the anchors are stale, so the arrow jumps back to the old sides when a bound shape next moves — **OBSERVED** on excalidraw.com | mirrored for every arrow. Every bound arrow is re-resolved right after a commit here, so stale anchors would undo the flip at once |
+| arrows-only check                  | counts an arrow's label (`getSelectedElements` with `includeBoundTextElement`, `actionFlip.ts:87-94`), so a labelled arrow flipped alone is mirrored and let go of both shapes                                          | labels are not counted: a labelled bound arrow alone turns round like any other                                                    |
+| re-centring after the flip         | moves the selection back onto its old middle (`actionFlip.ts:158-192`): a curved arrow is measured by its rendered curve, which can bump the box by a pixel                                                             | not ported: boxes are measured from points, which mirror exactly; `ci_flip.rs` › `every_kind_round_trips` guards drift             |
+| an image's mirror                  | a `scale: [sx, sy]` field                                                                                                                                                                                               | a negative width or height, painted and exported as the same scale — `images.md` › Flip                                            |
+| a line's reach                     | its rendered rough path (`getLinearElementRotatedBounds`, `bounds.ts:934-995`), which can wander a pixel or so off its points, and a curve's bulge past them                                                            | its points: the line through a curved arrow's bulge can differ by as much as the bulge                                             |
+
+**Open** — a box resized past its own corner (single element) still mirrors its stroke
+through a negative extent (`ci_selection.rs`), where the oracle's stays positive. Flip
+keeps whatever sign a box already has, so it neither introduces nor removes one.
+
+**Open** — the frame drawn round a multi-selection (`group_box`, from `scene_bounds`) is
+the union of the **unturned** boxes, where the oracle's comes from the same turned bounds
+as its mirror line. So with a turned element in the selection the frame and its handles
+shift sideways on a flip, and shift back on the next one: a 200×20 bar stood on end beside
+a box at 300..350 has its frame at 0..350 before a horizontal flip and 90..440 after, where
+excalidraw.com's stays at 90..350. The mirror line is right; the frame is what is off, and
+making it turned-aware is a change to every selection frame, not to flip.

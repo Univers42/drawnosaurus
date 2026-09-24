@@ -120,9 +120,9 @@ layer.
   labelled shape is still that group (`actionGroup.tsx:73-83`).
 
 **VERIFIED** — a locked member travels with its group (move, resize, rotate, nudge,
-align, distribute), but is never picked up on its own; the oracle drags every selected
-element and refuses only when all are locked (`App.tsx:10899-10904`), and its align and
-distribute have no lock filter.
+align, distribute, flip), but is never picked up on its own; the oracle drags every
+selected element and refuses only when all are locked (`App.tsx:10899-10904`), and its
+align, distribute and flip have no lock filter (flip: `resize.md` › Flip).
 
 **VERIFIED** — align and distribute move groups, not elements
 (`getSelectedElementsByGroup`, `groups.ts:417-466`): each selected group is one block,
@@ -219,7 +219,6 @@ caller.
 
 ## Open
 
-**Not done** — flip still skips a locked member (`edit/flip.rs`), where the oracle's has
-no lock filter; z-order is not frame-aware (`zindex.ts` frame ranges); a shift-press on
+**Not done** — z-order is not frame-aware (`zindex.ts` frame ranges); a shift-press on
 an unselected element inside the selection's box adds it at once, where the oracle
 waits for the release (`App.tsx:9656-9660`).
