@@ -82,14 +82,30 @@ waypoint instead of finishing. **OBSERVED** on excalidraw.com in a Ctrl+D pack: 
 probes did that (the oracle finished 8 of 48 clicks, where the same rule judged at the
 press finishes every orbit).
 
-**VERIFIED** — a double click that finishes a click-mode arrow (its second click lands on
-the point its first placed) opens a label on **that arrow**: Excalidraw's finished arrow
-is its one selected element, and a double click labels the selected container
-(`getTextBindableContainerAtPosition`, `App.tsx@1118751f:6831-6838`). **OBSERVED** on
-excalidraw.com by element id: the typed text's `containerId` was the new arrow's, inside a
-pack and over an empty board alike. The engine used to open it on the shape under the
-pointer. A double click whose path was too short to keep opens nothing, as Excalidraw's
-does nothing while a path is open (`App.tsx@1118751f:7199-7201`).
+**VERIFIED** — a double click one of whose clicks finishes a click-mode path is about
+that path, never the shape under the pointer. Excalidraw's finished path is its one
+selected element when the `dblclick` arrives, so it is the only container on offer
+(`getTextBindableContainerAtPosition`, `App.tsx@1118751f:6831-6838`):
+
+| It finishes              | and lands                         | Opens                   |
+| ------------------------ | --------------------------------- | ----------------------- |
+| an arrow                 | on it, or within 30 of its middle | a label on the arrow    |
+| an arrow                 | anywhere else                     | a free text there       |
+| a line                   | anywhere                          | its points, and no text |
+| a path too short to keep | anywhere                          | nothing                 |
+
+(`App.tsx@1118751f:7199-7201`, `:7222-7234`, `:7356-7392`; `TEXT_TO_CENTER_SNAP_THRESHOLD`.)
+"Anywhere else" happens when the first click finishes, binding in orbit: the end moves
+onto the outline, along the line toward the shape's centre, away from the pointer.
+**OBSERVED** on excalidraw.com by element id and by the app's state at the `dblclick`: a
+second click that finishes on the first's waypoint labelled the arrow, inside a pack and
+over an empty board; of five double clicks whose first click bound in orbit, the two
+whose end stayed under the pointer labelled the arrow and the three whose end moved away
+typed a free text; a line opened its line editor with no text
+(`ci_binding_dense.rs::a_double_click_whose_first_click_ends_the_arrow`). The engine used
+to open a label on a shape under the pointer. It knows a double click is about the path
+by where the finishing press landed (within 35 px, `DOUBLE_TAP_POSITION_THRESHOLD`); a
+press anywhere else, a pan or another tool forgets it.
 
 **IMPLEMENTATION DETAIL, deliberate** — dropping one end on the other end's shape makes
 both `inside` only while it is there: the other end's binding as the drag found it is
@@ -136,8 +152,9 @@ The midpoint snap radius (16 px) and the diagonal inset are capped the same way.
 — 15 at zoom 1 and above, 25 at 0.4, at most 30. One number for the hover outline, the
 press that starts an arrow and the drop that ends it (`max_binding_distance`,
 `ci_binding_dense.rs::binding_reach_matches_oracle`). It replaced a reach of 32 screen
-pixels: at zoom 1 an end 16-32 units beside a shape no longer binds, and zoomed in the
-reach is larger on screen than it was (450 px at 30×).
+pixels: at zoom 1 an end 16-32 units beside a shape no longer binds, zoomed in the reach
+is larger on screen than it was (450 px at 30×), and zoomed out it is smaller — 30 units
+is 3 px at 10% (`MIN_ZOOM`), where it was 32. Both are the oracle's.
 
 ## What an end can bind to
 
@@ -151,7 +168,9 @@ distance" and dc2c16d9, two days after our pinned SHA — excalidraw.com serves 
 - each is measured by its **signed distance to its painted outline**
   (`signed_outline_distance`: positive inside, negative outside; rounded corners are the
   painter's quadratics, `distanceToElement`) and counts inside it, or outside within the
-  reach — but a frame only from outside, so a point inside a slide is aimed at what the
+  reach. A frame's corners are square, as the oracle's frames have no roundness
+  (`FRAME_STYLE.roundness: null`, `constants.ts@1118751f:209`) however ours are painted;
+  and a frame counts only from outside, so a point inside a slide is aimed at what the
   slide holds; and a shape inside a frame is skipped where the frame clips it from view
   (`isPointClippedByEnclosingFrame`, `collision.ts:283-298`);
 - candidates are walked top of the z-order first, and the walk **stops at the first
@@ -161,7 +180,9 @@ distance" and dc2c16d9, two days after our pinned SHA — excalidraw.com serves 
 - the **nearest outline wins**, ties to the one on top (a stable sort). When the point
   is inside the winner, a smaller shape it is also inside — overlapping the winner by
   more than a quarter of its own area and under three quarters of the winner's size —
-  takes over, so a nested shape is reached from anywhere inside it.
+  takes over, so a nested shape is reached from anywhere inside it. Sizes are each
+  shape's own box (`getElementBounds`, `bounds.ts@1118751f:176-209`): a turned diamond's
+  corners, a turned ellipse's curve, not the box around the turned box.
 
 So in a Ctrl+D pack of overlapping squares a point just outside one square's edge binds
 that square in orbit and a click there finishes the arrow, however many other squares the
@@ -175,14 +196,20 @@ painted ones are rounded (at most w/32 at the tip). The frame-background occlusi
 1118751f (`occludingFrameId`) is not ported: a frame has no background there
 (`hasBackground`), so it never applies.
 
-**OBSERVED, open** — boards made before native sticky notes store a note as a group
-with a filled shadow rectangle 3 units down and right of it, underneath. Measured on a
-live board of 20 such notes: an end aimed at the top or left edge binds the note (or the
-note stacked over that edge); one 2-12 units beyond the right or bottom edge binds the
-**shadow**, whose outline is nearer (inside it — a waypoint — up to 3 units out, in orbit
-beyond). The previous rule bound the note there beyond 3 units. The oracle's rule gives
-the same answer on that scene; the fix is the planned migration of legacy notes to a
-single element, which must also rebind arrows bound to a shadow onto its note.
+**OBSERVED, mitigated** — a sticky note from the N tool is a group with a filled shadow
+rectangle 3 units down and right of the note, underneath. Beside the note's right or
+bottom edge the shadow's outline is the nearer one, so from about 1.5 units out to about
+18 (the reach past the shadow's edge) the rule binds the **shadow**: inside it, a
+waypoint, up to 3 units out, in orbit beyond. The oracle's rule gives the same answer on
+that scene; the previous rule bound the note once the point was outside the shadow
+(equal sizes, tie to the top). A new note's shadow is therefore **locked**
+(`createStickyNote`; `e2e/arrow-dense.spec.ts` › "an arrow aimed beside a sticky note"):
+never a candidate, and still an occluder. A group carries its locked members
+(`carried_by`, the eraser's `erased_with`) — **OBSERVED** with a new note: moved,
+duplicated, deleted and erased, its shadow went with it. **Open:** a note
+made before this change, or unlocked from the menu (which unlocks its shadow too), still
+offers the shadow. The fix is the planned single-element sticky note, whose migration
+must also rebind arrows bound to a shadow onto its note.
 
 Ctrl+D copies ten units down and right, as the oracle does (`DEFAULT_GRID_SIZE / 2`,
 `actionDuplicateSelection.tsx:78-79`); it was twelve.
