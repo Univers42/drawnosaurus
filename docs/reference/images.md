@@ -123,8 +123,8 @@ other way and mirrors about its own centre, and flipped twice is exactly as it w
 
 A `scale` field was deliberately not added to `packages/contract`: it would be a wire
 change with nothing to gain, and a negative extent already round-trips through the server
-(`finite` allows it). Every other box kind keeps a positive extent on a flip (`resize.md`
-› Flip).
+(`finite` allows it). Every other box kind is reflected without changing the sign of its
+extent: a positive one stays positive, as the oracle's always is (`resize.md` › Flip).
 
 Pinned by `ci_flip.rs` › `an_image_mirrors_its_pixels_and_an_embed_does_not`, `ci_image.rs`
 › `a_flipped_image_exports_flipped` and `e2e/flip.spec.ts` › an image's pixels swap sides.

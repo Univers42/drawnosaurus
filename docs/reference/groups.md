@@ -163,8 +163,8 @@ this engine's older model (`ci_frame.rs`), applied to a group as a whole.
 a frame, the oracle takes that part out of the group (`updateGroupIdsAfterEditingGroup`,
 `App.tsx:12000-12060`). Here the group's membership is decided as a whole.
 
-**Not done** — align, distribute and flip still skip a locked member
-(`edit/align.rs`, `edit/flip.rs`), where the oracle's have no lock filter; z-order is not
+**Not done** — align and distribute still skip a locked member (`edit/align.rs`), where
+the oracle's have no lock filter (flip carries it: `resize.md` › Flip); z-order is not
 frame-aware (`zindex.ts` frame ranges); shift-click toggles on press rather than on
 release; a click on empty canvas inside the selection's frame keeps the selection, which
 the oracle drops (`App.tsx:12367-12387`) and `e2e/grabSelected.spec.ts` pins.

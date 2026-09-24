@@ -55,10 +55,16 @@ at the oracle SHA). Pinned by `tests/ci_flip.rs` (every kind, round trips, undo)
 children and a locked member of a selected group come along (`actionFlip.ts:87-94`,
 `groups.ts:94-132`). Nobody changes frame (`frame.ts:845-855`).
 
-**VERIFIED** — the mirror line is the middle of the **turned** boxes of what flips, plus
+**VERIFIED** — the mirror line is the middle of what flips as it is drawn, turned, plus
 the words on an arrow (`getCommonBoundingBox`, `actionFlip.ts:131`;
-`resizeElements.ts:1280-1310`). The unturned boxes put it in the wrong place whenever a
-turned element was in the selection.
+`resizeElements.ts:1280-1310`). Each kind is measured the way the oracle's
+`getElementBounds` measures it (`bounds.ts:147-240` at 1118751f), in
+`scene/geometry.rs` › `element_outline_bounds`: an ellipse by its own curve, a diamond by
+its four corners, a line, arrow or freehand stroke by its turned points, anything else by
+its turned box. The unturned boxes put the line in the wrong place whenever a turned
+element was in the selection, and the turned box for every kind still did for a turned
+ellipse, diamond, line or stroke — 70 units off for a line stood on end
+(`ci_flip.rs` › `the_axis_is_what_each_kind_draws`).
 
 **VERIFIED** — each kind, as the oracle does it (`resizeElements.ts:1409-1497`):
 
@@ -72,7 +78,15 @@ turned element was in the selection.
 
 An embed's page is never mirrored: Excalidraw only turns the iframe (`App.tsx:2046-2051`),
 and a mirrored video would show its controls and captions backwards. A text turned by
-0.3 comes back at 2π − 0.3, as on excalidraw.com; it used to keep its angle.
+0.3 comes back turned by -0.3, the same turn as excalidraw.com's 2π − 0.3; it used to keep
+its angle. The angle is negated and not normalised into `[0, 2π)` as the oracle's
+`normalizeRadians` does, so a second flip gives back the original number exactly.
+
+A flip that moves nothing — a lone unturned box, which is its own mirror image — is not an
+edit: no new version, nothing saved or sent, no step of undo, as the oracle's
+`mutateElement` keeps the version when no value changed (`mutateElement.ts:129-131`).
+`apply_patches` drops such a patch for align, distribute and lock as well
+(`ci_flip.rs` › `a_flip_that_changes_nothing_is_not_an_edit`).
 
 **VERIFIED** — arrows:
 
@@ -92,7 +106,16 @@ and a mirrored video would show its controls and captions backwards. A text turn
 | arrows-only check                  | counts an arrow's label (`getSelectedElements` with `includeBoundTextElement`, `actionFlip.ts:87-94`), so a labelled arrow flipped alone is mirrored and let go of both shapes                                          | labels are not counted: a labelled bound arrow alone turns round like any other                                                    |
 | re-centring after the flip         | moves the selection back onto its old middle (`actionFlip.ts:158-192`): a curved arrow is measured by its rendered curve, which can bump the box by a pixel                                                             | not ported: boxes are measured from points, which mirror exactly; `ci_flip.rs` › `every_kind_round_trips` guards drift             |
 | an image's mirror                  | a `scale: [sx, sy]` field                                                                                                                                                                                               | a negative width or height, painted and exported as the same scale — `images.md` › Flip                                            |
+| a line's reach                     | its rendered rough path (`getLinearElementRotatedBounds`, `bounds.ts:934-995`), which can wander a pixel or so off its points, and a curve's bulge past them                                                            | its points: the line through a curved arrow's bulge can differ by as much as the bulge                                             |
 
 **Open** — a box resized past its own corner (single element) still mirrors its stroke
 through a negative extent (`ci_selection.rs`), where the oracle's stays positive. Flip
 keeps whatever sign a box already has, so it neither introduces nor removes one.
+
+**Open** — the frame drawn round a multi-selection (`group_box`, from `scene_bounds`) is
+the union of the **unturned** boxes, where the oracle's comes from the same turned bounds
+as its mirror line. So with a turned element in the selection the frame and its handles
+shift sideways on a flip, and shift back on the next one: a 200×20 bar stood on end beside
+a box at 300..350 has its frame at 0..350 before a horizontal flip and 90..440 after, where
+excalidraw.com's stays at 90..350. The mirror line is right; the frame is what is off, and
+making it turned-aware is a change to every selection frame, not to flip.
