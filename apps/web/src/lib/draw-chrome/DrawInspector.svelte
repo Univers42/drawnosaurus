@@ -53,7 +53,13 @@
    * selection: an arrow offered a fill style it cannot have, a line offered corner
    * rounding it has no corners for, and a text element offered a dash pattern.
    */
-  const can = $derived(getShapeActions(tool, selection, style.backgroundColor));
+  const can = $derived(
+    getShapeActions(tool, selection, style.backgroundColor, {
+      // Read when the selection changes, as `selectionIsGroup` is below.
+      canAlign: selection.length > 0 && (engine?.canAlign() ?? false),
+      canDistribute: selection.length > 0 && (engine?.canDistribute() ?? false),
+    }),
+  );
 
   /** The arrowheads of the selected arrow, if the selection is one. */
   const arrowheads = $derived.by(() => {
