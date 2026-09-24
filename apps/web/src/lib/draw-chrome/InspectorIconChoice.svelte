@@ -21,7 +21,8 @@
     onPick,
   }: {
     options: Array<{ label: string; icon: IconName; value: T }>;
-    value: T;
+    /** `null` for a mixed selection: nothing is checked. */
+    value: T | null;
     ariaLabel: string;
     onPick: (value: T) => void;
   } = $props();

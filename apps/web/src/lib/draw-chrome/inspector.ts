@@ -69,10 +69,18 @@ export const SLOPPINESS: Array<{ label: string; value: number }> = [
  * nothing kept: measured on the canvas, a radius of 1, 8, 32 and 64 all produced pixel-
  * identical corners, because only "is it rounded" was ever read.
  */
-export const EDGES: Array<{ label: string; value: number | null }> = [
-  { label: "Sharp", value: null },
-  { label: "Round", value: 8 },
+export const EDGES: Array<{ label: string; value: "sharp" | "round" }> = [
+  { label: "Sharp", value: "sharp" },
+  { label: "Round", value: "round" },
 ];
+
+/**
+ * The roundness a pick writes. Named values rather than `null` for sharp, because the
+ * panel shows a mixed selection as `null` — and a `null` option would read as chosen.
+ */
+export function roundnessFor(edges: "sharp" | "round"): number | null {
+  return edges === "round" ? 8 : null;
+}
 
 /**
  * Grid spacings offered in the menu, in world units.

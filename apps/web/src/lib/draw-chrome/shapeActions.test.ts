@@ -1,17 +1,48 @@
 import { describe, expect, it } from "vitest";
 import type { DrawElement, DrawElementType } from "@osionos/draw-engine/types";
-import { getShapeActions, isDrawingTool, isTransparent } from "./shapeActions.ts";
+import { isTransparent } from "./colors.ts";
+import {
+  getShapeActions,
+  isDrawingTool,
+  NOTHING_SELECTED,
+  type SelectionFacts,
+} from "./shapeActions.ts";
 import type { ExtendedTool } from "./tools.ts";
 
-type Sel = Pick<DrawElement, "type" | "backgroundColor">;
+type Sel = Pick<DrawElement, "type" | "backgroundColor"> &
+  Partial<Pick<DrawElement, "boundTextId">>;
 
 const el = (type: DrawElementType, backgroundColor = "transparent"): Sel => ({
   type,
   backgroundColor,
 });
 
+/**
+ * What the engine's `selectionStyle()` reports for these elements: a label adds its
+ * text to the kinds, and aligns both ways unless it sits on an arrow
+ * (`ci_selection_style.rs` pins the engine side).
+ */
+const factsOf = (selected: readonly Sel[]): SelectionFacts => {
+  const kinds = new Set<DrawElementType>();
+  const filledKinds = new Set<DrawElementType>();
+  for (const element of selected) {
+    kinds.add(element.type);
+    if (!isTransparent(element.backgroundColor)) filledKinds.add(element.type);
+    if (element.boundTextId) kinds.add("text");
+  }
+  const labelled = selected.some((e) => e.boundTextId && e.type !== "arrow");
+  return {
+    ...NOTHING_SELECTED,
+    count: selected.length,
+    kinds: [...kinds],
+    filledKinds: [...filledKinds],
+    textAlignable: labelled || selected.some((e) => e.type === "text"),
+    verticalAlignable: labelled,
+  };
+};
+
 const actions = (tool: ExtendedTool, selected: Sel[] = [], nextBg = "transparent") =>
-  getShapeActions(tool, selected, nextBg);
+  getShapeActions(tool, factsOf(selected), nextBg);
 
 describe("panel visibility", () => {
   it("stays hidden with the select tool and nothing selected", () => {
@@ -120,7 +151,7 @@ describe("arrangement controls", () => {
     // shapes are one unit, and a frame with a shape beside it aligns nothing.
     const four = [el("rectangle"), el("ellipse"), el("diamond"), el("rectangle")];
     const units = (canAlign: boolean, canDistribute: boolean) =>
-      getShapeActions("select", four, "transparent", { canAlign, canDistribute });
+      getShapeActions("select", { ...factsOf(four), canAlign, canDistribute }, "transparent");
 
     expect(units(true, false).align).toBe(true);
     expect(units(true, false).distribute).toBe(false);
@@ -194,7 +225,7 @@ describe("a frame has a fixed appearance, so it styles nothing", () => {
     // answers no — Excalidraw excludes frames from those for the same reason. What does
     // still apply is everything about the frame as an object: send it to back, flip it,
     // group it. So the panel appears, carrying only those.
-    const actions = getShapeActions("select", [el("frame")], "transparent");
+    const actions = getShapeActions("select", factsOf([el("frame")]), "transparent");
     expect(actions.strokeColor).toBe(false);
     expect(actions.backgroundColor).toBe(false);
     expect(actions.strokeWidth).toBe(false);
@@ -207,14 +238,18 @@ describe("a frame has a fixed appearance, so it styles nothing", () => {
   });
 
   it("offers nothing at all while the frame tool is active with an empty board", () => {
-    const actions = getShapeActions("frame", [], "transparent");
+    const actions = getShapeActions("frame", factsOf([]), "transparent");
     expect(actions.visible).toBe(false);
   });
 
   it("still shows one when a frame is selected alongside something stylable", () => {
     // The controls act on what they can. Hiding the panel because one member of the
     // selection has no stroke colour would make a mixed selection unstylable.
-    const actions = getShapeActions("select", [el("frame"), el("rectangle")], "transparent");
+    const actions = getShapeActions(
+      "select",
+      factsOf([el("frame"), el("rectangle")]),
+      "transparent",
+    );
     expect(actions.visible).toBe(true);
     expect(actions.strokeColor).toBe(true);
   });
@@ -224,13 +259,13 @@ describe("an image is styled by selection, not by its tool", () => {
   it("shows nothing while the picker is open", () => {
     // The image tool lasts exactly as long as a file dialog. A panel that flashes up for
     // that long is noise.
-    expect(getShapeActions("image", [], "transparent").visible).toBe(false);
+    expect(getShapeActions("image", factsOf([]), "transparent").visible).toBe(false);
   });
 
   it("offers a selected image its corners and its opacity, and no stroke", () => {
     // An image has no stroke or fill to set, but Excalidraw does let you round its
     // corners and fade it.
-    const actions = getShapeActions("select", [el("image")], "transparent");
+    const actions = getShapeActions("select", factsOf([el("image")]), "transparent");
     expect(actions.visible).toBe(true);
     expect(actions.roundness).toBe(true);
     expect(actions.opacity).toBe(true);
@@ -247,7 +282,7 @@ describe("the bucket fill tool", () => {
   // time then repainted it that identical shade, which looks exactly like a tool that
   // does nothing.
   it("offers a background colour, because that is what it paints with", () => {
-    const actions = getShapeActions("bucketfill", [], "transparent");
+    const actions = getShapeActions("bucketfill", factsOf([]), "transparent");
     expect(actions.visible).toBe(true);
     expect(actions.backgroundColor).toBe(true);
   });
@@ -258,19 +293,19 @@ describe("the bucket fill tool", () => {
     // relevant either way" — `shapeActionPredicates.ts:131-135`. Without the special
     // case the fill row is hidden precisely when nothing has been picked yet, which is
     // every first use of the tool.
-    expect(getShapeActions("bucketfill", [], "transparent").fill).toBe(true);
-    expect(getShapeActions("bucketfill", [], "#b2f2bb").fill).toBe(true);
+    expect(getShapeActions("bucketfill", factsOf([]), "transparent").fill).toBe(true);
+    expect(getShapeActions("bucketfill", factsOf([]), "#b2f2bb").fill).toBe(true);
   });
 
   it("offers opacity", () => {
-    expect(getShapeActions("bucketfill", [], "transparent").opacity).toBe(true);
+    expect(getShapeActions("bucketfill", factsOf([]), "transparent").opacity).toBe(true);
   });
 
   it("offers nothing that paint has no use for", () => {
     // The paint it leaves behind has no stroke at all, so a stroke colour, width or
     // dash would be controls that change nothing. `comparisons.ts:19-64` omits
     // `bucketfill` from every one of them.
-    const actions = getShapeActions("bucketfill", [], "#b2f2bb");
+    const actions = getShapeActions("bucketfill", factsOf([]), "#b2f2bb");
     expect(actions.strokeColor).toBe(false);
     expect(actions.strokeWidth).toBe(false);
     expect(actions.strokeStyle).toBe(false);
@@ -297,7 +332,7 @@ describe("a shape carrying a label", () => {
       backgroundColor: "transparent",
       boundTextId: "el-label",
     };
-    expect(getShapeActions("select", [labelled], "transparent").text).toBe(true);
+    expect(getShapeActions("select", factsOf([labelled]), "transparent").text).toBe(true);
   });
 
   it("still offers everything a rectangle has", () => {
@@ -306,7 +341,7 @@ describe("a shape carrying a label", () => {
       backgroundColor: "transparent",
       boundTextId: "el-label",
     };
-    const shown = getShapeActions("select", [labelled], "transparent");
+    const shown = getShapeActions("select", factsOf([labelled]), "transparent");
     expect(shown.strokeColor).toBe(true);
     expect(shown.roundness).toBe(true);
   });
@@ -314,5 +349,53 @@ describe("a shape carrying a label", () => {
   it("does not offer them for a shape without one", () => {
     // `boundTextId` absent, and a bare rectangle has no text to format.
     expect(actions("select", [el("rectangle")]).text).toBe(false);
+  });
+});
+
+describe("text alignment", () => {
+  it("offers both alignments for a label in a shape", () => {
+    const labelled: Sel = { type: "rectangle", backgroundColor: "transparent", boundTextId: "l" };
+    const shown = actions("select", [labelled]);
+    expect(shown.textAlign).toBe(true);
+    expect(shown.verticalAlign).toBe(true);
+  });
+
+  it("offers free text the horizontal one only", () => {
+    // `shouldAllowVerticalAlign` is about a label's place in its container; free text
+    // has no container to sit in.
+    const shown = actions("select", [el("text")]);
+    expect(shown.textAlign).toBe(true);
+    expect(shown.verticalAlign).toBe(false);
+  });
+
+  it("offers an arrow's label neither", () => {
+    const labelled: Sel = { type: "arrow", backgroundColor: "transparent", boundTextId: "l" };
+    const shown = getShapeActions(
+      "select",
+      { ...factsOf([labelled]), textAlignable: false, verticalAlignable: false },
+      "transparent",
+    );
+    expect(shown.text).toBe(true);
+    expect(shown.textAlign).toBe(false);
+    expect(shown.verticalAlign).toBe(false);
+  });
+
+  it("offers the horizontal one while the text tool is active", () => {
+    expect(actions("text").textAlign).toBe(true);
+    expect(actions("text").verticalAlign).toBe(false);
+  });
+});
+
+describe("oracle predicates", () => {
+  it("gives an embed a background, as `hasBackground` does", () => {
+    // `packages/element/src/comparisons.ts@1118751f:3-14` lists `embeddable`.
+    expect(actions("select", [el("embed")]).backgroundColor).toBe(true);
+    expect(actions("select", [el("embed", "#ffc9c9")]).fill).toBe(true);
+  });
+
+  it("does not offer a stroke colour for a selected image just because a tool has one", () => {
+    // `canChangeStrokeColor` (`shapeActionPredicates.ts@1118751f:41-62`).
+    expect(actions("rectangle", [el("image")]).strokeColor).toBe(false);
+    expect(actions("rectangle").strokeColor).toBe(true);
   });
 });

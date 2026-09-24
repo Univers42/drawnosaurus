@@ -1,4 +1,5 @@
-import type { DrawElement, DrawElementType } from "@osionos/draw-engine/types";
+import type { DrawElementType } from "@osionos/draw-engine/types";
+import { isTransparent } from "./colors.ts";
 import type { ExtendedTool } from "./tools.ts";
 
 /**
@@ -43,7 +44,7 @@ const asElementKind = (kind: Kind): Kind =>
  * fill came out the one hardcoded fallback shade.
  */
 const hasBackground = (kind: Kind): boolean =>
-  ["rectangle", "ellipse", "diamond", "line", "freedraw", "bucketfill"].includes(
+  ["rectangle", "embed", "ellipse", "diamond", "line", "freedraw", "bucketfill"].includes(
     asElementKind(kind),
   );
 
@@ -122,15 +123,6 @@ export const isDrawingTool = (tool: ExtendedTool): boolean =>
   // shows a panel, because that is driven by the selection.
   tool !== "embed";
 
-/** Whether a colour paints nothing, so a fill style would have nothing to apply to. */
-export const isTransparent = (color: string): boolean => {
-  const c = color.trim().toLowerCase();
-  if (c === "transparent" || c === "") return true;
-  if (c.length === 9 && c.startsWith("#")) return c.slice(7) === "00";
-  if (c.length === 5 && c.startsWith("#")) return c.slice(4) === "0";
-  return false;
-};
-
 export interface ShapeActions {
   /** Whether the panel should be on screen at all. */
   visible: boolean;
@@ -142,7 +134,10 @@ export interface ShapeActions {
   sloppiness: boolean;
   roundness: boolean;
   arrowheads: boolean;
+  /** Font size — and, from wave 3, the font family. */
   text: boolean;
+  textAlign: boolean;
+  verticalAlign: boolean;
   opacity: boolean;
   /** Actions on things that exist: z-order, mirror, group, align. */
   layers: boolean;
@@ -153,28 +148,52 @@ export interface ShapeActions {
 }
 
 /**
- * Whether align and distribute would move anything — the engine's `canAlign()` and
- * `canDistribute()`. Asked of the engine because the answer is in units, not elements:
- * a group is one unit, a lone group is what it holds, and a frame refuses both.
+ * What the predicates need to know about the selection — the engine's `selectionStyle()`
+ * carries all of it, so the panel asks once per revision instead of walking elements.
+ *
+ * `kinds` are the oracle's *target* elements: the selection plus the labels its shapes
+ * carry (`getTargetElements`). Once a shape has a label the shape is the only thing a
+ * click can select, so asking only about the selection would leave the text rows
+ * unreachable for every label on the board — the case they exist for.
  */
-export interface Arrangeable {
+export interface SelectionFacts {
+  count: number;
+  kinds: readonly DrawElementType[];
+  /** The kinds whose background paints something. */
+  filledKinds: readonly DrawElementType[];
+  /** `suppportsHorizontalAlign` (`packages/element/src/textElement.ts@1118751f:462-477`). */
+  textAlignable: boolean;
+  /** `shouldAllowVerticalAlign` (`textElement.ts@1118751f:446-460`). */
+  verticalAlignable: boolean;
+  /** Whether align and distribute would move anything, counted in units by the engine. */
   canAlign: boolean;
   canDistribute: boolean;
 }
 
-const NOTHING_TO_ARRANGE: Arrangeable = { canAlign: false, canDistribute: false };
+export const NOTHING_SELECTED: SelectionFacts = {
+  count: 0,
+  kinds: [],
+  filledKinds: [],
+  textAlignable: false,
+  verticalAlignable: false,
+  canAlign: false,
+  canDistribute: false,
+};
 
 export function getShapeActions(
   activeTool: ExtendedTool,
-  selected: readonly Pick<DrawElement, "type" | "backgroundColor" | "boundTextId">[],
+  selection: SelectionFacts,
   /** The style that would be applied to the next thing drawn. */
   nextBackgroundColor: string,
-  arrangeable: Arrangeable = NOTHING_TO_ARRANGE,
 ): ShapeActions {
+  const { kinds } = selection;
   const forToolOrSelection = (predicate: (kind: Kind) => boolean): boolean =>
-    predicate(activeTool) || selected.some((element) => predicate(element.type));
+    predicate(activeTool) || kinds.some((kind) => predicate(kind));
 
-  const hasSelection = selected.length > 0;
+  const hasSelection = selection.count > 0;
+  // `canChangeStrokeColor` (`shapeActionPredicates.ts@1118751f:41-62`): the tool only
+  // counts while the selection is not all images or all frames.
+  const commonKind = kinds.length === 1 ? kinds[0] : null;
 
   // Excalidraw's `showSelectedShapeActions`: a drawing tool is active, so defaults can
   // be set before drawing, or something is selected. The select tool over an empty
@@ -183,7 +202,9 @@ export function getShapeActions(
 
   return {
     visible,
-    strokeColor: forToolOrSelection(hasStrokeColor),
+    strokeColor:
+      (hasStrokeColor(activeTool) && commonKind !== "image" && commonKind !== "frame") ||
+      kinds.some(hasStrokeColor),
     backgroundColor: forToolOrSelection(hasBackground),
     // A fill style only means something once there is a fill to style — except for the
     // bucket, which never paints transparent because it falls back to a real colour when
@@ -192,27 +213,20 @@ export function getShapeActions(
     fill:
       activeTool === "bucketfill" ||
       (hasFillStyle(activeTool) && !isTransparent(nextBackgroundColor)) ||
-      selected.some(
-        (element) => hasFillStyle(element.type) && !isTransparent(element.backgroundColor),
-      ),
+      selection.filledKinds.some(hasFillStyle),
     strokeWidth: forToolOrSelection(hasStrokeWidth),
     strokeStyle: forToolOrSelection(hasStrokeStyle),
     sloppiness: forToolOrSelection(hasRoughness),
     roundness: forToolOrSelection(canChangeRoundness),
     arrowheads: forToolOrSelection(canHaveArrowheads),
-    // `boundTextId` is not a convenience here. Once a shape has a label the shape is the
-    // only thing you *can* select — clicking it selects the container, and the label is
-    // not separately selectable — so asking only "is a text element selected" makes the
-    // font and alignment controls unreachable for every label on the board, which is the
-    // case they exist for.
-    text:
-      activeTool === "text" ||
-      selected.some((element) => isTextKind(element.type) || Boolean(element.boundTextId)),
+    text: activeTool === "text" || kinds.some(isTextKind),
+    textAlign: activeTool === "text" || selection.textAlignable,
+    verticalAlign: selection.verticalAlignable,
     opacity: forToolOrSelection(hasOpacity),
     layers: hasSelection,
     mirror: hasSelection,
     group: hasSelection,
-    align: arrangeable.canAlign,
-    distribute: arrangeable.canDistribute,
+    align: selection.canAlign,
+    distribute: selection.canDistribute,
   };
 }

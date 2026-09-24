@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { Arrowhead, DrawElement, DrawElementStyle } from "@osionos/draw-engine/types";
+  import type { Arrowhead, DrawElementStyle, SelectionStyle } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import InspectorRow from "./InspectorRow.svelte";
-  import InspectorSwatches from "./InspectorSwatches.svelte";
+  import InspectorColorPicker from "./InspectorColorPicker.svelte";
   import InspectorSegmented from "./InspectorSegmented.svelte";
   import InspectorIconRow from "./InspectorIconRow.svelte";
   import InspectorIconChoice from "./InspectorIconChoice.svelte";
@@ -16,33 +16,49 @@
     VERTICAL_ALIGNS,
     getFillSwatches,
     getStrokeSwatches,
+    roundnessFor,
     type ThemeMode,
     WIDTHS,
   } from "./inspector.ts";
+  import { mostUsedCustomColors, type ColorKind } from "./colors.ts";
   import { getShapeActions } from "./shapeActions.ts";
+  import { zOrderShortcut } from "./shortcuts.ts";
   import { ARROWHEAD_KINDS, ARROWHEAD_GLYPH, ARROWHEAD_LABEL } from "./menu.ts";
   import type { ExtendedTool } from "./tools.ts";
 
+  /**
+   * The properties panel.
+   *
+   * Every value comes from `summary` — the engine's `selectionStyle()`, read once per
+   * `styleRevision` — so the panel shows what the selection *is*: a value everything
+   * shares, or nothing marked for a mixed one (`null`), and it follows undo, redo and a
+   * peer's edit without being told about each. Every action goes through `run` (or
+   * `onApply` / `onPreview` for a style patch), which asks the engine again afterwards.
+   */
   let {
-    style,
+    summary,
     themeMode = "light",
-    selectedCount,
-    selection = [],
-    sceneRevision = 0,
     tool = "select",
     engine,
+    openPicker,
+    onOpenPicker,
     onApply,
+    onPreview,
+    run,
   }: {
-    style: DrawElementStyle;
-    selectedCount: number;
-    /** The selected elements, for deciding which controls apply. */
-    selection?: readonly DrawElement[];
-    /** Changes with every scene change, for what the selection alone does not say. */
-    sceneRevision?: number;
+    summary: SelectionStyle;
     tool?: ExtendedTool;
     engine: DrawEngine | null;
     themeMode?: ThemeMode;
+    /** Which colour picker is open — the S and G keys open them from outside. */
+    openPicker: ColorKind | null;
+    onOpenPicker: (kind: ColorKind | null) => void;
+    /** Applies a style to the selection, or to the next element with nothing selected. */
     onApply: (patch: Partial<DrawElementStyle>) => void;
+    /** Shows a style without committing it — a slider in motion. */
+    onPreview: (patch: Partial<DrawElementStyle>) => void;
+    /** Runs an engine action and reads the panel back. */
+    run: (action: (engine: DrawEngine) => void) => void;
   } = $props();
 
   const strokePresets = $derived(getStrokeSwatches(themeMode));
@@ -52,58 +68,78 @@
    * Which controls apply, given the tool and what is selected.
    *
    * Every section below is gated on one of these rather than on an ad-hoc condition, so
-   * the answers cannot drift apart. The panel used to render every control for every
-   * selection: an arrow offered a fill style it cannot have, a line offered corner
-   * rounding it has no corners for, and a text element offered a dash pattern.
+   * the answers cannot drift apart.
    */
-  const can = $derived.by(() => {
-    // Asked again on every scene change too: ungroup, lock, undo or a peer's edit changes
-    // the blocks the same selection makes, and no selection event says so.
-    void sceneRevision;
-    return getShapeActions(tool, selection, style.backgroundColor, {
-      canAlign: selection.length > 0 && (engine?.canAlign() ?? false),
-      canDistribute: selection.length > 0 && (engine?.canDistribute() ?? false),
-    });
-  });
-
-  /** The arrowheads of the selected arrow, if the selection is one. */
-  const arrowheads = $derived.by(() => {
-    const arrows = selection.filter((element) => element.type === "arrow");
-    const first = arrows[0];
-    if (!first) return { start: "none" as Arrowhead, end: "arrow" as Arrowhead };
-    return {
-      start: first.startArrowhead ?? ("none" as Arrowhead),
-      end: first.endArrowhead ?? ("arrow" as Arrowhead),
-    };
-  });
+  const can = $derived(getShapeActions(tool, summary, summary.backgroundColor ?? "transparent"));
 
   /** The element type reads as a heading, so it is capitalised rather than raw. */
   const title = $derived.by(() => {
-    if (selectedCount > 1) return `${selectedCount} selected`;
-    const kind = selection[0]?.type;
+    if (summary.count > 1) return `${summary.count} selected`;
+    const kind = summary.count === 1 ? summary.kinds[0] : undefined;
     if (!kind) return "Style";
     return kind.charAt(0).toUpperCase() + kind.slice(1);
   });
+
+  function customColors(kind: ColorKind): () => string[] {
+    return () =>
+      mostUsedCustomColors(
+        engine?.colorCounts(kind === "stroke" ? "strokeColor" : "backgroundColor") ?? [],
+      );
+  }
+
+  /** What the slider shows for a mixed selection: the next element's, as the oracle's does. */
+  const opacity = $derived(summary.opacity ?? engine?.getNextStyle().opacity ?? 100);
+  const opacityText = $derived(summary.opacity === null ? "mixed" : `${summary.opacity}%`);
+
+  const arrowheadSides = $derived([
+    { end: "start" as const, value: summary.startArrowhead },
+    { end: "end" as const, value: summary.endArrowhead },
+  ]);
+
+  function setArrowhead(end: "start" | "end", kind: Arrowhead): void {
+    run((e) => e.setArrowheads({ [end]: kind }));
+  }
 </script>
 
 <aside class="draw-panel panel" aria-label="Style inspector">
   <div class="title">{title}</div>
 
+  <!-- In the oracle's order (`components/Actions.tsx@1118751f:168-200`). -->
   {#if can.strokeColor}
     <InspectorRow label="Stroke">
-      <InspectorSwatches
-        value={style.strokeColor}
-        presets={strokePresets}
+      <InspectorColorPicker
+        label="Stroke"
+        kind="stroke"
+        value={summary.strokeColor}
+        picks={strokePresets}
+        open={openPicker === "stroke"}
+        customColors={customColors("stroke")}
+        onToggle={(open) => onOpenPicker(open ? "stroke" : null)}
         onPick={(color) => onApply({ strokeColor: color })}
       />
     </InspectorRow>
   {/if}
   {#if can.backgroundColor}
     <InspectorRow label="Background">
-      <InspectorSwatches
-        value={style.backgroundColor}
-        presets={fillPresets}
+      <InspectorColorPicker
+        label="Background"
+        kind="background"
+        value={summary.backgroundColor}
+        picks={fillPresets}
+        open={openPicker === "background"}
+        customColors={customColors("background")}
+        onToggle={(open) => onOpenPicker(open ? "background" : null)}
         onPick={(color) => onApply({ backgroundColor: color })}
+      />
+    </InspectorRow>
+  {/if}
+  {#if can.fill}
+    <InspectorRow label="Fill style">
+      <InspectorSegmented
+        ariaLabel="Fill style"
+        options={FILL_STYLES}
+        value={summary.fillStyle}
+        onPick={(v) => onApply({ fillStyle: v as DrawElementStyle["fillStyle"] })}
       />
     </InspectorRow>
   {/if}
@@ -112,7 +148,7 @@
       <InspectorSegmented
         ariaLabel="Stroke width"
         options={WIDTHS}
-        value={style.strokeWidth}
+        value={summary.strokeWidth}
         onPick={(v) => onApply({ strokeWidth: Number(v) })}
       />
     </InspectorRow>
@@ -122,7 +158,7 @@
       <InspectorSegmented
         ariaLabel="Stroke style"
         options={STROKE_STYLES}
-        value={style.strokeStyle}
+        value={summary.strokeStyle}
         onPick={(v) => onApply({ strokeStyle: v as DrawElementStyle["strokeStyle"] })}
       />
     </InspectorRow>
@@ -132,64 +168,60 @@
       <InspectorSegmented
         ariaLabel="Sloppiness"
         options={SLOPPINESS}
-        value={style.roughness}
+        value={summary.roughness}
         onPick={(v) => onApply({ roughness: Number(v) })}
       />
     </InspectorRow>
   {/if}
-  {#if can.fill}
-    <InspectorRow label="Fill style">
+  {#if can.roundness}
+    <InspectorRow label="Edges">
       <InspectorSegmented
-        ariaLabel="Fill style"
-        options={FILL_STYLES}
-        value={style.fillStyle}
-        onPick={(v) => onApply({ fillStyle: v as DrawElementStyle["fillStyle"] })}
+        ariaLabel="Edges"
+        options={EDGES}
+        value={summary.edges}
+        onPick={(v) => onApply({ roundness: roundnessFor(v === "round" ? "round" : "sharp") })}
       />
     </InspectorRow>
   {/if}
+  <!--
+    The text rows read the label of a selected shape as well as a selected text: once a
+    shape has a label, the shape is the only thing a click can select. The font family
+    goes above the size, as the oracle has it.
+  -->
   {#if can.text}
     <InspectorRow label="Font size">
       <InspectorSegmented
         ariaLabel="Font size"
         options={FONT_SIZES}
-        value={engine?.getFontSize() ?? 20}
-        onPick={(v) => engine?.setFontSize(Number(v))}
+        value={summary.fontSize}
+        onPick={(v) => run((e) => e.setFontSize(Number(v)))}
       />
     </InspectorRow>
   {/if}
-  <!--
-    Alignment, which the spec lists under "Formatting" and the conformance registry
-    recorded as a gap. Both rows read their current value back from the engine rather than
-    from the element: the engine resolves an unset alignment through the element's role,
-    so a label nobody has aligned still shows "centre" — which is where it is drawn.
-  -->
-  {#if can.text && engine}
+  {#if can.text && can.textAlign}
     <InspectorRow label="Text align">
       <InspectorIconChoice
         ariaLabel="Text alignment"
         options={TEXT_ALIGNS}
-        value={engine.getTextAlign()}
-        onPick={(v) => engine.setTextAlign(v)}
+        value={summary.textAlign}
+        onPick={(v) => run((e) => e.setTextAlign(v))}
       />
     </InspectorRow>
+  {/if}
+  {#if can.verticalAlign}
     <InspectorRow label="Vertical align">
       <InspectorIconChoice
         ariaLabel="Vertical text alignment"
         options={VERTICAL_ALIGNS}
-        value={engine.getVerticalAlign()}
-        onPick={(v) => engine.setVerticalAlign(v)}
+        value={summary.verticalAlign}
+        onPick={(v) => run((e) => e.setVerticalAlign(v))}
       />
     </InspectorRow>
   {/if}
-  <!--
-    Arrowheads existed in the engine and in the right-click menu, but not in the panel —
-    so the one control an arrow most obviously needs was the one place it could not be
-    reached. Shown only for arrows, which are the only elements that can have them.
-  -->
-  {#if can.arrowheads && engine}
+  {#if can.arrowheads}
     <InspectorRow label="Arrowheads">
       <div class="arrowheads">
-        {#each [{ end: "start" as const, value: arrowheads.start }, { end: "end" as const, value: arrowheads.end }] as side (side.end)}
+        {#each arrowheadSides as side (side.end)}
           <div
             class="heads"
             role="radiogroup"
@@ -203,7 +235,8 @@
                 aria-checked={side.value === kind}
                 aria-label={`${side.end === "start" ? "Start" : "End"} ${ARROWHEAD_LABEL[kind]}`}
                 title={ARROWHEAD_LABEL[kind]}
-                onclick={() => engine.setArrowheads({ [side.end]: kind })}
+                onmousedown={(event) => event.preventDefault()}
+                onclick={() => setArrowhead(side.end, kind)}
               >
                 <span class:flip={side.end === "start"}>{ARROWHEAD_GLYPH[kind]}</span>
               </button>
@@ -213,26 +246,23 @@
       </div>
     </InspectorRow>
   {/if}
+  <!--
+    0 to 100 in tens, as the oracle's range is (`actionProperties.tsx@1118751f:984-994`).
+    Dragging previews on the canvas and commits once on release, so a drag is one step
+    of undo rather than one per notch.
+  -->
   {#if can.opacity}
-    <InspectorRow label={`Opacity — ${style.opacity}%`}>
+    <InspectorRow label={`Opacity — ${opacityText}`}>
       <input
         type="range"
-        min={10}
+        min={0}
         max={100}
         step={10}
-        value={style.opacity}
+        value={opacity}
         aria-label="Opacity"
-        oninput={(e) => onApply({ opacity: Number(e.currentTarget.value) })}
-      />
-    </InspectorRow>
-  {/if}
-  {#if can.roundness}
-    <InspectorRow label="Edges">
-      <InspectorSegmented
-        ariaLabel="Edges"
-        options={EDGES}
-        value={style.roundness === null || style.roundness === undefined ? null : 8}
-        onPick={(v) => onApply({ roundness: v === null ? null : Number(v) })}
+        aria-valuetext={opacityText}
+        oninput={(e) => onPreview({ opacity: Number(e.currentTarget.value) })}
+        onchange={(e) => onApply({ opacity: Number(e.currentTarget.value) })}
       />
     </InspectorRow>
   {/if}
@@ -241,24 +271,24 @@
       <InspectorIconRow
         buttons={[
           {
-            label: "Send to back (⌘⌥[)",
+            label: `Send to back (${zOrderShortcut("back")})`,
             icon: "sendToBack",
-            onPick: () => engine.reorderSelection("back"),
+            onPick: () => run((e) => e.reorderSelection("back")),
           },
           {
-            label: "Send backward (⌘[)",
+            label: `Send backward (${zOrderShortcut("backward")})`,
             icon: "backward",
-            onPick: () => engine.reorderSelection("backward"),
+            onPick: () => run((e) => e.reorderSelection("backward")),
           },
           {
-            label: "Bring forward (⌘])",
+            label: `Bring forward (${zOrderShortcut("forward")})`,
             icon: "forward",
-            onPick: () => engine.reorderSelection("forward"),
+            onPick: () => run((e) => e.reorderSelection("forward")),
           },
           {
-            label: "Bring to front (⌘⌥])",
+            label: `Bring to front (${zOrderShortcut("front")})`,
             icon: "bringToFront",
-            onPick: () => engine.reorderSelection("front"),
+            onPick: () => run((e) => e.reorderSelection("front")),
           },
         ]}
       />
@@ -271,36 +301,34 @@
           {
             label: "Flip horizontally",
             icon: "flipHorizontal",
-            onPick: () => engine.flipSelection("horizontal"),
+            onPick: () => run((e) => e.flipSelection("horizontal")),
           },
           {
             label: "Flip vertically",
             icon: "flipVertical",
-            onPick: () => engine.flipSelection("vertical"),
+            onPick: () => run((e) => e.flipSelection("vertical")),
           },
         ]}
       />
     </InspectorRow>
   {/if}
   <!--
-    Group and ungroup existed in the engine and in the right-click menu, but there was
-    no way to reach them from the panel — so selecting several elements and grouping
-    them looked impossible. Shown from two elements up, and also for a single selection
-    that is already a group, which is the only way to ungroup one.
+    Shown from two elements up, and also for a single selection that is already a
+    group, which is the only way to ungroup one.
   -->
-  {#if engine && (selectedCount >= 2 || (selectedCount > 0 && engine.selectionIsGroup()))}
+  {#if engine && (summary.count >= 2 || summary.isGroup)}
     <InspectorRow label="Group">
       <InspectorIconRow
         buttons={[
           {
             label: "Group selection",
             icon: "group",
-            onPick: () => engine.groupSelection(),
+            onPick: () => run((e) => e.groupSelection()),
           },
           {
             label: "Ungroup selection",
             icon: "ungroup",
-            onPick: () => engine.ungroupSelection(),
+            onPick: () => run((e) => e.ungroupSelection()),
           },
         ]}
       />
@@ -310,27 +338,35 @@
     <InspectorRow label="Align">
       <InspectorIconRow
         buttons={[
-          { label: "Align left", icon: "alignLeft", onPick: () => engine.alignSelection("left") },
+          {
+            label: "Align left",
+            icon: "alignLeft",
+            onPick: () => run((e) => e.alignSelection("left")),
+          },
           {
             label: "Align horizontal centres",
             icon: "alignCenterX",
-            onPick: () => engine.alignSelection("centerX"),
+            onPick: () => run((e) => e.alignSelection("centerX")),
           },
           {
             label: "Align right",
             icon: "alignRight",
-            onPick: () => engine.alignSelection("right"),
+            onPick: () => run((e) => e.alignSelection("right")),
           },
-          { label: "Align top", icon: "alignTop", onPick: () => engine.alignSelection("top") },
+          {
+            label: "Align top",
+            icon: "alignTop",
+            onPick: () => run((e) => e.alignSelection("top")),
+          },
           {
             label: "Align vertical centres",
             icon: "alignCenterY",
-            onPick: () => engine.alignSelection("centerY"),
+            onPick: () => run((e) => e.alignSelection("centerY")),
           },
           {
             label: "Align bottom",
             icon: "alignBottom",
-            onPick: () => engine.alignSelection("bottom"),
+            onPick: () => run((e) => e.alignSelection("bottom")),
           },
         ]}
       />
@@ -343,12 +379,12 @@
           {
             label: "Distribute horizontally",
             icon: "distributeX",
-            onPick: () => engine.distributeSelection("x"),
+            onPick: () => run((e) => e.distributeSelection("x")),
           },
           {
             label: "Distribute vertically",
             icon: "distributeY",
-            onPick: () => engine.distributeSelection("y"),
+            onPick: () => run((e) => e.distributeSelection("y")),
           },
         ]}
       />

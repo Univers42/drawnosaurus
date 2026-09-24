@@ -49,7 +49,8 @@ export type IconName =
   | "zoomIn"
   | "zoomOut"
   | "fit"
-  | "focus";
+  | "focus"
+  | "eyeDropper";
 
 export type SvgNode =
   | { tag: "path"; d: string }
@@ -329,5 +330,14 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "path", d: "M17 3h2a2 2 0 0 1 2 2v2" },
     { tag: "path", d: "M21 17v2a2 2 0 0 1-2 2h-2" },
     { tag: "path", d: "M7 21H5a2 2 0 0 1-2-2v-2" },
+  ],
+  // A pipette, for picking a colour off the screen.
+  eyeDropper: [
+    { tag: "path", d: "m2 22 1-1h3l9-9" },
+    { tag: "path", d: "M3 21v-3l9-9" },
+    {
+      tag: "path",
+      d: "m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z",
+    },
   ],
 };
