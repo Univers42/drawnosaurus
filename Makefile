@@ -280,8 +280,9 @@ oracle: ## Fetch the Excalidraw parity reference at the pinned SHA
 
 # Regenerating fixtures is deliberate: it re-derives what we are held to. Run it when
 # the pin moves, never to make a red test go green.
-oracle-fixtures: oracle ## Regenerate the rough.js conformance fixtures
+oracle-fixtures: oracle ## Regenerate the rough.js and text-wrap conformance fixtures
 	cd engine/tools/rough-oracle && npm install && npm run generate
+	docker run --rm $(RUN_AS_HOST) -v "$(CURDIR)/engine:/engine" -v "$(CURDIR)/third_party/excalidraw:/excalidraw:ro" -e EXCALIDRAW_DIR=/excalidraw -e ORACLE_SHA=$(ORACLE_SHA) -w /engine/tools/text-oracle mcr.microsoft.com/playwright:v1.63.0-noble node --import ./register.mjs generate.mjs
 	@echo -e "$(GREEN)✔ fixtures regenerated — review the diff before committing$(RESET)"
 
 inspector-smoke: ## End-to-end check of the editor-inspector MCP server (needs `make dev`)

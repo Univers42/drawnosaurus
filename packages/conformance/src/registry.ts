@@ -165,7 +165,7 @@ export const RULES: readonly Rule[] = [
     section: "🔤 Text",
     text: /wrap text where appropriate/,
     status: "gap",
-    why: "Text wrapping for bound labels, carried over from issue #4. Needs real text measurement first.",
+    why: "Pasting plain text makes no text element: the host hands it to pasteJson, which takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not.",
   },
   { section: "🔤 Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
@@ -502,9 +502,19 @@ export const RULES: readonly Rule[] = [
       "e2e/textEditRequest.spec.ts",
     ],
   },
+  // Wrapping, carved out of the gap below, which is about font metrics. The wrap itself
+  // no longer is: it is Excalidraw's textWrapping.ts ported line for line and replayed
+  // against fixtures that file generates (docs/reference/text.md). What keeps both lines a
+  // gap is that only setting a text wraps it; no resize does.
   {
     section: "9. Text",
-    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Wrapping|Fixed-width|Font family|inside arrows/,
+    text: /Wrapping|Fixed-width/,
+    status: "gap",
+    why: "Text wraps as Excalidraw's does when it is set: a label as it is typed, and a dragged-out fixed-width column (ci_text_wrap_oracle.rs, ci_text_box.rs). No resize rewraps it. A resized container keeps its label's lines (layout_label), a column resized by its handle keeps its lines, and widening never unwraps: `text` holds the wrapped lines, and nothing wraps from originalText yet (an element can carry it, ci_text_model_compat.rs, but new text is not given one), which Excalidraw does on every resize (textElement.ts:94-98, 192-196, resizeElements.ts:371-375).",
+  },
+  {
+    section: "9. Text",
+    text: /IME|Bold|Italic|[Ll]etter spacing|[Ll]ine height|Font family|inside arrows/,
     status: "gap",
     why: "Bold, italic, letter spacing, line height and per-element font family. An element can carry fontFamily and lineHeight (ci_text_model_compat.rs, and the contract keeps them), but nothing draws or measures with them yet. That waits on real font metrics — vendored faces gated on document.fonts.ready, risk R1 — because each changes how wide a glyph is, and measuring before the face loads mis-sizes every text element permanently.",
   },
