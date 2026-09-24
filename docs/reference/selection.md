@@ -16,8 +16,11 @@ that is a class of bug, and state-reading tests cannot see it.
 
 ## Shift
 
-**VERIFIED** — shift-click adds; shift-click on a held element removes; shift-drag
-extends; shift on empty canvas keeps the selection. A plain click on empty canvas clears.
+**VERIFIED** — shift-click adds; shift-click on a held element removes it on the
+release, so a shift-drag from a held element moves everything held
+(`App.tsx:9656-9660`, `:12183-12260`); shift-drag extends; shift on empty canvas keeps the
+selection. A plain click on empty canvas clears, and so does one in the hole of the
+selection's box, where a drag would move it (`App.tsx:12344-12387`, `ci_grab_selected.rs`).
 Each rule is another's escape hatch (`ci_multi_select.rs`).
 
 ## Moving
