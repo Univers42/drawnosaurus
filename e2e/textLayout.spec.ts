@@ -145,7 +145,15 @@ for (const [tool, kind] of [
     expect(label.y + label.height).toBeLessThanOrEqual(shape.y + shape.height);
 
     // And the canvas agrees: no ink beside the shape, where an overflowing line would be.
+    // The click lets go of the label, whose selection frame and handles reach 4-5px past
+    // the shape's edge; read the canvas once a frame has been painted without them.
     await focusBoard(board);
+    await page.evaluate(
+      () =>
+        new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done())),
+        ),
+    );
     const { x, y, scale } = await page.evaluate(() => window.__drawEngine!.camera);
     const top = shape.y * scale + y;
     // A grown diamond runs off the bottom, and off the canvas every pixel reads as ink.
