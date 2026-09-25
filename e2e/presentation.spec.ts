@@ -239,6 +239,25 @@ test.describe("presentation", () => {
     expect(await sceneElements(page)).toEqual(elementsBefore);
   });
 
+  test("leaving fullscreen ends the show, as the Esc the browser keeps for itself does", async ({
+    page,
+  }) => {
+    await openThreeFrameBoard(page);
+    const toolBefore = await activeTool(page);
+
+    await page.keyboard.press("Control+Shift+p");
+    const controls = page.getByRole("group", { name: "Presentation controls" });
+    await expect(controls).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
+
+    // Dispatched rather than pressed: while fullscreen, a real Esc is taken by the
+    // browser and never reaches the page — what the page sees is fullscreen ending.
+    await page.evaluate(() => document.exitFullscreen());
+
+    await expect(controls).toBeHidden();
+    expect(await activeTool(page)).toBe(toolBefore);
+  });
+
   test("a board with no frames presents as a single slide fit to everything on it", async ({
     page,
   }) => {

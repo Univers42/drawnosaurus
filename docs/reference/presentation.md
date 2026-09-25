@@ -49,6 +49,8 @@ stays focusable the whole time.
 Exiting — `Esc`, the bar's Exit button, or the menu again — restores the camera and the
 tool exactly as they were before Present, leaves fullscreen if it was granted, and tells
 any peer whose Follow was tracking this show that it ended (`present-end`).
+In fullscreen the browser keeps `Esc` for itself and the page never sees it, so leaving
+fullscreen — by `Esc` or any other way — ends the show too (`onFullscreenChange`).
 
 ## Nothing is editable
 
@@ -77,6 +79,8 @@ heard of the type simply falls through `handleMessage`'s chain and ignores it �
 way every other addition to this wire has been backward-compatible. A follower resolves
 the id against **their own** local scene (`slidesFromScene`, the same pure function
 Present itself uses) — the wire never carries bounds, only which frame.
+The slide is also repeated with every `presence` — on each join and heartbeat — so someone
+who opens the board mid-show sees the notice at once rather than at the next slide.
 
 ## Known limits
 

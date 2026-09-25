@@ -754,6 +754,25 @@ describe("realtimeClient sending", () => {
     expect(peers).toEqual([]);
     channel.disconnect();
   });
+
+  it("tells someone who joins mid-show which slide is up, and stops once the show ends", async () => {
+    const { channel, socket } = connected();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    channel.sendPresent("frame-2");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    socket.sent = [];
+
+    channel.handleMessage({ type: "join", clientId: "ana", name: "Ana", color: "#e03131" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(collabTypes(socket)).toEqual(["presence", "present"]);
+    expect(collabPayloads(socket).at(-1)).toMatchObject({ frameId: "frame-2" });
+
+    channel.sendPresentEnd();
+    channel.handleMessage({ type: "join", clientId: "bo", name: "Bo", color: "#1971c2" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(collabTypes(socket).slice(2)).toEqual(["present-end", "presence"]);
+    channel.disconnect();
+  });
 });
 
 describe("realtimeClient keeping everyone up to date", () => {

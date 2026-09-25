@@ -182,6 +182,9 @@ export class RealtimeChannel<T extends StampedElement> {
   private stateListeners: ((peers: Peer<T>[]) => void)[] = [];
   /** What this client holds, repeated on every join and heartbeat. */
   private claims: Claims = {};
+  /** The slide this client is presenting, repeated with its presence; `undefined` when
+   *  not presenting — `null` is the one slide of a frame-less board. */
+  private presenting: string | null | undefined;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   /**
    * Frames go out in the order they were sent. Sealing is asynchronous, and two seals
@@ -464,6 +467,8 @@ export class RealtimeChannel<T extends StampedElement> {
     };
     if (this.socketId) presence.socket = this.socketId;
     void this.send(presence);
+    // Someone who joins mid-show would otherwise only learn of it at the next slide.
+    if (this.presenting !== undefined) this.sendPresentFrame(this.presenting);
   }
 
   sendPreview(elements: T[]): void {
@@ -477,6 +482,11 @@ export class RealtimeChannel<T extends StampedElement> {
   /** Announces the slide now showing — the frame's id, or `null` for a frame-less
    *  board's one slide. Call again on every slide change; see `presentation.ts`. */
   sendPresent(frameId: string | null): void {
+    this.presenting = frameId;
+    this.sendPresentFrame(frameId);
+  }
+
+  private sendPresentFrame(frameId: string | null): void {
     void this.send({
       type: "present",
       clientId: this.profile.clientId,
@@ -487,6 +497,7 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   sendPresentEnd(): void {
+    this.presenting = undefined;
     void this.send({ type: "present-end", clientId: this.profile.clientId });
   }
 

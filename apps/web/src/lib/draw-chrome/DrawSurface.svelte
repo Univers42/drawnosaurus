@@ -1050,9 +1050,19 @@
     showSlide(0, { instant: false });
     try {
       await document.documentElement.requestFullscreen?.();
+      presentFullscreen = document.fullscreenElement !== null;
     } catch {
       // Refused, or unavailable in this browser — presenting still works without it.
     }
+  }
+
+  /** Whether Present put the page in fullscreen, so that leaving it leaves the show. */
+  let presentFullscreen = false;
+
+  /** The browser keeps Esc for itself while fullscreen: the key that ends the show never
+   *  reaches the page — only the end of the fullscreen it was shown in does. */
+  function onFullscreenChange(): void {
+    if (presenting && presentFullscreen && !document.fullscreenElement) void exitPresent();
   }
 
   async function exitPresent(): Promise<void> {
@@ -1068,6 +1078,7 @@
       if (engine.getToolLocked() !== restore.toolLocked) engine.setToolLocked(restore.toolLocked);
     }
     if (realtime) realtime.sendPresentEnd();
+    presentFullscreen = false;
     if (document.fullscreenElement) {
       try {
         await document.exitFullscreen();
@@ -1437,6 +1448,7 @@
 </script>
 
 <svelte:window onkeydown={onAppShortcut} onresize={onWindowResize} />
+<svelte:document onfullscreenchange={onFullscreenChange} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
