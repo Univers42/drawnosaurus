@@ -132,6 +132,8 @@ export interface ShapeActions {
   /** Sharp or curved, for arrows and the arrow tool. */
   arrowType: boolean;
   arrowheads: boolean;
+  /** Close a selected line into a filled shape, or open it back up. */
+  polygon: boolean;
   /** The font family and size rows. */
   text: boolean;
   textAlign: boolean;
@@ -181,6 +183,13 @@ export interface SelectionFacts {
    * note's label passes the pick on to its note, though the label has no fill itself.
    */
   backgroundDomain: ColorDomain;
+  /**
+   * Whether the polygon toggle would do anything: a line with at least four points, and
+   * only lines (`actionLinearEditor.tsx@1118751f:127-138`). Not folded into `kinds` like
+   * the other predicates because it depends on point count, which those booleans don't
+   * carry — read off `SelectionStyle.canTogglePolygon`, the engine's own one-pass answer.
+   */
+  canTogglePolygon: boolean;
 }
 
 export function getShapeActions(
@@ -225,6 +234,9 @@ export function getShapeActions(
     roundness: forToolOrSelection(canChangeRoundness),
     arrowType: forToolOrSelection(isArrowKind),
     arrowheads: forToolOrSelection(canHaveArrowheads),
+    // Selection-only, like `align`/`distribute` above: the tool has no points yet for
+    // "four or more" to ask about, so there is nothing to offer before something is drawn.
+    polygon: selection.canTogglePolygon,
     text: activeTool === "text" || kinds.some(isTextKind),
     textAlign: activeTool === "text" || selection.textAlignable,
     verticalAlign: selection.verticalAlignable,

@@ -76,6 +76,8 @@ export interface SceneElement {
   frameId?: string | null;
   /** Point-based kinds only — a line, an arrow or a freehand stroke. */
   points?: [number, number][];
+  /** A line closed on its first point, painted filled: absent reads as false. */
+  polygon?: boolean;
   text?: string;
   /** Absent means nothing chose one, which the engine resolves from the element's role. */
   textAlign?: "left" | "center" | "right";

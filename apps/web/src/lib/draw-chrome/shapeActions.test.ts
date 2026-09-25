@@ -185,6 +185,23 @@ describe("arrangement controls", () => {
   });
 });
 
+describe("the polygon toggle", () => {
+  it("offers it exactly when the engine says the toggle would do something", () => {
+    // Point count decides eligibility, which nothing in `Sel` carries — same reason
+    // align/distribute above are asked for directly rather than derived from elements.
+    const line = actions("select", [el("line")]);
+    expect(
+      getShapeActions("select", { ...factsOf([el("line")]), canTogglePolygon: true }, "transparent")
+        .polygon,
+    ).toBe(true);
+    expect(line.polygon).toBe(false);
+  });
+
+  it("offers nothing before anything is drawn: the tool alone carries no points to close", () => {
+    expect(actions("line").polygon).toBe(false);
+  });
+});
+
 describe("the active tool preconfigures", () => {
   it("offers a rectangle's controls before one exists", () => {
     const tool = actions("rectangle", [], "#ffec99");
