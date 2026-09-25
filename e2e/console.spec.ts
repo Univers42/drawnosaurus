@@ -88,9 +88,12 @@ test("after undo and redo the panel shows the scene as it is", async ({ page }) 
   await option(page, "Stroke width", "L").click();
   await expect.poll(() => pressed(page, "Stroke width")).toBe("L");
 
-  // The engine lets go of the selection on undo and redo (`after_history_step`), which
-  // under the select tool puts the panel away; when it is back it shows the scene's
-  // value, not the one it last had.
+  // A smoke check, not the guard: it passes without the style revision too. The engine
+  // lets go of the selection on undo and redo (`after_history_step`), which under the
+  // select tool puts the panel away, and the click that brings it back reads it afresh.
+  // The revision moving on undo and redo is pinned by `ci_selection_style.rs` ›
+  // `undo_and_redo_move_it`; an edit the panel must follow with the selection held is the
+  // colleague's, below.
   await page.keyboard.press("Control+z");
   expect(await field(page, "strokeWidth")).toEqual([2]);
   await expect(panel(page)).toBeHidden();
