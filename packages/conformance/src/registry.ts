@@ -657,7 +657,7 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "13. Embeds",
-    text: /Lock|Loading state|Error state|Export fallback|View-only/,
+    text: /Loading state|Error state|Export fallback|View-only/,
     status: "gap",
     why: "Embed lifecycle states. URL recognition, the allow-list and geometry are done.",
   },
