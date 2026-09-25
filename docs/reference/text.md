@@ -9,7 +9,7 @@ Markers: **OBSERVED**, **VERIFIED**, **INFERRED**, **IMPLEMENTATION DETAIL**, **
 `text-model.md` › Layout), which wraps with `Measure::wrap` over the memo. It runs whenever a
 text's words or its room change: `set_element_text` (the editor's commit), `text_preview`
 (what peers see while it is typed), `set_text_box_width`, a font size, family or alignment
-change, `relayout_text` and `fonts_loaded`. The wrap itself is `crate::text`
+change, the label wrap and auto-resize switches, and `fonts_loaded`. The wrap itself is `crate::text`
 (`engine/crates/draw-engine/src/text/`), a line-for-line port of Excalidraw's
 `packages/element/src/textWrapping.ts` at the pinned SHA:
 
@@ -28,10 +28,10 @@ path is checked on; 1,890 differed.
   `engine/crates/draw-engine/src/scene/binding.rs`, position only) and keeps its lines.
 - **A fixed-width text resized by its handle** takes the new width and keeps its lines.
 
-The resize package calls `relayout_text(container or text id)` after a resize, then
-commits: that re-wraps from `originalText`, which every text now carries, so widening
-unwraps and narrowing grows the shape (`ci_text_model.rs` › relayout wraps the source, not
-the drawn lines). Excalidraw does the
+The resize package is to lay the text out after a resize as every writer does
+(`DrawEngine::laid_out`), then commit: that re-wraps from `originalText`, which every text now
+carries, so widening unwraps and narrowing grows the shape (`ci_text_model.rs` › relayout
+wraps the source, not the drawn lines). Excalidraw does the
 same on every resize: `redrawTextBoundingBox` (`textElement.ts@1118751f:94-98`),
 `handleBindTextResize` (`:192-196`) and `resizeSingleTextElement`
 (`resizeElements.ts@1118751f:371-375`).

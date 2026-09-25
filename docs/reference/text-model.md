@@ -79,9 +79,10 @@ text out from it would put the old words back.
 
 **Every writer keeps it.** Laying a text out (`text::layout::layout_text`) writes
 `originalText` from `source_text` and wraps from it, so a text without one gains it at its
-first edit, font change or relayout, and widening a label's room unwraps it
+first edit, font change or relayout, and a label laid out again in a wider room unwraps
 (`ci_text_model_compat.rs` › an edit keeps the source in step; `ci_text_model.rs` › relayout
-wraps the source, not the drawn lines).
+wraps the source, not the drawn lines). A resize handle does not lay text out yet: a resized
+shape moves its label and keeps its lines (`text.md` › What does not rewrap yet).
 New text carries `originalText`, `fontFamily` 5 (Excalifont, the oracle's
 `DEFAULT_FONT_FAMILY`) and that family's `lineHeight` from the start. Text with no
 `fontFamily` is laid out, painted and exported exactly as before (`ci_text_model.rs` › a text
@@ -120,10 +121,12 @@ border.
 
 One function lays a text out, `text::layout::layout_text`
 (`engine/crates/draw-engine/src/text/layout.rs`), a port of `redrawTextBoundingBox`
-(`packages/element/src/textElement.ts@1118751f:51-153`). Every path that sets text or changes
-its room goes through it: the editor's commit, a peer's preview, a font size, family or
-alignment change, `set_text_box_width`, `relayout_text` and `fonts_loaded`. It wraps from the
-source, measures, and grows a label's shape to hold it. **VERIFIED** by `ci_text_model.rs`
+(`packages/element/src/textElement.ts@1118751f:51-153`). Every path that lays text out goes
+through it (`DrawEngine::laid_out`): the editor's commit, a peer's preview, a font size,
+family, alignment or wrap change, `set_text_auto_resize`, `set_text_box_width` and
+`fonts_loaded`. It wraps from the source, measures, and grows a label's shape to hold it. A
+resize handle is not one of them yet: moving or resizing a shape only places its label
+(`layout_label`). **VERIFIED** by `ci_text_model.rs`
 (every shape, growth, unwrap, rotation, the free-text anchors, style reaching a label, a font
 arriving) and `e2e/textLayout.spec.ts` (a label typed into a rectangle, an ellipse and a
 diamond; a family change; the SVG export).
@@ -145,26 +148,41 @@ diamond; a family change; the SVG export).
 | text painted per line on its baseline (`renderElement.ts@1118751f:626-676`)                  | `paint_text`, `text_line_placement`                            |
 | text exported per line (`staticSvgScene.ts@1118751f:776-832`)                                | `text_svg`                                                     |
 
-`BOUND_TEXT_PADDING` is 5, as in the oracle (it was 8 here). A label taller than its shape
-allows is placed by the oracle's rule, above the padding, rather than clamped inside
-(`ci_text_align.rs` › a label taller than its container is placed by the oracle's rule), and
-the shape grows to hold it anyway. Style applied to a shape reaches its label for stroke colour
-and opacity (`actionChangeStrokeColor`, `actionChangeOpacity`).
+`BOUND_TEXT_PADDING` is 5, as in the oracle (it was 8 here). Style applied to a shape reaches
+its label for stroke colour and opacity (`actionChangeStrokeColor`, `actionChangeOpacity`),
+except a label a peer holds: typing into a label holds the label alone, and every writer that
+follows a shape to its label skips one that is `untouchable`, as everything else does
+(`ci_text_model.rs` › a label a peer holds is left alone). A writer stamps only what it
+changed, through the commit: picking the family, colour or wrap a text already has is not an
+edit (`newElementWith`, `mutateElement.ts@1118751f:149-181`; `ci_text_model.rs` › a change
+that changes nothing is not an edit). `set_text_auto_resize` re-routes the arrows bound to
+the text it resizes (`updateBoundElements` in `actionTextAutoResize.ts@1118751f`). The cut
+in an arrow's stroke follows its label as it is painted, a peer's preview included
+(`ci_text_model.rs` › the cut under an arrow's label follows a peer's preview).
 
-The web fonts (`apps/web/static/fonts/LICENSES.md`) load when some text first asks for them;
-`watchFonts` (`apps/web/src/lib/draw-chrome/fonts.ts`) then calls `engine.fontsLoaded()`, which
-re-measures and re-lays every text in a family without stamping it (`ci_text_model.rs` › a loaded
-font relays texts without stamping them; `e2e/textLayout.spec.ts` › a font family change).
+The web fonts (`apps/web/static/fonts/LICENSES.md`: Virgil, Excalifont, Cascadia, Nunito,
+Lilita One and Comic Shanns) load when some text first asks for them; `watchFonts`
+(`apps/web/src/lib/draw-chrome/fonts.ts`) then calls `engine.fontsLoaded()`, which re-measures
+and re-lays every text in a family without stamping it (`ci_text_model.rs` › a loaded font
+relays texts without stamping them; `fonts.test.ts`; `e2e/textLayout.spec.ts` › a font family
+change, new text is written in Excalifont). `setFontFamily` lays the text out at once, in
+whatever face the browser has: a family picker loads the face first
+(`document.fonts.load`), as `changeFontFamily` waits for it
+(`actionProperties.tsx@1118751f:1302-1356`), or a shape grown in a wider fallback keeps the
+growth.
 
 ### Where layout departs from the oracle
 
-| divergence                                                                                                                                                                                                                                  | oracle                                               | pinned by                                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
-| A line or arrow never grows for its label: its extent is its points'. The oracle writes the new width onto an arrow, which its points then contradict.                                                                                      | `textElement.ts@1118751f:127-133`                    | `ci_text_model.rs` › an arrow's label wraps at the oracle's width |
-| A font arriving re-lays text, unstamped. The oracle only drops caches and repaints, so a box sized in a fallback keeps its size until the next edit. Arrows bound to a grown shape are re-routed at the next edit of either.                | `Fonts.ts@1118751f:106-148`                          | `ci_text_model.rs` › fonts_loaded                                 |
-| A peer's preview carries the label only; the shape it grows is sent grown on commit.                                                                                                                                                        | `textWysiwyg.tsx` grows the container as it is typed | none: the editor rewrite streams both                             |
-| Text with no `fontFamily` (every text made before this) keeps the system stack, 1.25 lines, drawn from the top of each line, and its SVG baseline at 0.85 of the size.                                                                      | `restore.ts` gives such text a family                | `ci_text_model.rs` › families, `ci_export.rs`                     |
-| No `direction` on exported or painted text: right-to-left text is laid out left to right.                                                                                                                                                   | `staticSvgScene.ts@1118751f:776-832`                 | none (gap)                                                        |
-| A line can carry a label here, and its stroke is cut under it as an arrow's is.                                                                                                                                                             | only arrows take labels                              | `ci_export.rs`                                                    |
-| The SVG export names each text's family but embeds no `@font-face`, so a viewer without the font draws the fallback.                                                                                                                        | `Fonts.generateFontFaceDeclarations`                 | none (gap)                                                        |
-| Excalifont (the default) and Liberation Sans are not shipped, nor Xiaolai, emoji, or non-Latin shards: their licence could not be read from the file, or they are out of scope. Text asks for them and draws in the next face of its stack. | `packages/excalidraw/fonts/`                         | `apps/web/static/fonts/LICENSES.md`                               |
+| divergence                                                                                                                                                                                                                                                                                                                                                                                                                    | oracle                                                                    | pinned by                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| A line or arrow never grows for its label: its extent is its points'. The oracle writes the new width onto an arrow, which its points then contradict.                                                                                                                                                                                                                                                                        | `textElement.ts@1118751f:127-133`                                         | `ci_text_model.rs` › an arrow's label wraps at the oracle's width      |
+| A font arriving re-lays text, unstamped. The oracle only drops caches and repaints, so a box sized in a fallback keeps its size until the next edit. Arrows bound to a grown shape are re-routed at the next edit of either.                                                                                                                                                                                                  | `Fonts.ts@1118751f:106-148`                                               | `ci_text_model.rs` › fonts_loaded                                      |
+| A peer's preview carries the label only; the shape it grows is sent grown on commit.                                                                                                                                                                                                                                                                                                                                          | `textWysiwyg.tsx` grows the container as it is typed                      | none: the editor rewrite streams both                                  |
+| Text with no `fontFamily` (every text made before this) keeps the system stack, 1.25 lines, drawn from the top of each line, and its SVG baseline at 0.85 of the size.                                                                                                                                                                                                                                                        | `restore.ts` gives such text a family                                     | `ci_text_model.rs` › families, `ci_export.rs`                          |
+| A label taller than its shape starts at the padded top, whatever its vertical alignment, when only placed (a move, a peer's patch): overflowing downward, it is still read from its first line. The oracle never meets one, because laying a label out grows its shape; here one saved before shapes grew, or in a shape resized smaller, is placed on every move.                                                            | `computeBoundTextPosition` (`textElement.ts@1118751f:249-324`) centres it | `ci_text_align.rs`, `ci_text_model.rs` › a label taller than its shape |
+| Only the first load of each face of a text family is reported, and nothing when watching starts: `document.fonts.ready` resolves before any face is asked for, and reporting it re-laid every text in the fallback's widths. The UI's own faces (Inter) are ignored.                                                                                                                                                          | `Fonts.onLoaded` bails on faces it has seen (`Fonts.ts@1118751f:106-127`) | `fonts.test.ts`                                                        |
+| Known limit: a sticky note is still the host's four elements (`stickyNotes.ts`). Its label grows the note, as Excalidraw's `stickynote` grows past its base height, but the locked shadow and the date do not follow. The sticky package makes it one element with a painted shadow and footer.                                                                                                                               | one `stickynote` element (`packages/element/src/stickyNote.ts@1118751f`)  | none (gap)                                                             |
+| No `direction` on exported or painted text: right-to-left text is laid out left to right.                                                                                                                                                                                                                                                                                                                                     | `staticSvgScene.ts@1118751f:776-832`                                      | none (gap)                                                             |
+| A line can carry a label here, and its stroke is cut under it as an arrow's is.                                                                                                                                                                                                                                                                                                                                               | only arrows take labels                                                   | `ci_export.rs`                                                         |
+| The SVG export names each text's family but embeds no `@font-face`, so a viewer without the font draws the fallback.                                                                                                                                                                                                                                                                                                          | `Fonts.generateFontFaceDeclarations`                                      | none (gap)                                                             |
+| Liberation Sans is not shipped: the file Excalidraw ships is Liberation 1.05 (name IDs 0 and 5), under Red Hat's agreement granting the GPL v2 with a font exception (`liberation-fonts@eba8555b`, `source/License.txt`), not the OFL, which covers 2.00 and later only (its `ChangeLog`, 2012-07-06). Nor are Xiaolai, emoji, or non-Latin shards: out of scope. Text asks for them and draws in the next face of its stack. | `packages/excalidraw/fonts/`                                              | `apps/web/static/fonts/LICENSES.md`                                    |

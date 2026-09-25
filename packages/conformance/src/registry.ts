@@ -260,11 +260,13 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Elbow arrows are a milestone of their own: orthogonal routing over the fixed-point bindings arrows already have. Cardinality arrowheads wait on it.",
   },
+  // An arrow's label: typed on the arrow, wrapped at Excalidraw's width, centred on the
+  // path's middle, the stroke cut under it (docs/reference/text-model.md › Layout).
   {
     section: "➡️ Advanced arrows",
     text: /label/,
-    status: "gap",
-    why: "Arrow labels. Bound labels exist for shapes (`layout_label`); an arrow needs its own along-the-path placement.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_model.rs`, `${ENGINE}/ci_export.rs`, "e2e/textEditRequest.spec.ts"],
   },
   {
     section: "➡️ Advanced arrows",
@@ -492,9 +494,15 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "7. Arrow",
-    text: /[Ee]lbow|label/,
+    text: /[Ee]lbow|label positioning/,
     status: "gap",
-    why: "Elbow arrows and arrow labels — see the Advanced arrows rules.",
+    why: "Elbow arrows: see the Advanced arrows rules. Label positioning: a label sits on the middle of its arrow's path (linear_label_center, getBoundTextElementCenter), but cannot be dragged along it — Excalidraw's labelPosition (linearElementEditor.ts@1118751f:1962-2030) is not ported.",
+  },
+  {
+    section: "7. Arrow",
+    text: /label\/text/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_model.rs`, `${ENGINE}/ci_export.rs`, "e2e/textEditRequest.spec.ts"],
   },
   {
     section: "7. Arrow",
@@ -556,13 +564,13 @@ export const RULES: readonly Rule[] = [
     section: "9. Text",
     text: /Wrapping|Fixed-width/,
     status: "gap",
-    why: "Text wraps as Excalidraw's does, from originalText, whenever its words or its room change: typed, a font size, family or alignment change, a column's width set, a font arriving (ci_text_wrap_oracle.rs, ci_text_box.rs, ci_text_model.rs). A resize handle does not call relayout_text yet, so a resized shape keeps its label's lines and a column resized by its handle keeps its lines, where Excalidraw re-wraps on every resize (textElement.ts@1118751f:94-98, 192-196, resizeElements.ts@1118751f:371-375). The resize package calls it.",
+    why: "Text wraps as Excalidraw's does, from originalText, whenever its words or its room change: typed, a font size, family or alignment change, a column's width set, a font arriving (ci_text_wrap_oracle.rs, ci_text_box.rs, ci_text_model.rs). A resize handle does not lay text out yet, so a resized shape keeps its label's lines and a column resized by its handle keeps its lines, where Excalidraw re-wraps on every resize (textElement.ts@1118751f:94-98, 192-196, resizeElements.ts@1118751f:371-375). The resize package lays it out as every writer does (laid_out).",
   },
   {
     section: "9. Text",
     text: /IME|Bold|Italic|[Ll]etter spacing|Font family/,
     status: "gap",
-    why: "Font family: text is drawn, measured and exported in its family (ci_text_model.rs, e2e/textLayout.spec.ts) and the faces whose licence their files state are shipped (apps/web/static/fonts/LICENSES.md), but there is no picker yet, and Excalifont, the default, is not shipped. Bold, italic and letter spacing: Excalidraw has none of them either. IME: the overlay is a plain textarea, untested with composition.",
+    why: "Font family: text is drawn, measured and exported in its family (ci_text_model.rs, e2e/textLayout.spec.ts) and the faces whose licence is established are shipped (apps/web/static/fonts/LICENSES.md) — Excalifont, the default, is shipped and tested in the browser, but there is no picker yet, and Liberation Sans is not shipped: the file Excalidraw ships is Liberation 1.05, under Red Hat's GPL v2 font-exception licence, not the OFL of 2.00 and later (apps/web/static/fonts/LICENSES.md). Bold, italic and letter spacing: Excalidraw has none of them either. IME: the overlay is a plain textarea, untested with composition.",
   },
   { section: "9. Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
@@ -861,7 +869,7 @@ export const RULES: readonly Rule[] = [
     section: "35. Properties panel",
     text: /Font picker|Links/,
     status: "gap",
-    why: "Per-element font family needs vendored fonts (risk R1); links need the schema field.",
+    why: "Font picker: the fonts are vendored and setFontFamily works (ci_text_model.rs), but no picker calls it yet; one is to load the face before calling it, as changeFontFamily does (actionProperties.tsx@1118751f:1302-1356). Links need the schema field.",
   },
   {
     section: "35. Properties panel",
