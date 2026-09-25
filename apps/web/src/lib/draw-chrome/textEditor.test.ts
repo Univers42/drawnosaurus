@@ -81,6 +81,10 @@ describe("editorKey", () => {
     expect(editorKey(press({ key: "Enter", ctrlKey: true, isComposing: true }))).toBe("hold");
     expect(editorKey(press({ key: "Enter", ctrlKey: true, keyCode: 229 }))).toBe("hold");
     expect(editorKey(press({ key: "Enter" }))).toBeNull();
+    // An IME's own Escape cancels its composition; ours must not also close the whole
+    // edit under it — Chromium still forwards the keydown, `isComposing: true`.
+    expect(editorKey(press({ key: "Escape", isComposing: true }))).toBe("hold");
+    expect(editorKey(press({ key: "Escape", keyCode: 229 }))).toBe("hold");
   });
 
   it("indents on Tab and Ctrl+], outdents on Shift+Tab and Ctrl+[", () => {
@@ -90,6 +94,15 @@ describe("editorKey", () => {
     expect(editorKey(press({ key: "[", code: "BracketLeft", metaKey: true }))).toBe("outdent");
     expect(editorKey(press({ key: "Tab", isComposing: true }))).toBe("hold");
     expect(editorKey(press({ key: "]", code: "BracketRight" }))).toBeNull();
+  });
+
+  it("ends the edit and saves on Ctrl/Cmd+S, never mid-composition", () => {
+    expect(editorKey(press({ key: "s", ctrlKey: true }))).toBe("save");
+    expect(editorKey(press({ key: "S", metaKey: true }))).toBe("save");
+    expect(editorKey(press({ key: "s", ctrlKey: true, isComposing: true }))).toBe("hold");
+    expect(editorKey(press({ key: "s", ctrlKey: true, keyCode: 229 }))).toBe("hold");
+    expect(editorKey(press({ key: "s", ctrlKey: true, shiftKey: true }))).toBeNull();
+    expect(editorKey(press({ key: "s" }))).toBeNull();
   });
 
   it("zooms on Ctrl/Cmd with + − 0 and no Shift, by the printed key", () => {

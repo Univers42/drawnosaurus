@@ -53,8 +53,11 @@ test("a text is bound into a shape, and given back where it is drawn", async ({ 
   const shape = await drawBox(board);
   const text = await writeText(board, TEXT_AT, "inside");
 
-  await clickOn(board, text.id);
-  await clickOn(board, shape.id, { where: "top", shift: true });
+  // The shape first, then the text added with Shift: `writeText` leaves the text as the
+  // sole selection, and a plain click on that — already the sole selection — reopens it
+  // for typing instead of just selecting it (`ci_text_edit.rs` › entry).
+  await clickOn(board, shape.id, { where: "top" });
+  await clickOn(board, text.id, { shift: true });
   await expect.poll(async () => (await selection(page)).length).toBe(2);
   // The menu acts on the selection the pointer is on, all of it.
   await clickOn(board, text.id, { button: "right" });

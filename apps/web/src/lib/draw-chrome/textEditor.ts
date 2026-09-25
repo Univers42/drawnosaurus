@@ -50,7 +50,7 @@ export function editorBox(
 }
 
 export type EditorKey =
-  "submit" | "indent" | "outdent" | "zoomIn" | "zoomOut" | "zoomReset" | "hold";
+  "submit" | "save" | "indent" | "outdent" | "zoomIn" | "zoomOut" | "zoomReset" | "hold";
 
 type KeyLike = Pick<
   KeyboardEvent,
@@ -59,11 +59,15 @@ type KeyLike = Pick<
 
 /**
  * What a key does in the editor (`textWysiwyg.tsx@1118751f:662-711`); `null` types it.
- * Escape and Ctrl/Cmd+Enter end the edit; Tab, Shift+Tab and Ctrl/Cmd+] / [ indent and
- * outdent the lines the selection touches; Ctrl/Cmd with + − 0 and no Shift zoom the
- * board, by the printed key as the board's own shortcuts are. `hold` is a key to swallow
- * and ignore — one an input method is still composing. Everything else, the font-size
- * chord included, is the textarea's or goes on up to the board.
+ * Escape and Ctrl/Cmd+Enter end the edit; Ctrl/Cmd+S ends it and saves, as the oracle's
+ * does (`:683-686`); Tab, Shift+Tab and Ctrl/Cmd+] / [ indent and outdent the lines the
+ * selection touches; Ctrl/Cmd with + − 0 and no Shift zoom the board, by the printed key
+ * as the board's own shortcuts are. `hold` is a key to swallow and ignore — one an input
+ * method is still composing: Enter, Tab and Escape all confirm or cancel a composition of
+ * their own, and none of the three may reach past it to submit, indent or end the edit
+ * (Escape diverges from the oracle here, which lets it through unguarded, `:627-629`).
+ * Everything else, the font-size chord included, is the textarea's or goes on up to the
+ * board.
  */
 export function editorKey(event: KeyLike): EditorKey | null {
   const mod = event.ctrlKey || event.metaKey;
@@ -71,8 +75,17 @@ export function editorKey(event: KeyLike): EditorKey | null {
     if (event.key === "=" || event.key === "+") return "zoomIn";
     if (event.key === "-") return "zoomOut";
     if (event.key === "0") return "zoomReset";
+    if (event.key.toLowerCase() === "s") {
+      return event.isComposing || event.keyCode === 229 ? "hold" : "save";
+    }
   }
-  if (event.key === "Escape") return "submit";
+  if (event.key === "Escape") {
+    // An IME's own Escape cancels its composition — the browser still forwards the
+    // keydown here, and letting it also end the whole edit would close over a
+    // composition still in progress (`textWysiwyg.tsx@1118751f:627-629` does not guard
+    // this; a real IME's Escape needs to, so it is held rather than ported as-is).
+    return event.isComposing || event.keyCode === 229 ? "hold" : "submit";
+  }
   if (event.key === "Enter" && mod) {
     return event.isComposing || event.keyCode === 229 ? "hold" : "submit";
   }

@@ -1163,6 +1163,15 @@
   let mainMenu = $state.raw<DrawMainMenu | null>(null);
 
   /**
+   * Ctrl/Cmd+S: the board's own, and the text editor's — which ends the edit first, as
+   * the oracle's Ctrl/Cmd+S submits before it saves (`textWysiwyg.tsx@1118751f:683-686`).
+   */
+  function saveAsFile(): void {
+    if (!engine) return;
+    downloadBlob("drawing.osidraw", new Blob([engine.exportJson()], { type: "application/json" }));
+  }
+
+  /**
    * The shortcuts the main menu advertises.
    *
    * They live here rather than in the engine's key handler because they are application
@@ -1193,12 +1202,7 @@
       queueMicrotask(() => mainMenu?.openFile());
     } else if (mod && key === "s") {
       event.preventDefault();
-      if (engine) {
-        downloadBlob(
-          "drawing.osidraw",
-          new Blob([engine.exportJson()], { type: "application/json" }),
-        );
-      }
+      saveAsFile();
     } else if (!mod && event.altKey && event.code === "KeyS") {
       // Excalidraw's `Alt+S` (`actionToggleObjectsSnapMode.tsx`), on `code` for the same
       // reason as the grid below — and because on a Mac, Option+S types "ß".
@@ -1475,6 +1479,7 @@
         onInput={() => {
           if (realtime) startPreviews();
         }}
+        onSave={saveAsFile}
         onDone={(boardPress) => {
           textEdit = null;
           if (boardPress) {

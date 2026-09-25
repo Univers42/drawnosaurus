@@ -26,6 +26,7 @@
     request,
     revision,
     onInput,
+    onSave,
     onDone,
   }: {
     engine: DrawEngine;
@@ -34,6 +35,8 @@
     revision: number;
     /** Something was typed — for the others to see. */
     onInput?: () => void;
+    /** Ctrl/Cmd+S, once the edit it interrupted is committed. */
+    onSave?: () => void;
     /** The edit is over. `boardPress`: a primary press on the board ended it. */
     onDone: (boardPress: boolean) => void;
   } = $props();
@@ -64,6 +67,15 @@
     });
   });
 
+  // A fixed-width free text shows the box it wraps in while it is typed, as the oracle's
+  // interactive layer does for one that is not `autoResize` (`renderTextBox`,
+  // `interactiveScene.ts@1118751f:1510-1531`, `:1661-1672`) — a label has its shape's own
+  // outline already. `outline`, not a sibling box: it then carries the textarea's own
+  // transform for free, rotation and zoom included. A constant screen gap and stroke, as
+  // the oracle keeps theirs, by dividing the zoom back out of a world-unit style the
+  // `scale(zoom)` transform will multiply back up.
+  const boxed = $derived(Boolean(layout && !layout.containerId && layout.wrap));
+
   // The engine let the text go — a peer took it, the board was replaced: nothing is left
   // to type into.
   $effect(() => {
@@ -79,7 +91,11 @@
     // it was made with.
     if (!request.text && engine.updateTextEdit("")) typed += 1;
     node.focus();
-    node.select();
+    // A click on a text that was already the sole selection opens with the caret there
+    // instead of the whole text selected, as every other entry point does
+    // (`getCaretIndexFromInitialSceneCoords`, `textWysiwyg.tsx@1118751f:491-538`).
+    if (request.caret === undefined) node.select();
+    else node.setSelectionRange(request.caret, request.caret);
     // At once: the editor opens on a release, a double click or a key, never inside the
     // press it would take for one that ends it — which the oracle waits a frame to skip
     // (`textWysiwyg.tsx@1118751f:1047-1053`). A frame can be long enough to click in.
@@ -126,7 +142,10 @@
     event.preventDefault();
     event.stopPropagation();
     if (action === "submit") finish(true, true);
-    else if (action === "zoomIn") engine.zoomIn();
+    else if (action === "save") {
+      finish(true, true);
+      onSave?.();
+    } else if (action === "zoomIn") engine.zoomIn();
     else if (action === "zoomOut") engine.zoomOut();
     else if (action === "zoomReset") engine.zoomReset();
     else if (action === "indent" || action === "outdent") {
@@ -187,6 +206,9 @@
   wrap="off"
   spellcheck={false}
   class:wrap={layout?.wrap}
+  class:boxed
+  style:outline-offset={boxed && layout ? `${4 / layout.zoom}px` : undefined}
+  style:outline-width={boxed && layout ? `${1 / layout.zoom}px` : undefined}
   style:left={box ? `${box.left}px` : undefined}
   style:top={box ? `${box.top}px` : undefined}
   style:width={box ? `${box.width}px` : undefined}
@@ -235,5 +257,13 @@
   textarea.wrap {
     white-space: pre-wrap;
     word-break: break-word;
+  }
+
+  /* `renderTextBox`'s dashed box, at its `globalAlpha: 0.5`. `outline-offset` and
+     `outline-width` are set inline, in world units the transform scales back to a
+     constant screen size. */
+  textarea.boxed {
+    outline-style: dashed;
+    outline-color: color-mix(in srgb, var(--accent) 50%, transparent);
   }
 </style>
