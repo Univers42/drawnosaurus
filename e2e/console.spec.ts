@@ -88,21 +88,19 @@ test("after undo and redo the panel shows the scene as it is", async ({ page }) 
   await option(page, "Stroke width", "L").click();
   await expect.poll(() => pressed(page, "Stroke width")).toBe("L");
 
-  // A smoke check, not the guard: it passes without the style revision too. The engine
-  // lets go of the selection on undo and redo (`after_history_step`), which under the
-  // select tool puts the panel away, and the click that brings it back reads it afresh.
-  // The revision moving on undo and redo is pinned by `ci_selection_style.rs` ›
-  // `undo_and_redo_move_it`; an edit the panel must follow with the selection held is the
-  // colleague's, below.
+  // Undo and redo put back the selection the step recorded, as the oracle's history does
+  // (`delta.ts@1118751f:526-1015`), so the panel stays up with no click in between and
+  // must follow the value undo put back — the style revision moving on undo and redo,
+  // pinned by `ci_selection_style.rs` › `undo_and_redo_move_it` and
+  // `ci_history_selection.rs`.
   await page.keyboard.press("Control+z");
   expect(await field(page, "strokeWidth")).toEqual([2]);
-  await expect(panel(page)).toBeHidden();
-  await clickElement(board, 0);
+  await expect(panel(page)).toBeVisible();
   await expect.poll(() => pressed(page, "Stroke width"), { message: "stale after undo" }).toBe("M");
 
   await page.keyboard.press("Control+Shift+z");
   expect(await field(page, "strokeWidth")).toEqual([4]);
-  await clickElement(board, 0);
+  await expect(panel(page)).toBeVisible();
   await expect.poll(() => pressed(page, "Stroke width"), { message: "stale after redo" }).toBe("L");
 });
 

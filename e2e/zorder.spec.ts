@@ -1,6 +1,14 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { focusBoard, openBoard, sceneElements } from "./board.ts";
+import {
+  camera,
+  focusBoard,
+  OPEN_CANVAS,
+  openBoard,
+  pickTool,
+  sceneElements,
+  selection,
+} from "./board.ts";
 
 /**
  * Z-order through the keys — Ctrl+] / Ctrl+[ a step, Ctrl+Shift+] / Ctrl+Shift+[ to the
@@ -142,6 +150,57 @@ test.describe("z-order keys", () => {
     const body = (await ordered).postDataJSON() as { order: string[] };
 
     expect(final).toEqual(["C2", "F", "C1", "X"]);
+    expect(body.order).toEqual(final);
+  });
+});
+
+test.describe("what joins a frame", () => {
+  /**
+   * A shape drawn inside a frame goes directly below it, not on top of the board
+   * (`App.tsx@1118751f:7754-7782`, `frame.ts@1118751f:521-536`). That moves it in the
+   * stack as it is created, which a delta cannot say: the save carries the order.
+   */
+  test("a shape drawn in a frame is saved directly below it", async ({ page }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    const { x, y, scale } = await camera(page);
+    // The frame's top-left, in world units, 40px inside the open canvas.
+    const at = { x: (OPEN_CANVAS.left + 40 - x) / scale, y: (OPEN_CANVAS.top + 40 - y) / scale };
+    const saved = page.waitForResponse((response) => response.request().method() === "PATCH");
+    await load(page, [
+      {
+        id: "C1",
+        type: "rectangle",
+        x: at.x + 20,
+        y: at.y + 40,
+        width: 60,
+        height: 60,
+        frameId: "F",
+      },
+      { id: "F", type: "frame", x: at.x, y: at.y, width: 400, height: 300, name: "Frame 1" },
+      { id: "X", type: "rectangle", x: at.x + 460, y: at.y + 40, width: 60, height: 60 },
+    ]);
+    await saved;
+
+    const ordered = page.waitForRequest(
+      (request) =>
+        request.method() === "PATCH" &&
+        Array.isArray((request.postDataJSON() as { order?: unknown } | null)?.order),
+    );
+    await pickTool(page, "Rectangle");
+    const from = {
+      x: board.box.x + OPEN_CANVAS.left + 240,
+      y: board.box.y + OPEN_CANVAS.top + 140,
+    };
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 100, from.y + 80, { steps: 4 });
+    await page.mouse.up();
+
+    const [drawn] = await selection(page);
+    const final = await stack(page);
+    expect(final).toEqual(["C1", drawn, "F", "X"]);
+    const body = (await ordered).postDataJSON() as { order: string[] };
     expect(body.order).toEqual(final);
   });
 });
