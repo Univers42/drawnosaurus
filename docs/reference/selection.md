@@ -49,6 +49,37 @@ handle and bends it rather than moving it. The oracle does the same.
 dotted box around all of them (`interactiveScene.ts:1922-1948`, `:2027-2052`). Canvas
 dash state is sticky, so chrome sets its dash explicitly or inherits the last element's.
 
+## Undo and redo
+
+**OBSERVED** on excalidraw.com (2026-09-25) and **VERIFIED** against the source — undo and
+redo put back the selection the step recorded, as the oracle's history carries it in each
+entry's app-state delta (`AppStateDelta`, `delta.ts@1118751f:526-1015`): undo the selection
+before the step, redo the one after. Click A, Delete, Ctrl+Z → A is back and selected;
+Ctrl+Shift+Z → nothing selected. So the properties panel stays up under Ctrl+Z and shows
+the value undo put back (`e2e/console.spec.ts`). Here every undo and redo used to let go of
+everything.
+
+The selection a step began with is the one the last capture saw, never the press that
+started it (`store.ts@1118751f:376-385`, the pointer-up capture `App.tsx@1118751f:12451-12464`):
+a shape dragged from unselected comes back unselected. A command's selection with no
+gesture after it — Select All, then Delete — is what the next step began with. Picking a
+shape tool lets go of the selection without a capture (`App.tsx@1118751f:6110-6256`), so
+undoing a new shape gives back what was selected before it. Picking the pencil is a capture
+(`App.tsx@1118751f:6204-6206`; "should create entry when selecting freedraw",
+`history.test.tsx@1118751f:1249`): click A, pencil, a stroke, Ctrl+Z → the stroke is gone,
+the pencil still in hand and nothing selected, so the next colour picked restyles nothing.
+Auto-shape, which the oracle lacks, goes with the shape tools. A click with a shape tool
+that draws nothing, or Escape on a shape being drawn, leaves nothing to commit, so what is
+selected after it settles as any selection does. What a peer deleted since is
+not selected again (`filterSelectedElements`, `delta.ts@1118751f:875-902`), and a step made
+inside a group steps back into it (`editingGroupId`, `delta.ts@1118751f:806-818`).
+Pinned by `ci_history_selection.rs`.
+
+| what               | Excalidraw                                                                                                          | here                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| a selection change | its own history entry when nothing else changed: undo walks back through selections (`history.ts@1118751f:117-137`) | never a step: undo and redo move only through edits, each putting back the selection it recorded (`engine/stamp.rs`) |
+| a peer's change    | never in local history                                                                                              | the same: a peer's patch is never a step                                                                             |
+
 ## Open
 
 **UNKNOWN** — alignment snapping is on by default here (a moved arrow snapped 6px onto a

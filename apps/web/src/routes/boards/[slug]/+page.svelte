@@ -154,7 +154,8 @@
    * elements that was ~9.8MB and ~60ms per shape drawn — the cost of drawing one
    * rectangle grew with the size of the board. It now sends a delta for the common
    * path and the full scene only for the structural changes a delta cannot describe
-   * (a z-order command, a hard delete, an undo).
+   * (a z-order command, a hard delete, an undo). A delta that moved the stack — a shape
+   * that joined a frame goes directly below it — carries the order of every id.
    */
   function onSceneChange(json: string): void {
     let parsed: unknown;
@@ -168,8 +169,16 @@
       const appended = live.apply(parsed);
       saver.tracker.noteChanged(parsed.updated.map((element) => element.id));
       saver.tracker.noteChanged(parsed.removed);
-      // A delta never rearranges the stack: all it can do is put new elements on top.
-      drafts.record(slug, parsed.updated, parsed.removed, { appended });
+      if (parsed.order) {
+        // The stack moved as well: only comparing everything finds the order to save.
+        saver.tracker.noteEverything();
+        drafts.record(slug, parsed.updated, parsed.removed, {
+          order: live.elements.map((element) => element.id),
+        });
+      } else {
+        // Nothing moved in the stack: all the delta did was put new elements on top.
+        drafts.record(slug, parsed.updated, parsed.removed, { appended });
+      }
     } else {
       const elements = elementsFromJson(json);
       if (elements === null) return;
@@ -191,6 +200,7 @@
     type: "osidraw-delta";
     updated: DrawElement[];
     removed: string[];
+    order?: string[];
   }
 
   const isDelta = (value: unknown): value is SceneDelta =>

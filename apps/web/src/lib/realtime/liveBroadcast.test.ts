@@ -71,6 +71,24 @@ describe("LiveSceneBroadcaster", () => {
     );
     expect(patch?.order).toEqual(["b", "a"]);
   });
+
+  it("sends the order a delta carries when the stack moved", () => {
+    // A shape drawn into a frame goes directly below it, and the engine's delta says so.
+    const broadcaster = new LiveSceneBroadcaster();
+    broadcaster.reset([el("c1"), el("f"), el("x")]);
+    const patch = broadcaster.ingest(
+      JSON.stringify({
+        type: "osidraw-delta",
+        updated: [el("n")],
+        removed: [],
+        order: ["c1", "n", "f", "x"],
+      }),
+      100,
+      () => 1,
+    );
+    expect(patch?.elements.map((e) => e.id)).toEqual(["n"]);
+    expect(patch?.order).toEqual(["c1", "n", "f", "x"]);
+  });
 });
 
 describe("changes made while the socket is down", () => {

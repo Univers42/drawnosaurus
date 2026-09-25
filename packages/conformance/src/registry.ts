@@ -652,8 +652,14 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "12. Frames",
+    // Frame ordering — what is drawn, pasted or dragged into a frame, or taken in by one
+    // drawn or resized, goes directly below it — is pinned in ci_zorder.rs.
     status: "covered",
-    tests: [`${ENGINE}/ci_frame.rs`, `${ENGINE}/ci_group_locks_frames.rs`],
+    tests: [
+      `${ENGINE}/ci_frame.rs`,
+      `${ENGINE}/ci_group_locks_frames.rs`,
+      `${ENGINE}/ci_zorder.rs`,
+    ],
   },
   {
     section: "13. Embeds",
@@ -727,14 +733,10 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "17. Z-order",
-    text: /Paste ordering/,
-    status: "gap",
-    why: "No test pins where a paste lands in the stack. The engine appends pasted elements on top (paste_json → Scene::add). The oracle does too, but moves what it pastes into a frame to just below that frame (duplicateAtSceneCoords → addElementsToFrame, frame.ts@1118751f:596-633). That second step is not ported: see docs/reference/zorder.md, Open.",
-  },
-  {
-    section: "17. Z-order",
     // Frames, groups, labels and the entered group as the oracle's own zindex.test.tsx
-    // pins them; undo and redo of a reorder in ci_version_stamps.rs.
+    // pins them; undo and redo of a reorder in ci_version_stamps.rs. Paste ordering: on
+    // top, or directly below the frame it lands in, as what is drawn or dragged into one
+    // goes (ci_zorder.rs, frame.ts@1118751f:521-635).
     status: "covered",
     tests: [
       `${ENGINE}/ci_edit.rs`,
@@ -880,8 +882,10 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [
       `${ENGINE}/ci_history.rs`,
+      `${ENGINE}/ci_history_selection.rs`,
       `${ENGINE}/ci_version_stamps.rs`,
       "e2e/versionStamps.spec.ts",
+      "e2e/console.spec.ts",
     ],
   },
   {
