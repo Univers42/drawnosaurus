@@ -20,21 +20,22 @@ The old wrapper split on single spaces and broke a long word by re-measuring eac
 prefix. **OBSERVED**: it matched the oracle on only 517 of the 2,407 cases the engine
 path is checked on; 1,890 differed.
 
-## What does not rewrap yet
+## A resize rewraps
 
-**VERIFIED** (an engine probe): a resize handle does not rewrap text yet.
+**VERIFIED**: a resize handle lays text out through the same `layout_text`, on every move of
+the drag, from the source (`originalText`), so widening unwraps and narrowing wraps and grows
+the shape:
 
-- **A container resize** moves its label (`layout_label`,
-  `engine/crates/draw-engine/src/scene/binding.rs`, position only) and keeps its lines.
-- **A fixed-width text resized by its handle** takes the new width and keeps its lines.
+- **a free text's side** fixes its width and wraps it there (`resizeSingleTextElement`,
+  `resizeElements.ts@1118751f:360-408`); a corner scales its font and keeps its lines;
+- **a shape's handle** lays its label out in the new room, never narrower than a character
+  of it nor lower than a line (`handleBindTextResize`, `textElement.ts@1118751f:155-247`;
+  `resizeSingleElement`, `resizeElements.ts@1118751f:778-803`);
+- **several elements** scale their texts' fonts and lay their labels out again
+  (`resizeMultipleElements`, `resizeElements.ts@1118751f:1499-1514`).
 
-The resize package is to lay the text out after a resize as every writer does
-(`DrawEngine::laid_out`), then commit: that re-wraps from `originalText`, which every text now
-carries, so widening unwraps and narrowing grows the shape (`ci_text_model.rs` › relayout
-wraps the source, not the drawn lines). Excalidraw does the
-same on every resize: `redrawTextBoundingBox` (`textElement.ts@1118751f:94-98`),
-`handleBindTextResize` (`:192-196`) and `resizeSingleTextElement`
-(`resizeElements.ts@1118751f:371-375`).
+The rules, the divergences and the cost per move are in `resize.md` › Text and labels
+(`ci_text_resize.rs`, `e2e/textResize.spec.ts`).
 
 ## How it is held to the oracle
 

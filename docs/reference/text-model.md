@@ -81,8 +81,8 @@ text out from it would put the old words back.
 `originalText` from `source_text` and wraps from it, so a text without one gains it at its
 first edit, font change or relayout, and a label laid out again in a wider room unwraps
 (`ci_text_model_compat.rs` › an edit keeps the source in step; `ci_text_model.rs` › relayout
-wraps the source, not the drawn lines). A resize handle does not lay text out yet: a resized
-shape moves its label and keeps its lines (`text.md` › What does not rewrap yet).
+wraps the source, not the drawn lines). A resize handle lays text out too, on every move
+(`text.md` › A resize rewraps).
 New text carries `originalText`, `fontFamily` 5 (Excalifont, the oracle's
 `DEFAULT_FONT_FAMILY`) and that family's `lineHeight` from the start. Text with no
 `fontFamily` is laid out, painted and exported exactly as before (`ci_text_model.rs` › a text
@@ -124,29 +124,31 @@ One function lays a text out, `text::layout::layout_text`
 (`packages/element/src/textElement.ts@1118751f:51-153`). Every path that lays text out goes
 through it (`DrawEngine::laid_out`): the editor's commit, a peer's preview, a font size,
 family, alignment or wrap change, a pasted style, `set_text_auto_resize`,
-`set_text_box_width` and `fonts_loaded`. It wraps from the source, measures, and grows a label's shape to hold it. A
-resize handle is not one of them yet: moving or resizing a shape only places its label
-(`layout_label`). **VERIFIED** by `ci_text_model.rs`
+`set_text_box_width`, `fonts_loaded` and a resize handle (`bound_text_resize`, on every move
+of the drag; `resize.md` › Text and labels). It wraps from the source, measures, and grows a
+label's shape to hold it. Moving a shape only places its label (`layout_label`). **VERIFIED** by `ci_text_model.rs`
 (every shape, growth, unwrap, rotation, the free-text anchors, style reaching a label, a font
 arriving) and `e2e/textLayout.spec.ts` (a label typed into a rectangle, an ellipse and a
 diamond; a family change; the SVG export).
 
-| oracle                                                                                       | here                                                           |
-| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `getBoundTextMaxWidth` / `MaxHeight` (`textElement.ts@1118751f:511-570`)                     | `bound_text_max_width` / `bound_text_max_height`               |
-| `getContainerCoords`, `computeBoundTextPosition` (`:396-417`, `:249-324`)                    | `container_coords`, `bound_text_position` (and `layout_label`) |
-| `computeContainerDimensionForBoundText` (`:492-509`)                                         | `container_dimension_for_bound_text`                           |
-| `getBoundTextElementCenter` (`linearElementEditor.ts@1118751f:1942-1960`)                    | `linear_label_center`                                          |
-| `measureText` (`textMeasurements.ts@1118751f:12-27`)                                         | `Measure::size`                                                |
-| `getAdjustedDimensions` (`newElement.ts@1118751f:393-527`)                                   | `edit_anchor`                                                  |
-| `offsetElementAfterFontResize` (`actionProperties.tsx@1118751f:273-292`)                     | `font_resize_anchor`                                           |
-| `actionTextAutoResize` (`actionTextAutoResize.ts@1118751f`)                                  | `auto_resize_anchor`, `set_text_auto_resize`                   |
-| `changeFontFamily` sets the family's line height (`actionProperties.tsx@1118751f:1285-1290`) | `set_font_family`                                              |
-| `FONT_METADATA`, `getVerticalOffset` (`font-metadata.ts@1118751f:35-170`)                    | `text::font::FAMILIES`, `vertical_offset`                      |
-| the arrow clipped under its label (`renderElement.ts@1118751f:784-812`)                      | `paint_linear_around`                                          |
-| the arrow masked under its label (`staticSvgScene.ts@1118751f:404-470`)                      | `linear_svg`                                                   |
-| text painted per line on its baseline (`renderElement.ts@1118751f:626-676`)                  | `paint_text`, `text_line_placement`                            |
-| text exported per line (`staticSvgScene.ts@1118751f:776-832`)                                | `text_svg`                                                     |
+| oracle                                                                                               | here                                                           |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `getBoundTextMaxWidth` / `MaxHeight` (`textElement.ts@1118751f:511-570`)                             | `bound_text_max_width` / `bound_text_max_height`               |
+| `getContainerCoords`, `computeBoundTextPosition` (`:396-417`, `:249-324`)                            | `container_coords`, `bound_text_position` (and `layout_label`) |
+| `computeContainerDimensionForBoundText` (`:492-509`)                                                 | `container_dimension_for_bound_text`                           |
+| `getBoundTextElementCenter` (`linearElementEditor.ts@1118751f:1942-1960`)                            | `linear_label_center`                                          |
+| `measureText` (`textMeasurements.ts@1118751f:12-27`)                                                 | `Measure::size`                                                |
+| `getAdjustedDimensions` (`newElement.ts@1118751f:393-527`)                                           | `edit_anchor`                                                  |
+| `offsetElementAfterFontResize` (`actionProperties.tsx@1118751f:273-292`)                             | `font_resize_anchor`                                           |
+| `actionTextAutoResize` (`actionTextAutoResize.ts@1118751f`)                                          | `auto_resize_anchor`, `set_text_auto_resize`                   |
+| `handleBindTextResize` (`textElement.ts@1118751f:155-247`)                                           | `bound_text_resize`, `keep_point`                              |
+| `getApproxMinLineWidth` / `Height`, `getMinTextElementWidth` (`textMeasurements.ts@1118751f:32-104`) | `min_container_size`, `min_text_width`                         |
+| `changeFontFamily` sets the family's line height (`actionProperties.tsx@1118751f:1285-1290`)         | `set_font_family`                                              |
+| `FONT_METADATA`, `getVerticalOffset` (`font-metadata.ts@1118751f:35-170`)                            | `text::font::FAMILIES`, `vertical_offset`                      |
+| the arrow clipped under its label (`renderElement.ts@1118751f:784-812`)                              | `paint_linear_around`                                          |
+| the arrow masked under its label (`staticSvgScene.ts@1118751f:404-470`)                              | `linear_svg`                                                   |
+| text painted per line on its baseline (`renderElement.ts@1118751f:626-676`)                          | `paint_text`, `text_line_placement`                            |
+| text exported per line (`staticSvgScene.ts@1118751f:776-832`)                                        | `text_svg`                                                     |
 
 `BOUND_TEXT_PADDING` is 5, as in the oracle (it was 8 here). Style applied to a shape reaches
 its label for stroke colour and opacity (`actionChangeStrokeColor`, `actionChangeOpacity`;

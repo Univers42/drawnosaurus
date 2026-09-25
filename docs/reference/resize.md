@@ -19,9 +19,115 @@ case as a control that must still pass.
 ## The grab offset
 
 **VERIFIED** — a handle's centre sits `handle_offset` (4px frame margin + half an 8px
-handle) outside the corner, and `scale_for` puts the corner at the raw pointer with no
-compensation for where in the handle it was grabbed. So a handle jumps by that offset on
-the first pull. The oracle's does too.
+handle) outside the corner it moves. The press records where it was taken from that
+corner, or from the side's middle for a side (`grab` on `Interaction::Resize` and
+`ResizeGroup`, measured from the unsnapped press), and every move takes it off the pointer
+before the grid snaps it, as the oracle does (`getResizeOffsetXY`,
+`packages/element/src/resizeElements.ts@1118751f:497-554`, taken at
+`App.tsx@1118751f:9406-9416` and applied at `:13578-13582`). So the edge moves exactly as
+far as the pointer, turned or not, one element or a group, and never jumps on the first
+pull (`ci_handles.rs` › where in the handle it was taken; `ci_group_resize.rs` › a group's
+handle taken where it is drawn does not jump; `e2e/textResize.spec.ts`).
+
+**OBSERVED** before: the corner went to the raw pointer, so a handle jumped 8px on the
+first pull. An earlier version of this page said the oracle's jumps too; it does not.
+
+**VERIFIED** — a handle is hit where the pointer is. A press tests the resize, rotation,
+radius and point handles, a text's sides and a group's corners at the raw pointer, as the
+hover cursor does and as the oracle does (`pointerDownState.origin`,
+`App.tsx@1118751f:9220`, `:9366-9404`); only the positions the drag produces are snapped.
+Hit at the grid-snapped point, a handle a few pixels off a grid line showed its cursor and
+a press on it moved the shape instead (`ci_handles.rs` › with the grid on a press takes the
+handle the cursor shows).
+
+**VERIFIED** — a line, an arrow or a stroke is resized from the box its handles are drawn
+on, its points' own box, as the oracle's is (`previousOrigin`,
+`resizeElements.ts@1118751f:848-851`). Its `x`, `y` is its first point, which need not be a
+corner: resized from there, a handle taken where it is drawn flattened a line whose first
+point was not its top-left (`ci_handles.rs` › a line's handle does not jump when its first
+point is no corner).
+
+## Text and labels
+
+**VERIFIED** — a free text (`resizeSingleTextElement`,
+`packages/element/src/resizeElements.ts@1118751f:317-409`):
+
+- a corner scales the font and the box by the height it is given, from where the last
+  move left them; the lines are the same lines. A drag that would take the font below 1
+  (`MIN_FONT_SIZE`), through the anchor included, leaves the text as the last move had it:
+  a text is never mirrored;
+- a side (east or west) fixes the width (`autoResize` false) and wraps the source
+  (`originalText`) at it through `text::layout::layout_text`, never narrower than a space
+  and the padding (`getMinTextElementWidth`, `textMeasurements.ts@1118751f:46-51`);
+  widening it again unwraps. The width kept is the one the lines were wrapped at
+  (`:398-405`), so laying them out again — a face arriving, an edit — gives the same
+  lines, and a glyph wider than it hangs out of the box, as it does there (`ci_text_resize.rs`
+  › a glyph wider than the box hangs out of it);
+- the corner or side opposite the handle stays put, turned or not (`getResizedOrigin`);
+- a text shows its four corners and the rotation handle only (`DEFAULT_OMIT_SIDES`,
+  `transformHandles.ts@1118751f:57-62`, `:112-131`); its sides are taken on the frame line, within 4
+  screen pixels of it (`SIDE_RESIZING_THRESHOLD`, `resizeTest.ts@1118751f:96-121`), and the
+  hover cursor says so.
+
+**VERIFIED** — a shape holding a label (`resizeSingleElement`, `:729-986`):
+
+- it is never made narrower than the widest character of the label's font nor lower than
+  one of its lines, each plus the padding (`:778-803`), and the label is laid out again on
+  every move (`handleBindTextResize`, `textElement.ts@1118751f:155-247`): narrowing wraps
+  it, widening unwraps it, and a label that needs more room than it has grows the shape
+  back from the side the drag holds (the bottom for a north handle, the top otherwise, the
+  other way round once the drag has turned the shape through its anchor);
+- a label with `wrap` false keeps its lines;
+- with Shift (or an image's locked proportions) there is no minimum: the label's font
+  scales with the room it has from where the last move left it, an arrow's with its width
+  (`:815-833`, `:904-915`). A move without Shift lays the label out at the font it had when
+  the drag began (`:805-814`), so letting go of Shift mid-drag gives it back
+  (`ci_text_resize.rs` › letting go of shift gives the label its font back).
+
+**VERIFIED** — several elements (`resizeMultipleElements`, `:1209-1594`): they scale as one
+— as with Shift — when any of them is turned, is a text, or is in a group
+(`:1370-1377`); a text's font scales with it and a label's does too when they scale as one,
+otherwise it keeps its size (`:1491-1514`); a font that would fall below 1 stops the move.
+Every label is laid out again in its resized shape. The frame the drag scales is the frame
+that is drawn and hit-tested: what the selection carries, a label included when the
+selection carries it, as a group's are (a click on a group selects its labels). The labels
+of the other shapes ride inside it. So the corner opposite the handle holds where it is
+drawn (`ci_text_resize.rs` › a group's drawn corner holds with an arrow's label past its
+shapes). A label someone else deleted, which its shape can still name after concurrent
+edits, is left out and laid out by no resize (`ci_text_resize.rs` › a deleted label is left
+out of a resize of several).
+
+**VERIFIED** — a resize stamps nothing while it moves: the shape and its label are stamped
+once each, by the commit (`ci_text_resize.rs` › a drag stamps the shape and its label once).
+
+**MEASURED** — `cargo bench -p draw-engine --bench text -- resize_label` (a 400 × 300
+shape, a 2,000-character label, twenty moves, the host estimate for measuring):
+
+| drag               | before (lines kept, label only moved) | after (laid out on every move) |
+| ------------------ | ------------------------------------- | ------------------------------ |
+| east (new width)   | 17.2 µs                               | 2.26 ms (113 µs a move)        |
+| south (same width) | 17.1 µs                               | 214 µs (11 µs a move)          |
+
+The east drag wraps 2,000 characters at a new width on every move; the south drag's lines
+come out of the wrap memo after the first move. Both are far inside a 16 ms frame.
+Measured again once the smallest room read its chars from the cache: the same 2.26 ms and
+214 µs, because the bench's estimate makes a measure free. In a browser each measure is a
+`measureText` call across the wasm boundary, and a warm move now makes none
+(`ci_text_resize.rs` › a warm resize measures nothing).
+
+### Divergences
+
+| what                                          | Excalidraw                                                                                                                                                                                                                             | here                                                                                                                                                                                                                                                                   | pinned by                                                                                            |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| a labelled shape's minimum width              | the widest character measured so far in that font (`getMaxCharWidth`, the `charWidth` cache, `textMeasurements.ts@1118751f:32-104`)                                                                                                    | the widest of `A`–`Z` and `0`–`9` in the label's font, every time: the oracle's number depends on what that session happened to measure                                                                                                                                | `ci_text_resize.rs` › a labelled shape stops at one char of its label                                |
+| a north or south drag of a labelled shape     | lays the label out only when the width it wraps at changed                                                                                                                                                                             | lays it out on every move; the lines come out of the wrap memo and the smallest room's chars out of the char-width cache, so a warm move asks the host to measure nothing (bench above)                                                                                | `ci_text_resize.rs` › a north handle grows the shape from its bottom; a warm resize measures nothing |
+| a label too wide for a narrowed shape         | grows the shape's height only (`handleBindTextResize`)                                                                                                                                                                                 | also widens the shape to hold a line that cannot wrap, from the side a west handle holds. A rectangle's minimum keeps a drag from needing it; an ellipse's or a diamond's text box is narrower than the shape, and a label with `wrap` false does not fit a narrow one | `ci_text_resize.rs` › a labelled shape stops at one char of its label                                |
+| an arrow's label in a multi-selection's frame | counted in the frame drawn and scaled, grouped or not (`getElementBounds` → `getLinearElementRotatedBounds`, `bounds.ts@1118751f:175`, `:934-990`; `getNextMultipleWidthAndHeightFromPointer`, `resizeElements.ts@1118751f:1101-1131`) | counted, in both, only when the selection carries it, as a group's are; the frame of a loose selection, drawn and scaled alike, leaves an arrow's label out                                                                                                            | `ci_text_resize.rs` › a group's drawn corner holds with an arrow's label past its shapes             |
+| the sides of anything but a text              | on a desktop no element has side handles: every one takes its sides on the frame line (`resizeTest.ts@1118751f:62-121`); a phone draws them                                                                                            | a shape keeps its drawn side handles; only a text, as the oracle's desktop does, has none and takes its sides on the frame line                                                                                                                                        | `ci_handles.rs` › a text's handles                                                                   |
+| a fixed-width text's reset handle             | a small handle right of a fixed-width text puts it back to auto width (`textAutoResizeHandle.ts@1118751f`)                                                                                                                             | **gap**: not drawn, and nothing in the app calls the engine's `setTextAutoResize`, so a fixed-width text cannot go back to auto width                                                                                                                                  | none                                                                                                 |
+| a side of a multi-selection                   | taken on the frame line (`resizeTest.ts@1118751f:62-121`)                                                                                                                                                                              | **gap**: the group frame has corners only                                                                                                                                                                                                                              | none                                                                                                 |
+| a turned element in a flipped group           | its angle is negated when the group is dragged through its anchor (`resizeElements.ts@1118751f:1417-1420`)                                                                                                                             | **gap**: the angle is kept                                                                                                                                                                                                                                             | none                                                                                                 |
+| Alt: resize from the centre                   | Alt scales about the centre (`shouldResizeFromCenter`)                                                                                                                                                                                 | **gap**: not ported, for any element                                                                                                                                                                                                                                   | none                                                                                                 |
 
 ## Corner radius
 

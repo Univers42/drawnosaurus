@@ -90,6 +90,13 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "Shapes",
+    // Was swept up by the section rule below while nothing read Alt while drawing or resizing.
+    text: /Alt\/Option \+ drag/,
+    status: "gap",
+    why: "Alt does not draw or resize from the centre: a new shape grows from where the drag began and a handle holds the opposite side (docs/reference/resize.md › Divergences). Excalidraw's shouldResizeFromCenter (resizeElements.ts@1118751f:621-727) and its drawing counterpart are not ported.",
+  },
+  {
+    section: "Shapes",
     status: "covered",
     tests: [`${ENGINE}/ci_pointer.rs`, `${ENGINE}/ci_snapping.rs`, `${ENGINE}/ci_grid.rs`],
   },
@@ -601,14 +608,26 @@ export const RULES: readonly Rule[] = [
       "e2e/textEditRequest.spec.ts",
     ],
   },
-  // Wrapping, carved out of the gap below. The wrap is Excalidraw's textWrapping.ts ported
-  // line for line (docs/reference/text.md), and every layout wraps from originalText. What
-  // keeps both lines a gap is that no resize handle lays the text out yet.
+  // Wrapping. The wrap is Excalidraw's textWrapping.ts ported line for line
+  // (docs/reference/text.md), every layout wraps from originalText, and a resize handle lays
+  // text out on every move of its drag (docs/reference/resize.md › Text and labels).
   {
     section: "9. Text",
-    text: /Wrapping|Fixed-width/,
+    text: /Wrapping/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text_wrap_oracle.rs`,
+      `${ENGINE}/ci_text_box.rs`,
+      `${ENGINE}/ci_text_model.rs`,
+      `${ENGINE}/ci_text_resize.rs`,
+      "e2e/textResize.spec.ts",
+    ],
+  },
+  {
+    section: "9. Text",
+    text: /Fixed-width/,
     status: "gap",
-    why: "Text wraps as Excalidraw's does, from originalText, whenever its words or its room change: typed, a font size, family or alignment change, a column's width set, a font arriving (ci_text_wrap_oracle.rs, ci_text_box.rs, ci_text_model.rs). A resize handle does not lay text out yet, so a resized shape keeps its label's lines and a column resized by its handle keeps its lines, where Excalidraw re-wraps on every resize (textElement.ts@1118751f:94-98, 192-196, resizeElements.ts@1118751f:371-375). The resize package lays it out as every writer does (laid_out).",
+    why: "A text's east or west side fixes its width and wraps it there, and widening it unwraps (ci_text_resize.rs, e2e/textResize.spec.ts). There is no way back to auto width from the UI: Excalidraw's reset handle beside a fixed-width text (textAutoResizeHandle.ts@1118751f) is not drawn, and nothing in the app calls the engine's setTextAutoResize.",
   },
   {
     section: "9. Text",
@@ -702,6 +721,13 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "15. Transform engine",
+    // Was swept up by the section rule below while nothing read Alt during a resize.
+    text: /Alt center scaling/,
+    status: "gap",
+    why: "Alt does not resize from the centre: every handle holds the opposite side or corner, one element or several. Excalidraw scales about the centre while Alt is held (shouldResizeFromCenter, resizeElements.ts@1118751f:621-727, 1056-1059).",
+  },
+  {
+    section: "15. Transform engine",
     status: "covered",
     tests: [
       `${ENGINE}/ci_selection.rs`,
@@ -709,6 +735,10 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_hit_rotated.rs`,
       `${ENGINE}/ci_binding.rs`,
       `${ENGINE}/ci_history.rs`,
+      // Text, containers and attached labels as a resize reaches them.
+      `${ENGINE}/ci_text_resize.rs`,
+      `${ENGINE}/ci_group_resize.rs`,
+      "e2e/textResize.spec.ts",
     ],
   },
   {
