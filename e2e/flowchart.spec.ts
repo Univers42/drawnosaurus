@@ -222,3 +222,29 @@ test("a new node lands inside the viewport even off the edge of the screen", asy
   expect(screenBottom, "the revealed node's bottom edge is on screen").toBeGreaterThan(0);
   expect(screenTop, "the revealed node's top edge is on screen").toBeLessThan(viewport.height);
 });
+
+test("the shape strip swaps the pending node's shape by click, and letting go of Ctrl still commits", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeStartingRectangle(board, "start", {
+    x: OPEN_CANVAS.left + 200,
+    y: OPEN_CANVAS.top + 200,
+  });
+  const before = await sceneElements(page);
+
+  await page.keyboard.down("Control");
+  await page.keyboard.press("ArrowRight");
+  const strip = page.getByRole("toolbar", { name: "Flowchart node shape" });
+  await expect(strip).toBeVisible();
+  await strip.getByRole("button", { name: "Diamond (2)" }).click();
+  // The click must leave the board's keyboard focus where it was: the release that
+  // commits is read by the board's own key listener.
+  await page.keyboard.up("Control");
+
+  await expect(strip).toBeHidden();
+  const after = await sceneElements(page);
+  expect(after, "the node and its arrow committed").toHaveLength(before.length + 2);
+  onlyNewOf(before, after, "diamond");
+});

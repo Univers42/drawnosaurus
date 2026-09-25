@@ -26,7 +26,14 @@
   style:top="{y}px"
 >
   {#each SHAPES as { shape, label, key } (shape)}
-    <button type="button" aria-label={`${label} (${key})`} onclick={() => onChoose(shape)}>
+    <!-- Focus stays on the board: Ctrl is still held, and the release that commits the
+         node is read by the board's own key listener. -->
+    <button
+      type="button"
+      aria-label={`${label} (${key})`}
+      onmousedown={(event) => event.preventDefault()}
+      onclick={() => onChoose(shape)}
+    >
       <Icon name={shape} size={16} />
     </button>
   {/each}
