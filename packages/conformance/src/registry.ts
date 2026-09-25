@@ -652,8 +652,14 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "12. Frames",
+    // Frame ordering — what is drawn, pasted or dragged into a frame, or taken in by one
+    // drawn or resized, goes directly below it — is pinned in ci_zorder.rs.
     status: "covered",
-    tests: [`${ENGINE}/ci_frame.rs`, `${ENGINE}/ci_group_locks_frames.rs`],
+    tests: [
+      `${ENGINE}/ci_frame.rs`,
+      `${ENGINE}/ci_group_locks_frames.rs`,
+      `${ENGINE}/ci_zorder.rs`,
+    ],
   },
   {
     section: "13. Embeds",
