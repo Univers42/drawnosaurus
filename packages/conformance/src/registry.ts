@@ -75,6 +75,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🧭 Navigation & canvas",
+    text: /Middle mouse \+ drag/,
+    status: "gap",
+    why: "pointerInput.ts treats a middle-button press the same as space (event.button === 1 || session.spaceHeld), but nothing dispatches a middle-button pointer event: no unit test for that branch, and no e2e drag with button: 'middle' anywhere in the suite.",
+  },
+  {
+    section: "🧭 Navigation & canvas",
     status: "covered",
     tests: [
       `${ENGINE}/ci_zoom_wheel.rs`,
@@ -98,6 +104,15 @@ export const RULES: readonly Rule[] = [
     text: /Alt\/Option \+ drag/,
     status: "gap",
     why: "Alt does not draw or resize from the centre: a new shape grows from where the drag began and a handle holds the opposite side (docs/reference/resize.md › Divergences). Excalidraw's shouldResizeFromCenter (resizeElements.ts@1118751f:621-727) and its drawing counterpart are not ported.",
+  },
+  // rect_from_drag's square parameter — a shape is free unless Shift squares it
+  // (pointer_move.rs) — is pinned directly in draw_engine.rs's shape_drag_rect_from_drag,
+  // not one of this rule's own named files.
+  {
+    section: "Shapes",
+    text: /^`Shift \+ drag` — Constrain proportions/,
+    status: "covered",
+    tests: [`${ENGINE}/draw_engine.rs`],
   },
   {
     section: "Shapes",
@@ -168,6 +183,36 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_flowchart.rs`, "engine/src/host/keys.test.ts", "e2e/flowchart.spec.ts"],
   },
+  // A plain click selecting an element is real but absent from every file the section
+  // rule below names: ci_pointer.rs drives it directly through the engine, and
+  // grabSelected.spec.ts's selectByOutline() clicks a real shape in a real browser and
+  // asserts the selection.
+  {
+    section: "🖱️ Selection",
+    text: /^`Click` —/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_pointer.rs`, "e2e/grabSelected.spec.ts"],
+  },
+  // Alt-drag duplication: ci_group_structure.rs drives begin_pointer/move_pointer with
+  // the duplicate flag set and checks the copies land, and layer.spec.ts holds Alt down
+  // for a real drag in a real browser and checks the element count. Neither file is
+  // named below.
+  {
+    section: "🖱️ Selection",
+    text: /^`Alt\/Option \+ drag` —/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_group_structure.rs`, "e2e/layer.spec.ts"],
+  },
+  // copySelection/cutSelection are wired to Ctrl+C/Ctrl+X (keys.ts's handleModChords) and
+  // Ctrl+V is deliberately left unhandled so the browser's own paste event carries it —
+  // but no test dispatches Ctrl+C or Ctrl+X, and nothing drives an actual paste, so none
+  // of the three round-trips through a test. Same gap as "27. Keyboard system"'s.
+  {
+    section: "🖱️ Selection",
+    text: /^`Ctrl\/Cmd \+ [CXV]` —/,
+    status: "gap",
+    why: "implemented, untested — copySelection/cutSelection answer Ctrl+C/Ctrl+X and paste rides the native clipboard event, but no test dispatches Ctrl+C/Ctrl+X or completes a paste to confirm any of the three actually round-trips.",
+  },
   {
     section: "🖱️ Selection",
     status: "covered",
@@ -184,6 +229,15 @@ export const RULES: readonly Rule[] = [
     text: /Deep-select|deep-select|deep selection|containers\/frames/,
     status: "gap",
     why: "Alt+click to reach an element underneath another. Hit-testing returns the topmost hit only; there is no depth cursor.",
+  },
+  // `Enter` on a selected text opens its editor: keys.test.ts ›
+  // "leaves Enter to the text editor when no path is being placed" dispatches the key and
+  // asserts it calls `editSelectedText` — not one of the section rule's own named files.
+  {
+    section: "🎯 Advanced selection tricks",
+    text: /`Enter` on a selected text element/,
+    status: "covered",
+    tests: ["engine/src/host/keys.test.ts"],
   },
   {
     section: "🎯 Advanced selection tricks",
@@ -207,6 +261,14 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Pasting plain text makes no text element: the host hands it to pasteJson, which takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not.",
   },
+  // `T` activates the text tool: ci_shortcuts.rs' oracle table drives it generically
+  // through every tool's letter, not one of the section rule's own named files.
+  {
+    section: "🔤 Text",
+    text: /Activate text tool/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_shortcuts.rs`],
+  },
   {
     section: "🔤 Text",
     status: "covered",
@@ -222,6 +284,15 @@ export const RULES: readonly Rule[] = [
     text: /bypass snapping/,
     status: "covered",
     tests: [`${ENGINE}/ci_objects_snap.rs`, "e2e/objectsSnap.spec.ts"],
+  },
+  // AlignMode has six variants (edit/align.rs) and ci_edit.rs exercises Left, Right,
+  // CenterX and CenterY directly; ci_align_units.rs and ci_group_locks_frames.rs exercise
+  // Bottom. Nothing anywhere calls align_selection/align_elements with AlignMode::Top.
+  {
+    section: "📐 Alignment & distribution",
+    text: /^Align selected elements top$/,
+    status: "gap",
+    why: "AlignMode::Top exists and is wired up, but no test — unit or e2e — ever selects it; every align test uses Left, Right, CenterX, CenterY or Bottom.",
   },
   {
     section: "📐 Alignment & distribution",
@@ -310,6 +381,23 @@ export const RULES: readonly Rule[] = [
     text: /Rename|Export frames/,
     status: "gap",
     why: "Frames carry a name and render it, but nothing edits it, and export has no per-frame mode.",
+  },
+  // The chord itself is pinned in the shortcuts oracle, not here — draw_frame in
+  // ci_frame.rs activates the tool directly (`set_tool`), never through a keypress.
+  {
+    section: "🧩 Frames",
+    text: /^`F` — Frame tool$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_shortcuts.rs`],
+  },
+  // a_frame_and_its_duplicated_children_stay_in_one_run_above_it (ci_duplicate.rs) drags a
+  // frame and its child through duplicate_selection and checks both copies land — not one
+  // of this rule's own named files.
+  {
+    section: "🧩 Frames",
+    text: /^Duplicate a frame/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_duplicate.rs`],
   },
   {
     section: "🧩 Frames",
@@ -432,6 +520,22 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_bucket_fill.rs`, "e2e/bucket.spec.ts"],
   },
+  // `N` activates the sticky-note tool: ci_shortcuts.rs' oracle table, not one of the
+  // section rule's own named files.
+  {
+    section: "📝 Sticky notes",
+    text: /`N` — Sticky note/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_shortcuts.rs`],
+  },
+  // A workflow made of Create and Type directly into the note, both covered by the
+  // section rule below — not a feature of its own.
+  {
+    section: "📝 Sticky notes",
+    text: /brainstorming/,
+    status: "out-of-scope",
+    why: "A workflow made of Create and Type directly into the note, already covered by the section rule below.",
+  },
   {
     section: "📝 Sticky notes",
     status: "covered",
@@ -460,10 +564,37 @@ export const RULES: readonly Rule[] = [
     tests: [`${WEB}/draw-chrome/presentation.test.ts`, "e2e/presentation.spec.ts"],
   },
   { section: "🔴 Laser pointer", status: "covered", tests: [`${ENGINE}/ci_laser.rs`] },
+  // Same gap as "🧭 Navigation & canvas"'s: pointerInput.ts treats a middle-button press
+  // like space, but nothing dispatches a middle-button pointer event to exercise it.
+  {
+    section: "✋ Hand / panning",
+    text: /^Middle mouse drag/,
+    status: "gap",
+    why: "implemented, untested — pointerInput.ts treats a middle-button press the same as space, but no test dispatches one.",
+  },
   {
     section: "✋ Hand / panning",
     status: "covered",
     tests: [`${ENGINE}/ci_pointer.rs`, "e2e/shortcuts.spec.ts"],
+  },
+  {
+    section: "🧱 Web embeds",
+    text: /^Activate Web Embed$/,
+    status: "covered",
+    // the_embed_is_reachable_by_its_own_key asserts 'w'/'W' select DrawTool::Embed.
+    tests: [`${ENGINE}/ci_shortcuts.rs`],
+  },
+  {
+    section: "🧱 Web embeds",
+    text: /^Drag to create an embed region$/,
+    status: "gap",
+    why: "not implemented — embeds are placed through a URL-entry modal (DrawEmbedModal.svelte) at a fixed point; every test inserts via window.__drawEngine.insertEmbed directly, and there is no drag-to-create-a-region gesture anywhere.",
+  },
+  {
+    section: "🧱 Web embeds",
+    text: /^Paste supported embed URLs$/,
+    status: "gap",
+    why: "implemented, untested — the host allow-list and URL resolution are thoroughly tested (ci_embed.rs), but nothing pastes a URL through the modal or onto the canvas to trigger creation; every test calls insertEmbed directly.",
   },
   {
     section: "🧱 Web embeds",
@@ -474,6 +605,30 @@ export const RULES: readonly Rule[] = [
     section: "🧙 Magic Frame / Wireframe → Code",
     status: "out-of-scope",
     why: "A hosted AI service, not an engine feature. Nothing in the motor can implement it.",
+  },
+  {
+    section: "🧜 Mermaid",
+    text: /^Open Mermaid/,
+    status: "gap",
+    why: "implemented, untested — DrawMainMenu opens DrawMermaidModal.svelte, but no test exercises the menu action or the modal opening.",
+  },
+  {
+    section: "🧜 Mermaid",
+    text: /^Preview the generated diagram$/,
+    status: "gap",
+    why: "not implemented — DrawMermaidModal.svelte parses and inserts directly on its Insert button; there is no preview step shown before committing to the board.",
+  },
+  {
+    section: "🧜 Mermaid",
+    text: /^Supported diagram types include/,
+    status: "gap",
+    why: "overclaimed — only flowchart syntax is parsed (mermaidParser.ts's parseMermaidFlowchart); sequence, class, entity-relationship and state diagrams are not supported.",
+  },
+  {
+    section: "🧜 Mermaid",
+    text: /Paste Mermaid directly/,
+    status: "gap",
+    why: "not implemented as auto-detection — Mermaid syntax must be typed or pasted inside the manually-opened modal; a canvas-level paste does not detect or trigger it.",
   },
   {
     section: "🧜 Mermaid",
@@ -541,6 +696,31 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "📋 Clipboard tricks",
+    text: /Ctrl\/Cmd \+ C`.*Copy|Ctrl\/Cmd \+ X`.*Cut/,
+    status: "gap",
+    why: "implemented, untested — the C/X keys call copySelection/cutSelection and write to the clipboard (engine/src/host/keys.ts:139-148), but keys.test.ts only stubs copySelection/cutSelection in its mock session and never dispatches Ctrl+C or Ctrl+X to assert either is called; ci_edit.rs has no clipboard tests.",
+  },
+  {
+    section: "📋 Clipboard tricks",
+    text: /^Paste images directly$/,
+    status: "covered",
+    // "pasting an image places it, rather than the shapes copied earlier".
+    tests: ["e2e/image.spec.ts"],
+  },
+  {
+    section: "📋 Clipboard tricks",
+    text: /^Paste text directly$/,
+    status: "gap",
+    why: "not implemented — same gap as design.md's Text paste: arbitrary clipboard text never becomes a text element (engine/src/host/keyboardInput.ts falls back to re-pasting the internal clipboard, which fails to parse plain text).",
+  },
+  {
+    section: "📋 Clipboard tricks",
+    text: /Paste Mermaid syntax to trigger Mermaid handling/,
+    status: "gap",
+    why: "not implemented as an auto-trigger — Mermaid syntax must be typed or pasted inside the manually-opened DrawMermaidModal; a canvas-level paste never detects or opens it (same gap as prompt/shortkey.md:321).",
+  },
+  {
+    section: "📋 Clipboard tricks",
     status: "covered",
     tests: [`${ENGINE}/ci_edit.rs`, "engine/src/host/keys.test.ts"],
   },
@@ -549,6 +729,20 @@ export const RULES: readonly Rule[] = [
     text: /PNG|read-only link/,
     status: "gap",
     why: "No PNG export and no read-only share link. SVG and JSON are done.",
+  },
+  // The binding is real; only the shortcut itself is unexercised — Save/export and
+  // Import are covered through their underlying JSON pipeline below.
+  {
+    section: "💾 Files",
+    text: /Ctrl\/Cmd \+ O` — Open\/load a scene/,
+    status: "gap",
+    why: "implemented, untested — DrawSurface.svelte's onAppShortcut binds mod+O to open the file picker (mainMenu.openFile()), but no test presses Ctrl/Cmd+O or drives the open flow.",
+  },
+  {
+    section: "💾 Files",
+    text: /editable source of truth/,
+    status: "out-of-scope",
+    why: "This app's source of truth is the board persisted server-side via autosave and MongoDB (CLAUDE.md's Autosave section); local files are .osidraw, not .excalidraw, and are only an export/import round-trip.",
   },
   {
     section: "💾 Files",
@@ -566,6 +760,24 @@ export const RULES: readonly Rule[] = [
     text: /frames/,
     status: "gap",
     why: "No per-frame export mode.",
+  },
+  {
+    section: "🔍 Export tricks",
+    text: /^Export selection$/,
+    status: "gap",
+    why: "No selection-scoped export anywhere: the export dialog and both engine.exportSvg/exportPng always export the whole scene.",
+  },
+  {
+    section: "🔍 Export tricks",
+    text: /^Copy selection as SVG$/,
+    status: "gap",
+    why: "SVG export exists (ci_export.rs) but nothing wires it to the clipboard — same missing plumbing as the Clipboard tricks section's 'copy as image' gap.",
+  },
+  {
+    section: "🔍 Export tricks",
+    text: /^Include\/exclude background depending on export settings$/,
+    status: "gap",
+    why: "scene_to_svg always renders a background rect; no option anywhere omits it.",
   },
   { section: "🔍 Export tricks", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
   {
@@ -657,6 +869,106 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Host-side editor state that lives in Svelte rather than in the engine, and is not covered by a test.",
   },
+  // Not persisted at all, by design: the `.osidraw` envelope (packages/contract/src/board.ts)
+  // carries only `type`/`version`/`elements` — see CLAUDE.md's boundary rule. The section rule
+  // below claimed both from the same four files that never mention either concept.
+  {
+    section: "1. Core architecture",
+    text: /^appState$/,
+    status: "out-of-scope",
+    why: "Editor/appState never crosses the boundary — only the elements array is persisted. appState lives in the host and the in-memory engine, not the saved document.",
+  },
+  {
+    section: "1. Core architecture",
+    text: /^files$/,
+    status: "out-of-scope",
+    why: "An image carries its own base64 picture inline on the element (packages/contract/tests/element.test.ts › \"an image's picture\") rather than a separate top-level files map keyed by fileId, as Excalidraw's format has.",
+  },
+  // The "current style" patch pipeline (DrawElementStylePatch, applied by apply_style /
+  // set_next_style) is exercised for color, width and opacity in ci_style.rs, which the
+  // section rule below already names. Roughness and roundness go through the same struct but
+  // are only ever asserted in ci_style_patch.rs; stroke style and fill style are not asserted
+  // being *set* anywhere — ci_selection_style.rs only reads them back for the inspector.
+  {
+    section: "1. Core architecture",
+    text: /Current stroke style|Current fill style/,
+    status: "gap",
+    why: "implemented, untested — DrawElementStylePatch carries stroke_style and fill_style, but no test patches either field through apply_style or set_next_style.",
+  },
+  {
+    section: "1. Core architecture",
+    text: /Current roughness|Current roundness/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_style_patch.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Active tool$/,
+    status: "covered",
+    // Tool switching and its effects (hand pans, eraser deletes, select clicks, drawing
+    // resets to select) — the section rule below never names the file that exercises it.
+    tests: [`${ENGINE}/ci_pointer.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Hovered elements$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_hover.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Editing element$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_edit.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Current group$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_group_editing.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Current frame$|Element frame membership/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_frame.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Grid state$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_grid.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Snap state$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_snapping.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Binding state$|Element binding relationships/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_binding_anchor.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^View-only state$/,
+    status: "gap",
+    why: "No read-only/view-only mode exists in the engine or the host UI — every peer who can open a board can edit it.",
+  },
+  {
+    section: "1. Core architecture",
+    text: /Dark\/light theme/,
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/theme.test.ts`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /^Scroll\/pan$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_scroll.rs`],
+  },
   {
     section: "1. Core architecture",
     status: "covered",
@@ -667,10 +979,13 @@ export const RULES: readonly Rule[] = [
       "packages/contract/tests/element.test.ts",
     ],
   },
+  // groupIds is exercised by the grouping engine tests, seed by the shape-cache tests that key
+  // on it for deterministic rough rendering — neither of the section rule's two named files
+  // asserts either field.
   {
     section: "2. Element system",
     status: "covered",
-    tests: ["packages/contract/tests/element.test.ts", `${ENGINE}/ci_persistence.rs`],
+    tests: [`${ENGINE}/ci_edit.rs`, `${ENGINE}/ci_shape_cache.rs`],
   },
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
@@ -690,6 +1005,85 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Snapping to objects, and its Ctrl/Cmd inversion, applies to moving a selection only (ci_objects_snap.rs). Drawing and resizing snap to the grid but not to other elements, where Excalidraw's snapNewElement and snapResizingElements (App.tsx:13375, :13499) do.",
   },
+  // The section rule below claimed a creation gesture that grows from the pointer-down
+  // point, not from a centre, while nothing reads Alt (or any modifier) during a draft
+  // drag — the same missing shouldResizeFromCenter counterpart the "Shapes" gap above
+  // already records for resizing.
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^(Click \+ drag from center|Alt\/Option centered creation)$/,
+    status: "gap",
+    why: "A new shape always grows from where the drag began, never from its centre. Alt is read during a resize (ci_selection.rs) but not while drawing (docs/reference/resize.md › Divergences; pointer_move.rs's Draft branch never reads alt_held).",
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^(Shift constrained square|Shift → circle)$/,
+    status: "covered",
+    tests: [`${ENGINE}/draw_engine.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Snap to grid$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_grid.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Drag cancellation$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_history_selection.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Move$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_version_stamps.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Duplicate$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_duplicate.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Copy\/paste$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_persistence.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^(Change )?[Rr]oughness$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_style_patch.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Change roundness$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_style_patch.rs`],
+  },
+  // Intersection testing itself (marquee vs. rotated box) is already in the section
+  // rule's own ci_hit_rotated.rs, so it needs no carve-out; ci_bucket_fill.rs's
+  // "intersect" hits are segment math for the flood fill, a different claim entirely.
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Selection outline$/,
+    status: "gap",
+    why: "Implemented, untested: no test asserts the selection highlight's own outline geometry as distinct from the bounding-box tests already covering this section — ci_hit_fill.rs's \"outline band\" is hit-testing a hollow shape, a different claim.",
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Connector attachment( points)?$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/draw_binding.rs`],
+  },
+  {
+    section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
+    text: /^Text\/container behavior$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text.rs`, `${ENGINE}/ci_text_model.rs`],
+  },
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
     status: "covered",
@@ -701,6 +1095,64 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_geometry.rs`,
       `${ENGINE}/ci_style.rs`,
     ],
+  },
+  // `a_line_never_binds_to_a_shape` — deliberately, correctly, and tested: only Arrow
+  // binds, matching the oracle. Creation and point-adding are the rest of this file.
+  {
+    section: "6. Line",
+    text: /^Click-drag creation$|^Multi-point lines$|^Add point$|^Binding$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_line_multipoint.rs`],
+  },
+  {
+    section: "6. Line",
+    text: /^Remove point$/,
+    status: "gap",
+    why: "Not implemented — no backspace/undo-last-point exists while placing a multi-point line (multi_linear.rs).",
+  },
+  {
+    section: "6. Line",
+    text: /^Move entire line$|^Rotate$/,
+    status: "gap",
+    why: "Implemented, untested: no test moves or rotates a Line-kind (multi-point) element specifically and checks its points.",
+  },
+  // A polyline's corner-handle resize and its individual point handles, from the general
+  // handle suite rather than this section's own files.
+  {
+    section: "6. Line",
+    text: /^Move individual points$|^Resize$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_handles.rs`],
+  },
+  {
+    section: "6. Line",
+    text: /^Start\/end arrows$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_style.rs`],
+  },
+  {
+    section: "6. Line",
+    text: /^Hit testing$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_hit_fill.rs`],
+  },
+  // Dragging a midpoint handle splits the segment; removing a middle point is its
+  // inverse — both are inline tests in the module itself.
+  {
+    section: "6. Line",
+    text: /^Point insertion$|^Point deletion$/,
+    status: "covered",
+    tests: ["engine/crates/draw-engine/src/selection/linear.rs"],
+  },
+  // Not to be confused with the 45°-angle constrain the section rule below's ci_snapping.rs
+  // genuinely tests (constrain_to_angle) — this is a line's own endpoint snapping to a
+  // *nearby element*, and nothing in the crate computes that; a line does not even bind
+  // (see the rule above), let alone snap short of binding.
+  {
+    section: "6. Line",
+    text: /^Endpoint snapping$/,
+    status: "gap",
+    why: "No snap-to-object exists for a line's own endpoint while drawing or dragging it; only the move-selection alignment guides (ci_snapping.rs) and the 45° draw constraint (draw_binding.rs) exist.",
   },
   {
     section: "6. Line",
@@ -735,6 +1187,47 @@ export const RULES: readonly Rule[] = [
     text: /[Pp]ressure|stylus|[Pp]alm|[Tt]ouch|[Ss]tabiliz|[Ss]moothing|interpolation|pen vs/,
     status: "gap",
     why: "No perfect-freehand pipeline: pressure, stabilisation and variable width all come with it, and so does pen/touch discrimination.",
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /^Point simplification$/,
+    status: "gap",
+    why: "not implemented — points are only streamlined (jitter-smoothed via freehand::streamline, engine/src/engine/pointer_move.rs) as they arrive; there is no point-count reduction pass.",
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /^Rough rendering$/,
+    status: "gap",
+    why: "No test asserts a hand-drawn look for freedraw specifically — ci_render_drawable.rs (not named by the section rule) only checks that element_drawable does not panic for every kind including Freedraw, never that the result looks rough.",
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /^Erasing$/,
+    status: "covered",
+    // a_freehand_stroke_is_erased_by_its_ink_not_its_box tests exactly this.
+    tests: [`${ENGINE}/ci_eraser.rs`],
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /^Hit testing$/,
+    status: "covered",
+    // content_elements_are_never_hollow hit-tests a Freedraw element's middle.
+    tests: [`${ENGINE}/ci_hit_fill.rs`],
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /^Transform$/,
+    status: "covered",
+    // stroke_at builds a Freedraw element whose points are scaled under a group resize.
+    tests: [`${ENGINE}/ci_group_resize.rs`],
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /^Undo$/,
+    status: "covered",
+    // ci_history.rs (named below) never mentions freedraw; undoing_a_pencil_stroke_selects_nothing
+    // (ci_history_selection.rs) is the real test.
+    tests: [`${ENGINE}/ci_history_selection.rs`],
   },
   {
     section: "8. Freedraw / pencil",
@@ -843,6 +1336,64 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Excalidraw has none of them either.",
   },
+  // A single click with the Text tool — the section rule below names only the files that
+  // cover the double-click path (existing shapes, existing text).
+  {
+    section: "9. Text",
+    text: /^Click to create$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_pointer.rs`],
+  },
+  // Below TEXT_BOX_MIN_DRAG a click auto-sizes; a real drag fixes the width to the column
+  // dragged out (`end_text`, pointer_end.rs) — asserted in ci_text_box.rs, not either file
+  // the section rule names.
+  {
+    section: "9. Text",
+    text: /^Drag to create constrained text$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_box.rs`],
+  },
+  {
+    section: "9. Text",
+    text: /^(Color|Opacity)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_style.rs`],
+  },
+  {
+    section: "9. Text",
+    text: /^Blur$/,
+    status: "gap",
+    why: "implemented, untested — commit_text_edit takes a via_keyboard flag and the false (blur) branch is real, but no test ever calls it that way; every test that ends an edit does so via Escape, Enter or a direct API call.",
+  },
+  // The editor is a plain textarea (textEditor.test.ts's own "is a textarea..." case), so
+  // caret placement and in-editor text selection are the browser's native behaviour — real,
+  // but nothing in this project's own tests asserts a caret position or a text selection.
+  {
+    section: "9. Text",
+    text: /^(Cursor|Selection)$/,
+    status: "gap",
+    why: "implemented, untested — the editor is a native textarea, so caret and selection behaviour comes from the browser; no test asserts either directly.",
+  },
+  {
+    section: "9. Text",
+    text: /^Resize$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_resize.rs`],
+  },
+  {
+    section: "9. Text",
+    text: /^Rotate$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_model.rs`],
+  },
+  // A label's own frame membership, kept separate from its container's (a_bound_label_is_not
+  // _captured_on_its_own) — neither file below is about frames.
+  {
+    section: "9. Text",
+    text: /^Text inside frames$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_frame.rs`],
+  },
   {
     section: "9. Text",
     status: "covered",
@@ -867,6 +1418,18 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "10. Images",
+    text: /^Rotate$/,
+    status: "gap",
+    why: "Rotation is a generic transform-engine feature (ci_handles.rs), but no test rotates an inserted image specifically to confirm it behaves the same way.",
+  },
+  {
+    section: "10. Images",
+    text: /^Copy\/paste$/,
+    status: "gap",
+    why: "implemented, untested — duplicating or copying an existing image element is never exercised with an image; ci_duplicate.rs and ci_persistence.rs's copy/paste tests use rectangles only, so the data URL is never checked to survive.",
+  },
+  {
+    section: "10. Images",
     status: "covered",
     tests: [
       `${ENGINE}/ci_image.rs`,
@@ -874,6 +1437,24 @@ export const RULES: readonly Rule[] = [
       "e2e/image.spec.ts",
       "apps/api/tests/integration/images.test.ts",
     ],
+  },
+  // stroke_color on a note is repurposed as the date footer's ink (paint_sticky in
+  // wasm/paint.rs fills the footer text with it) — nothing paints a border with it. A
+  // sticky note has a background paper and a fixed drop-shadow, never a colored outline.
+  {
+    section: "11. Sticky notes",
+    text: /^Border color$/,
+    status: "gap",
+    why: "not implemented — a note's stroke_color is the date footer's ink, not a border; nothing renders an outline in it.",
+  },
+  // angle is a plain field a note shares with every element, and ci_sticky.rs's
+  // a_turned_note_grows_from_its_top_edge sets it directly to check the resize math
+  // around a pre-rotated note — no test drives the rotation handle on a sticky note.
+  {
+    section: "11. Sticky notes",
+    text: /^Rotate$/,
+    status: "gap",
+    why: "implemented, untested — a note rotates like any element (angle field, resize math accounts for it), but no test drags its rotation handle.",
   },
   {
     section: "11. Sticky notes",
@@ -893,6 +1474,23 @@ export const RULES: readonly Rule[] = [
     text: /Rename|Export frame|Frame navigation/,
     status: "gap",
     why: "See the Frames rule: naming is stored and drawn but not editable, and export has no frame mode.",
+  },
+  // Resize handles are not excluded for DrawElementType::Frame, so dragging one works the
+  // same as any rectangle-shaped element — but no test drags a frame's own handle and
+  // checks its children re-clip against the new bounds.
+  {
+    section: "12. Frames",
+    text: /^Resize frame$/,
+    status: "gap",
+    why: "implemented, untested — a frame resizes through the generic handle path, but no test drags one and checks membership re-clips.",
+  },
+  // No action selects a frame's children as a set — clicking the frame's border selects
+  // only the frame (a_frame_is_grabbed_by_its_border_and_not_through_its_middle).
+  {
+    section: "12. Frames",
+    text: /^Select contents$/,
+    status: "gap",
+    why: "not implemented — selecting a frame selects the frame itself; nothing selects what is inside it as a set.",
   },
   {
     section: "12. Frames",
@@ -936,6 +1534,54 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "14. Selection engine",
+    text: /^(Click element|Click empty canvas)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_pointer.rs`],
+  },
+  {
+    section: "14. Selection engine",
+    text: /^Shift-click (add|remove)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_multi_select.rs`],
+  },
+  // A marquee always tests containment, never overlap — a_marquee_that_merely_clips_a_shape
+  // _leaves_it is the point of the rule, so a left-to-right drag and the shift-additive case
+  // are both real, just not in any of the four files the section rule names.
+  {
+    section: "14. Selection engine",
+    text: /^(Drag left → right|Containment mode|Shift additive selection)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_multi_select.rs`],
+  },
+  {
+    section: "14. Selection engine",
+    text: /^Drag right → left$/,
+    status: "gap",
+    why: "A marquee has no direction: dragging it either way tests the same containment (ci_multi_select.rs). There is no separate right-to-left gesture.",
+  },
+  {
+    section: "14. Selection engine",
+    text: /^Intersection mode$/,
+    status: "gap",
+    why: "Deliberately not ported — Excalidraw's getElementsWithinSelection is containment-only here so a small marquee across a big background shape does not sweep it up too (ci_multi_select.rs comment on a_marquee_that_merely_clips_a_shape_leaves_it).",
+  },
+  {
+    section: "14. Selection engine",
+    text: /^Group indicators$/,
+    status: "gap",
+    why: "No visual marker distinguishes a selected group from a selected single element; same gap as Locked indicators above.",
+  },
+  // Only the "add" half is real: a lasso's `base` is either the whole existing selection
+  // (Shift held) or empty (`engine/pointer.rs`'s Lasso branch) — there is no subtractive
+  // path, so "remove" was never exercised by ci_lasso.rs's additive-only test.
+  {
+    section: "14. Selection engine",
+    text: /^Add\/remove modifiers$/,
+    status: "gap",
+    why: "Add is real (ci_lasso.rs's an_additive_loop_keeps_what_was_already_selected); there is no remove/subtractive modifier for the lasso at all.",
+  },
+  {
+    section: "14. Selection engine",
     status: "covered",
     tests: [
       `${ENGINE}/ci_selection.rs`,
@@ -958,6 +1604,66 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_text_resize.rs`,
       "e2e/resizeCenter.spec.ts",
     ],
+  },
+  // A plain drag translates one element, and the same gesture on a multi-selection member
+  // carries the rest along — neither file the section rule names below drives a drag at all.
+  {
+    section: "15. Transform engine",
+    text: /^(Mouse drag|Multi-selection movement)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_multi_select.rs`],
+  },
+  // Keyboard translation: the host maps the key to a delta (1px, 10px with Shift) and the
+  // engine bumps the version for it — neither half is in the section rule's file list.
+  {
+    section: "15. Transform engine",
+    text: /^(Arrow keys|Shift movement)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_version_stamps.rs`, "engine/src/host/keys.test.ts"],
+  },
+  {
+    section: "15. Transform engine",
+    text: /^Fine movement$/,
+    status: "gap",
+    why: "No modifier gives a smaller nudge than the plain 1px arrow-key step. Alt+Arrow is taken for flowchart navigation instead (engine/src/host/keys.test.ts).",
+  },
+  {
+    section: "15. Transform engine",
+    text: /^Negative dimensions normalization$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_geometry.rs`],
+  },
+  {
+    section: "15. Transform engine",
+    text: /^(Angle snapping|Shift angle locking)$/,
+    status: "gap",
+    why: "rotate_element (selection/transform.rs) takes only the pointer position — no modifier or snap increment reaches it, so a rotation is never quantised.",
+  },
+  // Rotating a multi-element selection together — the concrete case is bound arrows staying
+  // attached through the turn, which needs every member to have turned, not just one shape.
+  {
+    section: "15. Transform engine",
+    text: /^Multi-selection rotation$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding_anchor.rs`],
+  },
+  {
+    section: "15. Transform engine",
+    text: /^Frames$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_frame.rs`],
+  },
+  {
+    section: "15. Transform engine",
+    text: /^Attached labels$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_model.rs`],
+  },
+  {
+    section: "15. Transform engine",
+    text: /^Selection$/,
+    status: "gap",
+    why: "implemented, untested — nothing asserts a selection survives its own transform rather than merely appearing to, since every resize/rotate test re-reads the element by id rather than checking selection state afterward.",
   },
   {
     section: "15. Transform engine",
@@ -993,6 +1699,15 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_group_locks_frames.rs`,
       "e2e/groups.spec.ts",
     ],
+  },
+  // Deletion tombstones an element in place rather than removing it from the array
+  // (z-order is array position, CLAUDE.md), so the rest are stable by construction — but
+  // no test deletes from a stack and checks the survivors keep their relative order.
+  {
+    section: "17. Z-order",
+    text: /^Stable ordering after deletion$/,
+    status: "gap",
+    why: "implemented, untested — deletion tombstones in place rather than reindexing, so order should be stable by construction, but no test asserts it.",
   },
   {
     section: "17. Z-order",
@@ -1046,6 +1761,30 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Equal-spacing guides and configurable increments. Edge, centre, midpoint and 45° snapping are done.",
   },
+  // constrain_to_angle (interaction/linear_drag.rs) rounds a drag to the nearest 45° step.
+  // draw_binding.rs's shift_snaps_to_45 exercises the horizontal case (dy rounds to 0 for
+  // a shallow drag) and the 45° case (dx == dy for a near-diagonal one); nothing feeds it a
+  // near-vertical drag to exercise the 90° case.
+  {
+    section: "19. Snapping",
+    text: /^Horizontal$/,
+    status: "covered",
+    tests: [`${ENGINE}/draw_binding.rs`],
+  },
+  {
+    section: "19. Snapping",
+    text: /^Vertical$/,
+    status: "gap",
+    why: "Implemented (constrain_to_angle snaps to any 45° multiple, 90° included), but no test feeds it a near-vertical drag — draw_binding.rs's shift_snaps_to_45 only exercises the horizontal and 45° cases.",
+  },
+  // Where an arrow lands on a bindable shape: attach_point_box_direction and
+  // element_center_calculation are the edge and centre halves, neither named below.
+  {
+    section: "19. Snapping",
+    text: /^(Shape edges|Shape centers)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding.rs`],
+  },
   {
     section: "19. Snapping",
     status: "covered",
@@ -1055,6 +1794,38 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_objects_snap.rs`,
       "e2e/objectsSnap.spec.ts",
     ],
+  },
+  // The property itself, not the fill types enumerated below: apply_style with fill_style
+  // is only exercised by the bucket-fill path (a_fill_style_that_was_actually_chosen_is_
+  // honoured) — ci_style.rs and ci_style_patch.rs never patch it.
+  {
+    section: "20. Fill and stroke system",
+    text: /^Fill style$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_bucket_fill.rs`],
+  },
+  // Never patched in ci_style.rs/ci_style_patch.rs either, but copy/paste-styles
+  // round-trips it (the_shape_styles_transfer) and it changes the exported dasharray
+  // (scene_to_svg_stroke_style_dashed/_dotted).
+  {
+    section: "20. Fill and stroke system",
+    text: /^Stroke style$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_selection_style.rs`, `${ENGINE}/ci_export.rs`],
+  },
+  {
+    section: "20. Fill and stroke system",
+    text: /^None$/,
+    status: "gap",
+    why: "FillStyle has no None/no-pattern variant — only Hachure, CrossHatch, Solid and Zigzag (scene/element.rs); the inspector's FILL_STYLES picker only offers Hachure/Cross/Solid.",
+  },
+  // The two non-default stroke styles each pin their own SVG dasharray by name; Solid is
+  // the default exercised implicitly everywhere else in the suite.
+  {
+    section: "20. Fill and stroke system",
+    text: /^(Dashed|Dotted)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export.rs`],
   },
   {
     section: "20. Fill and stroke system",
@@ -1066,6 +1837,28 @@ export const RULES: readonly Rule[] = [
       `${WEB}/draw-chrome/inspector.test.ts`,
     ],
   },
+  // Seed determinism and stroke-to-stroke variability live in the shape generator's own
+  // inline tests, not in this section's named files.
+  {
+    section: "21. Rough / hand-drawn renderer",
+    text: /^Deterministic random seed$|^Stroke variability$/,
+    status: "covered",
+    tests: ["engine/crates/draw-engine/src/render/shape.rs"],
+  },
+  // The shape cache is the redraw-consistency and performance story: same fingerprint,
+  // same cached Drawable, no regeneration.
+  {
+    section: "21. Rough / hand-drawn renderer",
+    text: /^Consistent redraws$|^Performance optimization$/,
+    status: "covered",
+    tests: ["engine/crates/draw-engine/src/render/cache.rs", `${ENGINE}/ci_shape_cache.rs`],
+  },
+  {
+    section: "21. Rough / hand-drawn renderer",
+    text: /^Roughness levels$/,
+    status: "covered",
+    tests: ["engine/crates/draw-engine/src/render/opts.rs"],
+  },
   {
     section: "21. Rough / hand-drawn renderer",
     status: "covered",
@@ -1076,6 +1869,39 @@ export const RULES: readonly Rule[] = [
     text: /Pinch|Touch pan/,
     status: "gap",
     why: "Pinch and touch pan need the gesture work in §23.",
+  },
+  {
+    section: "22. Canvas navigation",
+    text: /^Middle mouse$/,
+    status: "gap",
+    why: "Same gap as shortkey.md's Navigation & canvas rule: pointerInput.ts's button===1 branch has no test, unit or e2e.",
+  },
+  // Real drag, real camera assertion — just not named by this rule.
+  {
+    section: "22. Canvas navigation",
+    text: /^Space \+ drag$/,
+    status: "covered",
+    tests: ["e2e/shortcuts.spec.ts"],
+  },
+  {
+    section: "22. Canvas navigation",
+    text: /^Hand tool$/,
+    status: "covered",
+    // pointer_hand_tool_pans_camera sets DrawTool::Hand, drags, and asserts the camera
+    // moved by the drag delta.
+    tests: [`${ENGINE}/ci_pointer.rs`],
+  },
+  {
+    section: "22. Canvas navigation",
+    text: /^Zoom (in|out)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_style.rs`, "e2e/shortcuts.spec.ts"],
+  },
+  {
+    section: "22. Canvas navigation",
+    text: /^100%$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_style.rs`, "e2e/shortcuts.spec.ts"],
   },
   {
     section: "22. Canvas navigation",
@@ -1091,6 +1917,15 @@ export const RULES: readonly Rule[] = [
     section: "23. Touch / mobile",
     status: "gap",
     why: "Pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout.",
+  },
+  // a_freehand_stroke_is_erased_by_its_ink_not_its_box tests hit-testing precision against
+  // a stroke's shape, but the stroke is always taken whole — nothing splits one into the
+  // segments a sweep did not cross.
+  {
+    section: "24. Eraser",
+    text: /^Delete partially intersected freehand paths$/,
+    status: "gap",
+    why: "not implemented — a swept freehand stroke is deleted whole; nothing splits it into the parts the eraser missed.",
   },
   {
     section: "24. Eraser",
@@ -1131,6 +1966,30 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Tab does nothing on the canvas. The oracle's own Tab opens the shape-conversion popup (App.tsx), not flowchart navigation — that is Alt+Arrow, covered under Flowcharts. This one is still unclaimed.",
   },
+  // Shift-click is a pointer gesture, not a keydown, so it is absent from keys.test.ts —
+  // the additive/subtractive click the section rule below never actually exercises.
+  {
+    section: "27. Keyboard system",
+    text: /^Shift-click$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_multi_select.rs`],
+  },
+  // copySelection/cutSelection exist (keys.ts's handleModChords) and Ctrl+V is proven
+  // deliberately unhandled so the browser's own paste event carries it — but no test
+  // dispatches Ctrl+C or Ctrl+X, and nothing drives an actual paste to confirm the round
+  // trip through the clipboard. "does not steal Ctrl+V" is non-interference, not a paste.
+  {
+    section: "27. Keyboard system",
+    text: /^Cmd\/Ctrl\+[CXV]$/,
+    status: "gap",
+    why: "implemented, untested — copySelection/cutSelection are wired to Ctrl+C/Ctrl+X and paste rides the native clipboard event, but no test dispatches Ctrl+C/Ctrl+X or completes a paste to confirm any of the three actually round-trips.",
+  },
+  {
+    section: "27. Keyboard system",
+    text: /^Backspace$/,
+    status: "gap",
+    why: 'Implemented, untested: handlePlainKeys treats Backspace exactly like Delete (`event.key === "Delete" || event.key === "Backspace"`, keys.ts), but keys.test.ts only ever dispatches "Delete".',
+  },
   {
     section: "27. Keyboard system",
     status: "covered",
@@ -1155,6 +2014,16 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "History is a linear snapshot stack; branching needs the operation model from §41. Undo is partly collaboration-aware: it restores only the elements its own step changed and goes out as a new edit, so it no longer reverts a peer's work elsewhere (ci_version_stamps.rs). It is whole-element, though — undoing your change to an element a peer has since edited restores all of it, where Excalidraw's deltas restore only the properties you changed.",
   },
+  // No explicit transaction object exists anywhere in the engine (grep finds none):
+  // a commit is stamped once, whole, at the end of a gesture (push_history,
+  // CLAUDE.md's "Server: element-level last-write-wins"), not opened, updated and closed
+  // through a named API a caller could start, update, commit or cancel piecemeal.
+  {
+    section: "29. Undo / redo",
+    text: /^Transaction (start|update|commit|cancel)$/,
+    status: "gap",
+    why: "not implemented as an explicit API — a commit is one stamp at the end of a gesture (push_history), not a transaction object with separate start/update/commit/cancel calls.",
+  },
   {
     section: "29. Undo / redo",
     status: "covered",
@@ -1178,12 +2047,71 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Internal copy/paste round-trips with id regeneration, and a pasted image file is placed; other rich external formats are not read.",
   },
-  { section: "30. Clipboard", status: "covered", tests: [`${ENGINE}/ci_edit.rs`] },
+  // ci_edit.rs (named below) has zero copy/cut/paste tests — it is entirely z-order, align,
+  // distribute, flip and grouping. The real coverage is ci_persistence.rs:
+  // copy_selection_single_element_serializes, copy_and_paste_remaps_ids (ID regeneration),
+  // copy_and_paste_preserves_internal_connector_bindings (binding reconstruction),
+  // cut_selection_returns_json_and_deletes. Cross-document paste is exercised by ci_live.rs's
+  // a_delta_lists_what_it_adds_in_stacking_order, which pastes JSON exported from an unrelated
+  // engine instance.
+  {
+    section: "30. Clipboard",
+    text: /^Copy$|^Cut$|^Paste$|Cross-document paste|ID regeneration|Binding reconstruction/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_persistence.rs`, `${ENGINE}/ci_live.rs`],
+  },
+  {
+    section: "30. Clipboard",
+    text: /^Duplicate$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_duplicate.rs`],
+  },
+  {
+    section: "30. Clipboard",
+    text: /^Text paste$/,
+    status: "gap",
+    why: "not implemented — paste_json (engine/crates/draw-engine/src/engine/clipboard.rs) only accepts this app's own osidraw JSON; arbitrary clipboard text fails to parse and falls back to re-pasting the last internal copy (or nothing), never becoming a text element the way Excalidraw's paste does.",
+  },
   {
     section: "31. Persistence",
     text: /IndexedDB|crash recovery|localStorage preferences/,
     status: "gap",
     why: "Autosave goes to the API and a localStorage draft is the fallback; there is no IndexedDB store and no crash-recovery prompt.",
+  },
+  // recoverStripped repairs what a server round-trip drops (a frame's name, what frame an
+  // element is in, a picture) — apps/web/src/lib/autosave/recover.test.ts, not one of this
+  // rule's own named files.
+  {
+    section: "31. Persistence",
+    text: /^recovery$/,
+    status: "covered",
+    tests: [`${WEB}/autosave/recover.test.ts`],
+  },
+  // elements_from_json checks the type tag before anything else (export/json.rs) and
+  // refuses everything but "osidraw" — a real Excalidraw file is rejected, not converted.
+  {
+    section: "31. Persistence",
+    text: /^\.excalidraw (import|export)$/,
+    status: "gap",
+    why: 'not implemented — elements_from_json refuses anything whose type is not "osidraw"; a .excalidraw file does not load, and nothing writes one.',
+  },
+  // elements_from_json_invalid_type_returns_none, _malformed_json_returns_none and
+  // _missing_elements_field_returns_none pin exactly this — in ci_export.rs, not named
+  // below.
+  {
+    section: "31. Persistence",
+    text: /^JSON validation$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export.rs`],
+  },
+  // Old scenes still parse and round-trip: a_legacy_scene_round_trips_byte_identical and
+  // a_legacy_text_resolves_exactly_as_before (ci_text_model_compat.rs), "an old scene must
+  // still parse" (ci_text_align.rs) — none of this rule's own named files.
+  {
+    section: "31. Persistence",
+    text: /^(Version|Legacy) migration$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_model_compat.rs`, `${ENGINE}/ci_text_align.rs`],
   },
   {
     section: "31. Persistence",
@@ -1193,6 +2121,42 @@ export const RULES: readonly Rule[] = [
       `${WEB}/autosave/autosaver.test.ts`,
       `${WEB}/autosave/sceneDiff.test.ts`,
     ],
+  },
+  // Both are Canvas→PNG-only options, and Canvas→PNG is canvas.toBlob() on the on-screen
+  // canvas as-is (engine.ts's exportPng) — no transparent-background toggle and no
+  // chosen-background-color option, unlike the SVG path's explicit background parameter.
+  // Slips past the PNG carve-out above since neither line contains the word "PNG".
+  {
+    section: "32. Export",
+    text: /^(Transparent background|Background color)$/,
+    status: "gap",
+    why: "Canvas→PNG (engine.ts exportPng, canvas.toBlob()) has no transparent-background toggle and no background-color option, unlike the SVG export path.",
+  },
+  {
+    section: "32. Export",
+    text: /^Selection export$/,
+    status: "gap",
+    why: "The export dialog and both engine.exportSvg/exportPng always export the whole scene; nothing threads the current selection through to either path.",
+  },
+  // scene_to_svg's <image> arm is exercised directly: a real embedded data URL, a flipped
+  // image, and the no-picture-yet fallback.
+  {
+    section: "32. Export",
+    text: /^Images$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_image.rs`],
+  },
+  {
+    section: "32. Export",
+    text: /^Embedded scene data if desired$/,
+    status: "gap",
+    why: "Neither exportSvg nor exportPng embeds the .osidraw JSON into the file for round-trip re-import; OsidrawFile (export/json.rs) has no such provision.",
+  },
+  {
+    section: "32. Export",
+    text: /^(Files|Exportable app state)$/,
+    status: "gap",
+    why: "The exported .osidraw JSON (OsidrawFile in export/json.rs) carries only type, version and elements — no files map and no appState, so neither round-trips.",
   },
   {
     section: "32. Export",
@@ -1212,10 +2176,29 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "The command palette and the menu entries that depend on features not built yet (links, library, a stats panel).",
   },
+  // Each action is implemented and tested at the engine/store level (grouping, z-order,
+  // lock, duplicate, delete, copy/paste) but no test clicks the context-menu entry
+  // itself and checks the effect — menu.test.ts covers what the menu *offers*, not what
+  // clicking an item *does*.
   {
     section: "34. Menus",
-    status: "covered",
-    tests: [`${WEB}/draw-chrome/menu.test.ts`, `${WEB}/draw-chrome/shapeActions.test.ts`],
+    text: /^Cut$|^Copy$|^Duplicate$|^Delete$|^Group$|^Ungroup$|^Lock$|^Unlock$|^Bring forward$|^Send backward$/,
+    status: "gap",
+    why: "Implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically.",
+  },
+  // A single hamburger dropdown (DrawMainMenu.svelte), not a File/Edit/View/Help menu
+  // bar — the checklist's generic template, not this project's or the oracle's shape.
+  {
+    section: "34. Menus",
+    text: /^File$|^Edit$|^View$|^Help$|^Preferences$/,
+    status: "out-of-scope",
+    why: "This project's main menu is one hamburger dropdown (DrawMainMenu.svelte), not a File/Edit/View/Help/Preferences menu bar — Excalidraw itself has no such bar either.",
+  },
+  {
+    section: "34. Menus",
+    text: /^Export$/,
+    status: "gap",
+    why: '"Export image…" is in the dropdown (DrawMainMenu.svelte) but no test opens it from the main menu specifically; the export flow itself is covered under section 32.',
   },
   {
     section: "35. Properties panel",
@@ -1278,6 +2261,22 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Grid step is modelled but not exposed, rendering does not thin with zoom, and export does not explicitly exclude the grid.",
   },
+  // ci_grid.rs pins the snapping math (step size, intersections, on/off) but never the
+  // paint output — set_stroke(ctx, &view.theme.grid) in wasm/paint.rs has no test.
+  {
+    section: "38. Grid",
+    text: /^Grid rendering$/,
+    status: "gap",
+    why: "implemented, untested — the grid is painted from view.theme.grid, but nothing checks what gets drawn.",
+  },
+  // themeFromCss's "reads the host tokens" test checks the grid colour it derives from
+  // the page's --line token — apps/web/src/lib/draw-chrome/theme.test.ts, not named below.
+  {
+    section: "38. Grid",
+    text: /^Dark mode$/,
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/theme.test.ts`],
+  },
   { section: "38. Grid", status: "covered", tests: [`${ENGINE}/ci_grid.rs`] },
   {
     section: "39. Dark mode / themes",
@@ -1290,11 +2289,53 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${WEB}/draw-chrome/theme.test.ts`, `${ENGINE}/ci_export.rs`],
   },
+  // The colored outline around what a peer holds is exactly "remote selections" in the
+  // Multiplayer UI list — e2e/peers.spec.ts's "what one person holds, the other sees in
+  // their colour and cannot take" drives it end to end. Carved out before the blanket gap
+  // below, which used to claim this untested.
   {
     section: "40. Collaboration",
-    text: /Follow user|Remote selections|Active tool|User list/,
+    text: /^Remote selections$/,
+    status: "covered",
+    tests: ["e2e/peers.spec.ts"],
+  },
+  {
+    section: "40. Collaboration",
+    text: /Follow user|Active tool/,
     status: "gap",
     why: "Presence beyond cursors. Element sync, last-write-wins, reconnection with catch-up, the offline queue and the connection state are done.",
+  },
+  // The share modal renders one (DrawShareModal.svelte) but no unit test or e2e spec
+  // asserts it — the section rule below never names a file that mentions "avatar" at all.
+  {
+    section: "40. Collaboration",
+    text: /^Collaborator avatars$/,
+    status: "gap",
+    why: "implemented, untested — rendered by DrawShareModal.svelte; no test asserts it.",
+  },
+  // The peers-list DrawShareModal renders (avatars, "N online") is the same untested
+  // surface as Collaborator avatars just above — nothing asserts it renders or updates.
+  {
+    section: "40. Collaboration",
+    text: /^User list$/,
+    status: "gap",
+    why: "implemented, untested — DrawShareModal.svelte renders a peers-list with a live count; no test asserts it.",
+  },
+  // Presence's other half — what a peer has selected, not just where their cursor is —
+  // lives in peerClaims.ts and is asserted there, a file the section rule never names.
+  {
+    section: "40. Collaboration",
+    text: /^Selection$/,
+    status: "covered",
+    tests: [`${WEB}/realtime/peerClaims.test.ts`],
+  },
+  // The merge rule itself — reconcile.ts, the single source of truth CLAUDE.md points to —
+  // is unit-tested in the contract package, not in any file the section rule names.
+  {
+    section: "40. Collaboration",
+    text: /^(Conflict resolution|Ordering|Versioning)$/,
+    status: "covered",
+    tests: ["packages/contract/tests/reconcile.test.ts"],
   },
   {
     section: "40. Collaboration",
@@ -1317,8 +2358,53 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "42. Rendering engine",
+    text: /^Draw hover$/,
+    status: "gap",
+    why: "No test paints a hover highlight — only a connector endpoint's binding-highlight-while-hovering is verified (paint.rs), which is the gap above's 'Draw bindings', not a general hover outline.",
+  },
+  // `paint_view().marquee` is the actual render-facing state a selection drag produces.
+  {
+    section: "42. Rendering engine",
+    text: /^Draw selection$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_repaint.rs`],
+  },
+  {
+    section: "42. Rendering engine",
+    text: /^Draw laser$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_laser.rs`],
+  },
+  {
+    section: "42. Rendering engine",
     status: "covered",
     tests: [`${ENGINE}/ci_render_drawable.rs`, `${ENGINE}/ci_export.rs`, `${ENGINE}/ci_grid.rs`],
+  },
+  // Rectangle/Ellipse/Diamond outline hit testing has its own suite, not in this
+  // section's named files.
+  {
+    section: "43. Hit-testing engine",
+    text: /^Rectangle$|^Ellipse$|^Diamond$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_geometry.rs`],
+  },
+  // `clicking_a_member_selects_the_whole_outermost_group` drives the click through the
+  // real hit test to reach a group's member.
+  {
+    section: "43. Hit-testing engine",
+    text: /^Groups$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_groups_nested.rs`],
+  },
+  // `has_solid_interior` (geometry.rs) puts Sticky and Embed on the same catch-all "solid
+  // unless Frame or an unfilled Rectangle/Diamond/Ellipse" branch as Text/Freedraw/Image,
+  // which `content_elements_are_never_hollow` (ci_hit_fill.rs, named below) exercises —
+  // but no test constructs a StickyNote or Embeddable element and hit-tests it directly.
+  {
+    section: "43. Hit-testing engine",
+    text: /^Sticky$|^Embeds$/,
+    status: "gap",
+    why: "Implemented (same has_solid_interior branch as Image/Text/Freedraw), untested: no test hit-tests a StickyNote or Embeddable element specifically.",
   },
   {
     section: "43. Hit-testing engine",
@@ -1332,6 +2418,60 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "44. Geometry engine",
+    text: /^Vector$/,
+    status: "gap",
+    why: "No vector primitive or vector algebra module — offsets are plain x/y deltas on Point pairs.",
+  },
+  {
+    section: "44. Geometry engine",
+    text: /^Matrix$/,
+    status: "gap",
+    why: "No composable transform matrix — rotation and translation are direct x/y/angle field updates, not matrix multiplication.",
+  },
+  {
+    section: "44. Geometry engine",
+    text: /^Circle$/,
+    status: "gap",
+    why: "No distinct Circle primitive — a circle is an Ellipse element with equal width and height (ci_recognize.rs::a_circle_is_an_ellipse_too is about shape recognition, not a Circle geometry type).",
+  },
+  {
+    section: "44. Geometry engine",
+    text: /^Convex polygon tests$/,
+    status: "gap",
+    why: "is_valid_polygon and can_become_polygon (geometry.rs) check point count and closedness, not convexity — no convexity or convex-hull test exists.",
+  },
+  {
+    section: "44. Geometry engine",
+    text: /^Projection$|^Closest point$/,
+    status: "gap",
+    why: "project_param (bucket_fill.rs) and the binding anchor's projection helpers are implemented but exercised only indirectly through bucket-fill and binding behaviour — no test asserts a projected or closest-point value directly.",
+  },
+  // `polygon_includes_point` reached through a live hit test, and the toggle's own
+  // validity/closedness rules — not in this section's named files.
+  {
+    section: "44. Geometry engine",
+    text: /^Polygon$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_polygon.rs`],
+  },
+  // `distance_to_segment` and `segments_intersect`/`segment_intersection_point`, reached
+  // through bucket fill's boundary walk and dense-binding's outline distance.
+  {
+    section: "44. Geometry engine",
+    text: /^Segment$|^Intersection$|^Distance$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_bucket_fill.rs`, `${ENGINE}/ci_binding_dense.rs`],
+  },
+  // `rotate_point` (selection/handles.rs), reached through the handle and resize suites —
+  // not in this section's named files.
+  {
+    section: "44. Geometry engine",
+    text: /^Rotation$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_handles.rs`, `${ENGINE}/ci_selection.rs`],
+  },
+  {
+    section: "44. Geometry engine",
     status: "covered",
     tests: [`${ENGINE}/ci_geometry.rs`, `${ENGINE}/ci_math.rs`, `${ENGINE}/ci_camera.rs`],
   },
@@ -1340,6 +2480,23 @@ export const RULES: readonly Rule[] = [
     text: /High contrast|Reduced motion|Screen-reader|focus trap|Focus management/,
     status: "gap",
     why: "Toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited.",
+  },
+  // DrawMainMenu.svelte's onKeyDown answers ArrowDown/ArrowUp by stepping the highlighted
+  // item, and DrawContextMenu.svelte has its own handler — but no test presses either key
+  // with a menu open.
+  {
+    section: "48. Accessibility",
+    text: /^Menu keyboard navigation$/,
+    status: "gap",
+    why: "implemented, untested — both menus answer ArrowDown/ArrowUp, but no test opens one and presses an arrow key.",
+  },
+  // Every menu item shows its own chord inline (dropdown-menu-item__shortcut) and `?`
+  // opens the shortcuts help — but nothing asserts the hint text or opens that dialog.
+  {
+    section: "48. Accessibility",
+    text: /^Shortcut discoverability$/,
+    status: "gap",
+    why: "implemented, untested — menu items render their shortcut inline and `?` opens the help dialog, but no test checks either.",
   },
   {
     section: "48. Accessibility",
@@ -1362,6 +2519,29 @@ export const RULES: readonly Rule[] = [
     text: /modifier|Shift|Alt|Cmd|None/,
     status: "gap",
     why: "No systematic modifier sweep. Individual modifiers are tested where they matter; the cross-product is not.",
+  },
+  // "All three" is the last row of the modifier sweep above (Shift + Alt + Cmd/Ctrl held at
+  // once) but names none of its siblings' words, so it fell through the modifier-gap rule and
+  // into the section catch-all instead of sharing its verdict.
+  {
+    section: "51. Testing matrix",
+    text: /^All three$/,
+    status: "gap",
+    why: "No systematic modifier sweep. Individual modifiers are tested where they matter; the cross-product is not.",
+  },
+  // Moving and duplicating a selection are real, tested behaviours — just not in any of the
+  // three files the section rule names.
+  {
+    section: "51. Testing matrix",
+    text: /^Move$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_grab_selected.rs`],
+  },
+  {
+    section: "51. Testing matrix",
+    text: /^Duplicate$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_duplicate.rs`],
   },
   {
     section: "51. Testing matrix",
