@@ -676,11 +676,21 @@ export const RULES: readonly Rule[] = [
       "e2e/textResize.spec.ts",
     ],
   },
+  // A text's east or west side fixes its width and wraps it there, and widening it unwraps;
+  // "Enable text auto-resizing" in the context menu, or Grow in the panel's Text wrap row,
+  // gives it its own width back (actionTextAutoResize.ts@1118751f). Excalidraw's reset
+  // handle beside a fixed-width text is not drawn: docs/reference/resize.md records it.
   {
     section: "9. Text",
     text: /Fixed-width/,
-    status: "gap",
-    why: "A text's east or west side fixes its width and wraps it there, and widening it unwraps (ci_text_resize.rs, e2e/textResize.spec.ts). There is no way back to auto width from the UI: Excalidraw's reset handle beside a fixed-width text (textAutoResizeHandle.ts@1118751f) is not drawn, and nothing in the app calls the engine's setTextAutoResize.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text_resize.rs`,
+      `${ENGINE}/ci_text_model.rs`,
+      `${WEB}/draw-chrome/menu.test.ts`,
+      `${WEB}/draw-chrome/inspector.test.ts`,
+      "e2e/textResize.spec.ts",
+    ],
   },
   // Drawn, measured and exported in its family, and chosen from the panel's font picker,
   // its face loaded first. Liberation Sans is not shipped: the file Excalidraw ships is
