@@ -17,6 +17,9 @@
     animateCamera,
     boundsOf,
     fitCamera,
+    focusCamera,
+    persistFocusModePreference,
+    readFocusModePreference,
     revealPan,
     setCameraExact,
     worldToScreen,
@@ -215,6 +218,15 @@
    * change — the camera, a face arriving, a peer — so its editor reads it again.
    */
   let editorRevision = $state(0);
+  /**
+   * Focus mode: Enter on a selected shape eases the camera in on it; leaving the edit
+   * eases back. A double-click opens the same editor without moving the camera — see
+   * `onFocusModeKeydown`, the only place `pendingKeyboardTextEdit` is set.
+   */
+  let focusModeEnabled = $state(true);
+  let pendingKeyboardTextEdit = false;
+  let cameraBeforeFocus: Camera | null = null;
+  let focusAnim: CameraAnimation | null = null;
   /**
    * A primary press on the board just ended an edit. A press of the text tool then only
    * ends it, rather than starting another text (`App.tsx@1118751f:9815-9824`).
@@ -454,6 +466,15 @@
     canvasBackground = color;
     persistCanvasBackground(typeof localStorage === "undefined" ? undefined : localStorage, color);
     applyTheme();
+  }
+
+  /** The main menu switch and the palette command. */
+  function toggleFocusMode(): void {
+    focusModeEnabled = !focusModeEnabled;
+    persistFocusModePreference(
+      typeof localStorage === "undefined" ? undefined : localStorage,
+      focusModeEnabled,
+    );
   }
 
   let canvasHost: HTMLDivElement | undefined = $state();
@@ -1054,6 +1075,56 @@
     return { width: rect?.width ?? 0, height: rect?.height ?? 0 };
   }
 
+  /**
+   * Captured ahead of the engine's own key listener — same reason and same technique as
+   * `onStyleShortcut` — because the engine's `onRequestTextEdit` carries no origin: a
+   * double-click and an Enter both arrive as the identical request. Set unconditionally
+   * on a plain Enter over the board, and cleared by the following microtask whether or
+   * not this press turns out to open an edit at all, so a later double-click is never
+   * mistaken for a keyboard one.
+   */
+  function onFocusModeKeydown(event: KeyboardEvent): void {
+    if (
+      event.key === "Enter" &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      keyTarget(event.target) === "board"
+    ) {
+      pendingKeyboardTextEdit = true;
+      // Not `queueMicrotask`: the DOM runs a microtask checkpoint after *every* listener in
+      // one event's dispatch, capture and bubble alike, so a microtask queued here would
+      // reset the flag before the engine's own bubble-phase listener — several callbacks
+      // later in the same dispatch — ever ran. `setTimeout` waits for the whole chain to
+      // settle instead, same as `pressEndedEdit`'s reset below.
+      setTimeout(() => (pendingKeyboardTextEdit = false));
+    }
+  }
+
+  /** Eases the camera in on the shape just entered from the keyboard. */
+  function enterFocusMode(): void {
+    if (!engine) return;
+    const bounds = boundsOf(engine.getSelectedElements());
+    if (!bounds) return;
+    cameraBeforeFocus = engine.camera;
+    const target = focusCamera(bounds, viewportSize(), engine.camera);
+    focusAnim?.cancel();
+    focusAnim = animateCamera(engine.camera, target, (camera) => setCameraExact(engine!, camera), {
+      reducedMotion: prefersReducedMotion(),
+    });
+  }
+
+  /** Eases back to the camera from before `enterFocusMode`, if it ran. */
+  function exitFocusMode(): void {
+    if (!engine || !cameraBeforeFocus) return;
+    const restore = cameraBeforeFocus;
+    cameraBeforeFocus = null;
+    focusAnim?.cancel();
+    focusAnim = animateCamera(engine.camera, restore, (camera) => setCameraExact(engine!, camera), {
+      reducedMotion: prefersReducedMotion(),
+    });
+  }
+
   /** The live scene's elements, as `presentation.ts` needs them. */
   function currentSlideElements(): SlideElement[] {
     if (!engine) return [];
@@ -1221,6 +1292,7 @@
     canvasBackground = readCanvasBackground(localStorage);
     grid = readGridPreference(localStorage);
     objectsSnap = readObjectsSnapPreference(localStorage);
+    focusModeEnabled = readFocusModePreference(localStorage);
     // In case the engine was ready first; `onReady` covers the usual order.
     engine?.setObjectsSnap(objectsSnap);
     themeMode = resolveThemeMode(themePreference, systemPrefersDark());
@@ -1510,6 +1582,7 @@
   class="draw-chrome"
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
+    onFocusModeKeydown(e);
     if (!onPresentKeydown(e)) onStyleShortcut(e);
   }}
   ondragover={onChromeDragOver}
@@ -1534,10 +1607,12 @@
             {canvasBackground}
             {grid}
             {objectsSnap}
+            {focusModeEnabled}
             onPickTheme={pickTheme}
             onPickCanvasBackground={pickCanvasBackground}
             onPickGrid={pickGrid}
             onToggleObjectsSnap={flipObjectsSnap}
+            onToggleFocusMode={toggleFocusMode}
             onOpenExport={() => (showExport = true)}
             onOpenMermaid={() => (showMermaid = true)}
             onOpenShare={() => (showShare = true)}
@@ -1606,6 +1681,10 @@
       onNotice={(notice) => notify(NOTICE_TEXT[notice])}
       onRequestTextEdit={(request) => {
         textEdit = request;
+        if (pendingKeyboardTextEdit) {
+          pendingKeyboardTextEdit = false;
+          if (focusModeEnabled) enterFocusMode();
+        }
         if (realtime) startPreviews();
       }}
       onContextMenu={(point, kind) => {
@@ -1829,6 +1908,7 @@
         onSave={saveAsFile}
         onDone={(boardPress) => {
           textEdit = null;
+          exitFocusMode();
           if (boardPress) {
             pressEndedEdit = true;
             // Only for the press under way: one that never reached the board's handler

@@ -31,10 +31,12 @@
     canvasBackground = null,
     grid,
     objectsSnap = false,
+    focusModeEnabled = true,
     onPickTheme,
     onPickCanvasBackground,
     onPickGrid,
     onToggleObjectsSnap,
+    onToggleFocusMode,
     onOpenExport,
     onOpenMermaid,
     onOpenShare,
@@ -47,10 +49,12 @@
     canvasBackground: string | null;
     grid: GridPreference;
     objectsSnap?: boolean;
+    focusModeEnabled?: boolean;
     onPickTheme: (preference: ThemePreference) => void;
     onPickCanvasBackground: (color: string) => void;
     onPickGrid: (patch: Partial<GridPreference>) => void;
     onToggleObjectsSnap: () => void;
+    onToggleFocusMode: () => void;
     onOpenExport: () => void;
     onOpenMermaid: () => void;
     onOpenShare: () => void;
@@ -288,6 +292,21 @@
         aria-checked={objectsSnap}
         aria-label="Snap to objects"
         onclick={onToggleObjectsSnap}
+      >
+        <span class="knob"></span>
+      </button>
+    </div>
+
+    <div class="dropdown-menu-item-bare">
+      <span class="dropdown-menu-item__text">Focus while typing</span>
+      <button
+        type="button"
+        role="switch"
+        class="switch"
+        class:on={focusModeEnabled}
+        aria-checked={focusModeEnabled}
+        aria-label="Focus while typing"
+        onclick={onToggleFocusMode}
       >
         <span class="knob"></span>
       </button>

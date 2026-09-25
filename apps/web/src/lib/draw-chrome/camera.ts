@@ -216,6 +216,60 @@ export function animateCamera(
 }
 
 /**
+ * Focus mode's target camera: eases in so `bounds` — the shape Enter was pressed on —
+ * fills the viewport width with a comfortable margin (80% by default), capped at
+ * `maxScale` (2x — a "sensible zoom", not a hard engine limit), and never *below* the
+ * camera's current scale. The floor matters as much as the ceiling: a shape entered
+ * while already zoomed in past what the margin would ask for must not pull the camera
+ * back out — that would fight the zoom level the person chose on their way in.
+ */
+export function focusCamera(
+  bounds: Box,
+  viewport: Viewport,
+  current: CameraLike,
+  options: { marginRatio?: number; maxScale?: number } = {},
+): CameraLike {
+  const marginRatio = options.marginRatio ?? 0.8;
+  const maxScale = options.maxScale ?? 2;
+  const fitScale = (viewport.width * marginRatio) / Math.max(bounds.width, 1);
+  const scale = Math.max(current.scale, Math.min(fitScale, maxScale));
+  const centerX = bounds.x + bounds.width / 2;
+  const centerY = bounds.y + bounds.height / 2;
+  return {
+    scale,
+    x: viewport.width / 2 - centerX * scale,
+    y: viewport.height / 2 - centerY * scale,
+  };
+}
+
+const FOCUS_MODE_STORAGE_KEY = "drawnosaurus:focus-mode";
+
+/**
+ * Whether entering text from the keyboard (Enter on a selected shape) eases the camera
+ * in on it. **On** by default, unlike the grid/objects-snap toggles above — Excalidraw
+ * has no equivalent to default off against, and the point of the feature is lost if
+ * most people never see it once.
+ */
+export function readFocusModePreference(storage?: Pick<Storage, "getItem"> | undefined): boolean {
+  try {
+    return storage?.getItem(FOCUS_MODE_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+export function persistFocusModePreference(
+  storage: Pick<Storage, "setItem"> | undefined,
+  on: boolean,
+): void {
+  try {
+    storage?.setItem(FOCUS_MODE_STORAGE_KEY, String(on));
+  } catch {
+    // Not persisting is survivable; the current page still honours the choice.
+  }
+}
+
+/**
  * World → screen, matching the engine's `world_to_screen`
  * (`wx * scale + camera.x`). Peer cursors are stored in world space.
  */
