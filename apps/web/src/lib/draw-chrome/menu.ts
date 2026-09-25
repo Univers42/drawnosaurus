@@ -13,6 +13,7 @@ export interface MenuPoint {
 
 /** What the right-click landed on — drives which menu sections render. */
 export interface MenuElementInfo {
+  /** The heads of the first line or arrow selected that is not locked. */
   linear: { start: Arrowhead; end: Arrowhead } | null;
   locked: boolean;
   multi: boolean;
@@ -100,7 +101,9 @@ export function menuElementFromSelection(
 ): MenuElementInfo | null {
   if (selected.length === 0) return null;
 
-  const linear = selected.find((element) => isLinearElement(element));
+  // Not a locked one: the engine passes it by, so a head picked for it would change only
+  // the next arrow's while the row showed it picked.
+  const linear = selected.find((element) => isLinearElement(element) && !element.locked);
   const only = selected.length === 1 && !locked ? selected[0] : undefined;
   return {
     linear: linear

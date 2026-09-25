@@ -83,6 +83,17 @@ describe("menuElementFromSelection", () => {
     expect(info?.locked).toBe(true);
   });
 
+  it("offers no heads for a locked line or arrow, which a style passes by", () => {
+    const locked = el({ id: "a", type: "arrow", locked: true });
+    expect(menuElementFromSelection([locked], true, false)?.linear).toBeNull();
+    // Beside one that is not locked, the row is that one's.
+    const free = el({ id: "b", type: "arrow", startArrowhead: "dot" });
+    expect(menuElementFromSelection([locked, free], false, false)?.linear).toEqual({
+      start: "dot",
+      end: "arrow",
+    });
+  });
+
   it("marks a multi-selection and a group", () => {
     const info = menuElementFromSelection(
       [el({ id: "a", type: "rectangle" }), el({ id: "b", type: "ellipse" })],
