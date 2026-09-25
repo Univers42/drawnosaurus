@@ -326,12 +326,20 @@ export const RULES: readonly Rule[] = [
     why: "Elbow arrows are a milestone of their own: orthogonal routing over the fixed-point bindings arrows already have. Cardinality arrowheads wait on it.",
   },
   // An arrow's label: typed on the arrow, wrapped at Excalidraw's width, centred on the
-  // path's middle, the stroke cut under it (docs/reference/text-model.md › Layout).
+  // path's middle, the stroke cut under it, and re-wrapped/re-centred whenever the arrow's
+  // own length changes — a point dragged directly or a bound shape moving it — since an
+  // arrow has no resize gesture of its own to hang that on
+  // (docs/reference/text-model.md › Layout).
   {
     section: "➡️ Advanced arrows",
     text: /label/,
     status: "covered",
-    tests: [`${ENGINE}/ci_text_model.rs`, `${ENGINE}/ci_export.rs`, "e2e/textEditRequest.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_text_model.rs`,
+      `${ENGINE}/ci_export.rs`,
+      "e2e/textEditRequest.spec.ts",
+      "e2e/arrowLabel.spec.ts",
+    ],
   },
   {
     section: "➡️ Advanced arrows",

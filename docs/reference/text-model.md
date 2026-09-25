@@ -170,6 +170,18 @@ typed into: nothing was ever shown, so there is nothing for undo to bring back
 (`ci_text_edit.rs` › ending › a never-typed label's deletion leaves no trace, a text deleted
 while open ends its session).
 
+A double-click that lands on a line or an arrow's own path can mean two different things —
+open its label, or open its point editor — and `DrawEngine::open_linear_points` is what
+decides between them before `handle_double_click` ever reaches `label_target_at`: a line
+always opens its points, an arrow only with Ctrl/Cmd held, matching `isSimpleArrow` +
+the modifier check the oracle's own double-click handler makes
+(`App.tsx@1118751f:7218-7226`, `typeChecks.ts@1118751f:139-141`). Gating on the element
+kind alone — opening the point editor for every multi-point line _or arrow_ — made a
+double-click on a 3-or-more-point arrow's line unable to ever reach a label: the same
+points a bare double-click lands on are also what `open_linear_points` claims first.
+**VERIFIED** by `ci_text_model.rs` › a multi-point arrow's line takes a label, not the
+point editor; `e2e/arrowLabel.spec.ts` › a double click on a curved arrow's line.
+
 ### Where the editor departs from the oracle
 
 | divergence                                                                                                                                                                                                                                                                  | oracle                                                                                                                                                                   | pinned by                                                                                                                                           |
@@ -192,31 +204,45 @@ through it (`DrawEngine::laid_out`): the editor's commit, a peer's preview, a fo
 family, alignment or wrap change, a pasted style, `set_text_auto_resize`,
 `set_text_box_width`, `fonts_loaded` and a resize handle (`bound_text_resize`, on every move
 of the drag; `resize.md` › Text and labels). It wraps from the source, measures, and grows a
-label's shape to hold it. Moving a shape only places its label (`layout_label`). **VERIFIED** by `ci_text_model.rs`
-(every shape, growth, unwrap, rotation, the free-text anchors, style reaching a label, a font
-arriving) and `e2e/textLayout.spec.ts` (a label typed into a rectangle, an ellipse and a
-diamond; a family change; the SVG export).
+label's shape to hold it. Moving a _shape_ only places its label (`layout_label`): resizing
+it is a separate gesture, laid out again by `bound_text_resize`. An _arrow_ has no separate
+resize gesture — dragging one of its points is its resize, direct or through a bound shape
+moving it — so `ARROW_LABEL_WIDTH_FRACTION * width` changes on every move; `layout_label`
+only repositions, so `DrawEngine::rewrap_linear_labels` runs a full `layout_text` on every
+label `scene::binding::refresh_bindings_in_place` / `refresh_binding_of` names as a linear
+container's, right after (`apply_bindings`, `stamp.rs` › `replay_step`, both
+`pointer_move.rs` point-drag paths) — the oracle's `handleBindTextResize`, called from the
+same two places (`linearElementEditor.ts@1118751f:629-636`, `binding.ts@1118751f:1416-1418`).
+Before this, a label typed to fit a long arrow kept that width and line count as the arrow
+was shortened or bent, overflowing past the shrunk `0.7 * width` and desyncing the stroke's
+cut hole (`paint_linear_around`) from what the label actually needed. **VERIFIED** by
+`ci_text_model.rs` (every shape, growth, unwrap, rotation, the free-text anchors, style
+reaching a label, a font arriving, dragging an arrow's end, a bound shape moving) and
+`e2e/textLayout.spec.ts` / `e2e/arrowLabel.spec.ts` (a label typed into a rectangle, an
+ellipse and a diamond; a family change; the SVG export; an arrow's label centred, wrapped,
+cut clear of the stroke, and re-wrapped when the arrow changes).
 
-| oracle                                                                                               | here                                                           |
-| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `getBoundTextMaxWidth` / `MaxHeight` (`textElement.ts@1118751f:511-570`)                             | `bound_text_max_width` / `bound_text_max_height`               |
-| `getContainerCoords`, `computeBoundTextPosition` (`:396-417`, `:249-324`)                            | `container_coords`, `bound_text_position` (and `layout_label`) |
-| `computeContainerDimensionForBoundText` (`:492-509`)                                                 | `container_dimension_for_bound_text`                           |
-| `getBoundTextElementCenter` (`linearElementEditor.ts@1118751f:1942-1960`)                            | `linear_label_center`                                          |
-| `measureText` (`textMeasurements.ts@1118751f:12-27`)                                                 | `Measure::size`                                                |
-| `getAdjustedDimensions` (`newElement.ts@1118751f:393-527`)                                           | `edit_anchor`                                                  |
-| `offsetElementAfterFontResize` (`actionProperties.tsx@1118751f:273-292`)                             | `font_resize_anchor`                                           |
-| the typing session, `handleTextWysiwyg` (`App.tsx@1118751f:6344-6515`)                               | `text_session.rs`: `update_text_edit`, `commit_text_edit`      |
-| `updateWysiwygStyle`, `getTransform` (`textWysiwyg.tsx@1118751f:80-99`, `:268-450`)                  | `text_edit_layout`; `textEditor.ts` › `editorBox`              |
-| `actionTextAutoResize` (`actionTextAutoResize.ts@1118751f`)                                          | `auto_resize_anchor`, `set_text_auto_resize`                   |
-| `handleBindTextResize` (`textElement.ts@1118751f:155-247`)                                           | `bound_text_resize`, `keep_point`                              |
-| `getApproxMinLineWidth` / `Height`, `getMinTextElementWidth` (`textMeasurements.ts@1118751f:32-104`) | `min_container_size`, `min_text_width`                         |
-| `changeFontFamily` sets the family's line height (`actionProperties.tsx@1118751f:1285-1290`)         | `set_font_family`                                              |
-| `FONT_METADATA`, `getVerticalOffset` (`font-metadata.ts@1118751f:35-170`)                            | `text::font::FAMILIES`, `vertical_offset`                      |
-| the arrow clipped under its label (`renderElement.ts@1118751f:784-812`)                              | `paint_linear_around`                                          |
-| the arrow masked under its label (`staticSvgScene.ts@1118751f:404-470`)                              | `linear_svg`                                                   |
-| text painted per line on its baseline (`renderElement.ts@1118751f:626-676`)                          | `paint_text`, `text_line_placement`                            |
-| text exported per line (`staticSvgScene.ts@1118751f:776-832`)                                        | `text_svg`                                                     |
+| oracle                                                                                                                                                              | here                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `getBoundTextMaxWidth` / `MaxHeight` (`textElement.ts@1118751f:511-570`)                                                                                            | `bound_text_max_width` / `bound_text_max_height`               |
+| `getContainerCoords`, `computeBoundTextPosition` (`:396-417`, `:249-324`)                                                                                           | `container_coords`, `bound_text_position` (and `layout_label`) |
+| `computeContainerDimensionForBoundText` (`:492-509`)                                                                                                                | `container_dimension_for_bound_text`                           |
+| `getBoundTextElementCenter` (`linearElementEditor.ts@1118751f:1942-1960`)                                                                                           | `linear_label_center`                                          |
+| `handleBindTextResize`, called on an arrow's point drag and on a bound shape moving it (`linearElementEditor.ts@1118751f:629-636`, `binding.ts@1118751f:1416-1418`) | `DrawEngine::rewrap_linear_labels`                             |
+| `measureText` (`textMeasurements.ts@1118751f:12-27`)                                                                                                                | `Measure::size`                                                |
+| `getAdjustedDimensions` (`newElement.ts@1118751f:393-527`)                                                                                                          | `edit_anchor`                                                  |
+| `offsetElementAfterFontResize` (`actionProperties.tsx@1118751f:273-292`)                                                                                            | `font_resize_anchor`                                           |
+| the typing session, `handleTextWysiwyg` (`App.tsx@1118751f:6344-6515`)                                                                                              | `text_session.rs`: `update_text_edit`, `commit_text_edit`      |
+| `updateWysiwygStyle`, `getTransform` (`textWysiwyg.tsx@1118751f:80-99`, `:268-450`)                                                                                 | `text_edit_layout`; `textEditor.ts` › `editorBox`              |
+| `actionTextAutoResize` (`actionTextAutoResize.ts@1118751f`)                                                                                                         | `auto_resize_anchor`, `set_text_auto_resize`                   |
+| `handleBindTextResize` (`textElement.ts@1118751f:155-247`)                                                                                                          | `bound_text_resize`, `keep_point`                              |
+| `getApproxMinLineWidth` / `Height`, `getMinTextElementWidth` (`textMeasurements.ts@1118751f:32-104`)                                                                | `min_container_size`, `min_text_width`                         |
+| `changeFontFamily` sets the family's line height (`actionProperties.tsx@1118751f:1285-1290`)                                                                        | `set_font_family`                                              |
+| `FONT_METADATA`, `getVerticalOffset` (`font-metadata.ts@1118751f:35-170`)                                                                                           | `text::font::FAMILIES`, `vertical_offset`                      |
+| the arrow clipped under its label (`renderElement.ts@1118751f:784-812`)                                                                                             | `paint_linear_around`                                          |
+| the arrow masked under its label (`staticSvgScene.ts@1118751f:404-470`)                                                                                             | `linear_svg`                                                   |
+| text painted per line on its baseline (`renderElement.ts@1118751f:626-676`)                                                                                         | `paint_text`, `text_line_placement`                            |
+| text exported per line (`staticSvgScene.ts@1118751f:776-832`)                                                                                                       | `text_svg`                                                     |
 
 `BOUND_TEXT_PADDING` is 5, as in the oracle (it was 8 here). Style applied to a shape reaches
 its label for stroke colour and opacity (`actionChangeStrokeColor`, `actionChangeOpacity`;
