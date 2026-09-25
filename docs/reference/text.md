@@ -9,7 +9,7 @@ Markers: **OBSERVED**, **VERIFIED**, **INFERRED**, **IMPLEMENTATION DETAIL**, **
 `text-model.md` › Layout), which wraps with `Measure::wrap` over the memo. It runs whenever a
 text's words or its room change: `set_element_text` (the editor's commit), `text_preview`
 (what peers see while it is typed), `set_text_box_width`, a font size, family or alignment
-change, the label wrap and auto-resize switches, and `fonts_loaded`. The wrap itself is `crate::text`
+change, a pasted style, the label wrap and auto-resize switches, and `fonts_loaded`. The wrap itself is `crate::text`
 (`engine/crates/draw-engine/src/text/`), a line-for-line port of Excalidraw's
 `packages/element/src/textWrapping.ts` at the pinned SHA:
 
@@ -145,10 +145,11 @@ What is measured, and how, follows the oracle:
 floor went with `measure_via_ctx`).
 
 **VERIFIED**: the oracle clears a font's char widths when that font finishes loading
-(`fonts/Fonts.ts@1118751f:136`). Here the host calls `engine.fontsLoaded()` on
-`document.fonts`' `loadingdone` and `ready` (`apps/web/src/lib/draw-chrome/fonts.ts`); it
-clears the whole cache and re-lays every text in a family, unstamped (`text-model.md` ›
-Layout).
+(`fonts/Fonts.ts@1118751f:136`). Here the host calls `engine.fontsLoaded()` on the first
+`loadingdone` of each face of a text family, and never on `document.fonts.ready`, which
+resolves before any face is asked for (`apps/web/src/lib/draw-chrome/fonts.ts`,
+`text-model.md` › Divergences); it clears the whole cache and re-lays every text in a
+family, unstamped (`text-model.md` › Layout).
 
 ## Unicode version
 
