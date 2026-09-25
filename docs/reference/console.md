@@ -100,7 +100,9 @@ not deprecated, "Available fonts", each in label order and narrowed by a search 
 ignores case (`FontPickerList.tsx:157-187`, `:283-291`). Shift+F goes back to the search,
 Escape closes, Enter picks the hovered family, and the arrows walk the list round from the
 family chosen (`keyboardNavHandlers.ts:17-68`). A hovered family is drawn on the canvas
-and taken back when the pointer leaves or the list closes; it is not committed, and it is
+and taken back when the pointer leaves or the list closes; it is not committed — nor by a
+typing session a press on the board ends while the list is open, which gives it back first
+(`engine/text_session.rs` › `commit_text_edit`, `e2e/fontPicker.spec.ts`) — and it is
 skipped above 200 texts or 5,000 characters (`actionProperties.tsx:1220-1236`,
 `engine/style.rs` › `preview_font_family`). While the list is open the quick picks and the
 list go on marking the family chosen, not the one hovered (`:1395-1405`). A face is loaded
@@ -160,12 +162,17 @@ answers (`canBindText`, `canUnbindText`, `hasFreeText`), and each one step of un
   grew is not kept. Here it is left at the commit, so an edit that came to nothing leaves
   nothing (`engine/text_session.rs` › `commit_text_edit`, `ci_text_edit.rs` › unbind);
 - **Unbind text** — each selected shape's label is free text again, its typed lines at
-  their measured size where it was drawn, and the shape takes back the height remembered,
-  if one still is (`:69-121`);
+  their measured size where it was drawn, in the shape's frame, and the shape takes back
+  the height remembered, if one still is (`:69-121`). A label carries no frame here, its
+  shape carrying membership for both (`zorder.md`), so the text takes the shape's, where
+  the oracle's keeps the `frameId` its label carried (`ci_bound_text_actions.rs` › the
+  text given back stays in the shape's frame);
 - **Wrap text in a container** — each selected free text gets a rectangle in the next
   element's style, fully opaque, a padding clear of it, in its groups and frame and at its
   angle, directly below it; the arrows bound to the text are bound to the rectangle
-  (`:269-376`).
+  (`:269-376`). The frame is the text's even where the padding reaches past the frame's
+  edge: the oracle sets it and judges nothing (`:313`; `ci_bound_text_actions.rs` › a text
+  at a frame's edge keeps its frame).
 
 "Enable text auto-resizing" sits with them, for one free text of a fixed width
 (`actions/actionTextAutoResize.ts:27-34`). A right click on an element already selected

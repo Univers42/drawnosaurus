@@ -50,7 +50,11 @@ select( groupIds.length ? groupIds[last] : element )   // outermost of what rema
 **VERIFIED** — double-click (`App.tsx:7310-7334`): when a group is selected and the hit
 element belongs to it, `editingGroupId` becomes that group and the hit element is
 selected. The selection rule above then picks the next level in. Each double-click
-descends exactly one level, to any depth.
+descends exactly one level, to any depth. A label's hit is its shape's, as bound text is
+never hit on its own there (`App.tsx:6713-6737`), so a double-click on a grouped shape's
+label steps in holding the shape, never the label alone (`DrawEngine::element_at`;
+`ci_group_editing.rs` › a double click on a label steps in to its shape). The hover cursor
+and the "held by" notice read a label the same way (`ci_hover.rs`, `ci_peers.rs`).
 
 **VERIFIED** — leaving (`App.tsx:9641-9650`): a press on an element _not_ in the edited
 group clears `editingGroupId` and the selection.
