@@ -212,6 +212,3 @@ are (the engine's `hit_test`; `ci_bound_text_actions.rs` › context_menu,
 - **No Liberation Sans.** The file Excalidraw ships is Liberation 1.05, under a licence
   this project has not cleared (`apps/web/static/fonts/LICENSES.md`); the oracle's picker
   never lists it either, and a text in it is drawn in the fallback.
-- **A right click inside the selection's box** but on no element opens the board's menu,
-  where the oracle's opens the element menu (`isHittingCommonBoundingBoxOfSelectedElements`,
-  `App.tsx:13280-13287`).

@@ -298,7 +298,13 @@ test.describe("right-click on the selection's own frame", () => {
     expect((await selection(page)).sort()).toEqual(["G1", "G2"]);
   });
 
-  test("opens the board menu and clears the selection outside that box", async ({ page }) => {
+  /**
+   * Nothing under the point and outside the box too: the board menu opens, as it did
+   * before, but a right-click runs no selection-clearing path in the oracle at all
+   * (`openContextMenu`, `App.tsx@1118751f:13296-13326`) — the menu kind is decided by
+   * the hit alone, independent of what stays selected.
+   */
+  test("opens the board menu and keeps the selection outside that box", async ({ page }) => {
     const board = await openBoard(page);
     await focusBoard(board);
     await twoGroupedRectsInView(page);
@@ -312,6 +318,6 @@ test.describe("right-click on the selection's own frame", () => {
     await page.mouse.click(at.x, at.y, { button: "right" });
 
     await expect(page.getByRole("menuitem", { name: "Select all" })).toBeVisible();
-    expect(await selection(page)).toEqual([]);
+    expect((await selection(page)).sort()).toEqual(["G1", "G2"]);
   });
 });

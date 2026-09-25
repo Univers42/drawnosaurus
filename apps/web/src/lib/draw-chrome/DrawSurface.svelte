@@ -1320,17 +1320,23 @@
         textEdit = request;
         if (realtime) startPreviews();
       }}
-      onContextMenu={(point) => {
+      onContextMenu={(point, kind) => {
         if (!engine) return;
+        // "canvas" opens the board menu even when a selection is kept from before this
+        // right-click (a right-click never clears it) — the menu kind is the hit's own,
+        // not read back off whatever is still selected.
         menu = {
           x: point.x,
           y: point.y,
-          element: menuElementFromSelection(
-            engine.getSelectedElements(),
-            engine.selectionLocked(),
-            engine.selectionIsGroup(),
-            engine.selectionStyle(),
-          ),
+          element:
+            kind === "canvas"
+              ? null
+              : menuElementFromSelection(
+                  engine.getSelectedElements(),
+                  engine.selectionLocked(),
+                  engine.selectionIsGroup(),
+                  engine.selectionStyle(),
+                ),
         };
       }}
       onToolLockChange={(locked) => {
