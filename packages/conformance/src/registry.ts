@@ -379,6 +379,14 @@ export const RULES: readonly Rule[] = [
       "e2e/peers.spec.ts",
     ],
   },
+  {
+    section: "🔴 Laser pointer",
+    text: /Use during presentations/,
+    status: "covered",
+    // Presentation mode forces the laser tool for the length of the show — see
+    // `presentation.ts` and `DrawSurface.svelte`'s `enterPresent`.
+    tests: [`${WEB}/draw-chrome/presentation.test.ts`, "e2e/presentation.spec.ts"],
+  },
   { section: "🔴 Laser pointer", status: "covered", tests: [`${ENGINE}/ci_laser.rs`] },
   {
     section: "✋ Hand / panning",
@@ -434,6 +442,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🌙 Interface modes",
+    text: /presentation-style workflows/,
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/presentation.test.ts`, "e2e/presentation.spec.ts"],
+  },
+  {
+    section: "🌙 Interface modes",
     status: "covered",
     tests: [`${WEB}/draw-chrome/theme.test.ts`],
   },
@@ -486,7 +500,17 @@ export const RULES: readonly Rule[] = [
     section: "👥 Collaboration",
     text: /Follow another|undo\/redo/,
     status: "gap",
-    why: "Follow-mode and multiplayer-aware history. Presence, cursors and last-write-wins element sync are done.",
+    why: "Follow-mode and multiplayer-aware history. Presence, cursors and last-write-wins element sync are done. Presentation mode added a narrower follow — a peer's camera trailing a presenter's slide, in `presentation.ts` / `realtimeClient.ts`'s `present` message — but not the general case this line names: following anyone's view at any time.",
+  },
+  {
+    section: "👥 Collaboration",
+    text: /laser pointer during collaborative presentations/,
+    status: "covered",
+    tests: [
+      `${WEB}/draw-chrome/presentation.test.ts`,
+      `${WEB}/realtime/realtime.test.ts`,
+      "e2e/presentation.spec.ts",
+    ],
   },
   {
     section: "👥 Collaboration",
@@ -501,6 +525,20 @@ export const RULES: readonly Rule[] = [
   },
 
   // ------------------------------------------------- shortkey.md, closing sections
+  {
+    section: "Presentations",
+    text: /Use frames as slides|Zoom to the relevant frame|Use Laser Pointer|Use Live Collaboration for remote presentations/,
+    status: "covered",
+    // Present mode: `slidesFromScene` takes the board's frames as slides, `fitCamera`
+    // zooms to each, the tool is forced to the laser, and — Part 2 — `present`/
+    // `present-end` let a peer's Follow track it live.
+    tests: [
+      `${WEB}/draw-chrome/presentation.test.ts`,
+      `${WEB}/draw-chrome/camera.test.ts`,
+      `${WEB}/realtime/realtime.test.ts`,
+      "e2e/presentation.spec.ts",
+    ],
+  },
   {
     section:
       /^(🧪 Hidden|⭐ Muscle-memory|🚀 High-productivity|Fast diagramming|Architecture diagrams|UI wireframing|Presentations|Brainstorming|🧠 "I don't remember|🔥 Current-feature)/,

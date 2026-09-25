@@ -52,6 +52,16 @@
         { key: "Hold ⌘", desc: "Invert snapping while dragging" },
       ],
     },
+    {
+      cat: "Presentation",
+      items: [
+        { key: shortcutLabel("CtrlOrCmd+Shift+P"), desc: "Present — the board's frames as slides" },
+        { key: "→ ↓ Space", desc: "Next slide" },
+        { key: "← ↑", desc: "Previous slide" },
+        { key: "Home / End", desc: "First / last slide" },
+        { key: "Esc", desc: "Exit presentation" },
+      ],
+    },
   ];
 </script>
 

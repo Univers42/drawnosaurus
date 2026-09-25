@@ -39,6 +39,7 @@
     onOpenMermaid,
     onOpenShare,
     onOpenShortcuts,
+    onOpenPresent,
     onClose,
   }: {
     engine: DrawEngine | null;
@@ -54,6 +55,7 @@
     onOpenMermaid: () => void;
     onOpenShare: () => void;
     onOpenShortcuts: () => void;
+    onOpenPresent: () => void;
     onClose: () => void;
   } = $props();
 
@@ -219,6 +221,17 @@
     >
       <MainMenuIcon name="collab" />
       <span class="dropdown-menu-item__text">Live collaboration…</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(onOpenPresent)}
+    >
+      <MainMenuIcon name="play" />
+      <span class="dropdown-menu-item__text">Present</span>
+      <span class="dropdown-menu-item__shortcut">Ctrl+Shift+P</span>
     </button>
 
     <button

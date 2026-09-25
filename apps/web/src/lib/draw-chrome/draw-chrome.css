@@ -117,6 +117,17 @@
   overflow: visible;
 }
 
+/* The four bands dimming everything outside the current slide while presenting — see
+   `dimBands` in DrawSurface. `pointer-events: none` so a laser drag still reaches the
+   canvas underneath; each div's own `top`/`bottom`/`left`/`right`/`width`/`height` is set
+   inline, this only supplies what is shared. */
+.present-dim {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 5;
+}
+
 /* Visually gone but still operable. A file input hidden with `display: none` cannot be
    opened by script in every browser, and this one is only ever opened by script. */
 .sr-only {

@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { worldToScreen, zoomPercent } from "./camera.ts";
+import { describe, expect, it, vi } from "vitest";
+import {
+  animateCamera,
+  easeInOutCubic,
+  fitCamera,
+  lerpCamera,
+  setCameraExact,
+  worldToScreen,
+  zoomPercent,
+  type CameraSetter,
+} from "./camera.ts";
 
 describe("zoomPercent", () => {
   it("treats scale 1 as 100%", () => {
@@ -23,5 +32,186 @@ describe("worldToScreen", () => {
     const screen = worldToScreen(camera, world.x, world.y);
     expect((screen.sx - camera.x) / camera.scale).toBeCloseTo(world.x);
     expect((screen.sy - camera.y) / camera.scale).toBeCloseTo(world.y);
+  });
+});
+
+describe("fitCamera", () => {
+  it("centres the bounds on screen at the scale that fits it, minus the margin", () => {
+    const bounds = { minX: 0, minY: 0, maxX: 200, maxY: 100 };
+    const camera = fitCamera(bounds, { width: 1000, height: 1000 }, 0);
+    // The wider axis constrains: 200 world units into 1000 screen px is the tighter fit
+    // (5×) against height's 100 into 1000 (10×) — the smaller of the two wins.
+    expect(camera.scale).toBeCloseTo(5, 5);
+    // The bounds' centre (100, 50) lands on the screen's centre (500, 500).
+    expect(camera.x).toBeCloseTo(500 - 100 * 5, 5);
+    expect(camera.y).toBeCloseTo(500 - 50 * 5, 5);
+  });
+
+  it("shrinks to fit inside the margin", () => {
+    const bounds = { minX: 0, minY: 0, maxX: 100, maxY: 100 };
+    const withoutMargin = fitCamera(bounds, { width: 500, height: 500 }, 0);
+    const withMargin = fitCamera(bounds, { width: 500, height: 500 }, 50);
+    expect(withMargin.scale).toBeLessThan(withoutMargin.scale);
+    expect(withMargin.scale).toBeCloseTo((500 - 100) / 100, 5);
+  });
+
+  it("clamps to the engine's own zoom limits", () => {
+    const tiny = fitCamera({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, { width: 1000, height: 1000 });
+    expect(tiny.scale).toBeLessThanOrEqual(30);
+    const huge = fitCamera(
+      { minX: 0, minY: 0, maxX: 1_000_000, maxY: 1_000_000 },
+      { width: 100, height: 100 },
+    );
+    expect(huge.scale).toBeGreaterThanOrEqual(0.1);
+  });
+});
+
+describe("easeInOutCubic", () => {
+  it("starts at 0 and ends at 1", () => {
+    expect(easeInOutCubic(0)).toBe(0);
+    expect(easeInOutCubic(1)).toBe(1);
+  });
+
+  it("is exactly halfway at the midpoint", () => {
+    expect(easeInOutCubic(0.5)).toBeCloseTo(0.5, 10);
+  });
+
+  it("clamps outside [0, 1]", () => {
+    expect(easeInOutCubic(-1)).toBe(0);
+    expect(easeInOutCubic(2)).toBe(1);
+  });
+
+  it("is slower at the ends than in the middle — an eased step, not a linear one", () => {
+    const early = easeInOutCubic(0.1) - easeInOutCubic(0);
+    const middle = easeInOutCubic(0.55) - easeInOutCubic(0.45);
+    expect(middle).toBeGreaterThan(early);
+  });
+});
+
+describe("lerpCamera", () => {
+  it("is `from` at t=0 and `to` at t=1", () => {
+    const from = { x: 0, y: 0, scale: 1 };
+    const to = { x: 100, y: 200, scale: 3 };
+    expect(lerpCamera(from, to, 0)).toEqual(from);
+    expect(lerpCamera(from, to, 1)).toEqual(to);
+  });
+
+  it("interpolates x, y and scale independently", () => {
+    const from = { x: 0, y: 0, scale: 1 };
+    const to = { x: 100, y: 200, scale: 3 };
+    expect(lerpCamera(from, to, 0.25)).toEqual({ x: 25, y: 50, scale: 1.5 });
+  });
+});
+
+describe("setCameraExact", () => {
+  function fakeEngine(initial: { x: number; y: number; scale: number }): CameraSetter {
+    let camera = { ...initial };
+    return {
+      get camera() {
+        return camera;
+      },
+      panBy(dx, dy) {
+        camera = { ...camera, x: camera.x + dx, y: camera.y + dy };
+      },
+      zoomAt(sx, sy, factor) {
+        const scale = camera.scale * factor;
+        const ratio = scale / camera.scale;
+        camera = { scale, x: sx - (sx - camera.x) * ratio, y: sy - (sy - camera.y) * ratio };
+      },
+    };
+  }
+
+  it("lands exactly on the target camera, through panBy then zoomAt alone", () => {
+    const engine = fakeEngine({ x: 10, y: -20, scale: 2 });
+    setCameraExact(engine, { x: -300, y: 450, scale: 0.6 });
+    expect(engine.camera.x).toBeCloseTo(-300, 9);
+    expect(engine.camera.y).toBeCloseTo(450, 9);
+    expect(engine.camera.scale).toBeCloseTo(0.6, 9);
+  });
+
+  it("is a no-op when already there", () => {
+    const engine = fakeEngine({ x: 5, y: 5, scale: 1 });
+    const panBy = vi.spyOn(engine, "panBy");
+    const zoomAt = vi.spyOn(engine, "zoomAt");
+    setCameraExact(engine, { x: 5, y: 5, scale: 1 });
+    expect(panBy).not.toHaveBeenCalled();
+    expect(zoomAt).not.toHaveBeenCalled();
+  });
+});
+
+describe("animateCamera", () => {
+  /** A fake frame loop: `raf` just remembers the callback, `tick()` runs it. */
+  function fakeClock() {
+    let ms = 0;
+    let queued: ((t: number) => void) | null = null;
+    return {
+      now: () => ms,
+      raf: (cb: (t: number) => void) => {
+        queued = cb;
+        return 1;
+      },
+      caf: () => {
+        queued = null;
+      },
+      tick(byMs: number) {
+        ms += byMs;
+        const cb = queued;
+        queued = null;
+        cb?.(ms);
+      },
+      get pending() {
+        return queued !== null;
+      },
+    };
+  }
+
+  it("jumps straight to `to` for reduced motion, and calls onDone at once", () => {
+    const applied: unknown[] = [];
+    const onDone = vi.fn();
+    const from = { x: 0, y: 0, scale: 1 };
+    const to = { x: 100, y: 100, scale: 2 };
+    animateCamera(from, to, (c) => applied.push(c), { reducedMotion: true, onDone });
+    expect(applied).toEqual([to]);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("eases from `from` to `to` over the given duration, then stops and calls onDone once", () => {
+    const clock = fakeClock();
+    const applied: { x: number; y: number; scale: number }[] = [];
+    const onDone = vi.fn();
+    const from = { x: 0, y: 0, scale: 1 };
+    const to = { x: 100, y: 0, scale: 1 };
+    animateCamera(from, to, (c) => applied.push(c), {
+      durationMs: 400,
+      now: clock.now,
+      raf: clock.raf,
+      caf: clock.caf,
+      onDone,
+    });
+    expect(applied).toEqual([from]);
+
+    clock.tick(200);
+    expect(applied[1]!.x).toBeGreaterThan(0);
+    expect(applied[1]!.x).toBeLessThan(100);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(clock.pending, "schedules the next frame").toBe(true);
+
+    clock.tick(200);
+    expect(applied.at(-1)).toEqual(to);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(clock.pending, "does not schedule past the end").toBe(false);
+  });
+
+  it("cancel() stops the schedule before it reaches the end", () => {
+    const clock = fakeClock();
+    const applied: unknown[] = [];
+    const animation = animateCamera(
+      { x: 0, y: 0, scale: 1 },
+      { x: 100, y: 0, scale: 1 },
+      (c) => applied.push(c),
+      { durationMs: 400, now: clock.now, raf: clock.raf, caf: clock.caf },
+    );
+    animation.cancel();
+    expect(clock.pending).toBe(false);
   });
 });

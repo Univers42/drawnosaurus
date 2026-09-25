@@ -18,7 +18,8 @@
     | "trash"
     | "sun"
     | "moon"
-    | "system";
+    | "system"
+    | "play";
 
   let { name }: { name: MenuIconName } = $props();
 
@@ -84,6 +85,9 @@
         "M7 20h10M9 16v4M15 16v4",
       ],
     },
+    // Tabler's `player-play`, for "Present" — not from the oracle, which has no such
+    // feature; picked because it is the shape every presentation tool already uses.
+    play: { width: 1.5, paths: ["M7 4v16l13 -8z"] },
   };
 
   const small = $derived(SMALL[name]);

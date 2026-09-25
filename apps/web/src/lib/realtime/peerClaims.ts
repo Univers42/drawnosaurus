@@ -27,6 +27,12 @@ export interface PeerState<T> extends Claimant {
   color: string;
   /** Their gesture in progress, when they have one. */
   preview?: readonly T[];
+  /**
+   * The slide they are presenting, while they are: a frame's id, or `null` for the one
+   * slide of a frame-less board — distinct from the key being absent at all, which is
+   * "not presenting". See `presentation.ts` and `RealtimeMessage`'s `present`.
+   */
+  presenting?: string | null;
 }
 
 /** What the engine is told about one peer: see `DrawPeer` in the engine. */

@@ -90,7 +90,16 @@ export type RealtimeMessage<T extends StampedElement> =
   /** Their gesture in progress: the elements it changes, as they are right now. */
   | { type: "preview"; clientId: string; elements: T[] }
   /** The gesture is over; its commit went out before this, as a patch. */
-  | { type: "preview-end"; clientId: string };
+  | { type: "preview-end"; clientId: string }
+  /**
+   * Presenting, and on which slide: a frame's id, or `null` for the one slide of a
+   * frame-less board. Sent on entering Present and again on every slide change — see
+   * `presentation.ts`. Additive: an old peer's frame is simply never this type, the same
+   * way it is simply never `preview`.
+   */
+  | { type: "present"; clientId: string; name: string; color: string; frameId: string | null }
+  /** Left Present — pairs with `present` the way `preview-end` pairs with `preview`. */
+  | { type: "present-end"; clientId: string };
 
 const CURSOR_COLORS = ["#e03131", "#2f9e44", "#1971c2", "#f08c00", "#9c36b5", "#0c8599"];
 const textEncoder = new TextEncoder();
@@ -465,6 +474,22 @@ export class RealtimeChannel<T extends StampedElement> {
     void this.send({ type: "preview-end", clientId: this.profile.clientId });
   }
 
+  /** Announces the slide now showing — the frame's id, or `null` for a frame-less
+   *  board's one slide. Call again on every slide change; see `presentation.ts`. */
+  sendPresent(frameId: string | null): void {
+    void this.send({
+      type: "present",
+      clientId: this.profile.clientId,
+      name: this.profile.name,
+      color: this.profile.color,
+      frameId,
+    });
+  }
+
+  sendPresentEnd(): void {
+    void this.send({ type: "present-end", clientId: this.profile.clientId });
+  }
+
   private send(msg: RealtimeMessage<T>): Promise<void> {
     const socket = this.ws;
     if (!socket || !this.sessionReady || socket.readyState !== WebSocket.OPEN) {
@@ -661,6 +686,15 @@ export class RealtimeChannel<T extends StampedElement> {
       const peer = this.peers.get(msg.clientId);
       if (!peer?.preview) return;
       delete peer.preview;
+      this.notifyState();
+    } else if (msg.type === "present") {
+      if (msg.frameId !== null && typeof msg.frameId !== "string") return;
+      this.upsertPeer(msg.clientId, { name: msg.name, color: msg.color, presenting: msg.frameId });
+      this.notifyState();
+    } else if (msg.type === "present-end") {
+      const peer = this.peers.get(msg.clientId);
+      if (peer?.presenting === undefined) return;
+      delete peer.presenting;
       this.notifyState();
     } else if (msg.type === "patch") {
       this.patchListeners.forEach((fn) => fn(msg.patch));

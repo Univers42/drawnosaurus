@@ -538,6 +538,102 @@ describe("realtimeClient holds and gestures", () => {
   });
 });
 
+describe("realtimeClient presenting", () => {
+  type El = {
+    id: string;
+    version: number;
+    versionNonce: number;
+    updated: number;
+    isDeleted: boolean;
+  };
+
+  it("reports who is presenting, and which slide, from sendPresent alone", () => {
+    const channel = new RealtimeChannel<El>("abc");
+    const states: (string | null | undefined)[][] = [];
+    channel.onPeerState((peers) => states.push(peers.map((p) => p.presenting)));
+    states.length = 0;
+
+    channel.handleMessage({
+      type: "present",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      frameId: "frame-1",
+    });
+    channel.handleMessage({
+      type: "present",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      frameId: "frame-2",
+    });
+    channel.handleMessage({ type: "present-end", clientId: "ana" });
+
+    expect(states).toEqual([["frame-1"], ["frame-2"], [undefined]]);
+  });
+
+  it("carries `null` for the one slide of a frame-less board, distinct from not presenting", () => {
+    const channel = new RealtimeChannel<El>("abc");
+    let peers: { presenting?: string | null }[] = [];
+    channel.onPeerState((list) => (peers = list));
+
+    channel.handleMessage({
+      type: "present",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+      frameId: null,
+    });
+    expect(peers[0]!.presenting).toBeNull();
+    expect("presenting" in peers[0]!).toBe(true);
+  });
+
+  it("an old peer's frame is simply never this type — no crash, nobody reads as presenting", () => {
+    const channel = new RealtimeChannel<El>("abc");
+    let peers: { presenting?: string | null }[] = [];
+    channel.onPeerState((list) => (peers = list));
+
+    channel.handleMessage({ type: "join", clientId: "ana", name: "Ana", color: "#e03131" });
+    expect(peers[0]!.presenting).toBeUndefined();
+
+    // Malformed — a `present` with no `frameId` at all, the shape an old or broken frame
+    // would have if this field ever grows a second one. Ignored, not a peer presenting.
+    channel.handleMessage({
+      type: "present",
+      clientId: "ana",
+      name: "Ana",
+      color: "#e03131",
+    } as unknown as Parameters<typeof channel.handleMessage>[0]);
+    expect(peers[0]!.presenting).toBeUndefined();
+  });
+
+  it("present-end on someone who never presented is a no-op, not a state change", () => {
+    const channel = new RealtimeChannel<El>("abc");
+    const states: unknown[] = [];
+    channel.onPeerState((peers) => states.push(peers.length));
+    channel.handleMessage({ type: "join", clientId: "ana", name: "Ana", color: "#e03131" });
+    states.length = 0;
+    channel.handleMessage({ type: "present-end", clientId: "ana" });
+    expect(states, "no second notification for nothing changing").toHaveLength(0);
+  });
+
+  it("sendPresent puts the client's name, colour and frameId on the wire", async () => {
+    const channel = new RealtimeChannel<El>("abc");
+    const outgoing = await channel.encodeOutbound({
+      type: "present",
+      clientId: channel.profile.clientId,
+      name: channel.profile.name,
+      color: channel.profile.color,
+      frameId: "frame-1",
+    });
+    expect(JSON.parse(outgoing!)).toMatchObject({
+      type: "present",
+      clientId: channel.profile.clientId,
+      frameId: "frame-1",
+    });
+  });
+});
+
 describe("realtimeClient sending", () => {
   class FakeSocket {
     static OPEN = 1;
