@@ -73,7 +73,10 @@ test("a text is bound into a shape, and given back where it is drawn", async ({ 
   // Directly above its shape.
   expect((await sceneElements(page)).map((each) => each.id)).toEqual([shape.id, text.id]);
 
-  await clickOn(board, shape.id, { where: "top", button: "right" });
+  // On the words, in the middle of a transparent shape: a label is part of its shape to
+  // the menu's hit (`App.tsx@1118751f:6725-6735`), so the shape stays what is selected.
+  await clickOn(board, text.id, { button: "right" });
+  expect(await selection(page)).toEqual([shape.id]);
   expect(await textItems(board)).toEqual(["Unbind text"]);
   await run(board, "Unbind text");
   const freed = await element(board, text.id);
