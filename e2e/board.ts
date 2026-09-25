@@ -53,6 +53,8 @@ declare global {
       insertEmbed(url: string, x: number, y: number): string | null;
       /** The embeds on screen and where their frames go, as JSON. */
       embedFramesJson(): string;
+      /** The selection, serialised as this scene's own clipboard JSON — Ctrl+C's write. */
+      copySelection(): string | null;
     };
   }
 }

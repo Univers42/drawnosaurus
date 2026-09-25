@@ -163,6 +163,41 @@ export function normalizeText(text: string): string {
   return text.replace(/\r?\n|\r/g, "\n").replace(/\t/g, "        ");
 }
 
+/**
+ * What a paste of this scene's own clipboard JSON (`.osidraw`,
+ * `export/json.rs::scene_to_json`) inserts into the text being typed: the text of the
+ * elements it names, not the JSON — `onpaste`, `textWysiwyg.tsx@1118751f:571-606`,
+ * `getTextFromElements` (`packages/element/src/textElement.ts@1118751f:573-586`). Free
+ * texts and labels both contribute (both are `type: "text"`), joined with a blank line
+ * in the order copied; anything else is skipped.
+ *
+ * `null` for text that is not this scene's JSON — a plain-text clipboard, say — so the
+ * caller leaves the browser's own paste alone. `""` for scene JSON with no text at all,
+ * which pastes nothing rather than falling back to the raw JSON, matching the oracle's
+ * early return once `parsed.elements` held no text.
+ */
+export function elementsClipboardText(json: string): string | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (typeof data !== "object" || data === null) return null;
+  const { type, elements } = data as { type?: unknown; elements?: unknown };
+  if (type !== "osidraw" || !Array.isArray(elements)) return null;
+  return elements
+    .filter(
+      (element): element is { text: string } =>
+        typeof element === "object" &&
+        element !== null &&
+        (element as { type?: unknown }).type === "text" &&
+        typeof (element as { text?: unknown }).text === "string",
+    )
+    .map((element) => element.text)
+    .join("\n\n");
+}
+
 const WRITABLE_INPUTS = new Set(["text", "number", "password", "search"]);
 
 /**

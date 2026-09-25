@@ -14,6 +14,7 @@ import {
   type Board,
   type SceneElement,
 } from "./board.ts";
+import { writeText } from "./textBoard.ts";
 
 /**
  * Typing a text: what is typed is on screen once, where and as the canvas will draw it.
@@ -595,4 +596,56 @@ test("Ctrl/Cmd+Enter, Tab and Escape are held while an IME composes, and act onc
   await dispatch("Escape", 27);
   await expect(editor(page)).toHaveCount(0);
   expect((await byType(page, "text")).text).toBe("    ん");
+});
+
+test("pasting this board's own clipboard JSON inserts the elements' text, not the JSON", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await drawShape(board);
+  await openLabel(board);
+  await page.keyboard.type("shape label");
+  await page.keyboard.press("Control+Enter");
+  await writeText(board, { x: 950, y: 300 }, "free words");
+
+  // Everything on the board — a shape with a label, and a separate free text — copied.
+  await focusBoard(board);
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Control+c");
+  const json = await page.evaluate(() => window.__drawEngine!.copySelection());
+  expect(json).toBeTruthy();
+
+  // A fresh, empty text editor: pasting into it must not fall through to the canvas's
+  // own paste listener, which owns anything not landing in a field
+  // (`DrawSurface.svelte` › `onChromePaste`, `isOwnedElsewhere`).
+  const before = new Set((await sceneElements(page)).map((existing) => existing.id));
+  await page.mouse.dblclick(
+    board.box.x + OPEN_CANVAS.left + 60,
+    board.box.y + OPEN_CANVAS.bottom - 60,
+  );
+  await expect(editor(page)).toBeFocused();
+
+  // Dispatched: a real paste reads the system clipboard, which a headless browser does
+  // not share with the test (`e2e/image.spec.ts`). The event is the one the browser
+  // would deliver, carrying what Ctrl+C above put there.
+  await page.evaluate((data) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(data, "text/plain");
+    const target = document.activeElement ?? document.body;
+    target.dispatchEvent(
+      new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }),
+    );
+  }, json!);
+
+  await expect(editor(page)).toHaveValue(/shape label/);
+  await expect(editor(page)).toHaveValue(/free words/);
+  const value = await editor(page).inputValue();
+  expect(value, "not the raw clipboard JSON").not.toContain("osidraw");
+  expect(value, "not the raw clipboard JSON").not.toContain("{");
+
+  await page.keyboard.press("Control+Enter");
+  // The text just made — not the shape's label or the earlier free text, both also
+  // `type: "text"` and both still holding a copy of the words just pasted.
+  const pasted = (await sceneElements(page)).find((el) => el.type === "text" && !before.has(el.id));
+  expect(pasted?.text).toBe(value);
 });
