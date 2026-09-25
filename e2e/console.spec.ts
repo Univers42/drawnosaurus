@@ -287,6 +287,39 @@ test.describe("copy and paste styles", () => {
   });
 });
 
+test("the menu names front and back chords the keys act on", async ({ page }) => {
+  // The hints follow the platform, and each has to be a chord the keymap takes. They
+  // named Ctrl+Shift+] off a Mac, which the engine's keymap at this pin passes over.
+  const board = await openBoard(page);
+  await drawBox(board);
+  await drawBox(board, AT.x + 250);
+  const order = async () => (await sceneElements(page)).map((element) => element.id);
+  const [first, second] = await order();
+  const KEY: Record<string, string> = { Ctrl: "Control", "]": "BracketRight", "[": "BracketLeft" };
+
+  async function pressHinted(item: string, index: number): Promise<void> {
+    await clickElement(board, index, { button: "right" });
+    const hint = await page
+      .getByRole("menuitem", { name: new RegExp(`^${item}`) })
+      .locator(".hint")
+      .innerText();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toBeHidden();
+    await clickElement(board, index);
+    await page.keyboard.press(
+      hint
+        .split("+")
+        .map((key) => KEY[key] ?? key)
+        .join("+"),
+    );
+  }
+
+  await pressHinted("Bring to front", 0);
+  expect(await order(), "the chord named for bring to front did nothing").toEqual([second, first]);
+  await pressHinted("Send to back", 1);
+  expect(await order(), "the chord named for send to back did nothing").toEqual([first, second]);
+});
+
 test("an opacity drag shows as it goes and is one step of undo", async ({ page }) => {
   const board = await openBoard(page);
   await drawBox(board);
