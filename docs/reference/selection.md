@@ -63,8 +63,14 @@ The selection a step began with is the one the last capture saw, never the press
 started it (`store.ts@1118751f:376-385`, the pointer-up capture `App.tsx@1118751f:12451-12464`):
 a shape dragged from unselected comes back unselected. A command's selection with no
 gesture after it — Select All, then Delete — is what the next step began with. Picking a
-drawing tool lets go of the selection without a capture (`App.tsx@1118751f:6110-6256`), so
-undoing a new shape gives back what was selected before it. What a peer deleted since is
+shape tool lets go of the selection without a capture (`App.tsx@1118751f:6110-6256`), so
+undoing a new shape gives back what was selected before it. Picking the pencil is a capture
+(`App.tsx@1118751f:6204-6206`; "should create entry when selecting freedraw",
+`history.test.tsx@1118751f:1249`): click A, pencil, a stroke, Ctrl+Z → the stroke is gone,
+the pencil still in hand and nothing selected, so the next colour picked restyles nothing.
+Auto-shape, which the oracle lacks, goes with the shape tools. A click with a shape tool
+that draws nothing, or Escape on a shape being drawn, leaves nothing to commit, so what is
+selected after it settles as any selection does. What a peer deleted since is
 not selected again (`filterSelectedElements`, `delta.ts@1118751f:875-902`), and a step made
 inside a group steps back into it (`editingGroupId`, `delta.ts@1118751f:806-818`).
 Pinned by `ci_history_selection.rs`.
