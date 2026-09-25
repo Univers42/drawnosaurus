@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { DrawCanvas } from "@osionos/draw-engine/svelte";
   import { DARK_THEME, EMPTY_SELECTION_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
@@ -13,7 +13,24 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { DrawPeer } from "@osionos/draw-engine/types";
   import { cursorForTool } from "./style.ts";
-  import { zoomPercent } from "./camera.ts";
+  import {
+    animateCamera,
+    fitCamera,
+    setCameraExact,
+    worldToScreen,
+    zoomPercent,
+    type CameraAnimation,
+  } from "./camera.ts";
+  import {
+    PRESENT_MARGIN,
+    presentKeyAction,
+    slidesFromScene,
+    stepSlideIndex,
+    type Slide,
+    type SlideElement,
+  } from "./presentation.ts";
+  import DrawPresentBar from "./DrawPresentBar.svelte";
+  import DrawFollowNotice from "./DrawFollowNotice.svelte";
   import {
     persistCanvasBackground,
     persistThemePreference,
@@ -221,6 +238,50 @@
     onUpdate: (pathD) => {
       eraserTrailSvgPath = pathD;
     },
+  });
+
+  // Presenting — see the block above `onMount` for the functions that drive this.
+  let presenting = $state(false);
+  let slides = $state<Slide[]>([]);
+  let slideIndex = $state(0);
+  const currentSlide = $derived<Slide | null>(slides[slideIndex] ?? null);
+  let presentAnim: CameraAnimation | null = null;
+  let presentRestore: { camera: Camera; tool: DrawTool; toolLocked: boolean } | null = null;
+  /** Who else is presenting, and which slide — from a peer's `present`/`present-end`. */
+  let presentingPeer = $state<{ name: string; presenting: string | null } | null>(null);
+  let following = $state(false);
+  let followAnim: CameraAnimation | null = null;
+  /** Set around a camera change this component drove itself, so `onCameraChange` can
+   *  tell a follower's own pan (which breaks `following`) from the follow apart. */
+  let followDriving = false;
+  /** The screen rect the current frame occupies, for the dim overlay — `null` outside
+   *  Present, and for the whole-board slide of a frame-less scene, which has nothing
+   *  around it worth dimming. */
+  const spotlightRect = $derived.by(() => {
+    if (!presenting || !currentCamera || !currentSlide?.frameId || !currentSlide.bounds) {
+      return null;
+    }
+    const { minX, minY, maxX, maxY } = currentSlide.bounds;
+    const topLeft = worldToScreen(currentCamera, minX, minY);
+    const bottomRight = worldToScreen(currentCamera, maxX, maxY);
+    return {
+      x: topLeft.sx,
+      y: topLeft.sy,
+      width: bottomRight.sx - topLeft.sx,
+      height: bottomRight.sy - topLeft.sy,
+    };
+  });
+  /** Four bands covering everything but `spotlightRect`, each a plain CSS rect — simpler
+   *  than an SVG mask, and every length is clamped so a frame partly off-screen never
+   *  produces a negative width or height (invalid CSS, silently dropped). */
+  const dimBands = $derived.by(() => {
+    const r = spotlightRect;
+    if (!r) return null;
+    const x = Math.max(0, r.x);
+    const y = Math.max(0, r.y);
+    const w = Math.max(0, r.width);
+    const h = Math.max(0, r.height);
+    return { top: y, bottom: y + h, left: x, right: x + w, height: h };
   });
 
   // Modals state
@@ -912,6 +973,181 @@
     applyRemote({ elements });
   }
 
+  /**
+   * Presentation mode: the board's frames as slides, shown one at a time.
+   *
+   * Everything that decides *which* slide and *what to do with a key* is pure, in
+   * `presentation.ts`; everything here is wiring it to the engine, the camera and the
+   * live link. Nothing can be edited while presenting — the tool is forced to `laser`,
+   * which the engine already treats as a gesture with nothing behind it
+   * (`engine/pointer.rs`), and every key but `Tab` is caught before it reaches the
+   * engine's own listener (see `onPresentKeydown`).
+   */
+
+  /** `prefers-reduced-motion`, read fresh each time: it is a standing OS setting, not
+   *  something that changes mid-session, but reading it once at module load would miss
+   *  a browser started before the preference existed. */
+  function prefersReducedMotion(): boolean {
+    return (
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    );
+  }
+
+  /** The board area a slide is fit into — `canvasHost`'s own box, which is what the
+   *  camera's `x`/`y`/`scale` are already relative to (see `viewportCentre`). */
+  function viewportSize(): { width: number; height: number } {
+    const rect = canvasHost?.getBoundingClientRect();
+    return { width: rect?.width ?? 0, height: rect?.height ?? 0 };
+  }
+
+  /** The live scene's elements, as `presentation.ts` needs them. */
+  function currentSlideElements(): SlideElement[] {
+    if (!engine) return [];
+    const parsed = JSON.parse(engine.exportJson()) as { elements?: SlideElement[] };
+    return parsed.elements ?? [];
+  }
+
+  /** Animates (or, for reduced motion, jumps) the camera to `index`, and tells the live
+   *  link — a peer's `sendPresent` in `enterPresent`, this component's own on every
+   *  later move. Clamped, so a stale index from a resize never goes out of range. */
+  function showSlide(index: number, options: { instant?: boolean } = {}): void {
+    if (!engine) return;
+    slideIndex = Math.min(Math.max(index, 0), Math.max(slides.length - 1, 0));
+    const slide = slides[slideIndex];
+    presentAnim?.cancel();
+    if (slide?.bounds) {
+      const target = fitCamera(slide.bounds, viewportSize(), PRESENT_MARGIN);
+      presentAnim = animateCamera(
+        engine.camera,
+        target,
+        (camera) => setCameraExact(engine!, camera),
+        {
+          reducedMotion: options.instant || prefersReducedMotion(),
+        },
+      );
+    }
+    if (realtime) realtime.sendPresent(slide?.frameId ?? null);
+  }
+
+  function stepPresent(step: "next" | "prev" | "home" | "end"): void {
+    showSlide(stepSlideIndex(step, slideIndex, slides.length));
+  }
+
+  async function enterPresent(): Promise<void> {
+    if (!engine || presenting) return;
+    if (following) {
+      following = false;
+      followAnim?.cancel();
+    }
+    slides = slidesFromScene(currentSlideElements());
+    presentRestore = { camera: engine.camera, tool, toolLocked: engine.getToolLocked() };
+    presenting = true;
+    handleToolSelect("laser");
+    // The header and the rest of the chrome leave layout the instant `presenting` is
+    // set, which is also the instant `canvasHost` grows to fill the space they held —
+    // `showSlide` reads that box, so it has to wait for Svelte to apply the change first.
+    await tick();
+    showSlide(0, { instant: false });
+    try {
+      await document.documentElement.requestFullscreen?.();
+    } catch {
+      // Refused, or unavailable in this browser — presenting still works without it.
+    }
+  }
+
+  async function exitPresent(): Promise<void> {
+    if (!presenting) return;
+    presentAnim?.cancel();
+    presenting = false;
+    slides = [];
+    const restore = presentRestore;
+    presentRestore = null;
+    if (engine && restore) {
+      setCameraExact(engine, restore.camera);
+      handleToolSelect(restore.tool);
+      if (engine.getToolLocked() !== restore.toolLocked) engine.setToolLocked(restore.toolLocked);
+    }
+    if (realtime) realtime.sendPresentEnd();
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        // Already left, or the browser refuses — nothing left to do either way.
+      }
+    }
+  }
+
+  /** What a peer's `present`/`present-end` last said, folded into the Follow notice and,
+   *  while `following`, into this camera. Called from `onPeerState` — see `onMount`. */
+  function syncPresence(list: Peer<StampedElement>[]): void {
+    const presenter = list.find((peer) => peer.presenting !== undefined) ?? null;
+    presentingPeer = presenter
+      ? { name: presenter.name, presenting: presenter.presenting ?? null }
+      : null;
+    if (!presentingPeer) {
+      following = false;
+      return;
+    }
+    if (following) followTo(presentingPeer.presenting);
+  }
+
+  /** Tracks a presenter's slide: the same fit, the same animation, from this client's own
+   *  scene — the wire only ever carries a frame id, never its bounds. */
+  function followTo(frameId: string | null): void {
+    if (!engine) return;
+    const slide = slidesFromScene(currentSlideElements()).find((s) => s.frameId === frameId);
+    if (!slide?.bounds) return;
+    followAnim?.cancel();
+    followDriving = true;
+    const target = fitCamera(slide.bounds, viewportSize(), PRESENT_MARGIN);
+    followAnim = animateCamera(engine.camera, target, (camera) => setCameraExact(engine!, camera), {
+      reducedMotion: prefersReducedMotion(),
+      onDone: () => {
+        followDriving = false;
+      },
+    });
+  }
+
+  function toggleFollow(): void {
+    following = !following;
+    if (following && presentingPeer) followTo(presentingPeer.presenting);
+    else followAnim?.cancel();
+  }
+
+  /**
+   * Presentation's own keys, ahead of everything else: on the capture phase, like
+   * `onStyleShortcut`, and for the same reason — the engine's listener sits on the
+   * canvas below and must never see a key while presenting, or a stray "2" would swap
+   * the laser for the rectangle tool and start editing mid-show.
+   *
+   * Every key is caught, `Tab` excepted: that is the one key that still has a job, which
+   * is keeping the presenter bar's own controls reachable from the keyboard.
+   */
+  function onPresentKeydown(event: KeyboardEvent): boolean {
+    if (!presenting && !following) return false;
+    if (event.key === "Tab") return false;
+    if (presenting) {
+      const action = presentKeyAction(event.key);
+      event.preventDefault();
+      event.stopPropagation();
+      if (action === "exit") void exitPresent();
+      else if (action) stepPresent(action);
+      return true;
+    }
+    // Following, not presenting: only Esc is presentation's to take, so a peer's own
+    // typing or shortcuts are never touched.
+    if (event.key !== "Escape") return false;
+    event.preventDefault();
+    event.stopPropagation();
+    following = false;
+    followAnim?.cancel();
+    return true;
+  }
+
+  function onWindowResize(): void {
+    if (presenting) showSlide(slideIndex, { instant: true });
+  }
+
   onMount(() => {
     // Apply the stored choice *before* reading the tokens: themeFromCss resolves the
     // canvas colours off the host CSS variables, and the `dark` class is what swaps
@@ -966,6 +1202,7 @@
         unsubPeerState = realtime.onPeerState((list) => {
           peerStates = list;
           syncPeers();
+          syncPresence(list);
         });
         // What was selected before the link existed is held from now.
         if (engine) claimSelected(engine.getSelectedElements().map((element) => element.id));
@@ -1014,11 +1251,16 @@
     if (raf) cancelAnimationFrame(raf);
     if (cursorRaf) cancelAnimationFrame(cursorRaf);
     if (previewRaf) cancelAnimationFrame(previewRaf);
+    presentAnim?.cancel();
+    followAnim?.cancel();
     eraserTrail.clear();
     realtime?.disconnect();
   });
 
   function onCameraChange(camera: Camera): void {
+    // A follower's own pan — not `following`'s own drive, which sets `followDriving`
+    // around every camera change it makes — is the "pan" that ends following.
+    if (following && !followDriving) following = false;
     if (textEdit) editorRevision += 1;
     pending = camera;
     currentCamera = camera;
@@ -1187,51 +1429,59 @@
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
+    } else if (mod && event.shiftKey && key === "p" && !presenting) {
+      event.preventDefault();
+      void enterPresent();
     }
   }
 </script>
 
-<svelte:window onkeydown={onAppShortcut} />
+<svelte:window onkeydown={onAppShortcut} onresize={onWindowResize} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="draw-chrome"
   style:cursor={hoverCursor ?? toolCursor}
-  onkeydowncapture={onStyleShortcut}
+  onkeydowncapture={(e) => {
+    if (!onPresentKeydown(e)) onStyleShortcut(e);
+  }}
   ondragover={onChromeDragOver}
   ondrop={onChromeDrop}
   onpastecapture={onChromePaste}
 >
-  <DrawHeader
-    {title}
-    {status}
-    live={liveText}
-    onToggleMenu={() => (showMainMenu = !showMainMenu)}
-    onOpenShare={() => (showShare = true)}
-    onOpenShortcuts={() => (showShortcuts = true)}
-  >
-    {#snippet menu()}
-      {#if showMainMenu}
-        <DrawMainMenu
-          bind:this={mainMenu}
-          {engine}
-          {themePreference}
-          {canvasBackground}
-          {grid}
-          {objectsSnap}
-          onPickTheme={pickTheme}
-          onPickCanvasBackground={pickCanvasBackground}
-          onPickGrid={pickGrid}
-          onToggleObjectsSnap={flipObjectsSnap}
-          onOpenExport={() => (showExport = true)}
-          onOpenMermaid={() => (showMermaid = true)}
-          onOpenShare={() => (showShare = true)}
-          onOpenShortcuts={() => (showShortcuts = true)}
-          onClose={() => (showMainMenu = false)}
-        />
-      {/if}
-    {/snippet}
-  </DrawHeader>
+  {#if !presenting}
+    <DrawHeader
+      {title}
+      {status}
+      live={liveText}
+      onToggleMenu={() => (showMainMenu = !showMainMenu)}
+      onOpenShare={() => (showShare = true)}
+      onOpenShortcuts={() => (showShortcuts = true)}
+    >
+      {#snippet menu()}
+        {#if showMainMenu}
+          <DrawMainMenu
+            bind:this={mainMenu}
+            {engine}
+            {themePreference}
+            {canvasBackground}
+            {grid}
+            {objectsSnap}
+            onPickTheme={pickTheme}
+            onPickCanvasBackground={pickCanvasBackground}
+            onPickGrid={pickGrid}
+            onToggleObjectsSnap={flipObjectsSnap}
+            onOpenExport={() => (showExport = true)}
+            onOpenMermaid={() => (showMermaid = true)}
+            onOpenShare={() => (showShare = true)}
+            onOpenShortcuts={() => (showShortcuts = true)}
+            onOpenPresent={() => void enterPresent()}
+            onClose={() => (showMainMenu = false)}
+          />
+        {/if}
+      {/snippet}
+    </DrawHeader>
+  {/if}
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
@@ -1325,6 +1575,40 @@
         />
       </svg>
     {/if}
+    {#if dimBands}
+      <div
+        class="present-dim"
+        aria-hidden="true"
+        style:top="0"
+        style:left="0"
+        style:right="0"
+        style:height={`${dimBands.top}px`}
+      ></div>
+      <div
+        class="present-dim"
+        aria-hidden="true"
+        style:top={`${dimBands.bottom}px`}
+        style:left="0"
+        style:right="0"
+        style:bottom="0"
+      ></div>
+      <div
+        class="present-dim"
+        aria-hidden="true"
+        style:top={`${dimBands.top}px`}
+        style:left="0"
+        style:width={`${dimBands.left}px`}
+        style:height={`${dimBands.height}px`}
+      ></div>
+      <div
+        class="present-dim"
+        aria-hidden="true"
+        style:top={`${dimBands.top}px`}
+        style:left={`${dimBands.right}px`}
+        style:right="0"
+        style:height={`${dimBands.height}px`}
+      ></div>
+    {/if}
   </div>
 
   <!--
@@ -1406,18 +1690,20 @@
 
   <PeerCursors {peers} camera={currentCamera} />
 
-  <DrawToolbar
-    active={tool}
-    {toolLocked}
-    onSelect={handleToolSelect}
-    onToggleToolLock={() => {
-      if (!engine) return;
-      engine.setToolLocked(!engine.getToolLocked());
-      toolLocked = engine.getToolLocked();
-    }}
-  />
+  {#if !presenting}
+    <DrawToolbar
+      active={tool}
+      {toolLocked}
+      onSelect={handleToolSelect}
+      onToggleToolLock={() => {
+        if (!engine) return;
+        engine.setToolLocked(!engine.getToolLocked());
+        toolLocked = engine.getToolLocked();
+      }}
+    />
+  {/if}
 
-  {#if panelVisible}
+  {#if panelVisible && !presenting}
     <DrawInspector
       {summary}
       can={shapeActions}
@@ -1435,7 +1721,21 @@
     />
   {/if}
 
-  <DrawZoomBar {engine} {zoom} {contentVisible} />
+  {#if !presenting}
+    <DrawZoomBar {engine} {zoom} {contentVisible} />
+  {/if}
+
+  {#if presenting}
+    <DrawPresentBar
+      index={slideIndex}
+      count={slides.length}
+      onPrev={() => stepPresent("prev")}
+      onNext={() => stepPresent("next")}
+      onExit={() => void exitPresent()}
+    />
+  {:else if presentingPeer}
+    <DrawFollowNotice name={presentingPeer.name} {following} onToggle={toggleFollow} />
+  {/if}
 
   {#if textEdit && engine}
     {#key textEdit.id}
@@ -1461,24 +1761,26 @@
     {/key}
   {/if}
 
-  <DrawModals
-    {engine}
-    {slug}
-    {peers}
-    connectionStatus={liveStatus}
-    bind:menu
-    bind:showMainMenu
-    bind:showExport
-    bind:showMermaid
-    bind:showShare
-    bind:showShortcuts
-    onCopyStyles={copyStyles}
-    onEditEmbedLink={(id) => {
-      const url = embedFrames.find((frame) => frame.id === id)?.url;
-      if (url) editingEmbed = { id, url };
-    }}
-    onInsertMermaid={(elements) => {
-      if (engine) engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements }));
-    }}
-  />
+  {#if !presenting}
+    <DrawModals
+      {engine}
+      {slug}
+      {peers}
+      connectionStatus={liveStatus}
+      bind:menu
+      bind:showMainMenu
+      bind:showExport
+      bind:showMermaid
+      bind:showShare
+      bind:showShortcuts
+      onCopyStyles={copyStyles}
+      onEditEmbedLink={(id) => {
+        const url = embedFrames.find((frame) => frame.id === id)?.url;
+        if (url) editingEmbed = { id, url };
+      }}
+      onInsertMermaid={(elements) => {
+        if (engine) engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements }));
+      }}
+    />
+  {/if}
 </div>
