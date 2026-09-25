@@ -184,3 +184,37 @@ test("a family picked from the list while typing gives the keys back to the typi
   const [text] = await sceneElements(page);
   expect(text).toMatchObject({ type: "text", text: "abcde", fontFamily: 6 });
 });
+
+test("a family only hovered while typing is not the one a press on the board commits", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await page.mouse.dblclick(board.box.x + AT.x, board.box.y + AT.y);
+  await expect(editor(board)).toBeFocused();
+  await page.keyboard.type("abc");
+
+  // The search hovers Nunito: the editor shows it, nothing is picked.
+  await panel(page).getByRole("button", { name: "Show font picker" }).click();
+  await expect(picker(page)).toBeVisible();
+  await page.keyboard.type("nun");
+  await expect(picker(page).locator('[data-hovered="true"]')).toHaveText("Nunito");
+  await expect(editor(board)).toHaveCSS("font-family", /Nunito/);
+
+  // A press on the board ends the edit before the list closes: the hover is given back
+  // first, as the oracle's picker puts back what it cached (`actionProperties.tsx@1118751f:
+  // 1483-1500`), rather than committed with the words.
+  await page.mouse.click(
+    board.box.x + OPEN_CANVAS.right - 60,
+    board.box.y + OPEN_CANVAS.bottom - 60,
+  );
+  await expect(editor(board)).toHaveCount(0);
+  await expect(picker(page)).toBeHidden();
+  const [text, ...others] = await sceneElements(page);
+  expect(others).toEqual([]);
+  expect(text).toMatchObject({ type: "text", text: "abc", fontFamily: 5 });
+  await expect
+    .poll(async () => (await patchedElements(page)).some((each) => each.id === text!.id))
+    .toBe(true);
+  const sent = await patchedElements(page);
+  expect(sent.some((each) => (each as BoardElement).fontFamily === 6)).toBe(false);
+});
