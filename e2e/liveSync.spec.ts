@@ -134,6 +134,37 @@ test("a word shows on the other screen while it is being typed", async ({ page, 
   await other.done();
 });
 
+// The text being typed goes out as a gesture does, with the shape it grows and nothing
+// saved until it is done (`engine/text_session.rs`).
+test("a shape grows on the other screen as its label is typed", async ({ page, browser }) => {
+  const { board, live, hash } = await host(page);
+  const other = await colleague(browser, live, hash);
+  const theirs = other.board.page;
+  await drawBox(board);
+  await expect.poll(async () => (await sceneElements(theirs)).length).toBe(1);
+  const drawn = (await sceneElements(theirs))[0]!;
+  // Just under the box as drawn, 140 × 90: empty until it grows.
+  const below = { left: AT.x + 10, right: AT.x + 130, top: AT.y + 100, bottom: AT.y + 150 };
+  const before = await regionInk(theirs, below);
+
+  await page.mouse.dblclick(board.box.x + AT.x + 70, board.box.y + AT.y + 45);
+  await expect(page.locator("textarea[aria-label='Text editor']")).toBeFocused();
+  await page.keyboard.type("one\ntwo\nthree\nfour\nfive");
+
+  await expect
+    .poll(async () => (await regionInk(theirs, below)) - before, {
+      message: "the shape did not grow on the other screen while its label was typed",
+    })
+    .toBeGreaterThan(0.003);
+  expect((await sceneElements(theirs))[0]!.height, "a preview, not an edit").toBe(drawn.height);
+
+  await page.keyboard.press("Escape");
+  await expect
+    .poll(async () => (await sceneElements(theirs)).find((el) => el.type === "rectangle")?.height)
+    .toBeGreaterThan(drawn.height);
+  await other.done();
+});
+
 test("what someone held is theirs no longer the moment their page goes", async ({
   page,
   browser,
