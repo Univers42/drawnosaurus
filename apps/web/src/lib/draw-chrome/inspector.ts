@@ -216,18 +216,3 @@ export function textWrap(style: WrapFacts): TextWrap | null {
   }
   return first ? "wrap" : "grow";
 }
-
-/**
- * What a pick writes, for the kinds of text selected: `setTextAutoResize` for free texts,
- * `setLabelWrap` for labels. ponytail: a selection holding both takes two engine calls,
- * so two steps of undo; one engine call for both is the upgrade.
- */
-export function wrapWrites(
-  style: Pick<WrapFacts, "hasFreeText" | "hasLabel">,
-  wrap: TextWrap,
-): { autoResize?: boolean; labelWrap?: boolean } {
-  return {
-    ...(style.hasFreeText ? { autoResize: wrap === "grow" } : {}),
-    ...(style.hasLabel ? { labelWrap: wrap === "wrap" } : {}),
-  };
-}
