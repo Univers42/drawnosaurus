@@ -123,8 +123,8 @@ One function lays a text out, `text::layout::layout_text`
 (`engine/crates/draw-engine/src/text/layout.rs`), a port of `redrawTextBoundingBox`
 (`packages/element/src/textElement.ts@1118751f:51-153`). Every path that lays text out goes
 through it (`DrawEngine::laid_out`): the editor's commit, a peer's preview, a font size,
-family, alignment or wrap change, `set_text_auto_resize`, `set_text_box_width` and
-`fonts_loaded`. It wraps from the source, measures, and grows a label's shape to hold it. A
+family, alignment or wrap change, a pasted style, `set_text_auto_resize`,
+`set_text_box_width` and `fonts_loaded`. It wraps from the source, measures, and grows a label's shape to hold it. A
 resize handle is not one of them yet: moving or resizing a shape only places its label
 (`layout_label`). **VERIFIED** by `ci_text_model.rs`
 (every shape, growth, unwrap, rotation, the free-text anchors, style reaching a label, a font
@@ -149,7 +149,8 @@ diamond; a family change; the SVG export).
 | text exported per line (`staticSvgScene.ts@1118751f:776-832`)                                | `text_svg`                                                     |
 
 `BOUND_TEXT_PADDING` is 5, as in the oracle (it was 8 here). Style applied to a shape reaches
-its label for stroke colour and opacity (`actionChangeStrokeColor`, `actionChangeOpacity`),
+its label for stroke colour and opacity (`actionChangeStrokeColor`, `actionChangeOpacity`;
+the panel's one path, `selection_style.rs` › `style_targets`, `ci_style_reach.rs`),
 except a label a peer holds: typing into a label holds the label alone, and every writer that
 follows a shape to its label skips one that is `untouchable`, as everything else does
 (`ci_text_model.rs` › a label a peer holds is left alone). A writer stamps only what it
