@@ -58,10 +58,13 @@ the shared style to every target:
   (`packages/element/src/newElement.ts:105`). Its size and alignment are written only
   when they differ as read, so pasting a text's own style onto it is not an edit;
 - a text's font from the source, or the defaults. From a shape, that is the family new
-  text is written in: today none, the system stack.
-  `ci_selection_style.rs` › `from_a_shape_a_text_takes_the_family_new_text_gets` asks
-  the engine, so it fails once new text gets Excalifont and paste still writes none
-  (the oracle writes `DEFAULT_FONT_FAMILY`, `actions/actionStyles.ts:143`);
+  text is written in, Excalifont (`sourceText.fontFamily || DEFAULT_FONT_FAMILY`,
+  `actions/actionStyles.ts@1118751f:143`); from a text, its own family — a legacy text
+  with none crosses as the system stack it is drawn in, so its twin is not moved. The
+  text is laid out again with its shape, which grows when the label no longer fits
+  (`redrawTextBoundingBox(newTextElement, container)`, `:174`);
+- except a locked element and the label of a locked shape, which keep their own (see
+  Select All below);
 - arrowheads only from an arrow to an arrow;
 - a frame target keeps a transparent background and no roundness.
 
