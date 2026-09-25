@@ -230,7 +230,11 @@ build: $(ENGINE_PKG) ## Build the api, web, and realtime images
 	@echo -e "$(GREEN)✔ images built$(RESET)"
 
 up: $(ENGINE_PKG) ## Start the stack mongo + api + web behind the gateway on WEB_PORT + realtime
-	$(DC) up -d --build mongo realtime api web gateway
+	$(DC) up -d --build mongo realtime api web
+	@# Recreated every time, because it is cheap and a kept one can be stale: its
+	@# Caddyfile is a single-file bind mount, and a git checkout replaces the file, so a
+	@# kept container serves the old inode (scripts/gateway-stale.sh).
+	$(DC) up -d --no-deps --force-recreate gateway
 	@echo -e "$(GREEN)✔ up: web http://localhost:$(WEB_PORT)  api http://localhost:$(API_PORT)  realtime ws://localhost:$(REALTIME_PORT)/ws$(RESET)"
 	@first=$$(printf '%s' "$(SHARE_LAN_ORIGINS)" | cut -d, -f1); \
 	over=$${first%%|*}; first=$${first#*|}; \
@@ -278,7 +282,8 @@ unshare: ## Take the stack off the internet
 # Is the running web container built from what is checked out? It exists because a
 # container left up while commits land serves the old code, and nothing says so — it
 # looks exactly like a fix that did not work. That cost three rounds of debugging a tree
-# that no longer had the bug. Exits 1 when stale, so it can gate other targets.
+# that no longer had the bug. Exits 1 when stale, so it can gate other targets. The
+# gateway has no image of ours to stamp, so its Caddyfile is compared instead.
 stale: ## Is the running stack built from this checkout? Exits 1 if not
 	@id=$$($(DC) ps -q web 2>/dev/null); \
 	if [ -z "$$id" ]; then echo "web is not running — nothing to be stale"; exit 0; fi; \
@@ -286,7 +291,11 @@ stale: ## Is the running stack built from this checkout? Exits 1 if not
 	engine=$$(docker inspect --format '{{ index .Config.Labels "drawnosaurus.engine.revision" }}' $$id); \
 	echo "running:    app $${app:-unstamped} · engine $${engine:-unstamped}"; \
 	echo "checked out: app $(BUILD_APP_SHA) · engine $(BUILD_ENGINE_SHA)"; \
-	if [ "$$app" = "$(BUILD_APP_SHA)" ] && [ "$$engine" = "$(BUILD_ENGINE_SHA)" ]; then \
+	gateway=$$($(DC) ps -q gateway 2>/dev/null); \
+	caddy=current; \
+	if [ -n "$$gateway" ] && ! scripts/gateway-stale.sh "$$gateway"; then caddy=stale; fi; \
+	if [ "$$app" = "$(BUILD_APP_SHA)" ] && [ "$$engine" = "$(BUILD_ENGINE_SHA)" ] \
+		&& [ "$$caddy" = current ]; then \
 		echo -e "$(GREEN)✔ current$(RESET)"; \
 	else \
 		echo -e "\033[31m✖ stale — run 'make up' to rebuild$(RESET)"; exit 1; \
