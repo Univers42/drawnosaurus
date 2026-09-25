@@ -26,6 +26,7 @@
     request,
     revision,
     onInput,
+    onSave,
     onDone,
   }: {
     engine: DrawEngine;
@@ -34,6 +35,8 @@
     revision: number;
     /** Something was typed — for the others to see. */
     onInput?: () => void;
+    /** Ctrl/Cmd+S, once the edit it interrupted is committed. */
+    onSave?: () => void;
     /** The edit is over. `boardPress`: a primary press on the board ended it. */
     onDone: (boardPress: boolean) => void;
   } = $props();
@@ -139,7 +142,10 @@
     event.preventDefault();
     event.stopPropagation();
     if (action === "submit") finish(true, true);
-    else if (action === "zoomIn") engine.zoomIn();
+    else if (action === "save") {
+      finish(true, true);
+      onSave?.();
+    } else if (action === "zoomIn") engine.zoomIn();
     else if (action === "zoomOut") engine.zoomOut();
     else if (action === "zoomReset") engine.zoomReset();
     else if (action === "indent" || action === "outdent") {
