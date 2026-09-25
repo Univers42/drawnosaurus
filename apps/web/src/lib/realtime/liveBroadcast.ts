@@ -7,7 +7,7 @@
  */
 import { fillPictures, PictureLedger } from "../autosave/pictures.ts";
 import { SceneDiffTracker, type ScenePatch, type StampedElement } from "../autosave/sceneDiff.ts";
-import { SceneMirror } from "../autosave/sceneMirror.ts";
+import { SceneMirror, type MirrorDelta } from "../autosave/sceneMirror.ts";
 
 /**
  * Each element a client has, by id, with its stamp: `[version, versionNonce]`, and for a
@@ -30,6 +30,8 @@ export interface SceneDeltaEvent {
   type: "osidraw-delta";
   updated: StampedElement[];
   removed: string[];
+  /** Every live id, bottom first, when the stack moved as well (`SceneMirror.apply`). */
+  order?: string[];
 }
 
 function isDelta(value: unknown): value is SceneDeltaEvent {
@@ -90,9 +92,11 @@ export class LiveSceneBroadcaster<T extends StampedElement = StampedElement> {
       return false;
     }
     if (isDelta(parsed)) {
-      this.live.apply(parsed as unknown as { updated: T[]; removed: string[] });
+      this.live.apply(parsed as unknown as MirrorDelta<T>);
       this.tracker.noteChanged(parsed.updated.map((element) => element.id));
       this.tracker.noteChanged(parsed.removed);
+      // The stack moved as well: only comparing everything finds the order to send.
+      if (parsed.order) this.tracker.noteEverything();
       return true;
     }
     if (

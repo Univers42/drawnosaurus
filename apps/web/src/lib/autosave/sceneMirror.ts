@@ -5,7 +5,7 @@
  * rebuild it from scratch on every change the engine reported — the whole board walked
  * and copied for each Ctrl+D, two milliseconds apiece on 9,000 shapes. A change is now
  * applied where it lands: an element replaced in place, a new one put on top. Only a
- * deletion, or a whole scene, rebuilds it.
+ * deletion, a delta that moved the stack, or a whole scene rebuilds it.
  */
 
 interface MirroredElement {
@@ -17,6 +17,12 @@ interface MirroredElement {
 export interface MirrorDelta<T> {
   updated: readonly T[];
   removed: readonly string[];
+  /**
+   * Every live id, bottom first, when the stack moved as well: elements placed beside
+   * another — a shape that joined a frame goes directly below it, a new label above its
+   * shape. Absent when nothing moved.
+   */
+  order?: readonly string[];
 }
 
 export class SceneMirror<T extends MirroredElement> {
@@ -59,10 +65,17 @@ export class SceneMirror<T extends MirroredElement> {
   /**
    * Applies a delta, and returns the ids it put on top, in order.
    *
-   * A delta never rearranges the stack — the engine sends the whole scene when it does —
-   * so an element it names is either where it was or new on top.
+   * An element it names is either where it was or new on top — then, when the delta
+   * carries an order, the stack is put in it. The engine used to send the whole scene
+   * for that, which on 20,000 shapes was 10.7MB for one shape drawn into a frame.
    */
   apply(delta: MirrorDelta<T>): string[] {
+    const appended = this.applyElements(delta);
+    if (delta.order) this.arrange(delta.order);
+    return appended;
+  }
+
+  private applyElements(delta: MirrorDelta<T>): string[] {
     const appended: string[] = [];
     const deletes = delta.removed.length > 0 || delta.updated.some((element) => element.isDeleted);
     if (!deletes) {
@@ -104,6 +117,19 @@ export class SceneMirror<T extends MirroredElement> {
     this.list = next;
     this.reindex();
     return appended;
+  }
+
+  /** Puts the stack in `order`. What it leaves out stays, on top, as it was. */
+  private arrange(order: readonly string[]): void {
+    const listed = new Set(order);
+    const next: T[] = [];
+    for (const id of order) {
+      const element = this.lookup(id);
+      if (element) next.push(element);
+    }
+    for (const element of this.list) if (!listed.has(element.id)) next.push(element);
+    this.list = next;
+    this.reindex();
   }
 
   private reindex(): void {

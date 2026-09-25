@@ -22,6 +22,31 @@ describe("SceneMirror", () => {
     expect(appended).toEqual(["d", "e"]);
   });
 
+  it("puts the stack in the order a delta carries, when the stack moved", () => {
+    // A shape drawn into a frame goes directly below it, and the engine says so.
+    const mirror = new SceneMirror<Element>();
+    mirror.replace([el("c1"), el("f"), el("x")]);
+
+    const appended = mirror.apply({
+      updated: [el("n")],
+      removed: [],
+      order: ["c1", "n", "f", "x"],
+    });
+
+    expect(ids(mirror)).toEqual(["c1", "n", "f", "x"]);
+    expect(mirror.lookup("f")?.id).toBe("f");
+    expect(appended).toEqual(["n"]);
+  });
+
+  it("keeps on top what an order leaves out", () => {
+    const mirror = new SceneMirror<Element>();
+    mirror.replace([el("a"), el("b"), el("c")]);
+
+    mirror.apply({ updated: [], removed: [], order: ["b", "a"] });
+
+    expect(ids(mirror)).toEqual(["b", "a", "c"]);
+  });
+
   it("changes the list it already has, rather than building another", () => {
     // The point: a change costs what it touches, not the board.
     const mirror = new SceneMirror<Element>();
