@@ -70,6 +70,7 @@
     resolvePeers,
     type Claims,
   } from "../realtime/peerClaims.ts";
+  import { syncPeerLasers } from "../realtime/peerLaser.ts";
   import { importRoomKey, resolveRoomKey } from "../realtime/roomCrypto.ts";
   import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
   import type { StampedElement, ScenePatch } from "../autosave/sceneDiff.ts";
@@ -957,6 +958,9 @@
         if (liveCancelled) return;
         realtime = new RealtimeChannel(slug, roomKey);
         unsubPeers = realtime.onPeers((list) => {
+          // Before `peers` is overwritten: this diffs against the outgoing list, so a
+          // peer's laser trail gets its final `down: false` when they leave mid-stroke.
+          if (engine) syncPeerLasers(peers, list, engine.peerLaser.bind(engine));
           peers = list;
         });
         unsubPeerState = realtime.onPeerState((list) => {
@@ -1097,8 +1101,27 @@
       if (!next || !realtime) return;
       if (Math.abs(next.x - lastSent.x) < 1 && Math.abs(next.y - lastSent.y) < 1) return;
       lastSent = next;
-      realtime.sendCursor(next.x, next.y);
+      realtime.sendCursor(next.x, next.y, tool === "laser" ? "laser" : "pointer", dragging);
     });
+  }
+
+  /**
+   * Down and up, sent at once rather than waiting for the next `onCanvasPointerMove` —
+   * which the 1px dedup above can skip outright (a click with no drag), and which may
+   * never come again after a release. Only while the laser is the active tool: every
+   * other tool's cursor is unaffected, exactly as it was before this existed.
+   */
+  function sendLaserCursorEdge(e: PointerEvent, down: boolean): void {
+    if (!realtime || !currentCamera || tool !== "laser") return;
+    const target = e.currentTarget as HTMLElement | null;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    const next = {
+      x: (e.clientX - rect.left - currentCamera.x) / currentCamera.scale,
+      y: (e.clientY - rect.top - currentCamera.y) / currentCamera.scale,
+    };
+    lastSent = next;
+    realtime.sendCursor(next.x, next.y, "laser", down);
   }
 
   function onCanvasPointerLeave(): void {
@@ -1216,9 +1239,18 @@
     class="canvas-host"
     onmousemove={onCanvasPointerMove}
     onmouseleave={onCanvasPointerLeave}
-    onpointerdowncapture={() => (dragging = true)}
-    onpointerup={() => (dragging = false)}
-    onpointercancel={() => (dragging = false)}
+    onpointerdowncapture={(e) => {
+      dragging = true;
+      sendLaserCursorEdge(e, true);
+    }}
+    onpointerup={(e) => {
+      dragging = false;
+      sendLaserCursorEdge(e, false);
+    }}
+    onpointercancel={(e) => {
+      dragging = false;
+      sendLaserCursorEdge(e, false);
+    }}
   >
     <DrawCanvas
       {scene}

@@ -368,8 +368,16 @@ export const RULES: readonly Rule[] = [
   {
     section: "🔴 Laser pointer",
     text: /[Cc]ollaborator/,
-    status: "gap",
-    why: "The laser is local. Broadcasting it needs a transient channel — it must not go through the scene, which is what the realtime patch path carries.",
+    status: "covered",
+    // The engine already drew and faded a per-peer trail, and painted it
+    // (`engine/peers.rs` › `peer_laser`, `ci_laser.rs`) — the transient channel this once
+    // called out as missing. What was missing was the host ever calling it: the `cursor`
+    // frame carried no tool or button state, so a peer's laser never reached the wire.
+    tests: [
+      `${WEB}/realtime/peerLaser.test.ts`,
+      `${WEB}/realtime/realtime.test.ts`,
+      "e2e/peers.spec.ts",
+    ],
   },
   { section: "🔴 Laser pointer", status: "covered", tests: [`${ENGINE}/ci_laser.rs`] },
   {
@@ -980,8 +988,12 @@ export const RULES: readonly Rule[] = [
   {
     section: "25. Laser pointer",
     text: /[Cc]ollaboration/,
-    status: "gap",
-    why: "The laser is local — see the Laser pointer rule.",
+    status: "covered",
+    tests: [
+      `${WEB}/realtime/peerLaser.test.ts`,
+      `${WEB}/realtime/realtime.test.ts`,
+      "e2e/peers.spec.ts",
+    ],
   },
   { section: "25. Laser pointer", status: "covered", tests: [`${ENGINE}/ci_laser.rs`] },
   {
