@@ -219,18 +219,20 @@ describe("the laser draws nothing, so it styles nothing", () => {
   });
 });
 
-describe("a frame has a fixed appearance, so it styles nothing", () => {
-  it("offers a selected frame actions but no style controls", () => {
-    // A frame is always the same grey at the same weight, so every appearance control
-    // answers no — Excalidraw excludes frames from those for the same reason. What does
-    // still apply is everything about the frame as an object: send it to back, flip it,
-    // group it. So the panel appears, carrying only those.
+describe("a frame has a fixed appearance, so it styles nothing but its opacity", () => {
+  it("offers a selected frame actions and its opacity, but no style controls", () => {
+    // A frame is always the same grey at the same weight, so the stroke and fill
+    // controls answer no — Excalidraw excludes frames from those for the same reason.
+    // Its opacity is the exception: the oracle offers that row for any selection
+    // (`opacity: activeToolType !== "autoshape" || hasSelection`,
+    // `shapeActionPredicates.ts@1118751f:157`). What also applies is everything about the
+    // frame as an object: send it to back, flip it, group it.
     const actions = getShapeActions("select", factsOf([el("frame")]), "transparent");
     expect(actions.strokeColor).toBe(false);
     expect(actions.backgroundColor).toBe(false);
     expect(actions.strokeWidth).toBe(false);
     expect(actions.roundness).toBe(false);
-    expect(actions.opacity).toBe(false);
+    expect(actions.opacity).toBe(true);
 
     expect(actions.visible).toBe(true);
     expect(actions.layers).toBe(true);
@@ -252,6 +254,18 @@ describe("a frame has a fixed appearance, so it styles nothing", () => {
     );
     expect(actions.visible).toBe(true);
     expect(actions.strokeColor).toBe(true);
+  });
+});
+
+describe("opacity, as the oracle offers it", () => {
+  it("is offered for any selection and any tool but the auto-shape one", () => {
+    // `opacity: activeToolType !== "autoshape" || hasSelection`
+    // (`shapeActionPredicates.ts@1118751f:157`): not a list of kinds, so nothing selected
+    // is left without the row.
+    expect(actions("autoshape").opacity).toBe(false);
+    expect(actions("autoshape", [el("rectangle")]).opacity).toBe(true);
+    expect(actions("rectangle").opacity).toBe(true);
+    expect(actions("select", [el("frame"), el("image")]).opacity).toBe(true);
   });
 });
 

@@ -75,29 +75,6 @@ const canHaveArrowheads = (kind: Kind): boolean => asElementKind(kind) === "arro
 const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
 
 /**
- * Everything that can be made see-through.
- *
- * Written as an allow-list rather than as "not a frame", because these predicates are
- * also asked about the *active tool* — and `select`, `hand` and `eraser` are not frames
- * either, so a deny-list would answer yes for all of them.
- */
-const hasOpacity = (kind: Kind): boolean =>
-  [
-    "rectangle",
-    "ellipse",
-    "diamond",
-    "line",
-    "arrow",
-    "freedraw",
-    "text",
-    "image",
-    "embed",
-    // The bucket takes the current opacity for the paint it lays down, so the control
-    // has to be reachable while it is the active tool.
-    "bucketfill",
-  ].includes(asElementKind(kind));
-
-/**
  * Tools that create something, as opposed to selecting, panning or erasing.
  *
  * The lasso is a *selection* tool despite being drawn: Excalidraw's
@@ -222,7 +199,10 @@ export function getShapeActions(
     text: activeTool === "text" || kinds.some(isTextKind),
     textAlign: activeTool === "text" || selection.textAlignable,
     verticalAlign: selection.verticalAlignable,
-    opacity: forToolOrSelection(hasOpacity),
+    // `shapeActionPredicates.ts@1118751f:157`: every selection, a frame included, and
+    // every tool but the auto-shape one. The panel's own visibility rules out the tools
+    // that draw nothing.
+    opacity: activeTool !== "autoshape" || hasSelection,
     layers: hasSelection,
     mirror: hasSelection,
     group: hasSelection,
