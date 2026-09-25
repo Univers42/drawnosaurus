@@ -187,7 +187,11 @@ describe("a sticky note's fields", () => {
   });
 
   it("survives validation, so a note keeps its size, its date and its label's ceiling", () => {
-    const parsed = drawElementSchema.parse({ ...note, baseHeight: 250, created: 1_758_758_400_000 });
+    const parsed = drawElementSchema.parse({
+      ...note,
+      baseHeight: 250,
+      created: 1_758_758_400_000,
+    });
     expect(parsed).toMatchObject({ baseHeight: 250, created: 1_758_758_400_000 });
     expect(drawElementSchema.parse({ ...label, baseFontSize: 36 }).baseFontSize).toBe(36);
   });
