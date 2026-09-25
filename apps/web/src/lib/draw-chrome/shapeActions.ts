@@ -1,6 +1,5 @@
-import type { DrawElementType } from "@osionos/draw-engine/types";
+import type { ColorDomain, DrawElementType, DrawTool } from "@osionos/draw-engine/types";
 import { isTransparent } from "./colors.ts";
-import type { ExtendedTool } from "./tools.ts";
 
 /**
  * Which style controls are relevant right now.
@@ -19,21 +18,21 @@ import type { ExtendedTool } from "./tools.ts";
  */
 
 /** An element type or a tool name; the predicates accept either, as Excalidraw's do. */
-type Kind = DrawElementType | ExtendedTool;
+type Kind = DrawElementType | DrawTool;
 
 /**
  * Tools that stand in for an element type when the panel asks about them.
  *
- * A sticky note is a rectangle carrying a label. The auto-shape tool does not know yet
- * what it will draw, and answering as a rectangle offers every control it might need —
- * better than offering none for a tool that genuinely draws.
+ * The auto-shape tool does not know yet what it will draw, and answering as a rectangle
+ * offers every control it might need — better than offering none for a tool that
+ * genuinely draws.
  *
- * Only these two. The laser and the lasso leave no element behind, and an image, an embed
+ * Only this one. The laser and the lasso leave no element behind, and an image, an embed
  * or a frame takes none of the stroke and fill styling, so mapping any of them to a
- * rectangle would offer a background and a fill style that do nothing.
+ * rectangle would offer a background and a fill style that do nothing. The sticky note
+ * tool is named after its element, so it answers as itself.
  */
-const asElementKind = (kind: Kind): Kind =>
-  kind === "sticky" || kind === "autoshape" ? "rectangle" : kind;
+const asElementKind = (kind: Kind): Kind => (kind === "autoshape" ? "rectangle" : kind);
 
 /**
  * `bucketfill` is here as a **tool**, never as an element type — the paint it leaves
@@ -44,16 +43,32 @@ const asElementKind = (kind: Kind): Kind =>
  * fill came out the one hardcoded fallback shade.
  */
 const hasBackground = (kind: Kind): boolean =>
-  ["rectangle", "embed", "ellipse", "diamond", "line", "freedraw", "bucketfill"].includes(
-    asElementKind(kind),
-  );
+  [
+    "rectangle",
+    "stickynote",
+    "embed",
+    "ellipse",
+    "diamond",
+    "line",
+    "freedraw",
+    "bucketfill",
+  ].includes(asElementKind(kind));
 
-const hasFillStyle = hasBackground;
+/** A note's paper is always solid: it takes a colour and no fill pattern (`:16-17`). */
+const hasFillStyle = (kind: Kind): boolean => hasBackground(kind) && kind !== "stickynote";
 
 const hasStrokeColor = (kind: Kind): boolean =>
-  ["rectangle", "ellipse", "diamond", "freedraw", "arrow", "line", "text", "embed"].includes(
-    asElementKind(kind),
-  );
+  [
+    "rectangle",
+    "stickynote",
+    "ellipse",
+    "diamond",
+    "freedraw",
+    "arrow",
+    "line",
+    "text",
+    "embed",
+  ].includes(asElementKind(kind));
 
 const hasStrokeWidth = (kind: Kind): boolean =>
   ["rectangle", "ellipse", "diamond", "freedraw", "arrow", "line", "embed"].includes(
@@ -64,11 +79,12 @@ const hasStrokeWidth = (kind: Kind): boolean =>
 const hasStrokeStyle = (kind: Kind): boolean =>
   ["rectangle", "ellipse", "diamond", "arrow", "line", "embed"].includes(asElementKind(kind));
 
-const hasRoughness = hasStrokeStyle;
+/** A note has no stroke to dash, but its paper's outline is as sloppy as a rectangle's. */
+const hasRoughness = (kind: Kind): boolean => hasStrokeStyle(kind) || kind === "stickynote";
 
 /** Notably **not** an ellipse: it has no corners to round. */
 const canChangeRoundness = (kind: Kind): boolean =>
-  ["rectangle", "diamond", "line", "image", "embed"].includes(asElementKind(kind));
+  ["rectangle", "stickynote", "diamond", "line", "image", "embed"].includes(asElementKind(kind));
 
 const canHaveArrowheads = (kind: Kind): boolean => asElementKind(kind) === "arrow";
 
@@ -84,7 +100,7 @@ const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
  * `showSelectedShapeActions` excludes it alongside `selection`, because there is nothing
  * for a stroke colour or a fill style to act on while you are choosing what to act on.
  */
-export const isDrawingTool = (tool: ExtendedTool): boolean =>
+export const isDrawingTool = (tool: DrawTool): boolean =>
   tool !== "select" &&
   tool !== "lasso" &&
   tool !== "hand" &&
@@ -160,10 +176,15 @@ export interface SelectionFacts {
   hasFreeText: boolean;
   /** A label is selected, or carried by a selected shape. */
   hasLabel: boolean;
+  /**
+   * Whose colours a background pick sets. Not `regular` means it lands on a note — a
+   * note's label passes the pick on to its note, though the label has no fill itself.
+   */
+  backgroundDomain: ColorDomain;
 }
 
 export function getShapeActions(
-  activeTool: ExtendedTool,
+  activeTool: DrawTool,
   selection: SelectionFacts,
   /** The style that would be applied to the next thing drawn. */
   nextBackgroundColor: string,
@@ -187,7 +208,9 @@ export function getShapeActions(
     strokeColor:
       (hasStrokeColor(activeTool) && commonKind !== "image" && commonKind !== "frame") ||
       kinds.some(hasStrokeColor),
-    backgroundColor: forToolOrSelection(hasBackground),
+    // `canChangeBackgroundColor` (`shapeActionPredicates.ts@1118751f:64-78`): a note's
+    // label, the target while it is typed, keeps the picker because its note takes it.
+    backgroundColor: forToolOrSelection(hasBackground) || selection.backgroundDomain !== "regular",
     // A fill style only means something once there is a fill to style — except for the
     // bucket, which never paints transparent because it falls back to a real colour when
     // none is chosen. Without this the fill row is hidden exactly when nothing has been

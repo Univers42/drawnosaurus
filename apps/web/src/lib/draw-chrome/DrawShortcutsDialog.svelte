@@ -15,7 +15,7 @@
         { key: "6 or L", desc: "Line" },
         { key: "7 or P", desc: "Pencil / Draw" },
         { key: "8 or T", desc: "Text" },
-        { key: "9 or N", desc: "Sticky Note" },
+        { key: "N", desc: "Sticky note" },
         { key: "0 or E", desc: "Eraser" },
         { key: "Q", desc: "Lock tool" },
         { key: "Space", desc: "Pan / Hand tool" },

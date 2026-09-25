@@ -38,7 +38,7 @@ describe("DRAW_TOOLS", () => {
       "bucketfill",
       "laser",
       "lasso",
-      "sticky",
+      "stickynote",
     ]);
   });
 
@@ -73,13 +73,11 @@ describe("DRAW_TOOLS", () => {
   });
 
   it("gives every toolbar entry a hotkey the engine actually maps", () => {
-    // A badge printing a key the engine ignores is worse than no badge. `sticky` is
-    // ours rather than the engine's, so it is the one entry without an engine tool.
-    // Every tool, wherever it lives. A shortcut printed in the dropdown that the engine
+    // A badge printing a key the engine ignores is worse than no badge. Every tool,
+    // wherever it lives — the sticky note's N included, now the engine owns the tool. A shortcut printed in the dropdown that the engine
     // ignores is worse than one printed on the bar, because the menu is where someone
     // goes to *learn* the key.
     for (const entry of ALL_TOOL_DEFS) {
-      if (entry.tool === "sticky") continue;
       expect(
         toolForChord(entry.hotkey, entry.shift ?? false),
         `${entry.label} (${hotkeyLabel(entry)})`,
@@ -105,14 +103,10 @@ describe("DRAW_TOOLS", () => {
     expect(toolForKey("g")).toBeNull();
   });
 
-  it("leaves the sticky note's hotkey to itself", () => {
-    // The sticky note is handled by the host's own keydown listener, and the engine has
-    // its own on the canvas. `preventDefault` does not stop the other one, so a key the
-    // engine also maps fires *both*: "9" selected the sticky note and opened the image
-    // picker in one keystroke. The only safe key for a host tool is one the engine
-    // ignores entirely.
-    const sticky = toolDef("sticky");
-    expect(sticky).toBeDefined();
-    expect(toolForKey(sticky!.hotkey)).toBeNull();
+  it("gives the sticky note Excalidraw's letter and no digit", () => {
+    // `Tools.tsx@1118751f:121-124`. 9 stays the image tool's.
+    expect(toolDef("stickynote")?.hotkey).toBe("N");
+    expect(toolForKey("n")).toBe("stickynote");
+    expect(toolForKey("9")).toBe("image");
   });
 });

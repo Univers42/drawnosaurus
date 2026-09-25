@@ -11,15 +11,9 @@
    * every tool in the dropdown is one key away whether the menu is open, closed, or never
    * discovered — the menu is for finding them, not for reaching them.
    */
+  import type { DrawTool } from "@osionos/draw-engine/types";
   import Icon from "./Icon.svelte";
-  import {
-    DRAW_TOOLS,
-    EXTRA_TOOLS,
-    hotkeyLabel,
-    isExtraTool,
-    toolDef,
-    type ExtendedTool,
-  } from "./tools.ts";
+  import { DRAW_TOOLS, EXTRA_TOOLS, hotkeyLabel, isExtraTool, toolDef } from "./tools.ts";
 
   let {
     active,
@@ -27,9 +21,9 @@
     onSelect,
     onToggleToolLock,
   }: {
-    active: ExtendedTool;
+    active: DrawTool;
     toolLocked: boolean;
-    onSelect: (tool: ExtendedTool) => void;
+    onSelect: (tool: DrawTool) => void;
     onToggleToolLock: () => void;
   } = $props();
 
@@ -49,7 +43,7 @@
     event.preventDefault();
   }
 
-  function choose(tool: ExtendedTool): void {
+  function choose(tool: DrawTool): void {
     open = false;
     onSelect(tool);
   }

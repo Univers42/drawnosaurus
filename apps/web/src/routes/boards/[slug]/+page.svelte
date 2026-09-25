@@ -15,6 +15,7 @@
   import { SceneMirror } from "$lib/autosave/sceneMirror.ts";
   import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
+  import { migrateLegacyStickyGroups } from "$lib/notes/stickyNotes.ts";
 
   const slug = $derived(page.params.slug ?? "");
 
@@ -80,47 +81,59 @@
 
   onMount(() => {
     void (async () => {
+      /** The board as the server has it — or, when it cannot be reached, as the draft does. */
+      let loaded: DrawElement[] = [];
+      /** The board as it is opened: `loaded`, with what this page repairs on the way in. */
       let elements: DrawElement[] = [];
-      let repaired: DrawElement[] = [];
+      /** The ids of what it repaired, each re-stamped or deleted, to be saved again. */
+      const resave: string[] = [];
+      const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
       // Read beside the board rather than after it, so it costs the page no time.
       const draft = drafts.load(slug) as Promise<DrawElement[] | null>;
       try {
         const board = await getBoard(slug);
         title = board.title;
-        elements = elementsFromJson(JSON.stringify(board.scene)) ?? [];
+        loaded = elementsFromJson(JSON.stringify(board.scene)) ?? [];
         // The draft this page used to keep in localStorage: the server has the board,
         // and the string only took up the quota.
         storage()?.removeItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
         // What the server stripped from boards saved before its schema had the fields —
         // every video an empty box — this browser may still have in its draft.
-        const recovered = recoverStripped(elements, await draft, Date.now(), () =>
-          Math.floor(Math.random() * 0x7fffffff),
-        );
-        if (recovered.repaired.length > 0) {
-          saver.tracker.reset(elements);
-          saved.reset(elements);
-          elements = recovered.elements;
-          repaired = recovered.repaired;
-        }
+        const recovered = recoverStripped(loaded, await draft, Date.now(), nonce);
+        elements = recovered.elements;
+        resave.push(...recovered.repaired.map((element) => element.id));
       } catch {
         // The server is unreachable: the local draft, or the one an older version of
         // this page kept in localStorage.
         const drafted = await draft;
         const legacy = storage()?.getItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
-        elements = drafted ?? (legacy ? (elementsFromJson(legacy) ?? []) : []);
+        loaded = drafted ?? (legacy ? (elementsFromJson(legacy) ?? []) : []);
+        elements = loaded;
         title = slug ? `Board ${slug}` : "Untitled";
       }
 
-      if (repaired.length === 0) {
-        saver.tracker.reset(elements);
-        saved.reset(elements);
+      // A sticky note saved while it was four shapes in a group — shadow, pad, date and
+      // label — made the one element the engine draws. See `stickyNotes.ts`.
+      const migrated = migrateLegacyStickyGroups(elements, Date.now(), nonce);
+      if (migrated.changed.length > 0) {
+        elements = migrated.elements;
+        const removed = migrated.removed.map((element) => element.id);
+        resave.push(...migrated.changed.map((element) => element.id), ...removed);
+        // And in the draft, or a board opened offline shows the dropped pieces again,
+        // beside a note that is no longer in their group to take them back.
+        drafts.record(slug, migrated.changed, removed, {
+          order: elements.map((element) => element.id),
+        });
       }
+
+      // The tracker starts from what the server has, so what was repaired outranks it and
+      // goes out whole — and what was dropped, an id that vanished, as its tombstone.
+      saver.tracker.reset(loaded);
+      saved.reset(loaded);
       live.replace(elements);
       scene = new Scene(elements);
-      if (repaired.length > 0) {
-        // Saved again, whole: the tracker holds the server's stripped copies, which these
-        // outrank.
-        saver.tracker.noteChanged(repaired.map((element) => element.id));
+      if (resave.length > 0) {
+        saver.tracker.noteChanged(resave);
         saver.notify();
       }
     })();
