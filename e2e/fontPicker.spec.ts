@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import {
   OPEN_CANVAS,
+  expectBesidePanel,
   focusBoard,
   openBoard,
   patchedElements,
@@ -75,6 +76,16 @@ test("a family picked from the list is loaded, then the text is laid out in it",
   const lilita = await measured(page, WORDS, '"Lilita One"');
   expect(Math.abs(lilita - (await measured(page, WORDS, "sans-serif")))).toBeGreaterThan(1);
   expect((await element(board, text.id)).width).toBeCloseTo(lilita, 0);
+});
+
+test("the list opens beside the panel and leaves the panel as it was", async ({ page }) => {
+  const board = await openBoard(page);
+  const text = await writeText(board, AT, WORDS);
+  await clickOn(board, text.id);
+  await panel(page).getByRole("button", { name: "Show font picker" }).click();
+  await expect(picker(page)).toBeVisible();
+  await expect(picker(page).getByRole("textbox", { name: "Quick search" })).toBeFocused();
+  await expectBesidePanel(page, picker(page));
 });
 
 test("the list is searched and walked from the keyboard, and shows a family before it is picked", async ({
