@@ -228,11 +228,17 @@ test("a font family change re-wraps the label, and its font arriving re-lays it 
 
   // Drawing in Cascadia asked the browser for it; once it is in, the page tells the
   // engine, which lays the label out again in the real face: other widths than the
-  // fallback's, and not an edit.
+  // fallback's, and not an edit. Waited for as Cascadia's own widths rather than as a
+  // jump away from the fallback's, since the size of that jump is the machine's: CI's
+  // monospace, DejaVu Sans Mono, is 12.04px an `i` to Cascadia's 12, so the label wraps
+  // the same and narrows by 0.37px; the playwright image's is 10px, and it narrows by 32.
   await faceLoaded(page, "Cascadia");
   await expect
-    .poll(async () => Math.abs((await shapeAndLabel(page)).label.width - changed.width))
-    .toBeGreaterThan(0.5);
+    .poll(async () => {
+      const { label } = await shapeAndLabel(page);
+      return Math.abs(label.width - (await widest(page, label.text!.split("\n"), "20px Cascadia")));
+    })
+    .toBeLessThan(0.05);
   expect(
     await page.evaluate(() => (window as unknown as { fontsLoadedCalls: number }).fontsLoadedCalls),
   ).toBeGreaterThan(0);
