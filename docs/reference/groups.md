@@ -154,7 +154,9 @@ judges the selection on release (`updateFrameMembershipOfSelectedElements`,
 aligned out of its frame stays that frame's until it is itself dragged. What a commit
 creates — drawn, typed, pasted, duplicated, dropped in — is judged where it lands, as
 the oracle gives a new element the frame it is created in (`App.tsx:10442-10465`,
-`App.duplicate.ts:124-135`); a pasted or duplicated frame adopts nothing it lands on.
+`App.duplicate.ts:124-135`); a pasted or duplicated frame adopts nothing it lands on. A
+copied or duplicated frame takes its own children with it, so the copy is a frame with
+copies in it (`includeElementsInFrames`, `selection.ts@1118751f:196-209`).
 
 **VERIFIED** — part of the edited group dragged into or out of a frame leaves that
 group, and the edited group is let go (`updateGroupIdsAfterEditingGroup`,
