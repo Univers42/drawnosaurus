@@ -16,7 +16,7 @@ import { OPEN_CANVAS, openBoard, pickTool, sceneElements, type Board } from "./b
  * empty rectangle could only be moved by aiming at its outline.
  *
  * A drag from the hole moves the selection; a click there, with no drag, is a click on
- * nothing and lets it go, as Excalidraw does (`App.tsx:12344-12387`).
+ * nothing and lets it go, as Excalidraw does (`App.tsx@1118751f:12352-12395`).
  */
 
 /** Canvas-relative, clear of every floating panel. */

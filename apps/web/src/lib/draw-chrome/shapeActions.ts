@@ -37,7 +37,7 @@ const asElementKind = (kind: Kind): Kind => (kind === "autoshape" ? "rectangle" 
 /**
  * `bucketfill` is here as a **tool**, never as an element type — the paint it leaves
  * behind is a `line`, which is in this list on its own account. Excalidraw carries the
- * same entry with the same comment (`element/comparisons.ts:12-13`), because a bucket
+ * same entry with the same comment (`element/comparisons.ts@1118751f:12-13`), because a bucket
  * with no background control is a bucket whose colour cannot be chosen: the panel is
  * gated row by row on these predicates, so the tool arrived to an empty box and every
  * fill came out the one hardcoded fallback shade.

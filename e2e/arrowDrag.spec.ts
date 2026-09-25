@@ -6,7 +6,7 @@ import { OPEN_CANVAS, openBoard, pickTool, sceneElements, type Board } from "./b
  *
  * It could not: dragged by its shaft, it ended exactly where it started, because every
  * frame of the move re-resolved its ends onto the shapes it was bound to and put it
- * back. Excalidraw's rule (`dragElements.ts:110-167`) is that moving an arrow releases
+ * back. Excalidraw's rule (`dragElements.ts@1118751f:110-157`) is that moving an arrow releases
  * each end whose shape is not moving with it. `ci_arrow_drag.rs` pins that; this checks a
  * real drag reaches it through the canvas listeners and the WASM boundary.
  */

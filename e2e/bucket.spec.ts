@@ -196,7 +196,7 @@ test.describe("bucket fill", () => {
     // The failure a person actually met. The fill appeared and was then inert: clicking
     // it selected nothing, so it could not be moved, recoloured or removed, and the only
     // way out was undo. A closed line carrying a background is a polygon and a polygon is
-    // solid — `shouldTestInside`, `packages/element/src/collision.ts:82-102`.
+    // solid — `shouldTestInside`, `packages/element/src/collision.ts@1118751f:85-105`.
     const board = await openBoard(page);
     await drawRectangle(page, board);
     await divide(page);
@@ -290,7 +290,7 @@ test.describe("bucket fill", () => {
   }) => {
     // The tool stays active on purpose. A selection left on the last fill puts handles
     // over the paint and takes the next Delete. Excalidraw leaves nothing selected for
-    // the same reason (`App.bucketFill.ts:281-284`).
+    // the same reason (`App.bucketFill.ts@1118751f:281-284`).
     const board = await openBoard(page);
     await drawRectangle(page, board);
     await fillAt(page, board, INSIDE);
@@ -368,9 +368,9 @@ test.describe("the paint behaves like a shape", () => {
    * from. Those are the "circles around the perimeter that do nothing useful".
    *
    * Excalidraw's rule is a count, not a kind: a linear element gets a bounding box when
-   * `points.length > 2` (`transformHandles.ts:352`), and the point circles appear only
+   * `points.length > 2` (`transformHandles.ts@1118751f:352`), and the point circles appear only
    * while the line editor is open or the line has exactly two points
-   * (`interactiveScene.ts:1256`).
+   * (`interactiveScene.ts@1118751f:1198`).
    */
   async function fillARectangle(page: Page, board: Board) {
     await drawRectangle(page, board);

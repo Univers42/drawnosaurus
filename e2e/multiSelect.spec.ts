@@ -161,7 +161,7 @@ test.describe("the frame around a multi-selection", () => {
    * Each selected element is shown by its own shape, traced in the selection colour.
    *
    * Excalidraw puts a padded box around every selected element
-   * (`interactiveScene.ts:1922-1948`) inside the dotted box around them all
+   * (`interactiveScene.ts@1118751f:1864-1890`) inside the dotted box around them all
    * (`:2027-2052`), and so did we. On a board of neighbouring shapes that is a lattice of
    * rectangles over everything, the same for a circle as for a rectangle — reported as
    * "the multi-selector selects all the div around the shapes; we should see the selected

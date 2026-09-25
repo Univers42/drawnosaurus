@@ -444,7 +444,7 @@
 
   /**
    * Places image files and finishes the gesture the way Excalidraw's `insertImages` does
-   * (it ends in `actionFinalize`, `App.tsx:13002-13005`): everything placed is selected,
+   * (it ends in `actionFinalize`, `App.tsx@1118751f:13010-13013`): everything placed is selected,
    * and the tool goes back to Select unless it is locked.
    *
    * The return to Select is not cosmetic. The engine deliberately ignores presses while
@@ -488,7 +488,7 @@
    * Without this the tool stayed on "image" with nothing to do, and since the engine
    * ignores presses under that tool, the whole board stopped responding until another
    * tool was chosen by hand. Excalidraw resets to Select on the same path
-   * (`App.tsx:12773-12789`).
+   * (`App.tsx@1118751f:12781-12797`).
    */
   function onImagePickerCancelled(): void {
     imageDropAt = null;
@@ -514,7 +514,7 @@
    * zoom bar float *over* the canvas, so a drop that happened to land on one of them used
    * to be ignored — and a file drop nobody cancels is opened by the browser in the tab,
    * replacing the board. Excalidraw puts its handler on the container for the same reason
-   * (`App.tsx:2451`, `:4224-4235`).
+   * (`App.tsx@1118751f:2452`, `:4225-4236`).
    */
   function onChromeDragOver(event: DragEvent): void {
     // Cancelled everywhere, a dialog included. Whether the drop *places* anything is
@@ -557,7 +557,7 @@
    * pasted the shapes. Files are read synchronously, before any await: the clipboard is
    * only readable during the event.
    *
-   * Leaves pastes into fields and dialogs alone, as Excalidraw does (`App.tsx:4771-4782`).
+   * Leaves pastes into fields and dialogs alone, as Excalidraw does (`App.tsx@1118751f:4772-4783`).
    *
    * A scene copied while a sticky note was four shapes is pasted with the note the engine
    * draws (`stickyNotes.ts`); any other text goes on to the engine's own listener.

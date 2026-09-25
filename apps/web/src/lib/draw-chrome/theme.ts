@@ -186,8 +186,8 @@ export interface SnapModes {
 
 /**
  * Snapping to objects and the grid exclude each other: turning either **on** turns the
- * other off, as Excalidraw's toggles do (`actionToggleObjectsSnapMode.tsx:22-23`,
- * `actionToggleGridMode.tsx:23-24`).
+ * other off, as Excalidraw's toggles do (`actionToggleObjectsSnapMode.tsx@1118751f:22-23`,
+ * `actionToggleGridMode.tsx@1118751f:23-24`).
  *
  * Not only for parity. The engine lets a snapping grid win outright, so with both on
  * the objects switch would read "on" and do nothing — a setting that lies.

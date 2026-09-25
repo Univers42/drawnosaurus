@@ -88,7 +88,7 @@ test.describe("z-order keys", () => {
     await load(page, FRAME_BOARD);
     await select(page, ["C1"]);
 
-    // To the front of the frame's range, not of the board (`zindex.ts:543-621`).
+    // To the front of the frame's range, not of the board (`zindex.ts@1118751f:531-609`).
     expect(await press(page, "Control+Shift+BracketRight")).toEqual(["C2", "F", "C1", "X"]);
     expect(await press(page, "Control+Shift+BracketLeft")).toEqual(["C1", "C2", "F", "X"]);
     expect(await press(page, "Control+BracketRight")).toEqual(["C2", "C1", "F", "X"]);
@@ -106,7 +106,7 @@ test.describe("z-order keys", () => {
     expect(await press(page, "Control+BracketRight")).toEqual(["X", "C1", "C2", "F"]);
     expect(await press(page, "Control+BracketLeft")).toEqual(["C1", "C2", "F", "X"]);
 
-    // From outside, one step passes the frame and everything in it (`zindex.ts:256-267`).
+    // From outside, one step passes the frame and everything in it (`zindex.ts@1118751f:244-255`).
     await select(page, ["X"]);
     expect(await press(page, "Control+BracketLeft")).toEqual(["X", "C1", "C2", "F"]);
     expect(await press(page, "Control+BracketRight")).toEqual(["C1", "C2", "F", "X"]);

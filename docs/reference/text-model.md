@@ -30,16 +30,16 @@ is what happened to these keys before the engine knew them (`ci_text_model_compa
 the contract refuses is dropped where it comes in; `e2e/textModel.spec.ts` checks the engine's
 export against `patchElementsSchema` at every edge).
 
-| field          | contract                    | absent means                                | resolver               | oracle                                                 |
-| -------------- | --------------------------- | ------------------------------------------- | ---------------------- | ------------------------------------------------------ |
-| `originalText` | string, ≤ `MAX_TEXT_LENGTH` | `text` is the source, and so when empty     | `source_text`          | `originalText`; restore `\|\| text` (`restore.ts:572`) |
-| `fontFamily`   | integer 1..=64              | the system stack (`render::FONT_FAMILY`)    | `resolved_font_family` | `fontFamily`, same numeric ids                         |
-| `lineHeight`   | finite 0.5..=4              | the family's own, 1.25 for the system stack | `resolved_line_height` | `lineHeight`                                           |
-| `wrap`         | boolean                     | a label wraps inside its shape              | `layout::wrap_width`   | none, see below                                        |
+| field          | contract                    | absent means                                | resolver               | oracle                                                          |
+| -------------- | --------------------------- | ------------------------------------------- | ---------------------- | --------------------------------------------------------------- |
+| `originalText` | string, ≤ `MAX_TEXT_LENGTH` | `text` is the source, and so when empty     | `source_text`          | `originalText`; restore `\|\| text` (`restore.ts@1118751f:570`) |
+| `fontFamily`   | integer 1..=64              | the system stack (`render::FONT_FAMILY`)    | `resolved_font_family` | `fontFamily`, same numeric ids                                  |
+| `lineHeight`   | finite 0.5..=4              | the family's own, 1.25 for the system stack | `resolved_line_height` | `lineHeight`                                                    |
+| `wrap`         | boolean                     | a label wraps inside its shape              | `layout::wrap_width`   | none, see below                                                 |
 
 **INFERRED** (read in the pinned source, not observed on excalidraw.com): the known family
-ids and their line heights are the oracle's (`packages/common/src/constants.ts:133-144`,
-`packages/common/src/font-metadata.ts:35-104`). Virgil 1, Excalifont 5, Nunito 6 and Comic
+ids and their line heights are the oracle's (`packages/common/src/constants.ts@1118751f:137-148`,
+`packages/common/src/font-metadata.ts@1118751f:35-104`). Virgil 1, Excalifont 5, Nunito 6 and Comic
 Shanns 8 use 1.25. Helvetica 2, Lilita One 7 and Liberation Sans 9 use 1.15. Cascadia 3 uses
 1.2. The oracle's 4 is retired and its 10 (Assistant) is private to its own UI, so neither
 counts as known here.
@@ -51,12 +51,12 @@ allows (4, 10, 11..=64) and never rewrites it, but it draws that text with the s
 Keeping the id lets a newer client's font survive a trip through this one. The contract allows
 up to 64 for the same reason. An id outside 1..=64 is dropped as it comes in (see above). For
 an unknown id the oracle falls back to Excalifont's metrics (1.25, the same number) and to the
-emoji font for the face (`packages/common/src/utils.ts:123-136`).
+emoji font for the face (`packages/common/src/utils.ts@1118751f:123-136`).
 
 **Divergence, deliberate.** A line height outside 0.5..=4 is dropped as it comes in, and
 `resolved_line_height` ignores one set in code (or a non-finite one) rather than clamping it:
 the family's own is used. The oracle has no range. Its restore replaces only a missing or zero
-line height, and for legacy elements it detects one from the height (`restore.ts:557-564`). We
+line height, and for legacy elements it detects one from the height (`restore.ts@1118751f:555-562`). We
 do not detect: our legacy text was always drawn at 1.25, which is what `None` resolves to.
 
 **IMPLEMENTATION DETAIL.** `fontFamily` is a `u8`. Every value the contract refuses (0, 65,
@@ -71,7 +71,7 @@ Free text says the same thing with `autoResize`, as in the oracle.
 
 **The source stays the source.** A text that carries `originalText` keeps it in step: an edit
 records what was typed as the source (the oracle's `originalText`), the editor opens on
-`source_text` as the oracle's does (`textWysiwyg.tsx:488`), and a column given a new width
+`source_text` as the oracle's does (`textWysiwyg.tsx@1118751f:488`), and a column given a new width
 re-wraps `source_text`, not the text drawn at the old width (`ci_text_model_compat.rs` › an edit
 keeps the source in step, the editor opens on the source, a resized column rewraps its source).
 Left stale, the source would still read what the text said before the edit, and a client laying
