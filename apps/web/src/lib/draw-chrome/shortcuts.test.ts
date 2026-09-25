@@ -79,6 +79,52 @@ describe("style shortcuts", () => {
   });
 });
 
+describe("font size chords", () => {
+  const up = key({ key: ">", code: "Period", ctrlKey: true, shiftKey: true });
+  const down = key({ key: "<", code: "Comma", ctrlKey: true, shiftKey: true });
+
+  it("step the font size on Ctrl/Cmd+Shift+> and <, and on what a Mac prints for them", () => {
+    // `keyTest` (`actions/actionProperties.tsx@1118751f:1110-1117`, `:1133-1140`).
+    expect(styleShortcut(up, selection)).toBe("fontSizeUp");
+    expect(styleShortcut(down, selection)).toBe("fontSizeDown");
+    expect(styleShortcut(key({ key: ".", metaKey: true, shiftKey: true }), selection)).toBe(
+      "fontSizeUp",
+    );
+    expect(styleShortcut(key({ key: ",", metaKey: true, shiftKey: true }), selection)).toBe(
+      "fontSizeDown",
+    );
+    expect(styleShortcut(key({ key: ">", shiftKey: true }), selection)).toBeNull();
+  });
+
+  it("reach the text being edited, and no other style key does", () => {
+    // `wysiwyg/textWysiwyg.tsx@1118751f:675-678`.
+    const editing = { ...selection, target: "textEditor" as const };
+    expect(styleShortcut(up, editing)).toBe("fontSizeUp");
+    expect(styleShortcut(key({ key: "s" }), editing)).toBeNull();
+    expect(styleShortcut(key({ key: "g" }), editing)).toBeNull();
+    expect(
+      styleShortcut(key({ key: "c", code: "KeyC", altKey: true, ctrlKey: true }), editing),
+    ).toBeNull();
+  });
+
+  it("reach no other field", () => {
+    expect(styleShortcut(up, { ...selection, target: "field" })).toBeNull();
+  });
+});
+
+describe("the font picker key", () => {
+  it("opens on Shift+F where the font row shows", () => {
+    // `App.tsx@1118751f:5921-5950`.
+    const text = { ...selection, fontRow: true };
+    expect(styleShortcut(key({ key: "F", shiftKey: true }), text)).toBe("fontPicker");
+    expect(styleShortcut(key({ key: "F", shiftKey: true }), selection)).toBeNull();
+    expect(styleShortcut(key({ key: "F", shiftKey: true }), { ...text, selected: 0 })).toBeNull();
+    expect(
+      styleShortcut(key({ key: "F", shiftKey: true }), { ...text, selected: 0, tool: "text" }),
+    ).toBe("fontPicker");
+  });
+});
+
 describe("typing", () => {
   it("is a field or an editable element, and nothing else", () => {
     const at = (tagName: string, isContentEditable = false) =>

@@ -82,7 +82,7 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
-  import { isTextField, styleShortcut } from "./shortcuts.ts";
+  import { isTextField, styleShortcut, type KeyTarget } from "./shortcuts.ts";
   import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
@@ -135,8 +135,8 @@
    * selected — so the panel reads the selection once per move and never otherwise.
    */
   let styleRevision = $state(0);
-  /** Which colour picker is open; S and G open them from the keyboard. */
-  let openPicker = $state<"stroke" | "background" | null>(null);
+  /** Which picker is open; S, G and Shift+F open them from the keyboard. */
+  let openPicker = $state<"stroke" | "background" | "font" | null>(null);
 
   /**
    * Whether a pointer gesture is in flight on the canvas.
@@ -263,25 +263,54 @@
   }
 
   /**
+   * Where a key was pressed. The text being edited on the board is told apart from every
+   * other field by its editor's name, because it is the one field a style chord reaches.
+   */
+  function keyTarget(target: EventTarget | null): KeyTarget {
+    const typing = textEdit !== null;
+    if (typing && (target as Element | null)?.matches?.('textarea[aria-label="Text editor"]')) {
+      return "textEditor";
+    }
+    return isTextField(target) ? "field" : "board";
+  }
+
+  /**
+   * One font size step, on the selection — the text being typed, while it is. The editor
+   * is asked for again so it takes the new size and place; what has been typed stays.
+   */
+  function stepFontSize(increase: boolean): void {
+    if (!engine) return;
+    engine.stepFontSize(increase);
+    refreshStyle();
+    if (textEdit) engine.editSelectedText();
+  }
+
+  /**
    * The chrome's style keys, ahead of the engine's: Ctrl/Cmd+Alt+C and +V copy and paste
-   * styles, S and G open the colour pickers — see `styleShortcut`. On the capture
-   * phase, because the engine's listener sits on the canvas below and would otherwise
-   * take Ctrl+Alt+C for an element copy and S for the lasso.
+   * styles, S, G and Shift+F open the pickers, Ctrl/Cmd+Shift+< and > step the font size
+   * — see `styleShortcut`. On the capture phase, because the engine's listener sits on
+   * the canvas below and would otherwise take Ctrl+Alt+C for an element copy and S for
+   * the lasso, and the text editor stops every key it is given.
    */
   function onStyleShortcut(event: KeyboardEvent): void {
     // An open dialog keeps its keys too: the colour picker's own S and G pick blue and pink.
-    if (isTextField(event.target) || (event.target as Element).closest?.('[role="dialog"]')) return;
+    if ((event.target as Element).closest?.('[role="dialog"]')) return;
     const action = styleShortcut(event, {
       selected: summary.count,
       tool,
       strokeRow: panelVisible && shapeActions.strokeColor,
       backgroundRow: panelVisible && shapeActions.backgroundColor,
+      fontRow: panelVisible && shapeActions.text,
+      target: keyTarget(event.target),
     });
     if (!action) return;
     event.preventDefault();
     event.stopPropagation();
     if (action === "copyStyles") copyStyles();
     else if (action === "pasteStyles") pasteStyles();
+    else if (action === "fontSizeUp" || action === "fontSizeDown") {
+      stepFontSize(action === "fontSizeUp");
+    } else if (action === "fontPicker") openPicker = "font";
     else openPicker = action === "strokePicker" ? "stroke" : "background";
   }
 
@@ -1292,6 +1321,7 @@
             engine.getSelectedElements(),
             engine.selectionLocked(),
             engine.selectionIsGroup(),
+            engine.selectionStyle(),
           ),
         };
       }}

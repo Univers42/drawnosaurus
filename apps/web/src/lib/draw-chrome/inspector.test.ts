@@ -10,6 +10,8 @@ import {
   LIGHT_STROKE_SWATCHES,
   getFillSwatches,
   getStrokeSwatches,
+  textWrap,
+  wrapWrites,
 } from "./inspector.ts";
 
 describe("quick colour picks", () => {
@@ -98,5 +100,38 @@ describe("the other option rows", () => {
       const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
       expect((r + g + b) / 3, color).toBeGreaterThan(200);
     }
+  });
+});
+
+describe("the wrap row", () => {
+  const facts = {
+    hasFreeText: false,
+    autoResize: null,
+    hasLabel: false,
+    labelWrap: null,
+  };
+
+  it("reads a free text's fixed width, and a label's wrapping, as wrapping", () => {
+    expect(textWrap({ ...facts, hasFreeText: true, autoResize: false })).toBe("wrap");
+    expect(textWrap({ ...facts, hasFreeText: true, autoResize: true })).toBe("grow");
+    expect(textWrap({ ...facts, hasLabel: true, labelWrap: true })).toBe("wrap");
+    expect(textWrap({ ...facts, hasLabel: true, labelWrap: false })).toBe("grow");
+  });
+
+  it("marks nothing for a mixed selection, or one with no text", () => {
+    expect(textWrap({ ...facts, hasFreeText: true, autoResize: null })).toBeNull();
+    const both = { hasFreeText: true, autoResize: true, hasLabel: true, labelWrap: true };
+    expect(textWrap(both)).toBeNull();
+    expect(textWrap({ ...both, labelWrap: false })).toBe("grow");
+    expect(textWrap(facts)).toBeNull();
+  });
+
+  it("writes each kind of text its own way, and only the kinds selected", () => {
+    expect(wrapWrites({ ...facts, hasFreeText: true }, "wrap")).toEqual({ autoResize: false });
+    expect(wrapWrites({ ...facts, hasLabel: true }, "grow")).toEqual({ labelWrap: false });
+    expect(wrapWrites({ ...facts, hasFreeText: true, hasLabel: true }, "grow")).toEqual({
+      autoResize: true,
+      labelWrap: false,
+    });
   });
 });
