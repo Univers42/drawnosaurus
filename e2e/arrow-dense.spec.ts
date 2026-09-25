@@ -172,11 +172,11 @@ test.describe("an arrow aimed into a Ctrl+D pack", () => {
 
 test.describe("an arrow aimed beside a sticky note", () => {
   /**
-   * A note from the N tool is a group whose filled shadow sits three units down and right
-   * of it, underneath. Beside the note's right edge the shadow's outline is nearer than
-   * the note's, so the nearest-outline rule would bind the shadow — in orbit, three units
-   * off the note, or inside it, a waypoint, up to three units out. A locked shape is never
-   * a candidate (dc2c16d9), and the shadow is locked, so the note is what binds.
+   * A note from the N tool is one element, its shadow painted rather than a shape
+   * (`stickyNote.ts@1118751f`). The note it replaced was a group whose filled shadow sat
+   * three units down and right, underneath, and beside the note's right edge that shadow's
+   * outline was nearer — so the arrow bound the shadow, until the shadow was locked. With
+   * nothing but the note there, the note is what binds.
    */
   test("a click beside its right edge binds the note and finishes", async ({ page }) => {
     const board = await openBoard(page);
@@ -185,17 +185,16 @@ test.describe("an arrow aimed beside a sticky note", () => {
       y: board.box.y + OPEN_CANVAS.top + 200,
     };
     await focusBoard(board);
-    await pickTool(page, "Sticky Note");
+    await pickTool(page, "Sticky note");
     await page.mouse.click(centre.x, centre.y);
     await page.keyboard.press("Escape");
-    const rects = (await sceneElements(page)).filter((el) => el.type === "rectangle");
+    const placed = await sceneElements(page);
     expect(
-      rects.map((el) => el.backgroundColor),
-      "the shadow, then the note",
-    ).toEqual(["#000000", "#ffdf6b"]);
-    const [shadow, note] = [rects[0]!, rects[1]!];
-    const name = (id: string | null | undefined) =>
-      id === note.id ? "note" : id === shadow.id ? "shadow" : (id ?? null);
+      placed.map((el) => el.type),
+      "one note, and no label for a note left empty",
+    ).toEqual(["stickynote"]);
+    const note = placed[0]!;
+    const name = (id: string | null | undefined) => (id === note.id ? "note" : (id ?? null));
 
     const outcomes = [];
     for (const beyond of [2.5, 6, 12]) {

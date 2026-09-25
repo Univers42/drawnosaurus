@@ -2,17 +2,11 @@ import type { DrawTool } from "@osionos/draw-engine/types";
 import type { IconName } from "./icons.ts";
 
 /**
- * Every tool the toolbar can show: the engine's own, plus the host's.
- *
- * Only `"sticky"` is listed here. Everything else — image, frame, embed, autoshape,
- * laser, lasso — is the engine's, and naming those again would fork the tool list: the
- * union would keep compiling after the engine dropped or renamed one, and the toolbar
- * would offer a tool `setTool` no longer accepts.
+ * One toolbar entry. Every tool is the engine's: naming one it does not know would let
+ * the toolbar offer a tool `setTool` does not accept, so the type is the engine's own.
  */
-export type ExtendedTool = DrawTool | "sticky";
-
 export interface ToolDef {
-  tool: ExtendedTool;
+  tool: DrawTool;
   label: string;
   /** The bare key, without a modifier. `shift` carries the modifier separately. */
   hotkey: string;
@@ -75,20 +69,19 @@ export const EXTRA_TOOLS: readonly ToolDef[] = [
   { tool: "bucketfill", label: "Bucket fill", hotkey: "B", icon: "bucketfill" },
   { tool: "laser", label: "Laser pointer", hotkey: "K", icon: "laser" },
   { tool: "lasso", label: "Lasso", hotkey: "S", icon: "lasso" },
-  // "N" for note. Excalidraw's 9 is the image tool, and a sticky note is ours rather
-  // than theirs, so it is the one that yields the digit.
-  { tool: "sticky", label: "Sticky Note", hotkey: "N", icon: "sticky" },
+  // A letter and no digit, as Excalidraw has it (`Tools.tsx@1118751f:121-124`).
+  { tool: "stickynote", label: "Sticky note", hotkey: "N", icon: "sticky" },
 ];
 
 /** Every tool, wherever it lives. */
 export const ALL_TOOL_DEFS: readonly ToolDef[] = [...DRAW_TOOLS, ...EXTRA_TOOLS];
 
 /** Whether a tool lives behind the "more tools" button. */
-export function isExtraTool(tool: ExtendedTool): boolean {
+export function isExtraTool(tool: DrawTool): boolean {
   return EXTRA_TOOLS.some((entry) => entry.tool === tool);
 }
 
 /** The definition for a tool, wherever it lives. */
-export function toolDef(tool: ExtendedTool): ToolDef | undefined {
+export function toolDef(tool: DrawTool): ToolDef | undefined {
   return ALL_TOOL_DEFS.find((entry) => entry.tool === tool);
 }

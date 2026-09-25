@@ -3,10 +3,10 @@ import {
   EMPTY_SELECTION_STYLE,
   type DrawElement,
   type DrawElementType,
+  type DrawTool,
 } from "@osionos/draw-engine/types";
 import { isTransparent } from "./colors.ts";
 import { getShapeActions, isDrawingTool, type SelectionFacts } from "./shapeActions.ts";
-import type { ExtendedTool } from "./tools.ts";
 
 type Sel = Pick<DrawElement, "type" | "backgroundColor"> &
   Partial<Pick<DrawElement, "boundTextId">>;
@@ -42,7 +42,7 @@ const factsOf = (selected: readonly Sel[]): SelectionFacts => {
   };
 };
 
-const actions = (tool: ExtendedTool, selected: Sel[] = [], nextBg = "transparent") =>
+const actions = (tool: DrawTool, selected: Sel[] = [], nextBg = "transparent") =>
   getShapeActions(tool, factsOf(selected), nextBg);
 
 describe("panel visibility", () => {
@@ -199,11 +199,48 @@ describe("the active tool preconfigures", () => {
     expect(actions("arrow").arrowheads).toBe(true);
   });
 
-  it("treats the sticky-note tool as the rectangle it builds", () => {
-    const sticky = actions("sticky");
-    expect(sticky.visible).toBe(true);
-    expect(sticky.backgroundColor).toBe(true);
-    expect(sticky.roundness).toBe(true);
+  it("offers a note a colour and a sloppiness, never a fill pattern, width or dash", () => {
+    // `element/src/comparisons.ts@1118751f`: a note is in `hasBackground`,
+    // `hasStrokeColor`, `hasRoughness` and `canChangeRoundness`, and out of
+    // `hasFillStyle`, `hasStrokeWidth` and `hasStrokeStyle` — its paper is always solid
+    // and it draws no stroke. The same with the tool as with a note selected.
+    const cases = {
+      tool: actions("stickynote"),
+      note: actions("select", [el("stickynote", "#ffdf6b")]),
+    };
+    for (const [name, sticky] of Object.entries(cases)) {
+      expect(
+        {
+          visible: sticky.visible,
+          strokeColor: sticky.strokeColor,
+          backgroundColor: sticky.backgroundColor,
+          fill: sticky.fill,
+          strokeWidth: sticky.strokeWidth,
+          strokeStyle: sticky.strokeStyle,
+          sloppiness: sticky.sloppiness,
+          roundness: sticky.roundness,
+        },
+        name,
+      ).toEqual({
+        visible: true,
+        strokeColor: true,
+        backgroundColor: true,
+        fill: false,
+        strokeWidth: false,
+        strokeStyle: false,
+        sloppiness: true,
+        roundness: true,
+      });
+    }
+  });
+
+  it("keeps the background row for a note's label, whose note takes the pick", () => {
+    // `canChangeBackgroundColor` (`shapeActionPredicates.ts@1118751f:64-78`): the label
+    // being typed is the target and has no fill, but a pick on it colours its note. The
+    // engine says so with the background's domain.
+    const label = { ...factsOf([el("text")]), backgroundDomain: "sticky" as const };
+    expect(getShapeActions("select", label, "transparent").backgroundColor).toBe(true);
+    expect(actions("select", [el("text")]).backgroundColor, "a free text").toBe(false);
   });
 });
 

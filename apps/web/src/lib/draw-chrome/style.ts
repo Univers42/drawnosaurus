@@ -1,4 +1,4 @@
-import type { ExtendedTool } from "./tools.ts";
+import type { DrawTool } from "@osionos/draw-engine/types";
 
 /**
  * Tools whose cursor is a crosshair — every tool aimed at a point rather than at a thing.
@@ -9,7 +9,7 @@ import type { ExtendedTool } from "./tools.ts";
  * showed a crosshair once a loop was under way, so the pointer changed shape the moment
  * you pressed.
  */
-const CROSSHAIR_TOOLS = new Set<ExtendedTool>([
+const CROSSHAIR_TOOLS = new Set<DrawTool>([
   "rectangle",
   "diamond",
   "ellipse",
@@ -22,10 +22,10 @@ const CROSSHAIR_TOOLS = new Set<ExtendedTool>([
   "frame",
   "autoshape",
   "bucketfill",
-  "sticky",
+  "stickynote",
 ]);
 
-export function cursorForTool(tool: ExtendedTool): string {
+export function cursorForTool(tool: DrawTool): string {
   if (tool === "text") return "text";
   if (CROSSHAIR_TOOLS.has(tool)) return "crosshair";
   return "default";

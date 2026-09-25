@@ -151,6 +151,43 @@ describe("element reconciliation", () => {
     expect(byId.get("legacy")).toEqual(legacy);
   });
 
+  it("gives back a sticky note, its base height, its date and its label's ceiling", async () => {
+    // Refused at the boundary, a note would never reach the database; stripped, it would
+    // come back with no footer date and a label that forgot the size it was given.
+    const slug = await createBoard(app);
+    const note = element({
+      id: "note",
+      type: "stickynote",
+      backgroundColor: "#ffdf6b",
+      fillStyle: "solid",
+      width: 250,
+      height: 310,
+      baseHeight: 250,
+      created: 1_758_758_400_000,
+      boundTextId: "label",
+    });
+    const label = element({
+      id: "label",
+      type: "text",
+      text: "hi",
+      fontSize: 20,
+      baseFontSize: 36,
+      containerId: "note",
+    });
+    const undated = element({ id: "undated", type: "stickynote", created: null });
+    const legacy = element({ id: "legacy", ...LEGACY_LABEL });
+    const response = await patch(slug, { elements: [note, label, undated, legacy] });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ applied: 4, rejected: 0 });
+
+    const byId = await elementsById(slug);
+    expect(byId.get("note")).toEqual(note);
+    expect(byId.get("label")).toEqual(label);
+    expect(byId.get("undated")).toEqual(undated);
+    // Nothing is defaulted on the way through.
+    expect(byId.get("legacy")).toEqual(legacy);
+  });
+
   it("keeps the newer stamp and reports the stale write as rejected", async () => {
     const slug = await createBoard(app);
     await patch(slug, { elements: [element({ id: "a", version: 5, x: 500 })] });

@@ -35,6 +35,7 @@ export const DRAW_ELEMENT_TYPES = [
   "image",
   "frame",
   "embed",
+  "stickynote",
 ] as const;
 
 export const FILL_STYLES = ["hachure", "cross-hatch", "solid", "zigzag"] as const;
@@ -178,6 +179,16 @@ export const drawElementSchema = z.object({
   // re-checks it against its list of providers before anything is framed
   // (`scene/embed.rs`), so this is not where a page is let in.
   embedUrl: z.string().max(MAX_URL_LENGTH).nullable().optional(),
+
+  // The sticky note's model, all optional and undefaulted like the text fields above: every
+  // element saved before the note was native carries none, and must come back byte for byte.
+  // `baseHeight` is the height the user set, which a note grows above to fit its label and
+  // never shrinks below; `created` is when a note was drawn (its footer's date), `null` when
+  // unknown as the oracle writes it; `baseFontSize` is the size a note's label was given, the
+  // ceiling the auto-fit shrinks below.
+  baseHeight: finite.min(0).max(1_000_000).optional(),
+  created: finite.nullable().optional(),
+  baseFontSize: finite.min(1).max(1000).nullable().optional(),
 
   // The reconciliation stamp. `version` counts edits, `versionNonce` is random
   // per edit and breaks ties between concurrent writers.

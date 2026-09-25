@@ -5,6 +5,7 @@
   import { downloadBlob } from "./download.ts";
   import MainMenuIcon from "./MainMenuIcon.svelte";
   import { CANVAS_BACKGROUNDS, GRID_SIZES } from "./inspector.ts";
+  import { migrateLegacyStickyJson } from "../notes/stickyNotes.ts";
   import type { GridPreference, ThemePreference } from "./theme.ts";
 
   /**
@@ -88,7 +89,11 @@
     if (!file || !engine) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (!engine.loadScene(String(reader.result))) {
+      const text = String(reader.result);
+      // A file saved while a sticky note was four shapes opens with the note the engine
+      // draws — see `stickyNotes.ts`.
+      const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
+      if (!engine.loadScene(migrateLegacyStickyJson(text, Date.now(), nonce) ?? text)) {
         alert("Could not load that file — it is not a drawing this app understands.");
         return;
       }

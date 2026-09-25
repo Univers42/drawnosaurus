@@ -8,6 +8,8 @@ import {
   GRID_SIZES,
   LIGHT_FILL_SWATCHES,
   LIGHT_STROKE_SWATCHES,
+  STICKY_NOTE_BACKGROUND_PICKS,
+  colorRow,
   getFillSwatches,
   getStrokeSwatches,
   textWrap,
@@ -68,6 +70,49 @@ describe("quick colour picks", () => {
     // canvas, which is the whole reason there are two.
     expect(DARK_STROKE_SWATCHES).not.toEqual(LIGHT_STROKE_SWATCHES);
     expect(DARK_FILL_SWATCHES).not.toEqual(LIGHT_FILL_SWATCHES);
+  });
+});
+
+describe("a note's colour rows", () => {
+  it("offers a note the oracle's background picks, the default paper first", () => {
+    // `STICKY_NOTE_BACKGROUND_PICKS` (`common/src/colors.ts@1118751f:273-281`).
+    expect(STICKY_NOTE_BACKGROUND_PICKS).toEqual([
+      "#ffdf6b",
+      "#fcc2d7",
+      "#b2f2bb",
+      "#a5d8ff",
+      "#ffd8a8",
+    ]);
+    expect(colorRow("background", "sticky", "light")).toEqual({
+      label: "Background",
+      picks: STICKY_NOTE_BACKGROUND_PICKS,
+      hideTransparent: true,
+    });
+  });
+
+  it("calls a note's stroke its text colour, with the regular picks", () => {
+    // A note has no stroke: its "stroke" is its text's and its footer's ink
+    // (`actionProperties.tsx@1118751f:405-408`).
+    expect(colorRow("stroke", "sticky", "dark")).toEqual({
+      label: "Text color",
+      picks: DARK_STROKE_SWATCHES,
+      hideTransparent: true,
+    });
+  });
+
+  it("keeps the regular rows for a mixed selection and for everything else", () => {
+    for (const domain of ["regular", "mixed"] as const) {
+      expect(colorRow("stroke", domain, "light"), domain).toEqual({
+        label: "Stroke",
+        picks: LIGHT_STROKE_SWATCHES,
+        hideTransparent: false,
+      });
+      expect(colorRow("background", domain, "light"), domain).toEqual({
+        label: "Background",
+        picks: LIGHT_FILL_SWATCHES,
+        hideTransparent: false,
+      });
+    }
   });
 });
 

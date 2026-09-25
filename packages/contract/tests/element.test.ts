@@ -169,6 +169,67 @@ describe("the text model's fields", () => {
   });
 });
 
+describe("a sticky note's fields", () => {
+  /** A note as the sticky tool draws it, and the label typed into it. */
+  const note = element({
+    id: "note",
+    type: "stickynote",
+    backgroundColor: "#ffdf6b",
+    fillStyle: "solid",
+    width: 250,
+    height: 250,
+  });
+  const label = element({ id: "label", type: "text", text: "hi", containerId: "note" });
+  const STICKY_KEYS = ["baseHeight", "created", "baseFontSize"];
+
+  it("is an element type, so a note is not refused at the boundary", () => {
+    expect(drawElementSchema.safeParse(note).success).toBe(true);
+  });
+
+  it("survives validation, so a note keeps its size, its date and its label's ceiling", () => {
+    const parsed = drawElementSchema.parse({
+      ...note,
+      baseHeight: 250,
+      created: 1_758_758_400_000,
+    });
+    expect(parsed).toMatchObject({ baseHeight: 250, created: 1_758_758_400_000 });
+    expect(drawElementSchema.parse({ ...label, baseFontSize: 36 }).baseFontSize).toBe(36);
+  });
+
+  it("adds nothing to an element that carries none of them", () => {
+    // A note drawn before these fields existed — or any other element — must come back
+    // as it went in: a default would stamp a size or a date nobody chose. (Byte for byte is
+    // the engine's to keep, `ci_sticky.rs`; zod orders keys by its schema.)
+    for (const legacy of [note, label, element()]) {
+      const parsed = drawElementSchema.parse(legacy);
+      for (const key of STICKY_KEYS) expect(parsed, key).not.toHaveProperty(key);
+      expect(parsed).toEqual(legacy);
+    }
+  });
+
+  it("accepts a note whose date is unknown, as the oracle writes it", () => {
+    expect(drawElementSchema.safeParse({ ...note, created: null }).success).toBe(true);
+  });
+
+  it("refuses what is out of range or of the wrong kind", () => {
+    for (const patch of [
+      { baseHeight: Number.NaN },
+      { baseHeight: Number.POSITIVE_INFINITY },
+      { baseHeight: -1 },
+      { created: Number.NaN },
+      { created: "2025-09-24" },
+      { baseFontSize: 0 },
+      { baseFontSize: 1001 },
+      { baseFontSize: Number.NaN },
+    ]) {
+      expect(
+        drawElementSchema.safeParse({ ...note, ...patch }).success,
+        JSON.stringify(patch),
+      ).toBe(false);
+    }
+  });
+});
+
 describe("osidrawFileSchema", () => {
   it("accepts the envelope the engine emits", () => {
     const parsed = osidrawFileSchema.safeParse({

@@ -31,6 +31,7 @@
     kind,
     value,
     picks,
+    hideTransparent = false,
     open,
     customColors,
     onToggle,
@@ -40,6 +41,12 @@
     kind: ColorKind;
     value: string | null;
     picks: readonly string[];
+    /**
+     * Hides the transparent swatch — a note's colours are never transparent — rather
+     * than dropping it, so every other colour keeps its hotkey (`colorTargets.ts
+     * @1118751f:78-83`).
+     */
+    hideTransparent?: boolean;
     open: boolean;
     /** Asked when the picker opens: the board's most used off-palette colours. */
     customColors: () => string[];
@@ -238,6 +245,7 @@
         <button
           type="button"
           class="cell"
+          hidden={hideTransparent && isTransparent(color)}
           class:transparent={isTransparent(color)}
           class:active={current?.name === name}
           aria-label={`${COLOR_LABELS[name]} — ${COLOR_HOTKEYS[index]}`}

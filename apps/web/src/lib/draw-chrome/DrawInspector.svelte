@@ -17,8 +17,7 @@
     TEXT_ALIGNS,
     TEXT_WRAPS,
     VERTICAL_ALIGNS,
-    getFillSwatches,
-    getStrokeSwatches,
+    colorRow,
     roundnessFor,
     textWrap,
     type TextWrap,
@@ -73,8 +72,8 @@
     run: (action: (engine: DrawEngine) => void) => void;
   } = $props();
 
-  const strokePresets = $derived(getStrokeSwatches(themeMode));
-  const fillPresets = $derived(getFillSwatches(themeMode));
+  const strokeRow = $derived(colorRow("stroke", summary.strokeDomain, themeMode));
+  const fillRow = $derived(colorRow("background", summary.backgroundDomain, themeMode));
 
   /** The element type reads as a heading, so it is capitalised rather than raw. */
   const title = $derived.by(() => {
@@ -158,12 +157,13 @@
 
   <!-- In the oracle's order (`components/Actions.tsx@1118751f:168-200`). -->
   {#if can.strokeColor}
-    <InspectorRow label="Stroke">
+    <InspectorRow label={strokeRow.label}>
       <InspectorColorPicker
-        label="Stroke"
+        label={strokeRow.label}
         kind="stroke"
         value={summary.strokeColor}
-        picks={strokePresets}
+        picks={strokeRow.picks}
+        hideTransparent={strokeRow.hideTransparent}
         open={openPicker === "stroke"}
         customColors={customColors("stroke")}
         onToggle={(open) => onOpenPicker(open ? "stroke" : null)}
@@ -172,12 +172,13 @@
     </InspectorRow>
   {/if}
   {#if can.backgroundColor}
-    <InspectorRow label="Background">
+    <InspectorRow label={fillRow.label}>
       <InspectorColorPicker
-        label="Background"
+        label={fillRow.label}
         kind="background"
         value={summary.backgroundColor}
-        picks={fillPresets}
+        picks={fillRow.picks}
+        hideTransparent={fillRow.hideTransparent}
         open={openPicker === "background"}
         customColors={customColors("background")}
         onToggle={(open) => onOpenPicker(open ? "background" : null)}

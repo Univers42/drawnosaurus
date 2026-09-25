@@ -2,7 +2,7 @@ import { bench, describe } from "vitest";
 import { SceneDiffTracker } from "../../lib/autosave/sceneDiff.ts";
 import { parseMermaidFlowchart } from "../../lib/mermaid/mermaidParser.ts";
 import { mermaidToElements } from "../../lib/mermaid/mermaidToElements.ts";
-import { createStickyNote } from "../../lib/notes/stickyNotes.ts";
+import { migrateLegacyStickyGroups } from "../../lib/notes/stickyNotes.ts";
 import type { DrawElementDto } from "@drawnosaurus/contract";
 
 describe("Drawnosaurus Benchmark Suite", () => {
@@ -25,10 +25,6 @@ describe("Drawnosaurus Benchmark Suite", () => {
 
   bench("Mermaid: convert parsed diagram to 50+ DrawElements", () => {
     mermaidToElements(parsed, 100, 100);
-  });
-
-  bench("Sticky Notes: generate container and bound text", () => {
-    createStickyNote(200, 200, "Bench note", "yellow");
   });
 
   const baseScene: DrawElementDto[] = Array.from({ length: 500 }, (_, i) => ({
@@ -63,5 +59,10 @@ describe("Drawnosaurus Benchmark Suite", () => {
 
   bench("Autosave: compute diff across 500 dense elements", () => {
     tracker.diff(nextScene, 3000, () => 1);
+  });
+
+  // What every board load pays: looking for a legacy sticky note on a board without one.
+  bench("Sticky Notes: find no legacy note among 500 elements", () => {
+    migrateLegacyStickyGroups(baseScene, 3000, () => 1);
   });
 });

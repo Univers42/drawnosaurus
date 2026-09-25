@@ -184,8 +184,8 @@ factored into plain `.ts` modules beside it (`tools.ts`, `menu.ts`, `theme.ts`, 
 modules, not the Svelte components** — the components are covered by the browser specs. Follow that
 split when adding behaviour.
 
-`ExtendedTool = DrawTool | "sticky"` — only host-owned tools are named in `tools.ts`; re-listing the
-engine's would fork the tool list and let the toolbar offer a tool `setTool` no longer accepts.
+Every toolbar entry in `tools.ts` is typed `DrawTool`, the engine's own union — the sticky note
+included, which the engine owns now — so the toolbar cannot offer a tool `setTool` does not accept.
 
 ### The conformance gate
 

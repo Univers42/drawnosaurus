@@ -33,8 +33,7 @@
     type ThemePreference,
   } from "./theme.ts";
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
-  import { type ExtendedTool } from "./tools.ts";
-  import { createStickyNote, DEFAULT_STICKY_NOTE_SIZE } from "../notes/stickyNotes.ts";
+  import { migrateLegacyStickyJson } from "../notes/stickyNotes.ts";
   import { EraserTrail } from "../eraser/eraserTrail.ts";
   import {
     EMBED_ALLOW,
@@ -126,7 +125,7 @@
   /** Snapping to other elements while moving. Off until turned on, as in Excalidraw. */
   let objectsSnap = $state(false);
   let ink = $state("#1e1e1e");
-  let tool = $state<ExtendedTool>("select");
+  let tool = $state<DrawTool>("select");
   let toolLocked = $state(false);
   let selectedCount = $state(0);
   /**
@@ -214,7 +213,6 @@
   let currentCamera = $state<Camera | undefined>(undefined);
   let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
   let eraserTrailSvgPath = $state("");
-  let stickyStartPoint: { x: number; y: number } | null = null;
   const eraserTrail = new EraserTrail({
     decayTime: 220,
     size: 16,
@@ -560,11 +558,23 @@
    * only readable during the event.
    *
    * Leaves pastes into fields and dialogs alone, as Excalidraw does (`App.tsx:4771-4782`).
+   *
+   * A scene copied while a sticky note was four shapes is pasted with the note the engine
+   * draws (`stickyNotes.ts`); any other text goes on to the engine's own listener.
    */
   function onChromePaste(event: ClipboardEvent): void {
     if (isOwnedElsewhere(event.target)) return;
     const files = imagesFrom(Array.from(event.clipboardData?.files ?? []));
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
+      const migrated = text ? migrateLegacyStickyJson(text, Date.now(), nonce) : null;
+      if (migrated === null || !engine) return;
+      event.preventDefault();
+      event.stopPropagation();
+      engine.pasteJson(migrated);
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     void placeImages(files, lastPointer ?? viewportCentre());
@@ -693,23 +703,15 @@
     handleToolSelect("select");
   }
 
-  function handleToolSelect(next: ExtendedTool): void {
-    if (next === "sticky") {
-      // The sticky note is the host's own tool, not one the engine knows: the engine
-      // stays on "select" and this component watches the pointer for the placement
-      // gesture. `tool` is what the toolbar highlights, so it keeps the sticky.
-      tool = "sticky";
-      engine?.setTool("select");
-    } else {
-      tool = next;
-      engine?.setTool(next);
-      // Deliberately NOT calling setArrowheads here. It mutates the *current
-      // selection*, and after drawing a shape that selection is the shape you just
-      // drew — so picking the line tool silently stripped the head off the arrow
-      // before it. Picking a tool must never edit an existing element. The engine
-      // already defaults an arrow's head from its type (render::default_arrowhead),
-      // so this was redundant as well as harmful.
-    }
+  function handleToolSelect(next: DrawTool): void {
+    tool = next;
+    engine?.setTool(next);
+    // Deliberately NOT calling setArrowheads here. It mutates the *current
+    // selection*, and after drawing a shape that selection is the shape you just
+    // drew — so picking the line tool silently stripped the head off the arrow
+    // before it. Picking a tool must never edit an existing element. The engine
+    // already defaults an arrow's head from its type (render::default_arrowhead),
+    // so this was redundant as well as harmful.
   }
 
   /** Returning `true` claims the gesture, so the engine does not also act on it. */
@@ -744,11 +746,6 @@
       // for the topmost element under each sample — so a stack of copies lost one copy
       // per pass, the top one answering every sample while the rest were never reached.
       eraserTrail.start(point.x, point.y);
-      return;
-    }
-    if (tool === "sticky") {
-      stickyStartPoint = { x: point.x, y: point.y };
-      return true;
     }
   }
 
@@ -760,58 +757,7 @@
 
   function handleCanvasPointerUp(point: { x: number; y: number }): void {
     activateEmbedAt(point);
-    if (tool === "eraser") {
-      eraserTrail.stop();
-      return;
-    }
-
-    if (tool !== "sticky" || !stickyStartPoint || !engine) return;
-    const start = stickyStartPoint;
-    stickyStartPoint = null;
-
-    const worldStart = engine.screenToWorld(start.x, start.y);
-    const worldEnd = engine.screenToWorld(point.x, point.y);
-
-    let x: number;
-    let y: number;
-    let w = DEFAULT_STICKY_NOTE_SIZE;
-    let h = DEFAULT_STICKY_NOTE_SIZE;
-
-    // A drag sizes the note; a click drops a default one centred on the pointer. The
-    // 10px threshold is what separates the two — below it the "drag" is just a shaky
-    // click and sizing the note from it would produce a sliver.
-    if (Math.abs(point.x - start.x) > 10 || Math.abs(point.y - start.y) > 10) {
-      x = Math.min(worldStart.x, worldEnd.x);
-      y = Math.min(worldStart.y, worldEnd.y);
-      w = Math.max(Math.abs(worldEnd.x - worldStart.x), 100);
-      h = Math.max(Math.abs(worldEnd.y - worldStart.y), 100);
-    } else {
-      x = worldEnd.x - w / 2;
-      y = worldEnd.y - h / 2;
-    }
-
-    const [shadow, note, date, text] = createStickyNote(x, y, "", "yellow", w, h);
-    engine.pasteJson(
-      JSON.stringify({ type: "osidraw", version: 1, elements: [shadow, note, date, text] }),
-      {
-        x: x + w / 2,
-        y: y + h / 2,
-      },
-    );
-
-    if (!toolLocked) {
-      tool = "select";
-      engine.setTool("select");
-    }
-
-    // Drop straight into typing: a sticky note with nothing on it is never the goal.
-    const selected = engine.getSelectedElements();
-    const noteEl = selected.find((el) => el.boundTextId);
-    const textEl = noteEl ?? selected.find((el) => el.type === "text" && el.containerId);
-    if (textEl) {
-      engine.select([textEl.id]);
-      engine.editSelectedText();
-    }
+    if (tool === "eraser") eraserTrail.stop();
   }
 
   function handleSceneChange(json: string): void {
@@ -1208,13 +1154,6 @@
       // reason as the grid below — and because on a Mac, Option+S types "ß".
       event.preventDefault();
       flipObjectsSnap();
-    } else if (!mod && key === "n") {
-      // "N" only. 9 is the image tool's, both in the engine's keymap and on the toolbar,
-      // and claiming it here did not take it away — `preventDefault` does not stop the
-      // engine's own listener, so 9 selected the sticky note and opened the image picker
-      // in the same keystroke.
-      event.preventDefault();
-      handleToolSelect("sticky");
     } else if (mod && event.code === "Quote") {
       // Excalidraw's grid shortcut, and matched on `code` the way theirs is: `code` is
       // the physical key, `key` the character it produces. On a layout where that key is
@@ -1305,10 +1244,6 @@
         onReady?.(next);
       }}
       onToolChange={(next: DrawTool) => {
-        // The sticky note is a host tool that parks the engine on "select". Without this
-        // guard the engine's own tool change would immediately drop the toolbar back to
-        // select, and the sticky would look unselectable.
-        if (tool === "sticky" && next === "select") return;
         tool = next;
         if (next === "image") openImagePicker();
         if (next === "embed") showEmbed = true;

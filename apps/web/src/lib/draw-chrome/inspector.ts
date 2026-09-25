@@ -1,11 +1,14 @@
 import type {
   ArrowType,
+  ColorDomain,
   FillStyle,
   SelectionStyle,
   StrokeStyle,
   TextAlign,
   VerticalAlign,
 } from "@osionos/draw-engine/types";
+import type { ColorKind } from "./colors.ts";
+import { COLOR_PALETTE } from "./colors.ts";
 import type { IconName } from "./icons.ts";
 
 export type ThemeMode = "light" | "dark";
@@ -37,6 +40,48 @@ export function getStrokeSwatches(themeMode: ThemeMode = "light"): string[] {
 
 export function getFillSwatches(themeMode: ThemeMode = "light"): string[] {
   return themeMode === "dark" ? DARK_FILL_SWATCHES : LIGHT_FILL_SWATCHES;
+}
+
+/**
+ * A note's background picks (`STICKY_NOTE_BACKGROUND_PICKS`,
+ * `packages/common/src/colors.ts@1118751f:273-281`): classic note colours, the default
+ * paper first, and never transparent. A note's stroke picks are the regular ones.
+ */
+export const STICKY_NOTE_BACKGROUND_PICKS: readonly string[] = [
+  "#ffdf6b",
+  COLOR_PALETTE.pink[1],
+  COLOR_PALETTE.green[1],
+  COLOR_PALETTE.blue[1],
+  COLOR_PALETTE.orange[1],
+];
+
+export interface ColorRow {
+  label: string;
+  picks: readonly string[];
+  /** A note is never transparent, so its picker hides the swatch rather than ignore it. */
+  hideTransparent: boolean;
+}
+
+/**
+ * A colour row as the domain its pick lands in has it (`resolveColorTarget`,
+ * `actions/colorTargets.ts@1118751f:101-176`, and the row's label, `actionProperties.tsx
+ * @1118751f:405-408`): a note has no stroke — its "stroke" is the ink of its text and
+ * footer — so the row says so. A mixed selection keeps the regular row.
+ */
+export function colorRow(kind: ColorKind, domain: ColorDomain, themeMode: ThemeMode): ColorRow {
+  const sticky = domain === "sticky";
+  if (kind === "stroke") {
+    return {
+      label: sticky ? "Text color" : "Stroke",
+      picks: getStrokeSwatches(themeMode),
+      hideTransparent: sticky,
+    };
+  }
+  return {
+    label: "Background",
+    picks: sticky ? STICKY_NOTE_BACKGROUND_PICKS : getFillSwatches(themeMode),
+    hideTransparent: sticky,
+  };
 }
 
 // Keep backward compatibility
