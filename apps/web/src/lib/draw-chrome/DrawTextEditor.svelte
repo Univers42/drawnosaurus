@@ -37,9 +37,14 @@
 
   // Padding and border of the textarea itself, which sit outside the text box: 6px of
   // padding a side, and the 1.5px border as drawn at a device pixel ratio of 1, where it
-  // snaps to 1px. ponytail: at a ratio of 2 the border is 1.5px and the text box 1px
-  // narrower than the label; the editor rewrite drops the border altogether.
+  // snaps to 1px. The textarea is placed that far up and left of the request's point, so
+  // the text typed sits where the canvas will draw it — placed at the point, it sat 7px
+  // right, past a small shape's edge, and jumped back on commit. ponytail: at a ratio of
+  // 2 the border is 1.5px and the text box 1px narrower than the label; the editor
+  // rewrite drops the border altogether.
   const CHROME_PX = 14;
+  /** The same chrome above the text: 2px of padding and the 1px border. */
+  const CHROME_TOP_PX = 3;
 
   function autoResize(): void {
     if (!node) return;
@@ -62,7 +67,7 @@
     // third too wide for "Hello", nearly three times too wide for "iiii", and far too
     // narrow for "WWWW". The text visibly jumped the moment an edit was committed,
     // because the canvas and the textarea disagreed about how wide it was.
-    const measured = engine.measureText(value, fontSizePx).width;
+    const measured = engine.measureText(value, fontSizePx, request.fontFamily).width;
     return Math.max(measured + CHROME_PX, 60);
   }
 
@@ -85,12 +90,13 @@
   aria-label="Text editor"
   spellcheck={false}
   class:container-text={isContainer}
-  style:left={`${request.x}px`}
-  style:top={`${request.y}px`}
+  style:left={`${request.x - CHROME_PX / 2}px`}
+  style:top={`${request.y - CHROME_TOP_PX}px`}
   style:min-height={`${fontSizePx * 1.3}px`}
   style:color={request.color}
   style:font-size={`${fontSizePx}px`}
-  style:font-family={engine.fontFamily()}
+  style:font-family={engine.fontFamily(request.fontFamily)}
+  style:line-height={request.lineHeight}
   style:text-align={request.textAlign}
   oninput={(event) => {
     value = event.currentTarget.value;
@@ -125,9 +131,9 @@
     resize: none;
     overflow: hidden;
     background: transparent;
-    /* The family comes from the engine, so the overlay and the canvas render the same
-       glyphs at the same widths. Hard-coding it here is how they drift apart. */
-    line-height: 1.25;
+    /* The family and the line height come from the request, so the overlay and the
+       canvas render the same glyphs at the same widths and the same spacing. Hard-coding
+       them here is how they drift apart. */
     white-space: pre;
     z-index: 20;
     box-sizing: border-box;

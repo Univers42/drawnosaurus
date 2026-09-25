@@ -118,23 +118,23 @@ test("a label wraps at its shape's width instead of widening", async ({ page }) 
   await node.fill("the quick brown fox jumps over the lazy dog, then over it again and again");
   const style = await computed(node);
 
-  // It wraps where the canvas will: at the label's own width, which is the shape's inner
-  // width. Free text instead grows to fit its longest line, which here would be several
-  // times the shape.
-  expect(style.contentWidth).toBeCloseTo(label!.width, 0);
+  // It wraps where the canvas will: at the shape's width less the label padding on each
+  // side (`getBoundTextMaxWidth`, `element/src/textElement.ts@1118751f:511-540`). The label
+  // itself is only as wide as its longest line, as in Excalidraw. Free text instead grows
+  // to fit its longest line, which here would be several times the shape.
+  expect(style.contentWidth).toBeCloseTo(SHAPE.right - SHAPE.left - 2 * 5, 0);
   // And it grows down to show every line rather than scrolling them out of sight.
   expect(style.height).toBeGreaterThan(3 * 20 * 1.25);
 });
 
 test("a narrow shape's label wraps at the shape, not at the editor's minimum", async ({ page }) => {
   const board = await openBoard(page);
-  // 40 wide, so its label has 24 to wrap in: less than free text's smallest editor.
+  // 40 wide, so its label has 30 to wrap in: less than free text's smallest editor.
   const narrow = { ...SHAPE, right: SHAPE.left + 40 };
   await drawShape(board, "Rectangle", narrow);
   const node = await openLabelEditor(board);
-  const label = (await sceneElements(page)).find((element) => element.type === "text");
 
-  expect((await computed(node)).contentWidth).toBeCloseTo(label!.width, 0);
+  expect((await computed(node)).contentWidth).toBeCloseTo(40 - 2 * 5, 0);
 });
 
 test("an arrow's label wraps at the arrow's width, centred on its middle", async ({ page }) => {
@@ -148,16 +148,17 @@ test("an arrow's label wraps at the arrow's width, centred on its middle", async
   await node.fill(line);
   const style = await computed(node);
 
-  // Its lines wrap at the arrow's width less the label padding on each side — not at
-  // the label, an 8-unit placeholder, whose editor wrapped every word onto its own line
-  // while the canvas drew them on one.
-  expect(style.contentWidth).toBeCloseTo(500 - 2 * 8, 0);
+  // Its lines wrap at Excalidraw's arrow label width, the larger of 0.7 of the arrow and
+  // 11 font sizes (`element/src/textElement.ts@1118751f:511-540`) — not at the label, a
+  // placeholder, whose editor wrapped every word onto its own line while the canvas drew
+  // them on one.
+  expect(style.contentWidth).toBeCloseTo(Math.max(0.7 * 500, 11 * 20), 0);
   // So the line stays one: the editor does not grow as it is typed.
   expect(style.height).toBe(empty.height);
-  // Centred on the arrow's middle, as the canvas centres the label's lines, give or take
-  // the editor's 7px of chrome.
+  // Centred on the arrow's middle, as the canvas centres the label's lines: the editor's
+  // chrome goes around the text box rather than pushing it right.
   const middle = board.box.x + (arrow.left + arrow.right) / 2;
-  expect(Math.abs(style.contentLeft + style.contentWidth / 2 - middle)).toBeLessThan(8);
+  expect(Math.abs(style.contentLeft + style.contentWidth / 2 - middle)).toBeLessThan(1);
 
   await page.keyboard.press("Control+Enter");
   const label = (await sceneElements(page)).find((element) => element.type === "text");
