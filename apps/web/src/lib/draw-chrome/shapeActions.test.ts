@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { DrawElement, DrawElementType } from "@osionos/draw-engine/types";
-import { isTransparent } from "./colors.ts";
 import {
-  getShapeActions,
-  isDrawingTool,
-  NOTHING_SELECTED,
-  type SelectionFacts,
-} from "./shapeActions.ts";
+  EMPTY_SELECTION_STYLE,
+  type DrawElement,
+  type DrawElementType,
+} from "@osionos/draw-engine/types";
+import { isTransparent } from "./colors.ts";
+import { getShapeActions, isDrawingTool, type SelectionFacts } from "./shapeActions.ts";
 import type { ExtendedTool } from "./tools.ts";
 
 type Sel = Pick<DrawElement, "type" | "backgroundColor"> &
@@ -32,7 +31,7 @@ const factsOf = (selected: readonly Sel[]): SelectionFacts => {
   }
   const labelled = selected.some((e) => e.boundTextId && e.type !== "arrow");
   return {
-    ...NOTHING_SELECTED,
+    ...EMPTY_SELECTION_STYLE,
     count: selected.length,
     kinds: [...kinds],
     filledKinds: [...filledKinds],

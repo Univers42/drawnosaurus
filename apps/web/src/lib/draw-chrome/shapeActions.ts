@@ -147,16 +147,6 @@ export interface SelectionFacts {
   canDistribute: boolean;
 }
 
-export const NOTHING_SELECTED: SelectionFacts = {
-  count: 0,
-  kinds: [],
-  filledKinds: [],
-  textAlignable: false,
-  verticalAlignable: false,
-  canAlign: false,
-  canDistribute: false,
-};
-
 export function getShapeActions(
   activeTool: ExtendedTool,
   selection: SelectionFacts,

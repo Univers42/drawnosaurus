@@ -21,10 +21,9 @@
     WIDTHS,
   } from "./inspector.ts";
   import { mostUsedCustomColors, type ColorKind } from "./colors.ts";
-  import { getShapeActions } from "./shapeActions.ts";
+  import type { ShapeActions } from "./shapeActions.ts";
   import { zOrderShortcut } from "./shortcuts.ts";
   import { ARROWHEAD_KINDS, ARROWHEAD_GLYPH, ARROWHEAD_LABEL } from "./menu.ts";
-  import type { ExtendedTool } from "./tools.ts";
 
   /**
    * The properties panel.
@@ -37,8 +36,8 @@
    */
   let {
     summary,
+    can,
     themeMode = "light",
-    tool = "select",
     engine,
     openPicker,
     onOpenPicker,
@@ -47,7 +46,13 @@
     run,
   }: {
     summary: SelectionStyle;
-    tool?: ExtendedTool;
+    /**
+     * Which controls apply, given the tool and what is selected — `getShapeActions`, as
+     * the surface already reads it for the panel's visibility and the S and G keys.
+     * Every section below is gated on one of these rather than on an ad-hoc condition,
+     * so the answers cannot drift apart.
+     */
+    can: ShapeActions;
     engine: DrawEngine | null;
     themeMode?: ThemeMode;
     /** Which colour picker is open — the S and G keys open them from outside. */
@@ -63,14 +68,6 @@
 
   const strokePresets = $derived(getStrokeSwatches(themeMode));
   const fillPresets = $derived(getFillSwatches(themeMode));
-
-  /**
-   * Which controls apply, given the tool and what is selected.
-   *
-   * Every section below is gated on one of these rather than on an ad-hoc condition, so
-   * the answers cannot drift apart.
-   */
-  const can = $derived(getShapeActions(tool, summary, summary.backgroundColor ?? "transparent"));
 
   /** The element type reads as a heading, so it is capitalised rather than raw. */
   const title = $derived.by(() => {

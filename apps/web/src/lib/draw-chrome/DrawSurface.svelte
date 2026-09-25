@@ -1395,7 +1395,7 @@
   {#if panelVisible}
     <DrawInspector
       {summary}
-      {tool}
+      can={shapeActions}
       {engine}
       {themeMode}
       {openPicker}
