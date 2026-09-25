@@ -257,6 +257,53 @@ test.describe("flip", () => {
     expect(ends(after)).toEqual(ends(before));
   });
 
+  test("a rotated element's frame handle sits at its turned bounds, and stays put across a flip", async ({
+    page,
+  }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    // A bar stood on end beside a box: the bar's *rotated* footprint reaches only
+    // x:32..48, y:18..98 — not its unrotated box (x:0..80, y:50..66). The group's NW
+    // corner sits at its turned bounds' (32,18), 8px further out for the handle
+    // (`docs/reference/resize.md` › the multi-selection frame).
+    const scene = () => [
+      { id: "bar", type: "rectangle", x: 0, y: 50, width: 80, height: 16, angle: Math.PI / 2 },
+      { id: "box", type: "rectangle", x: 150, y: 50, width: 60, height: 60 },
+    ];
+    const grab = { x: ORIGIN.x + 24, y: ORIGIN.y + 10 };
+
+    await load(page, scene());
+    await select(page, ["bar", "box"]);
+    const before = await elementById(page, "box");
+
+    await page.mouse.move(board.box.x + grab.x, board.box.y + grab.y);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + grab.x + 20, board.box.y + grab.y + 20, { steps: 4 });
+    await page.mouse.up();
+
+    const shrunk = await elementById(page, "box");
+    expect(shrunk.x, "the SE anchor held while the NW corner moved in").toBeGreaterThan(before.x);
+    expect(shrunk.width).toBeLessThan(before.width);
+
+    // The same grab point again, on a *flipped* copy of the same scene: a turned union is
+    // symmetric here, so the NW corner lands in the same spot — no drift from mirroring
+    // the unturned union the way `scene_bounds` used to.
+    await load(page, scene());
+    await select(page, ["bar", "box"]);
+    await page.keyboard.press("Shift+H");
+    const beforeFlip = await elementById(page, "box");
+
+    await page.mouse.move(board.box.x + grab.x, board.box.y + grab.y);
+    await page.mouse.down();
+    await page.mouse.move(board.box.x + grab.x + 20, board.box.y + grab.y + 20, { steps: 4 });
+    await page.mouse.up();
+
+    const shrunkFlipped = await elementById(page, "box");
+    expect(shrunkFlipped.width, "the same handle still grabs after the flip").toBeLessThan(
+      beforeFlip.width,
+    );
+  });
+
   test("a frame's name starts at the frame's left edge whatever text was drawn before it", async ({
     page,
   }) => {

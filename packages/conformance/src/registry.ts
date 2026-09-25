@@ -828,10 +828,18 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "15. Transform engine",
-    // Was swept up by the section rule below while nothing read Alt during a resize.
+    // Was a gap while nothing read Alt during a resize. Every handle now scales about the
+    // frame's own centre while Alt is held — one element or a selection, composed with
+    // Shift's aspect lock (shouldResizeFromCenter, resizeElements.ts@1118751f:621-727,
+    // 1052-1059).
     text: /Alt center scaling/,
-    status: "gap",
-    why: "Alt does not resize from the centre: every handle holds the opposite side or corner, one element or several. Excalidraw scales about the centre while Alt is held (shouldResizeFromCenter, resizeElements.ts@1118751f:621-727, 1056-1059).",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_selection.rs`,
+      `${ENGINE}/ci_group_resize.rs`,
+      `${ENGINE}/ci_text_resize.rs`,
+      "e2e/resizeCenter.spec.ts",
+    ],
   },
   {
     section: "15. Transform engine",
