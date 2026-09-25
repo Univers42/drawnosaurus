@@ -249,26 +249,21 @@
   // it only ever has one while the pointer is actually over the canvas.
   const toolCursor = $derived(cursorForTool(tool));
 
-  /** Asks the engine whether the panel's view is stale, and makes it re-read if so. */
+  /**
+   * Asks the engine whether the panel's view is stale, and makes it re-read if so. After a
+   * write from the panel or a style key it is also what restyles a text being typed: the
+   * engine writes into it and moves the revision, and its editor, keyed to the revision,
+   * reads the new family, size, colour and box back (`DrawTextEditor`). The panel's
+   * buttons and the quick picks keep the focus, so the editor is still open when they write.
+   */
   function refreshStyle(): void {
     styleRevision = engine?.styleRevision() ?? 0;
-  }
-
-  /**
-   * After a write from the panel or a style key: the panel reads the selection again, and
-   * a text being typed is asked for again, so its editor takes the new family, size,
-   * colour and place — what has been typed stays. The panel's buttons and the quick picks
-   * keep the focus, so the editor is still open when they write.
-   */
-  function styleWritten(): void {
-    refreshStyle();
-    if (textEdit) engine?.editSelectedText();
   }
 
   /** Style patches from the panel: onto the selection, or the next element without one. */
   function applyStyle(patch: Partial<DrawElementStyle>): void {
     engine?.applyStyle(patch);
-    styleWritten();
+    refreshStyle();
   }
 
   function previewStyle(patch: Partial<DrawElementStyle>): void {
@@ -301,7 +296,7 @@
   /** One font size step, on the selection — the text being typed, while it is. */
   function stepFontSize(increase: boolean): void {
     engine?.stepFontSize(increase);
-    styleWritten();
+    refreshStyle();
   }
 
   /**
@@ -1458,7 +1453,7 @@
       run={(action) => {
         if (!engine) return;
         action(engine);
-        styleWritten();
+        refreshStyle();
       }}
     />
   {/if}

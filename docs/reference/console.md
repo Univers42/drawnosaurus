@@ -116,14 +116,17 @@ on the board and in the text being typed, as the oracle's editor runs them
 these chords through from the text editor; every other key typed there is text
 (`shortcuts.ts` › `styleShortcut`, `shortcuts.test.ts` › typing).
 
-**IMPLEMENTATION DETAIL** — the editor is asked for again after every write from the panel
-or a style key (`editSelectedText`, `DrawSurface.svelte` › `styleWritten`), so it takes
-the new family, size, colour and place and keeps what was typed: the quick picks and the
-panel's buttons keep the focus, so the editor is still open when they write
-(`e2e/fontPicker.spec.ts` › while typing). A text still being typed was made since the
-last commit: its step is written into it without a commit of its own, so the commit that
-closes the editor is still one step of undo (`engine/style.rs` ›
-`relayout_selected_texts`, `ci_next_style.rs` › a text being typed).
+**IMPLEMENTATION DETAIL** — while a text is typed, every style write — a size chord, a family,
+any panel row — lands on it, and the editor reads its new family, size, colour and box back
+at once through the style revision the write moves (`DrawSurface.svelte` › `refreshStyle`,
+`DrawTextEditor.svelte` › `revision`, `text_edit_layout`), keeping what was typed: the quick
+picks and the panel's buttons keep the focus, so the editor is still open when they write.
+None is a step of its own: nothing is stamped or sent until the editor closes, and that
+commit — typing and styles together — is one step of undo (`engine/selection_style.rs` ›
+`commit_style`; `ci_text_edit.rs` › `style_while_typing`, `ci_next_style.rs` › a text being
+typed, `e2e/fontSize.spec.ts` › one step). A family hovered in the list while typing is
+given back as the hover found the text, what was typed included, as the oracle's picker
+caches the editing text when it opens (`actionProperties.tsx@1118751f:1484-1499`).
 
 ## Arrows
 
