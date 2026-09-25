@@ -87,9 +87,13 @@ async function writeNote(board: Board, words: string): Promise<{ note: Element; 
   return { note, label };
 }
 
-/** The middle of a note, where its paper takes a click. */
+/**
+ * A click on a note's paper above its label. A note already selected reopens its label
+ * for typing when the click lands on the label (`App.tsx@1118751f:12402-12425`), and a
+ * short label sits in the middle.
+ */
 async function clickNote(board: Board, note: Element): Promise<void> {
-  const at = await onPage(board, note.x + note.width / 2, note.y + note.height / 2);
+  const at = await onPage(board, note.x + note.width / 2, note.y + note.height / 8);
   await board.page.mouse.click(at.x, at.y);
 }
 
