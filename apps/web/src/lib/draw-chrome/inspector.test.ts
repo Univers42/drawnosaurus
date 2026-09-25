@@ -4,6 +4,7 @@ import {
   DARK_FILL_SWATCHES,
   DARK_STROKE_SWATCHES,
   EDGES,
+  roundnessFor,
   GRID_SIZES,
   LIGHT_FILL_SWATCHES,
   LIGHT_STROKE_SWATCHES,
@@ -73,8 +74,11 @@ describe("the other option rows", () => {
     // Excalidraw's roundness is a mode, not a radius: their elements carry
     // `roundness: {type: 3}` with no value at all.
     expect(EDGES.map((e) => e.label)).toEqual(["Sharp", "Round"]);
-    expect(EDGES[0]?.value).toBeNull();
-    expect(EDGES[1]?.value).toBeTypeOf("number");
+    expect(EDGES.map((e) => roundnessFor(e.value))).toEqual([null, 8]);
+  });
+
+  it("names both edges, so a mixed selection (null) marks neither as chosen", () => {
+    expect(EDGES.map((e) => e.value)).not.toContain(null);
   });
 
   it("offers grid spacings that stay aligned with each other", () => {

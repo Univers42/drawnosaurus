@@ -1,4 +1,3 @@
-import type { DrawElement, DrawElementStyle } from "@osionos/draw-engine/types";
 import type { ExtendedTool } from "./tools.ts";
 
 /**
@@ -26,36 +25,8 @@ const CROSSHAIR_TOOLS = new Set<ExtendedTool>([
   "sticky",
 ]);
 
-/** `<input type="color">` only accepts #rrggbb. Anything else (transparent, tokens) falls back. */
-export function toHex(color: string): string {
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#1e1e1e";
-}
-
 export function cursorForTool(tool: ExtendedTool): string {
   if (tool === "text") return "text";
   if (CROSSHAIR_TOOLS.has(tool)) return "crosshair";
   return "default";
-}
-
-export function styleOf(element: DrawElement): DrawElementStyle {
-  const {
-    strokeColor,
-    backgroundColor,
-    fillStyle,
-    strokeWidth,
-    strokeStyle,
-    roughness,
-    opacity,
-    roundness,
-  } = element;
-  return {
-    strokeColor,
-    backgroundColor,
-    fillStyle,
-    strokeWidth,
-    strokeStyle,
-    roughness,
-    opacity,
-    roundness,
-  };
 }

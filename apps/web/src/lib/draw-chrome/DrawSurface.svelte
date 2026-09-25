@@ -1,10 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { DrawCanvas } from "@osionos/draw-engine/svelte";
-  import { DARK_THEME, DEFAULT_ELEMENT_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
+  import { DARK_THEME, EMPTY_SELECTION_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
-    DrawElement,
     DrawElementStyle,
     DrawTheme,
     DrawTool,
@@ -13,7 +12,7 @@
   } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { DrawPeer } from "@osionos/draw-engine/types";
-  import { cursorForTool, styleOf } from "./style.ts";
+  import { cursorForTool } from "./style.ts";
   import { screenFontPx, zoomPercent } from "./camera.ts";
   import {
     persistCanvasBackground,
@@ -83,6 +82,7 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
+  import { isTextField, styleShortcut } from "./shortcuts.ts";
   import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
@@ -129,14 +129,14 @@
   let tool = $state<ExtendedTool>("select");
   let toolLocked = $state(false);
   let selectedCount = $state(0);
-  /** The selected elements, so the panel can decide which controls apply. */
-  let selection = $state.raw<DrawElement[]>([]);
   /**
-   * Counts scene changes, ours and peers'. What the panel offers can change under the
-   * same selection — ungrouping it makes more blocks to align — and no selection event
-   * says so.
+   * The engine's `styleRevision()` as last read. It moves on everything that can change
+   * what the panel shows — a selection, a style, an undo, a peer's edit to what is
+   * selected — so the panel reads the selection once per move and never otherwise.
    */
-  let sceneRevision = $state(0);
+  let styleRevision = $state(0);
+  /** Which colour picker is open; S and G open them from the keyboard. */
+  let openPicker = $state<"stroke" | "background" | null>(null);
 
   /**
    * Whether a pointer gesture is in flight on the canvas.
@@ -175,11 +175,19 @@
     (window as unknown as { __drawEngine?: DrawEngine }).__drawEngine = instance;
   }
 
+  /** What the panel shows: one engine call per `styleRevision`, not one per row. */
+  const summary = $derived.by(() => {
+    void styleRevision;
+    return engine?.selectionStyle() ?? EMPTY_SELECTION_STYLE;
+  });
+  const shapeActions = $derived(
+    getShapeActions(tool, summary, summary.backgroundColor ?? "transparent"),
+  );
+
   $effect(() => {
-    const want = getShapeActions(tool, selection, activeStyle.backgroundColor).visible;
+    const want = shapeActions.visible;
     if (!dragging) panelVisible = want;
   });
-  let activeStyle = $state<DrawElementStyle>(DEFAULT_ELEMENT_STYLE);
   let textEdit = $state<TextEditRequest | null>(null);
 
   // Text first laid out in a fallback's widths is re-laid once its face arrives.
@@ -228,10 +236,53 @@
   // it only ever has one while the pointer is actually over the canvas.
   const toolCursor = $derived(cursorForTool(tool));
 
-  function syncStyle(source: DrawEngine | null): void {
-    if (!source) return;
-    const first = source.getSelectedElements()[0];
-    activeStyle = first ? styleOf(first) : source.getNextStyle();
+  /** Asks the engine whether the panel's view is stale, and makes it re-read if so. */
+  function refreshStyle(): void {
+    styleRevision = engine?.styleRevision() ?? 0;
+  }
+
+  /** Style patches from the panel: onto the selection, or the next element without one. */
+  function applyStyle(patch: Partial<DrawElementStyle>): void {
+    engine?.applyStyle(patch);
+    refreshStyle();
+  }
+
+  function previewStyle(patch: Partial<DrawElementStyle>): void {
+    if (selectedCount > 0) engine?.previewStyle(patch);
+    else engine?.setNextStyle(patch);
+    refreshStyle();
+  }
+
+  function copyStyles(): void {
+    if (engine?.copyStyles()) notify("Copied styles.");
+  }
+
+  function pasteStyles(): void {
+    engine?.pasteStyles();
+    refreshStyle();
+  }
+
+  /**
+   * The chrome's style keys, ahead of the engine's: Ctrl/Cmd+Alt+C and +V copy and paste
+   * styles, S and G open the colour pickers — see `styleShortcut`. On the capture
+   * phase, because the engine's listener sits on the canvas below and would otherwise
+   * take Ctrl+Alt+C for an element copy and S for the lasso.
+   */
+  function onStyleShortcut(event: KeyboardEvent): void {
+    // An open dialog keeps its keys too: the colour picker's own S and G pick blue and pink.
+    if (isTextField(event.target) || (event.target as Element).closest?.('[role="dialog"]')) return;
+    const action = styleShortcut(event, {
+      selected: summary.count,
+      tool,
+      strokeRow: panelVisible && shapeActions.strokeColor,
+      backgroundRow: panelVisible && shapeActions.backgroundColor,
+    });
+    if (!action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (action === "copyStyles") copyStyles();
+    else if (action === "pasteStyles") pasteStyles();
+    else openPicker = action === "strokePicker" ? "stroke" : "background";
   }
 
   /** Whether the OS is currently asking for a dark UI. */
@@ -259,7 +310,7 @@
     const cur = engine?.getNextStyle();
     if (cur && (cur.strokeColor === "#1e1e1e" || cur.strokeColor === "#f8f9fa")) {
       engine?.setNextStyle({ strokeColor: ink });
-      syncStyle(engine);
+      refreshStyle();
     }
   }
 
@@ -615,7 +666,6 @@
       // before it. Picking a tool must never edit an existing element. The engine
       // already defaults an arrow's head from its type (render::default_arrowhead),
       // so this was redundant as well as harmful.
-      syncStyle(engine);
     }
   }
 
@@ -718,7 +768,7 @@
   }
 
   function handleSceneChange(json: string): void {
-    sceneRevision += 1;
+    refreshStyle();
     onSceneChange?.(json);
     refreshEmbedFrames();
     if (!realtime) return;
@@ -855,7 +905,7 @@
     };
     if (patch.order) payload.order = patch.order;
     if (!engine.applyRemotePatch(JSON.stringify(payload))) return;
-    sceneRevision += 1;
+    refreshStyle();
     liveBroadcast.adoptRemote(patch);
     // Order-only patches carry no elements; exportJson is the safe host sync.
     // Otherwise a delta keeps tombstones visible to the autosave tracker.
@@ -1088,10 +1138,7 @@
    * never intercepted.
    */
   function onAppShortcut(event: KeyboardEvent): void {
-    const target = event.target as HTMLElement | null;
-    if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) {
-      return;
-    }
+    if (isTextField(event.target)) return;
 
     const mod = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
@@ -1148,6 +1195,7 @@
 <div
   class="draw-chrome"
   style:cursor={hoverCursor ?? toolCursor}
+  onkeydowncapture={onStyleShortcut}
   ondragover={onChromeDragOver}
   ondrop={onChromeDrop}
   onpastecapture={onChromePaste}
@@ -1209,7 +1257,7 @@
         zoom = zoomPercent(next.camera.scale);
         next.setGrid(grid);
         next.setObjectsSnap(objectsSnap);
-        syncStyle(next);
+        styleRevision = next.styleRevision();
         exposeForDevTools(next);
         refreshEmbedFrames();
         toldEngine = "";
@@ -1224,12 +1272,11 @@
         tool = next;
         if (next === "image") openImagePicker();
         if (next === "embed") showEmbed = true;
-        syncStyle(engine);
       }}
       onSelectionChange={(ids) => {
         selectedCount = ids.length;
-        selection = engine?.getSelectedElements() ?? [];
-        syncStyle(engine);
+        openPicker = null;
+        refreshStyle();
         claimSelected(ids);
       }}
       onNotice={(notice) => notify(NOTICE_TEXT[notice])}
@@ -1357,20 +1404,18 @@
 
   {#if panelVisible}
     <DrawInspector
-      style={activeStyle}
-      {selectedCount}
-      {selection}
-      {sceneRevision}
-      {tool}
+      {summary}
+      can={shapeActions}
       {engine}
       {themeMode}
-      onApply={(patch) => {
-        if (selectedCount > 0) {
-          engine?.applyStyle(patch);
-        } else {
-          engine?.setNextStyle(patch);
-        }
-        syncStyle(engine);
+      {openPicker}
+      onOpenPicker={(kind) => (openPicker = kind)}
+      onApply={applyStyle}
+      onPreview={previewStyle}
+      run={(action) => {
+        if (!engine) return;
+        action(engine);
+        refreshStyle();
       }}
     />
   {/if}
@@ -1404,6 +1449,7 @@
     bind:showMermaid
     bind:showShare
     bind:showShortcuts
+    onCopyStyles={copyStyles}
     onEditEmbedLink={(id) => {
       const url = embedFrames.find((frame) => frame.id === id)?.url;
       if (url) editingEmbed = { id, url };

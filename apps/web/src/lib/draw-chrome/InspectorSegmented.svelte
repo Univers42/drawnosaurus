@@ -1,7 +1,5 @@
 <script lang="ts">
-  // `null` is a real choice, not "unset": Edges uses it for sharp corners, which is how
-  // the engine spells "no roundness".
-  type Option = string | number | null;
+  type Option = string | number;
 
   let {
     options,
@@ -10,7 +8,8 @@
     onPick,
   }: {
     options: Array<{ label: string; value: Option }>;
-    value: Option;
+    /** `null` for a mixed selection: nothing is pressed, as nothing is true of all of it. */
+    value: Option | null;
     ariaLabel: string;
     onPick: (value: Option) => void;
   } = $props();
