@@ -47,6 +47,20 @@ also makes it the next element's style (`currentItem*`). An element the patch le
 unchanged keeps its version (`newElementWith`,
 `packages/element/src/mutateElement.ts:170-172`). Covered by `ci_style_reach.rs`.
 
+**VERIFIED** (source) — a click on a group selects every member with no lock filter
+(`selectGroupsForSelectedElements`, `packages/element/src/groups.ts@1118751f:66-140`) and
+`changeProperty` restyles every selected element
+(`actions/actionProperties.tsx@1118751f:193-223`); the oracle's lock filter is the marquee's
+alone (`packages/element/src/selection.ts@1118751f:33-34`, `:70-96`). So a locked member of
+a group the selection carries takes the colour, the pasted style and its label's size
+(`ci_style_reach.rs` › a locked member of a selected group is restyled). What a peer holds,
+and the label of a shape a peer holds, are never reached (`engine/style.rs` › `restylable`).
+
+The opacity slider previews on every move and commits on release. What a peer takes in
+between is given back to them at once, as it was, and what they send is taken as it comes:
+committed with the rest, the preview was stamped above their copy and a label they had typed
+into went back to its old words (`engine/peers.rs`, `ci_selection_style.rs` › preview).
+
 ## Copy and paste styles
 
 **VERIFIED** — `actions/actionStyles.ts:51-236`, ported as `copy_styles` / `paste_styles`.
@@ -61,10 +75,12 @@ the shared style to every target:
   text is written in, Excalifont (`sourceText.fontFamily || DEFAULT_FONT_FAMILY`,
   `actions/actionStyles.ts@1118751f:143`); from a text, its own family — a legacy text
   with none crosses as the system stack it is drawn in, so its twin is not moved. The
+  line height comes with the family (`sourceText.lineHeight || getLineHeight(fontFamily)`,
+  `:157`), so a shape's default style pasted on a new text changes nothing. The
   text is laid out again with its shape, which grows when the label no longer fits
   (`redrawTextBoundingBox(newTextElement, container)`, `:174`);
-- except a locked element and the label of a locked shape, which keep their own (see
-  Select All below);
+- except what a style may not change, which keeps its own: a loose locked element, what a
+  peer holds, and the label of either (see Select All below);
 - arrowheads only from an arrow to an arrow;
 - a frame target keeps a transparent background and no roundness.
 
@@ -74,14 +90,14 @@ styles." as the keys do (`actions/actionStyles.ts:73`).
 
 ## Divergences
 
-| what                            | Excalidraw                                                                                                                                                                                        | here                                                                                                                                                                                                                                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **S** with nothing selected     | opens the stroke picker under a drawing tool (`components/App.tsx:5895-5918`)                                                                                                                     | only with a selection. Our S is also the lasso key, which Excalidraw folds into the selection tool, and with nothing selected the key keeps that meaning                                                                                                                                          |
-| eyedropper                      | its own sampler: it reads the canvas's pixels (`components/EyeDropper.tsx:107-120`), applies live while the pointer is held, and is also opened by holding Alt (`ColorPicker/ColorInput.tsx:141`) | the browser's `EyeDropper` API, Chromium only, opened by the button or **I**; no Alt hold and no live application. The button is absent where the API is                                                                                                                                          |
-| arrowheads of a mixed selection | a non-arrow counts as the next element's arrowheads (`actionProperties.tsx:2002-2028`), so a box plus an arrow reads as mixed whenever the arrow's heads differ from those                        | read from the arrows only: a box plus an arrow shows the arrow's heads                                                                                                                                                                                                                            |
-| top picks in the dark theme     | the same five values, painted through the dark-mode filter (`ColorPicker/TopPicks.tsx`)                                                                                                           | darker values of their own (`inspector.ts` › `DARK_*_SWATCHES`, which predates this package); the popover's grid uses the light palette as Excalidraw's does                                                                                                                                      |
-| Select All                      | skips labels and locked elements (`actions/actionSelectAll.ts:32-38`), so no style ever reaches a locked element                                                                                  | takes both, so locked elements can be unlocked from the menu (`edit/group.rs` › `carried_by`). A label is read and styled through its shape; a style chosen then passes the locked elements and their labels by, and the panel reads only what it would change (`engine/style.rs` › `restylable`) |
-| top picks                       | reorderable by drag and replaceable from a context menu (`ColorPicker/TopPicks.tsx:48`, `:75`)                                                                                                    | fixed                                                                                                                                                                                                                                                                                             |
+| what                            | Excalidraw                                                                                                                                                                                        | here                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **S** with nothing selected     | opens the stroke picker under a drawing tool (`components/App.tsx:5895-5918`)                                                                                                                     | only with a selection. Our S is also the lasso key, which Excalidraw folds into the selection tool, and with nothing selected the key keeps that meaning                                                                                                                                                                                                  |
+| eyedropper                      | its own sampler: it reads the canvas's pixels (`components/EyeDropper.tsx:107-120`), applies live while the pointer is held, and is also opened by holding Alt (`ColorPicker/ColorInput.tsx:141`) | the browser's `EyeDropper` API, Chromium only, opened by the button or **I**; no Alt hold and no live application. The button is absent where the API is                                                                                                                                                                                                  |
+| arrowheads of a mixed selection | a non-arrow counts as the next element's arrowheads (`actionProperties.tsx:2002-2028`), so a box plus an arrow reads as mixed whenever the arrow's heads differ from those                        | read from the arrows only: a box plus an arrow shows the arrow's heads                                                                                                                                                                                                                                                                                    |
+| top picks in the dark theme     | the same five values, painted through the dark-mode filter (`ColorPicker/TopPicks.tsx`)                                                                                                           | darker values of their own (`inspector.ts` › `DARK_*_SWATCHES`, which predates this package); the popover's grid uses the light palette as Excalidraw's does                                                                                                                                                                                              |
+| Select All                      | skips labels and locked elements (`actions/actionSelectAll.ts:32-38`); a locked member of a group comes back with it (`selectGroupsForSelectedElements`) and is restyled                          | takes both, so locked elements can be unlocked from the menu (`edit/group.rs` › `carried_by`). A label is read and styled through its shape; a style chosen then passes a loose locked element and its label by, restyles a locked member of a group as the oracle does, and the panel reads only what it would change (`engine/style.rs` › `restylable`) |
+| top picks                       | reorderable by drag and replaceable from a context menu (`ColorPicker/TopPicks.tsx:48`, `:75`)                                                                                                    | fixed                                                                                                                                                                                                                                                                                                                                                     |
 
 ## Gaps
 

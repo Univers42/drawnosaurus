@@ -153,7 +153,13 @@ its label for stroke colour and opacity (`actionChangeStrokeColor`, `actionChang
 the panel's one path, `selection_style.rs` › `style_targets`, `ci_style_reach.rs`),
 except a label a peer holds: typing into a label holds the label alone, and every writer that
 follows a shape to its label skips one that is `untouchable`, as everything else does
-(`ci_text_model.rs` › a label a peer holds is left alone). A writer stamps only what it
+(`ci_text_model.rs` › a label a peer holds is left alone). Nor is a label reached without
+its shape when that shape is not ours: one clicked on its own or taken by Select All in a
+shape a peer holds, or a loose locked one, is neither restyled nor laid out again, and
+opens no editor — laying it out would grow the shape (`style.rs` › `restylable`;
+`ci_text_model.rs` › a shape a peer holds is not grown through its label, nor by typing
+into its label). An editor opened before a peer took the shape commits the words without
+growing it; the label may overflow until it is next laid out. A writer stamps only what it
 changed, through the commit: picking the family, colour or wrap a text already has is not an
 edit (`newElementWith`, `mutateElement.ts@1118751f:149-181`; `ci_text_model.rs` › a change
 that changes nothing is not an edit). `set_text_auto_resize` re-routes the arrows bound to
