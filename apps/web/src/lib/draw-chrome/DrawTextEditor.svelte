@@ -79,7 +79,11 @@
     // it was made with.
     if (!request.text && engine.updateTextEdit("")) typed += 1;
     node.focus();
-    node.select();
+    // A click on a text that was already the sole selection opens with the caret there
+    // instead of the whole text selected, as every other entry point does
+    // (`getCaretIndexFromInitialSceneCoords`, `textWysiwyg.tsx@1118751f:491-538`).
+    if (request.caret === undefined) node.select();
+    else node.setSelectionRange(request.caret, request.caret);
     // At once: the editor opens on a release, a double click or a key, never inside the
     // press it would take for one that ends it — which the oracle waits a frame to skip
     // (`textWysiwyg.tsx@1118751f:1047-1053`). A frame can be long enough to click in.
