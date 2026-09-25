@@ -87,6 +87,20 @@
       );
   }
 
+  /**
+   * Whether the slider has previewed since it last committed. A release commits whatever
+   * the value: Chromium fires no `change` when the thumb is let go where it started, and
+   * until a commit the previewed elements are mid-gesture, so a colleague's newer copy of
+   * them is refused. Once, whichever of `change` and the release comes first.
+   */
+  let previewing = false;
+
+  function commitOpacity(value: string): void {
+    if (!previewing) return;
+    previewing = false;
+    onApply({ opacity: Number(value) });
+  }
+
   /** What the slider shows for a mixed selection: the next element's, as the oracle's does. */
   const opacity = $derived(summary.opacity ?? engine?.getNextStyle().opacity ?? 100);
   const opacityText = $derived(summary.opacity === null ? "mixed" : `${summary.opacity}%`);
@@ -261,8 +275,12 @@
         value={opacity}
         aria-label="Opacity"
         aria-valuetext={opacityText}
-        oninput={(e) => onPreview({ opacity: Number(e.currentTarget.value) })}
-        onchange={(e) => onApply({ opacity: Number(e.currentTarget.value) })}
+        oninput={(e) => {
+          previewing = true;
+          onPreview({ opacity: Number(e.currentTarget.value) });
+        }}
+        onchange={(e) => commitOpacity(e.currentTarget.value)}
+        onpointerup={(e) => commitOpacity(e.currentTarget.value)}
       />
     </InspectorRow>
   {/if}

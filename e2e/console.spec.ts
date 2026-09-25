@@ -313,3 +313,41 @@ test("an opacity drag shows as it goes and is one step of undo", async ({ page }
     .poll(() => field(page, "opacity"), { message: "one undo did not undo the whole drag" })
     .toEqual([100]);
 });
+
+test("an opacity drag that ends where it began still lets a colleague's edit in", async ({
+  page,
+}) => {
+  // Chromium fires no `change` when the thumb is let go at its starting value, and the
+  // previews had left the shape mid-gesture: every newer copy a colleague sent was
+  // refused until some unrelated edit of ours.
+  const board = await openBoard(page);
+  await drawBox(board);
+  await clickElement(board, 0);
+
+  const slider = panel(page).getByRole("slider", { name: "Opacity" });
+  await slider.scrollIntoViewIfNeeded();
+  const track = await slider.boundingBox();
+  if (!track) throw new Error("the opacity slider has no box");
+  const y = track.y + track.height / 2;
+  await page.mouse.move(track.x + track.width - 2, y);
+  await page.mouse.down();
+  await page.mouse.move(track.x + track.width * 0.3, y, { steps: 6 });
+  expect((await field(page, "opacity"))[0], "setup: the drag previews").toBeLessThan(50);
+  await page.mouse.move(track.x + track.width - 2, y, { steps: 6 });
+  await page.mouse.up();
+  expect(await field(page, "opacity")).toEqual([100]);
+
+  const accepted = await page.evaluate(() => {
+    const engine = window.__drawEngine!;
+    const [shape] = JSON.parse(engine.exportJson()).elements;
+    return engine.applyRemotePatch(
+      JSON.stringify({
+        type: "osidraw",
+        version: 1,
+        elements: [{ ...shape, strokeColor: "#2f9e44", version: shape.version + 5 }],
+      }),
+    );
+  });
+  expect(accepted, "the colleague's edit was refused").toBe(true);
+  expect(await field(page, "strokeColor")).toEqual(["#2f9e44"]);
+});
