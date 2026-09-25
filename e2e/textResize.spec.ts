@@ -240,3 +240,52 @@ test("a handle taken where it is drawn moves its corner no further than the poin
   expect(after.width).toBeCloseTo(before.width + 40, 1);
   expect(after.height).toBeCloseTo(before.height + 30, 1);
 });
+
+test("a side-resized text takes its own width back from the menu, or from the wrap row", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await load(board, [label(null)]);
+  const before = await element(board, "text");
+
+  /** The east side pulled in to 100: a fixed width, the words wrapped at it. */
+  async function narrow(): Promise<Element> {
+    const now = await element(board, "text");
+    const side = await onPage(board, now.x + now.width, now.y + now.height / 2);
+    await pressAndMove(
+      board,
+      { x: side.x + FRAME_LINE_OUT, y: side.y },
+      { dx: 100 - now.width, dy: 0 },
+    );
+    await page.mouse.up();
+    const fixed = await element(board, "text");
+    expect(fixed.autoResize).toBe(false);
+    expect(fixed.text).toContain("\n");
+    return fixed;
+  }
+
+  /** Its own width again: its typed line, measured, its left edge where it was. */
+  async function ownWidth(): Promise<void> {
+    await expect.poll(async () => (await element(board, "text")).autoResize).toBe(true);
+    const auto = await element(board, "text");
+    expect(auto.text).toBe(TEXT);
+    expect(auto.width).toBeCloseTo(before.width, 0);
+    expect(auto.x).toBeCloseTo(before.x, 1);
+  }
+
+  // "Enable text auto-resizing" (`actionTextAutoResize.ts@1118751f`), on a right click.
+  const fixed = await narrow();
+  const middle = await onPage(board, fixed.x + fixed.width / 2, fixed.y + fixed.height / 2);
+  await page.mouse.click(middle.x, middle.y, { button: "right" });
+  await page.getByRole("menuitem", { name: "Enable text auto-resizing", exact: true }).click();
+  await ownWidth();
+
+  // The panel's Text wrap row, Grow.
+  await narrow();
+  await page
+    .getByRole("complementary", { name: "Style inspector" })
+    .getByRole("group", { name: "Text wrap" })
+    .getByRole("button", { name: "Grow" })
+    .click();
+  await ownWidth();
+});
