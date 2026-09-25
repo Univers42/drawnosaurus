@@ -1,7 +1,14 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { OPEN_CANVAS, focusBoard, openBoard, patchedElements, selection } from "./board.ts";
-import { clickOn, element, writeText, type BoardElement } from "./textBoard.ts";
+import {
+  OPEN_CANVAS,
+  focusBoard,
+  openBoard,
+  patchedElements,
+  sceneElements,
+  selection,
+} from "./board.ts";
+import { clickOn, editor, element, writeText, type BoardElement } from "./textBoard.ts";
 
 /**
  * The font family row, as Excalidraw's FontPicker (`components/FontPicker/*@1118751f`):
@@ -133,4 +140,23 @@ test("a selection of two families checks neither, and a pick sets both", async (
   await expect.poll(async () => (await element(board, first.id)).fontFamily).toBe(8);
   expect((await element(board, second.id)).fontFamily).toBe(8);
   await expect(quickPicks(page).getByRole("radio", { name: "Code" })).toBeChecked();
+});
+
+test("a family picked while typing is the one the editor types in", async ({ page }) => {
+  const board = await openBoard(page);
+  await page.mouse.dblclick(board.box.x + AT.x, board.box.y + AT.y);
+  await expect(editor(board)).toBeVisible();
+  await page.keyboard.type("abc");
+  await expect(editor(board)).toHaveCSS("font-family", /Excalifont/);
+
+  // The quick picks keep the focus, so the editor stays open and takes the new face.
+  await quickPicks(page).getByRole("radio", { name: "Code" }).click();
+  await expect(editor(board)).toBeFocused();
+  await expect(editor(board)).toHaveCSS("font-family", /Comic Shanns/);
+  await expect(editor(board)).toHaveValue("abc");
+
+  await page.keyboard.press("Control+Enter");
+  await expect(editor(board)).toHaveCount(0);
+  const [text] = await sceneElements(page);
+  expect(text).toMatchObject({ type: "text", text: "abc", fontFamily: 8 });
 });

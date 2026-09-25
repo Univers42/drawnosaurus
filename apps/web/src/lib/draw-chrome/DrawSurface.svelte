@@ -241,10 +241,21 @@
     styleRevision = engine?.styleRevision() ?? 0;
   }
 
+  /**
+   * After a write from the panel or a style key: the panel reads the selection again, and
+   * a text being typed is asked for again, so its editor takes the new family, size,
+   * colour and place — what has been typed stays. The panel's buttons and the quick picks
+   * keep the focus, so the editor is still open when they write.
+   */
+  function styleWritten(): void {
+    refreshStyle();
+    if (textEdit) engine?.editSelectedText();
+  }
+
   /** Style patches from the panel: onto the selection, or the next element without one. */
   function applyStyle(patch: Partial<DrawElementStyle>): void {
     engine?.applyStyle(patch);
-    refreshStyle();
+    styleWritten();
   }
 
   function previewStyle(patch: Partial<DrawElementStyle>): void {
@@ -274,15 +285,10 @@
     return isTextField(target) ? "field" : "board";
   }
 
-  /**
-   * One font size step, on the selection — the text being typed, while it is. The editor
-   * is asked for again so it takes the new size and place; what has been typed stays.
-   */
+  /** One font size step, on the selection — the text being typed, while it is. */
   function stepFontSize(increase: boolean): void {
-    if (!engine) return;
-    engine.stepFontSize(increase);
-    refreshStyle();
-    if (textEdit) engine.editSelectedText();
+    engine?.stepFontSize(increase);
+    styleWritten();
   }
 
   /**
@@ -1445,7 +1451,7 @@
       run={(action) => {
         if (!engine) return;
         action(engine);
-        refreshStyle();
+        styleWritten();
       }}
     />
   {/if}
