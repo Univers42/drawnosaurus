@@ -121,7 +121,9 @@ for (const [tool, kind] of [
     await page.keyboard.type(half);
     const typing = await textBox(node);
     const box = await onPage(board, drawn);
-    expect(typing.width).toBeCloseTo(maxWidth, 0);
+    // The editor is the label's box: its longest line, and half a unit
+    // (`textWysiwyg.tsx@1118751f:390-392`), in whole pixels.
+    expect(typing.width).toBeLessThanOrEqual(maxWidth + 1);
     expect(typing.overflows, "the editor's text runs past its box").toBe(false);
     expect(typing.left).toBeGreaterThanOrEqual(box.left);
     expect(typing.right).toBeLessThanOrEqual(box.right);

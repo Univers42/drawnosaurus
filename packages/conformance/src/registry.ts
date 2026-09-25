@@ -172,7 +172,12 @@ export const RULES: readonly Rule[] = [
   {
     section: "🎯 Advanced selection tricks",
     status: "covered",
-    tests: [`${ENGINE}/ci_text.rs`, `${ENGINE}/ci_hover.rs`],
+    tests: [
+      `${ENGINE}/ci_text.rs`,
+      `${ENGINE}/ci_hover.rs`,
+      `${ENGINE}/ci_text_edit.rs`,
+      "e2e/textEditor.spec.ts",
+    ],
   },
   {
     section: "🔤 Text",
@@ -186,7 +191,16 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Pasting plain text makes no text element: the host hands it to pasteJson, which takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not.",
   },
-  { section: "🔤 Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
+  {
+    section: "🔤 Text",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text.rs`,
+      `${ENGINE}/ci_text_edit.rs`,
+      `${WEB}/draw-chrome/textEditor.test.ts`,
+      "e2e/textEditor.spec.ts",
+    ],
+  },
   {
     section: "📐 Alignment & distribution",
     text: /bypass snapping/,
@@ -581,8 +595,9 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_text_align.rs`, "e2e/textAlign.spec.ts"],
   },
-  // The editor the engine asks the host to open: its size, alignment and wrap width come
-  // from the request, whose wire names the engine pins.
+  // The editor the engine asks the host to open, laid over the text by the session the
+  // engine keeps while it is typed: its box, font, size and wrap come from the session's
+  // layout, read again after every keystroke and camera move.
   {
     section: "9. Text",
     text: /Text editing mode|Font size|Double click edit/,
@@ -590,7 +605,9 @@ export const RULES: readonly Rule[] = [
     tests: [
       `${ENGINE}/ci_text.rs`,
       `${ENGINE}/ci_text_model_compat.rs`,
+      `${ENGINE}/ci_text_edit.rs`,
       "e2e/textEditRequest.spec.ts",
+      "e2e/textEditor.spec.ts",
     ],
   },
   // Laid out as Excalidraw lays it out (docs/reference/text-model.md › Layout): a label
@@ -633,9 +650,18 @@ export const RULES: readonly Rule[] = [
     section: "9. Text",
     text: /IME|Bold|Italic|[Ll]etter spacing|Font family/,
     status: "gap",
-    why: "Font family: text is drawn, measured and exported in its family (ci_text_model.rs, e2e/textLayout.spec.ts) and the faces whose licence is established are shipped (apps/web/static/fonts/LICENSES.md) — Excalifont, the default, is shipped and tested in the browser, but there is no picker yet, and Liberation Sans is not shipped: the file Excalidraw ships is Liberation 1.05, under Red Hat's GPL v2 font-exception licence, not the OFL of 2.00 and later (apps/web/static/fonts/LICENSES.md). Bold, italic and letter spacing: Excalidraw has none of them either. IME: the overlay is a plain textarea, untested with composition.",
+    why: "Font family: text is drawn, measured and exported in its family (ci_text_model.rs, e2e/textLayout.spec.ts) and the faces whose licence is established are shipped (apps/web/static/fonts/LICENSES.md) — Excalifont, the default, is shipped and tested in the browser, but there is no picker yet, and Liberation Sans is not shipped: the file Excalidraw ships is Liberation 1.05, under Red Hat's GPL v2 font-exception licence, not the OFL of 2.00 and later (apps/web/static/fonts/LICENSES.md). Bold, italic and letter spacing: Excalidraw has none of them either. IME: the editor holds Ctrl/Cmd+Enter and Tab while an input method is composing, as Excalidraw's does (textEditor.test.ts, textWysiwyg.tsx@1118751f:687-702), but composition itself is untested in a browser.",
   },
-  { section: "9. Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
+  {
+    section: "9. Text",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text.rs`,
+      `${ENGINE}/ci_text_edit.rs`,
+      `${WEB}/draw-chrome/textEditor.test.ts`,
+      "e2e/textEditor.spec.ts",
+    ],
+  },
   {
     section: "10. Images",
     text: /Crop|Replace image|Broken-image|WebP/,
@@ -901,9 +927,16 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "The engine exposes methods, not named actions. Nothing addressable by name means no command palette and no single place a shortcut, a menu item and a button agree on — design.md is right that this is the load-bearing one.",
   },
+  // A typing session is one step, stamped once, at its commit; undo waits for it.
   {
     section: "29. Undo / redo",
-    text: /Branch|Collaboration-aware|Text editing transactions/,
+    text: /Text editing transactions/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_text_edit.rs`],
+  },
+  {
+    section: "29. Undo / redo",
+    text: /Branch|Collaboration-aware/,
     status: "gap",
     why: "History is a linear snapshot stack; branching needs the operation model from §41. Undo is partly collaboration-aware: it restores only the elements its own step changed and goes out as a new edit, so it no longer reverts a peer's work elsewhere (ci_version_stamps.rs). It is whole-element, though — undoing your change to an element a peer has since edited restores all of it, where Excalidraw's deltas restore only the properties you changed.",
   },

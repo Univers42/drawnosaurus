@@ -18,43 +18,50 @@
 </script>
 
 <div class="draw-panel bar" role="group" aria-label="Zoom and history controls">
-  <button
-    type="button"
-    onmousedown={holdFocus}
-    aria-label="Zoom out (⌘−)"
-    title="Zoom out — ⌘−"
-    onclick={() => engine?.zoomOut()}
-  >
-    <Icon name="zoomOut" size={15} />
-  </button>
-  <button
-    type="button"
-    class="pct"
-    onmousedown={holdFocus}
-    aria-label={`Zoom ${zoom} percent — reset to 100 percent (⌘0)`}
-    title="Reset zoom — ⌘0"
-    onclick={() => engine?.zoomReset()}
-  >
-    {zoom}%
-  </button>
-  <button
-    type="button"
-    onmousedown={holdFocus}
-    aria-label="Zoom in (⌘+)"
-    title="Zoom in — ⌘+"
-    onclick={() => engine?.zoomIn()}
-  >
-    <Icon name="zoomIn" size={15} />
-  </button>
-  <button
-    type="button"
-    onmousedown={holdFocus}
-    aria-label="Zoom to fit (⇧1)"
-    title="Zoom to fit — ⇧1"
-    onclick={() => engine?.fit()}
-  >
-    <Icon name="fit" size={15} />
-  </button>
+  <!--
+    The zoom buttons — the oracle's zoom actions, and fit, a camera move like them that its
+    footer lacks — apart from undo and redo: a press on them leaves a text being typed open
+    (`textEditor.ts` › `pressKeepsEditor`).
+  -->
+  <div class="zoom-actions">
+    <button
+      type="button"
+      onmousedown={holdFocus}
+      aria-label="Zoom out (⌘−)"
+      title="Zoom out — ⌘−"
+      onclick={() => engine?.zoomOut()}
+    >
+      <Icon name="zoomOut" size={15} />
+    </button>
+    <button
+      type="button"
+      class="pct"
+      onmousedown={holdFocus}
+      aria-label={`Zoom ${zoom} percent — reset to 100 percent (⌘0)`}
+      title="Reset zoom — ⌘0"
+      onclick={() => engine?.zoomReset()}
+    >
+      {zoom}%
+    </button>
+    <button
+      type="button"
+      onmousedown={holdFocus}
+      aria-label="Zoom in (⌘+)"
+      title="Zoom in — ⌘+"
+      onclick={() => engine?.zoomIn()}
+    >
+      <Icon name="zoomIn" size={15} />
+    </button>
+    <button
+      type="button"
+      onmousedown={holdFocus}
+      aria-label="Zoom to fit (⇧1)"
+      title="Zoom to fit — ⇧1"
+      onclick={() => engine?.fit()}
+    >
+      <Icon name="fit" size={15} />
+    </button>
+  </div>
 
   <div class="rule" aria-hidden="true"></div>
 
@@ -106,6 +113,10 @@
     z-index: 20;
     box-shadow: var(--shadow-sm);
     backdrop-filter: blur(8px);
+  }
+
+  .zoom-actions {
+    display: contents;
   }
 
   button {

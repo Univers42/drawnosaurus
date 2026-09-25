@@ -66,6 +66,8 @@ function computed(node: Locator) {
       contentLeft:
         textarea.getBoundingClientRect().left + textarea.clientLeft + parseFloat(style.paddingLeft),
       height: textarea.getBoundingClientRect().height,
+      /** The camera's scale, as the editor is transformed by it. */
+      scale: new DOMMatrix(style.transform).a,
     };
   });
 }
@@ -81,7 +83,7 @@ test("a label editor opens at the label's font size and alignment", async ({ pag
   expect(style.textAlign).toBe("center");
 });
 
-test("its font follows the zoom", async ({ page }) => {
+test("its font is the label's, scaled with the editor by the zoom", async ({ page }) => {
   const board = await openBoard(page);
   await drawShape(board);
   await page.getByRole("button", { name: /^Zoom in/ }).click();
@@ -91,7 +93,10 @@ test("its font follows the zoom", async ({ page }) => {
 
   const style = await computed(await openLabelEditor(board));
 
-  expect(parseFloat(style.fontSize)).toBeCloseTo((20 * zoom) / 100, 1);
+  // In world units, the editor scaled as a whole by the camera, as the canvas draws it
+  // (`getTransform`, `textWysiwyg.tsx@1118751f:80-99`).
+  expect(style.fontSize).toBe("20px");
+  expect(style.scale).toBeCloseTo(zoom / 100, 1);
 });
 
 test("a right-aligned label is edited right-aligned", async ({ page }) => {
@@ -118,11 +123,15 @@ test("a label wraps at its shape's width instead of widening", async ({ page }) 
   await node.fill("the quick brown fox jumps over the lazy dog, then over it again and again");
   const style = await computed(node);
 
-  // It wraps where the canvas will: at the shape's width less the label padding on each
-  // side (`getBoundTextMaxWidth`, `element/src/textElement.ts@1118751f:511-540`). The label
-  // itself is only as wide as its longest line, as in Excalidraw. Free text instead grows
-  // to fit its longest line, which here would be several times the shape.
-  expect(style.contentWidth).toBeCloseTo(SHAPE.right - SHAPE.left - 2 * 5, 0);
+  // It wraps where the canvas will: the engine wraps the label at the shape's width less
+  // the label padding on each side (`getBoundTextMaxWidth`,
+  // `element/src/textElement.ts@1118751f:511-540`), and the editor is the label's box —
+  // its longest line, and half a unit (`textWysiwyg.tsx@1118751f:390-392`). Free text
+  // instead grows to fit its longest line, which here would be several times the shape.
+  const maxWidth = SHAPE.right - SHAPE.left - 2 * 5;
+  // `clientWidth` is whole pixels.
+  expect(style.contentWidth).toBeLessThanOrEqual(maxWidth + 1);
+  expect(style.contentWidth).toBeGreaterThan(maxWidth / 2);
   // And it grows down to show every line rather than scrolling them out of sight.
   expect(style.height).toBeGreaterThan(3 * 20 * 1.25);
 });
@@ -133,8 +142,11 @@ test("a narrow shape's label wraps at the shape, not at the editor's minimum", a
   const narrow = { ...SHAPE, right: SHAPE.left + 40 };
   await drawShape(board, "Rectangle", narrow);
   const node = await openLabelEditor(board);
+  await node.fill("a b c d e f");
 
-  expect((await computed(node)).contentWidth).toBeCloseTo(40 - 2 * 5, 0);
+  const style = await computed(node);
+  expect(style.contentWidth).toBeGreaterThan(0);
+  expect(style.contentWidth).toBeLessThanOrEqual(40 - 2 * 5 + 1);
 });
 
 test("an arrow's label wraps at the arrow's width, centred on its middle", async ({ page }) => {
@@ -149,10 +161,11 @@ test("an arrow's label wraps at the arrow's width, centred on its middle", async
   const style = await computed(node);
 
   // Its lines wrap at Excalidraw's arrow label width, the larger of 0.7 of the arrow and
-  // 11 font sizes (`element/src/textElement.ts@1118751f:511-540`) — not at the label, a
-  // placeholder, whose editor wrapped every word onto its own line while the canvas drew
-  // them on one.
-  expect(style.contentWidth).toBeCloseTo(Math.max(0.7 * 500, 11 * 20), 0);
+  // 11 font sizes (`element/src/textElement.ts@1118751f:511-540`) — not at the label's
+  // first, empty box, whose editor wrapped every word onto its own line while the canvas
+  // drew them on one.
+  expect(style.contentWidth).toBeGreaterThan(100);
+  expect(style.contentWidth).toBeLessThanOrEqual(Math.max(0.7 * 500, 11 * 20) + 1);
   // So the line stays one: the editor does not grow as it is typed.
   expect(style.height).toBe(empty.height);
   // Centred on the arrow's middle, as the canvas centres the label's lines: the editor's

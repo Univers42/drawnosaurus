@@ -1,152 +1,239 @@
 <script lang="ts">
+  /**
+   * The text being typed, over the canvas — which does not paint it meanwhile, so it is
+   * never on screen twice. A port of Excalidraw's `textWysiwyg`
+   * (`packages/excalidraw/wysiwyg/textWysiwyg.tsx@1118751f`): a bare textarea in the text's
+   * own font, size and colour, in world units, scaled and turned by the camera onto the
+   * box the engine laid the text out in (`engine/text_session.rs`). Every keystroke goes
+   * to the engine, which re-wraps the text and grows its shape; the box is read back after
+   * it, and after every camera, style or peer change (`revision`).
+   */
   import { onMount } from "svelte";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { TextEditRequest } from "@osionos/draw-engine/types";
+  import {
+    editorBox,
+    editorKey,
+    indent,
+    isWritable,
+    normalizeText,
+    outdent,
+    pressKeepsEditor,
+  } from "./textEditor.ts";
 
   let {
     engine,
     request,
-    fontSizePx,
-    onDraft,
+    revision,
+    onInput,
     onDone,
   }: {
     engine: DrawEngine;
     request: TextEditRequest;
-    fontSizePx: number;
-    /** The text as it stands, on opening and at every keystroke — for the others to see. */
-    onDraft?: (id: string, text: string) => void;
-    onDone: () => void;
+    /** Moves whenever the text may have moved or changed look. */
+    revision: number;
+    /** Something was typed — for the others to see. */
+    onInput?: () => void;
+    /** The edit is over. `boardPress`: a primary press on the board ended it. */
+    onDone: (boardPress: boolean) => void;
   } = $props();
 
-  let value = $state("");
-  let node: HTMLTextAreaElement | undefined;
-  let originalText = "";
+  let node: HTMLTextAreaElement | undefined = $state();
+  /** Moves on every keystroke and resize, so the box is read again. */
+  let typed = $state(0);
   let finished = false;
+  /**
+   * Whether losing focus ends the edit. Not while a press on the style panel or the zoom
+   * bar, or a middle-button pan, is under way (`temporarilyDisableSubmit`,
+   * `textWysiwyg.tsx@1118751f:938-945`); focus coming back arms it again.
+   */
+  let blurEnds = true;
 
-  /** Text bound to a shape, rather than free-standing text placed on the canvas. */
-  const isContainer = $derived(Boolean(request.containerId));
-
-  onMount(() => {
-    originalText = request.text;
-    value = request.text;
-    node?.focus();
-    node?.select();
-    autoResize();
-    onDraft?.(request.id, value);
+  const layout = $derived.by(() => {
+    void revision;
+    void typed;
+    return engine.textEditLayout();
   });
 
-  // Padding and border of the textarea itself, which sit outside the text box: 6px of
-  // padding a side, and the 1.5px border as drawn at a device pixel ratio of 1, where it
-  // snaps to 1px. The textarea is placed that far up and left of the request's point, so
-  // the text typed sits where the canvas will draw it — placed at the point, it sat 7px
-  // right, past a small shape's edge, and jumped back on commit. ponytail: at a ratio of
-  // 2 the border is 1.5px and the text box 1px narrower than the label; the editor
-  // rewrite drops the border altogether.
-  const CHROME_PX = 14;
-  /** The same chrome above the text: 2px of padding and the 1px border. */
-  const CHROME_TOP_PX = 3;
+  const box = $derived.by(() => {
+    if (!layout) return null;
+    const chrome = node?.parentElement;
+    return editorBox(layout, {
+      width: chrome?.clientWidth ?? window.innerWidth,
+      height: chrome?.clientHeight ?? window.innerHeight,
+    });
+  });
 
-  function autoResize(): void {
+  // The engine let the text go — a peer took it, the board was replaced: nothing is left
+  // to type into.
+  $effect(() => {
+    if (!layout) finish(false);
+  });
+
+  onMount(() => {
     if (!node) return;
-    // Width first: the height is read off `scrollHeight`, which depends on where the
-    // lines wrap, which depends on the width.
-    node.style.width = `${boxWidth()}px`;
-    node.style.height = "auto";
-    node.style.height = `${Math.max(node.scrollHeight, fontSizePx * 1.3)}px`;
-  }
+    // Set here, not through the attribute: Svelte would write it after `select()` and
+    // collapse the selection to the end.
+    node.value = request.text;
+    // A new text is laid out as one empty line from the start, not the press-sized box
+    // it was made with.
+    if (!request.text && engine.updateTextEdit("")) typed += 1;
+    node.focus();
+    node.select();
+    // At once: the editor opens on a release, a double click or a key, never inside the
+    // press it would take for one that ends it — which the oracle waits a frame to skip
+    // (`textWysiwyg.tsx@1118751f:1047-1053`). A frame can be long enough to click in.
+    window.addEventListener("pointerdown", onWindowPointerDown, true);
+    window.addEventListener("beforeunload", onUnload);
+    return () => {
+      window.removeEventListener("pointerdown", onWindowPointerDown, true);
+      window.removeEventListener("pointerup", onPressEnd);
+      window.removeEventListener("beforeunload", onUnload);
+    };
+  });
 
-  function boxWidth(): number {
-    if (isContainer && request.width) {
-      // Bound text wraps inside the shape holding it, so the box must not grow with the
-      // text the way free-standing text does. The request carries the width the canvas
-      // wraps the lines at, so the text box is that and the chrome goes around it.
-      return request.width + CHROME_PX;
-    }
-    // Measured by the engine, against the font the canvas draws with. This used to
-    // guess `maxLineLength * fontSize * 0.65`, counting UTF-16 units — so the box was a
-    // third too wide for "Hello", nearly three times too wide for "iiii", and far too
-    // narrow for "WWWW". The text visibly jumped the moment an edit was committed,
-    // because the canvas and the textarea disagreed about how wide it was.
-    const measured = engine.measureText(value, fontSizePx, request.fontFamily).width;
-    return Math.max(measured + CHROME_PX, 60);
-  }
-
-  function finish(): void {
+  /** Ends the edit; `commit` writes what was typed, as one step. */
+  function finish(commit: boolean, viaKeyboard = false, boardPress = false): void {
     if (finished) return;
     finished = true;
-    const finalVal = value.trim();
-    if (!isContainer && finalVal.length === 0 && originalText.trim().length === 0) {
-      engine.deleteSelection();
-    } else {
-      engine.setElementText(request.id, value);
+    const focused = document.activeElement === node;
+    if (commit && node) engine.commitTextEdit(node.value, viaKeyboard);
+    // The keyboard goes back to the board, so Enter opens the text again.
+    if (focused) document.querySelector<HTMLElement>('.draw-chrome [role="application"]')?.focus();
+    onDone(boardPress);
+  }
+
+  function onUnload(): void {
+    finish(true);
+  }
+
+  function typedIn(): void {
+    if (!node || finished) return;
+    const normal = normalizeText(node.value);
+    if (normal !== node.value) {
+      const at = node.selectionStart;
+      node.value = normal;
+      node.setSelectionRange(at, at);
     }
-    onDone();
+    if (!engine.updateTextEdit(node.value)) return finish(false);
+    typed += 1;
+    onInput?.();
+  }
+
+  function onKeydown(event: KeyboardEvent): void {
+    const action = editorKey(event);
+    if (!action || !node) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (action === "submit") finish(true, true);
+    else if (action === "zoomIn") engine.zoomIn();
+    else if (action === "zoomOut") engine.zoomOut();
+    else if (action === "zoomReset") engine.zoomReset();
+    else if (action === "indent" || action === "outdent") {
+      const current = {
+        value: node.value,
+        selectionStart: node.selectionStart,
+        selectionEnd: node.selectionEnd,
+      };
+      const next = action === "indent" ? indent(current) : outdent(current);
+      node.value = next.value;
+      node.setSelectionRange(next.selectionStart, next.selectionEnd);
+      typedIn();
+    }
+  }
+
+  /**
+   * A press elsewhere (`onPointerDown`, `textWysiwyg.tsx@1118751f:947-998`): on the style
+   * panel or the zoom buttons, or with the middle button, the edit stays open; anywhere else
+   * it ends — before the board sees it, so a press on the board only ends it. Ended here
+   * rather than by the blur the press brings: a button that keeps the board's focus, undo
+   * or a tool, brings none, and its click is then run after the commit, as the oracle's is.
+   */
+  function onWindowPointerDown(event: PointerEvent): void {
+    if (finished || event.target === node) return;
+    if (pressKeepsEditor(event.target as Element | null, event.button)) {
+      blurEnds = false;
+      window.addEventListener("pointerup", onPressEnd);
+    } else {
+      const onBoard = event.target instanceof HTMLCanvasElement;
+      finish(true, false, onBoard && event.button === 0);
+    }
+  }
+
+  /**
+   * After a press that kept the edit open, the typing carries on — the slider let go of,
+   * say — unless the press left the focus in something that takes keys of its own: a field,
+   * a list, or the colour picker.
+   */
+  function onPressEnd(): void {
+    window.removeEventListener("pointerup", onPressEnd);
+    setTimeout(() => {
+      if (finished || !node) return;
+      const active = document.activeElement;
+      const keeps = isWritable(active) || active?.closest('select, [role="dialog"]');
+      if (keeps && active !== node) return;
+      blurEnds = true;
+      node.focus();
+    });
   }
 </script>
 
+<svelte:window onresize={() => (typed += 1)} />
+
 <textarea
   bind:this={node}
-  {value}
   aria-label="Text editor"
+  dir="auto"
+  wrap="off"
   spellcheck={false}
-  class:container-text={isContainer}
-  style:left={`${request.x - CHROME_PX / 2}px`}
-  style:top={`${request.y - CHROME_TOP_PX}px`}
-  style:min-height={`${fontSizePx * 1.3}px`}
-  style:color={request.color}
-  style:font-size={`${fontSizePx}px`}
-  style:font-family={engine.fontFamily(request.fontFamily)}
-  style:line-height={request.lineHeight}
-  style:text-align={request.textAlign}
-  oninput={(event) => {
-    value = event.currentTarget.value;
-    autoResize();
-    onDraft?.(request.id, value);
-  }}
+  class:wrap={layout?.wrap}
+  style:left={box ? `${box.left}px` : undefined}
+  style:top={box ? `${box.top}px` : undefined}
+  style:width={box ? `${box.width}px` : undefined}
+  style:height={box ? `${box.height}px` : undefined}
+  style:max-height={box ? `${box.maxHeight}px` : undefined}
+  style:transform={box?.transform}
+  style:font-size={layout ? `${layout.fontSize}px` : undefined}
+  style:font-family={layout ? engine.fontFamily(layout.fontFamily) : undefined}
+  style:line-height={layout?.lineHeight}
+  style:text-align={layout?.textAlign}
+  style:color={layout?.color}
+  style:opacity={layout?.opacity}
+  oninput={typedIn}
+  onkeydown={onKeydown}
+  onfocus={() => (blurEnds = true)}
   onblur={() => {
-    finish();
-  }}
-  onkeydown={(event) => {
-    event.stopPropagation();
-    if (event.key === "Escape") {
-      finished = true;
-      engine.setElementText(request.id, originalText);
-      onDone();
-    } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      finish();
-    }
+    if (blurEnds) finish(true);
   }}
 ></textarea>
 
 <style>
+  /* `textWysiwyg.tsx@1118751f:461-486`: nothing of its own — no border, no padding, no
+     background — so what is typed is the text as the canvas will draw it. */
   textarea {
     position: absolute;
-    min-width: 60px;
-    padding: 2px 6px;
+    display: inline-block;
+    min-height: 1em;
+    backface-visibility: hidden;
     margin: 0;
-    border: 1.5px dashed var(--accent, #6965db);
-    border-radius: 4px;
-    outline: none;
+    padding: 0;
+    border: 0;
+    outline: 0;
     resize: none;
-    overflow: hidden;
     background: transparent;
-    /* The family and the line height come from the request, so the overlay and the
-       canvas render the same glyphs at the same widths and the same spacing. Hard-coding
-       them here is how they drift apart. */
+    overflow: hidden;
+    /* Over the board and what floats on it, under the panels, so a press on the style
+       panel reaches it even where the text runs under it. */
+    z-index: 12;
+    word-break: normal;
     white-space: pre;
-    z-index: 20;
-    box-sizing: border-box;
+    overflow-wrap: break-word;
+    box-sizing: content-box;
   }
 
-  textarea.container-text {
-    /* No `text-align` here: it comes from the request, which carries the element's
-       resolved alignment. Hard-coding centre for bound text is what the painter used to
-       do, and it is exactly the assumption this feature removes — a right-aligned label
-       would have been typed centred and jumped right the moment the edit was committed. */
+  /* A label, or a text of fixed width: wrapped at its width, as the engine wraps it. */
+  textarea.wrap {
     white-space: pre-wrap;
     word-break: break-word;
-    /* Its width is the canvas's: a floor would wrap a narrow shape's label wider. */
-    min-width: 0;
   }
 </style>

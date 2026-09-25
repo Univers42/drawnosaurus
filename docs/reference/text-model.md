@@ -90,32 +90,64 @@ with no family keeps its old placement; `ci_export.rs`).
 
 ## The editor overlay
 
-The overlay's font size is `fontSize × zoom% / 100`, and it is never NaN. `screenFontPx` in
-`apps/web/src/lib/draw-chrome/camera.ts` falls back to the element's own size
-(`engine.getFontSize()`), then to 20.
+Typing is a session in the engine (`engine/crates/draw-engine/src/engine/text_session.rs`), a
+port of the one `textWysiwyg` runs (`packages/excalidraw/wysiwyg/textWysiwyg.tsx@1118751f`).
+The request opens it; `updateTextEdit(text)` lays out every keystroke — wrapped, measured, the
+shape grown or shrunk and the arrows bound to it following — with no history step and no stamp;
+`commitTextEdit(text, viaKeyboard)` records the whole edit as one step. Emptied, a text made for
+the edit leaves nothing — its shape, the arrows bound to it and their labels go back as they
+were — and an existing one is deleted; `setElementText(id, "")`, the one-shot write, empties a
+text through the same routine. Undo and redo do nothing meanwhile: the textarea's own undo is
+the one that applies. The text deleted while it is open (`deleteSelection`, as a host writing
+text whole ends an empty one) ends the session. **VERIFIED** by `ci_text_edit.rs`.
 
-The request carries the box the canvas wraps the lines in: its width is `wrap_width`, the one
-function layout wraps with, and its left edge puts the lines' anchor where the painter puts it
-(`text_anchor_x`). For a shape it is the shape's text box (`getBoundTextMaxWidth`,
-`getContainerCoords`), so a label's editor is its padded box, not the label, which is only as
-wide as its longest line. For an arrow it is `max(0.7 × width, 11 × fontSize)` around the
-arrow's middle (`packages/element/src/textElement.ts@1118751f:511-540`). The overlay's text box
-is exactly that width, with no minimum for a label, so it wraps where the canvas does, however
-narrow the shape (`ci_text_model_compat.rs` › a shape's label editor is its padded box, an arrow
-label's editor is the box its lines wrap in; `e2e/textEditRequest.spec.ts`,
-`e2e/textLayout.spec.ts`). A fixed-width free text still opens the measured, unwrapped editor:
-only a label's editor wraps.
+The canvas does not paint the text being typed, nor its selection frame
+(`Renderer.ts@1118751f:259-267`): the editor is its only copy, so it is never on screen twice.
+Its shape and bound arrows are live and follow it. What is typed goes to peers on the gesture
+channel (`gestureElements`), shape included, and their copy of it is refused until the commit,
+which stamps above it — a peer's delete meanwhile included; an edit that came to nothing takes
+their copy instead (`ci_text_edit.rs` › peers; `e2e/liveSync.spec.ts`).
 
-The request also names the family (`fontFamily`, an id, 0 for the system stack) and the
-`lineHeight`: the overlay types in `engine.fontFamily(id)`, measures with it, and spaces its
-lines as the canvas does.
+The editor (`DrawTextEditor.svelte`, arithmetic in `textEditor.ts`) is a bare textarea — no
+border, padding or background — in the text's font, size, line height, alignment, colour and
+opacity, in world units, placed at `textEditLayout()`'s screen point and scaled and turned by
+the camera about its middle (`getTransform`, `textWysiwyg.tsx@1118751f:80-99`). It is the
+text's own box: a label's is half a unit wider, free text stops 8px short of the canvas's right
+edge, and it has 5% of height to spare (`:386-431`). A label or a fixed-width text wraps
+(`pre-wrap`) at that width, which the engine laid it out to; free text keeps its hard lines
+(`pre`). It is read again after every keystroke, camera change, style change, peer update, font
+arriving and resize (`e2e/textEditor.spec.ts`, `e2e/textEditRequest.spec.ts`,
+`e2e/textLayout.spec.ts`).
 
-**ponytail.** The chrome is 14px because the 1.5px border is drawn as 1px at a device pixel
-ratio of 1. At a ratio of 2 the text box is 1px narrower than the label. The textarea sits 7px
-left and 3px up of the request's point, so its text box is the canvas's; before, the text sat
-7px right, past a small shape's edge, and jumped back on commit. The overlay does not grow the
-shape as it is typed and ignores rotation: that is the editor rewrite's job, and it drops the
-border.
+Escape and Ctrl/Cmd+Enter end the edit, leaving the text or the label's shape selected — nothing
+with the tool locked or the autoshape tool (`App.tsx@1118751f:6446-6453`); Tab,
+Shift+Tab and Ctrl/Cmd+] / [ indent and outdent the selected lines by four spaces; Ctrl/Cmd
+with + − 0, without Shift, zoom the board; Ctrl/Cmd+Enter and Tab are held while an input method composes
+(`:662-805`, `textEditor.test.ts`). Every other key is the textarea's, so no letter reaches a
+tool or a style shortcut, and the font-size chord goes on up to the board. A press on the
+style panel — its slider included, but not a field that takes typing of its own
+(`isWritableElement`, `packages/common/src/utils.ts@1118751f:99-118`) unless it is in the
+colour picker — or on the zoom buttons, or a middle-button pan, leaves it open
+(`textWysiwyg.tsx@1118751f:947-998`); the zoom bar's fit button, which the oracle's footer
+lacks, counts as a zoom button. Any other press ends it: on the board, and with the text tool
+kept it only ends it (`App.tsx@1118751f:9815-9824`); on Undo or Redo, which sit beside the zoom
+buttons and not among them (`components/footer/Footer.tsx@1118751f:48-62`), it ends and the
+click then undoes it (`textEditor.test.ts`, `e2e/textEditor.spec.ts`). Leaving the page ends it.
+Ending it gives the keyboard back to the board.
+
+### Where the editor departs from the oracle
+
+| divergence                                                                                                                                                                                                                | oracle                                                                                                                               | pinned by                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| The text stays selected while it is typed, so the style panel keeps working on it; its frame and handles are not drawn. A style changed meanwhile commits what was typed so far.                                          | deselects everything (`App.tsx@1118751f:6509-6510`)                                                                                  | `ci_text_edit.rs` › painting, peers; `e2e/textEditor.spec.ts` › a colour picked in the panel |
+| Deleting lines shrinks the shape back, never below its height when the edit began.                                                                                                                                        | shrinks to fit in one step once the shape is taller than it was, which can take it lower (`textWysiwyg.tsx@1118751f:359-373`)        | `ci_text_edit.rs` › growth                                                                   |
+| A new label left empty puts its shape back as it was, one-line growth included.                                                                                                                                           | leaves the shape grown, uncaptured until the next step (`App.tsx@1118751f:6974-7006`)                                                | `ci_text_edit.rs` › a new text left empty leaves nothing                                     |
+| A new label's shape grows to one line of the widest capital or digit.                                                                                                                                                     | the widest character measured so far, which depends on what was typed before (`textMeasurements.ts@1118751f:29-44`)                  | `ci_text_edit.rs` › a new label grows its shape to one line                                  |
+| The editor's colour is the stroke colour untouched, because the painter draws it untouched in both themes.                                                                                                                | inverts it in the dark theme, as its canvas does (`applyDarkModeFilter`, `textWysiwyg.tsx@1118751f:421-424`)                         | none                                                                                         |
+| A peer taking the label or its shape ends the edit and what was typed goes back, as a drag of it does.                                                                                                                    | no holds                                                                                                                             | `ci_text_edit.rs` › a peer taking the shape ends the edit                                    |
+| The editor listens for presses from the moment it opens, since it never opens inside one; after a press on the style panel it takes the keys back unless a field or the colour picker has them.                           | waits a frame; refocuses on the scene's next update unless a popup is open (`textWysiwyg.tsx@1118751f:897-936`, `:1008-1015`)        | `e2e/textEditor.spec.ts`                                                                     |
+| Known limit: the caret goes nowhere in particular — the whole text is selected on every opening.                                                                                                                          | a click on a selected text opens it with the caret at the click (`App.tsx@1118751f:12402-12428`, `textWysiwyg.tsx@1118751f:488-555`) | none (gap)                                                                                   |
+| Known limit: Ctrl/Cmd+S while typing neither ends the edit nor saves; Excalidraw JSON pasted into the editor is pasted as its text; a fixed-width text has no outline while typed; a new text is not snapped to the grid. | `textWysiwyg.tsx@1118751f:683-686`, `:558-646`; `renderTextBox`; `getTextCreationGridPoint` (`App.tsx@1118751f:7008`)                | none (gap)                                                                                   |
 
 ## Layout
 
@@ -140,6 +172,8 @@ diamond; a family change; the SVG export).
 | `measureText` (`textMeasurements.ts@1118751f:12-27`)                                                 | `Measure::size`                                                |
 | `getAdjustedDimensions` (`newElement.ts@1118751f:393-527`)                                           | `edit_anchor`                                                  |
 | `offsetElementAfterFontResize` (`actionProperties.tsx@1118751f:273-292`)                             | `font_resize_anchor`                                           |
+| the typing session, `handleTextWysiwyg` (`App.tsx@1118751f:6344-6515`)                               | `text_session.rs`: `update_text_edit`, `commit_text_edit`      |
+| `updateWysiwygStyle`, `getTransform` (`textWysiwyg.tsx@1118751f:80-99`, `:268-450`)                  | `text_edit_layout`; `textEditor.ts` › `editorBox`              |
 | `actionTextAutoResize` (`actionTextAutoResize.ts@1118751f`)                                          | `auto_resize_anchor`, `set_text_auto_resize`                   |
 | `handleBindTextResize` (`textElement.ts@1118751f:155-247`)                                           | `bound_text_resize`, `keep_point`                              |
 | `getApproxMinLineWidth` / `Height`, `getMinTextElementWidth` (`textMeasurements.ts@1118751f:32-104`) | `min_container_size`, `min_text_width`                         |
@@ -153,18 +187,18 @@ diamond; a family change; the SVG export).
 `BOUND_TEXT_PADDING` is 5, as in the oracle (it was 8 here). Style applied to a shape reaches
 its label for stroke colour and opacity (`actionChangeStrokeColor`, `actionChangeOpacity`;
 the panel's one path, `selection_style.rs` › `style_targets`, `ci_style_reach.rs`),
-except a label a peer holds: typing into a label holds the label alone, and every writer that
+except a label a peer holds: typing into a label holds the label, and every writer that
 follows a shape to its label skips one that is `untouchable`, as everything else does
 (`ci_text_model.rs` › a label a peer holds is left alone). Nor is a label reached without
 its shape when that shape is not ours: one clicked on its own or taken by Select All in a
 shape a peer holds, or a loose locked one, is neither restyled nor laid out again, and
 opens no editor — laying it out would grow the shape (`style.rs` › `restylable`;
 `ci_text_model.rs` › a shape a peer holds is not grown through its label, nor by typing
-into its label). An editor opened before a peer took the shape commits the words without
-growing it; the label may overflow until it is next laid out. A writer stamps only what it
-changed, through the commit: picking the family, colour or wrap a text already has is not an
-edit (`newElementWith`, `mutateElement.ts@1118751f:149-181`; `ci_text_model.rs` › a change
-that changes nothing is not an edit). `set_text_auto_resize` re-routes the arrows bound to
+into its label). An edit under way when a peer takes the label or its shape ends, and what
+was typed goes back (`ci_text_edit.rs` › a peer taking the shape ends the edit). A writer
+stamps only what it changed, through the commit: picking the family, colour or wrap a text
+already has is not an edit (`newElementWith`, `mutateElement.ts@1118751f:149-181`;
+`ci_text_model.rs` › a change that changes nothing is not an edit). `set_text_auto_resize` re-routes the arrows bound to
 the text it resizes (`updateBoundElements` in `actionTextAutoResize.ts@1118751f`). The cut
 in an arrow's stroke follows its label as it is painted, a peer's preview included
 (`ci_text_model.rs` › the cut under an arrow's label follows a peer's preview).
@@ -186,7 +220,6 @@ growth.
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | A line or arrow never grows for its label: its extent is its points'. The oracle writes the new width onto an arrow, which its points then contradict.                                                                                                                                                                                                                                                                        | `textElement.ts@1118751f:127-133`                                         | `ci_text_model.rs` › an arrow's label wraps at the oracle's width      |
 | A font arriving re-lays text, unstamped. The oracle only drops caches and repaints, so a box sized in a fallback keeps its size until the next edit. Arrows bound to a grown shape are re-routed at the next edit of either.                                                                                                                                                                                                  | `Fonts.ts@1118751f:106-148`                                               | `ci_text_model.rs` › fonts_loaded                                      |
-| A peer's preview carries the label only; the shape it grows is sent grown on commit.                                                                                                                                                                                                                                                                                                                                          | `textWysiwyg.tsx` grows the container as it is typed                      | none: the editor rewrite streams both                                  |
 | Text with no `fontFamily` (every text made before this) keeps the system stack, 1.25 lines, drawn from the top of each line, and its SVG baseline at 0.85 of the size.                                                                                                                                                                                                                                                        | `restore.ts` gives such text a family                                     | `ci_text_model.rs` › families, `ci_export.rs`                          |
 | A label taller than its shape starts at the padded top, whatever its vertical alignment, when only placed (a move, a peer's patch): overflowing downward, it is still read from its first line. The oracle never meets one, because laying a label out grows its shape; here one saved before shapes grew, or in a shape resized smaller, is placed on every move.                                                            | `computeBoundTextPosition` (`textElement.ts@1118751f:249-324`) centres it | `ci_text_align.rs`, `ci_text_model.rs` › a label taller than its shape |
 | Only the first load of each face of a text family is reported, and nothing when watching starts: `document.fonts.ready` resolves before any face is asked for, and reporting it re-laid every text in the fallback's widths. The UI's own faces (Inter) are ignored.                                                                                                                                                          | `Fonts.onLoaded` bails on faces it has seen (`Fonts.ts@1118751f:106-127`) | `fonts.test.ts`                                                        |
