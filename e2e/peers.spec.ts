@@ -233,3 +233,39 @@ test("a peer's laser trail is dropped when they leave mid-stroke", async ({ page
 
   await close();
 });
+
+/**
+ * A finger or a pen held down fires pointer events and no mouse events at all, so a
+ * cursor fed by `mousemove` sent the press and the release and nothing in between: the
+ * other screen got a trail with no length. The touches go in through CDP — real input,
+ * which `page.touchscreen` cannot drag.
+ */
+test("a peer's laser drawn with a finger reaches the other screen too", async ({
+  page,
+  browser,
+}) => {
+  const { host, colleague, close } = await together(page, browser);
+  const other = colleague.page;
+  const region = around(AT.x, AT.y);
+
+  await pickTool(host.page, "Laser pointer");
+  const cdp = await host.page.context().newCDPSession(host.page);
+  const touch = (type: "touchStart" | "touchMove" | "touchEnd", x: number, y: number) =>
+    cdp.send("Input.dispatchTouchEvent", {
+      type,
+      touchPoints: type === "touchEnd" ? [] : [{ x: host.box.x + x, y: host.box.y + y }],
+    });
+  await touch("touchStart", AT.x, AT.y);
+  for (let step = 1; step <= 8; step += 1) {
+    await touch("touchMove", AT.x + step * 8, AT.y + step * 5);
+  }
+
+  await expect
+    .poll(() => chromaInk(other, region), {
+      message: "a finger's laser trail never reached the peer's screen",
+    })
+    .toBeGreaterThan(0.001);
+
+  await touch("touchEnd", AT.x + 64, AT.y + 40);
+  await close();
+});

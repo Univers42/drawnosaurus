@@ -1487,7 +1487,7 @@
   <div
     bind:this={canvasHost}
     class="canvas-host"
-    onmousemove={onCanvasPointerMove}
+    onpointermove={onCanvasPointerMove}
     onmouseleave={onCanvasPointerLeave}
     onpointerdowncapture={(e) => {
       dragging = true;
