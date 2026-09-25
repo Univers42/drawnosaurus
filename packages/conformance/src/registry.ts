@@ -129,6 +129,12 @@ export const RULES: readonly Rule[] = [
     tests: [`${ENGINE}/ci_linear_anchor.rs`, `${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_pointer.rs`],
   },
   {
+    section: /^(🖱️ Selection|🔒 Locking)$/,
+    text: /Shift \+ L`/,
+    status: "gap",
+    why: "No Ctrl/Cmd+Shift+L: lock and unlock are the context menu's one toggle (toggleLockSelection, ci_group_locks_frames.rs, menu.test.ts), with no key bound to it.",
+  },
+  {
     section: "🖱️ Selection",
     // Building a selection out of more than one thing, and seeing what is in it. Split
     // out of the section rule because that one names the single-element tests, and a
@@ -192,11 +198,20 @@ export const RULES: readonly Rule[] = [
       "e2e/groups.spec.ts",
     ],
   },
+  // An element carries `locked` (the contract's schema), the context menu toggles it, and
+  // a locked element is not pressed on, moved, lassoed or erased — only carried by its
+  // group or frame. Select All still takes it, so the menu can unlock it.
   {
     section: "🗂️ Layers / ordering",
     text: /Lock element|Unlock element/,
-    status: "gap",
-    why: "No locked state on an element. The schema has no field for it, so this is a model change before it is a UI one.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_group_locks_frames.rs`,
+      `${ENGINE}/ci_hover.rs`,
+      `${ENGINE}/ci_lasso.rs`,
+      `${ENGINE}/ci_eraser.rs`,
+      `${WEB}/draw-chrome/menu.test.ts`,
+    ],
   },
   {
     section: "🗂️ Layers / ordering",
@@ -216,8 +231,14 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🔒 Locking",
+    text: /deep-selection/,
     status: "gap",
-    why: "No locked state on an element — a schema change first, then hit-testing and selection have to honour it.",
+    why: "No deep selection reaches a locked element: a click, a marquee and a lasso pass it by, and only Select All takes it — so the context menu can unlock it, where Excalidraw's Select All skips it (actionSelectAll.ts@1118751f:32-38).",
+  },
+  {
+    section: "🔒 Locking",
+    status: "out-of-scope",
+    why: "Workflows made of Lock element, which is classified under Layers / ordering rather than twice.",
   },
   {
     section: "🖼️ Images",
@@ -449,9 +470,15 @@ export const RULES: readonly Rule[] = [
   // ---------------------------------------------------------------- design.md
   {
     section: "1. Core architecture",
-    text: /locked state|custom data|library|visibility/i,
+    text: /locked state/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_group_locks_frames.rs`, `${ENGINE}/ci_hover.rs`],
+  },
+  {
+    section: "1. Core architecture",
+    text: /custom data|library|visibility/i,
     status: "gap",
-    why: "Four fields the element schema does not carry yet: locked, customData, library membership, explicit visibility.",
+    why: "Three fields the element schema does not carry yet: customData, library membership, explicit visibility.",
   },
   {
     section: "1. Core architecture",
@@ -477,8 +504,14 @@ export const RULES: readonly Rule[] = [
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
     text: /Lock/,
-    status: "gap",
-    why: "No locked state — see the Locking rule.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_group_locks_frames.rs`,
+      `${ENGINE}/ci_hover.rs`,
+      `${ENGINE}/ci_lasso.rs`,
+      `${ENGINE}/ci_eraser.rs`,
+      `${WEB}/draw-chrome/menu.test.ts`,
+    ],
   },
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
@@ -635,9 +668,21 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "14. Selection engine",
-    text: /locked/i,
+    text: /Select locked/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_group_locks_frames.rs`,
+      `${ENGINE}/ci_hover.rs`,
+      `${ENGINE}/ci_lasso.rs`,
+      `${ENGINE}/ci_eraser.rs`,
+      `${WEB}/draw-chrome/menu.test.ts`,
+    ],
+  },
+  {
+    section: "14. Selection engine",
+    text: /Locked indicators/,
     status: "gap",
-    why: "No locked state — see the Locking rule.",
+    why: "Nothing on the canvas marks a locked element; only the context menu, which offers Unlock (menu.test.ts).",
   },
   {
     section: "14. Selection engine",
