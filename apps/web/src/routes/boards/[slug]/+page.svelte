@@ -131,7 +131,17 @@
       saver.tracker.reset(loaded);
       saved.reset(loaded);
       live.replace(elements);
-      scene = new Scene(elements);
+      // `migrated.removed` (empty when nothing was migrated) rides along on `scene`,
+      // not on `live`: DrawSurface reads `scene.toArray()` twice, once to seed
+      // `engine.setScene()` and once to seed `liveBroadcast.reset()` — the one place
+      // that reaches both the engine's own merge and the live link. Without the
+      // tombstones here, neither ever learns the shadow and date were deleted, so a
+      // peer tab still holding the legacy group answers this page's `join` with them
+      // at their old stamp and they are adopted back in (`liveBroadcast.ts` ›
+      // missing/adoptRemote); the engine, never having heard of the id at all, takes
+      // it unconditionally (`apply_remote_patch_step`, `self.scene.get(id) == None`).
+      // Loaded here as deleted elements instead, both refuse it on stamp alone.
+      scene = new Scene([...elements, ...migrated.removed]);
       if (resave.length > 0) {
         saver.tracker.noteChanged(resave);
         saver.notify();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "./liveBroadcast.ts";
 import type { StampedElement } from "../autosave/sceneDiff.ts";
+import { migrateLegacyStickyGroups } from "../notes/stickyNotes.ts";
 
 const el = (id: string, version = 1, patch: Partial<StampedElement> = {}): StampedElement => ({
   id,
@@ -115,6 +116,61 @@ describe("changes made while the socket is down", () => {
       broadcaster.takePatch(901, () => 6),
       "and only once",
     ).toBeNull();
+  });
+});
+
+describe("a migrated page's live seeding (DrawSurface:~950, +page.svelte:134)", () => {
+  // The smallest legacy group `migrateLegacyStickyGroups` recognises: a shadow, the pad
+  // and a free date text, no label — same shape a real note dropped on board load, minus
+  // what these tests do not need.
+  const now = new Date(2026, 8, 25).getTime();
+  const legacyGroup = (): StampedElement[] =>
+    [
+      {
+        id: "shadow",
+        type: "rectangle",
+        groupIds: ["g"],
+        backgroundColor: "#000000",
+        strokeColor: "transparent",
+        opacity: 16,
+      },
+      { id: "note", type: "rectangle", groupIds: ["g"], backgroundColor: "#a5d8ff", height: 220 },
+      { id: "date", type: "text", groupIds: ["g"], text: "24 Sep 2026" },
+    ].map((piece) => ({ ...el(piece.id, 3), ...piece }));
+
+  it("BUG this fixes: seeding from the migrated scene alone tells a stale peer we lack the shadow", () => {
+    // What DrawSurface did before the fix: `liveBroadcast.reset(scene.toArray())` where
+    // `scene` only ever held `migrated.elements` — the tombstones never reached it.
+    const migrated = migrateLegacyStickyGroups(legacyGroup(), now, () => 1);
+    const migratedPage = new LiveSceneBroadcaster();
+    migratedPage.reset(migrated.elements);
+
+    // A peer tab that still holds the legacy group live, at its original stamp.
+    const stalePeer = new LiveSceneBroadcaster();
+    stalePeer.reset(legacyGroup());
+
+    const lacking = stalePeer.missing(migratedPage.inventory()).map((element) => element.id);
+    expect(lacking.sort()).toEqual(["date", "shadow"]);
+  });
+
+  it("the fix: seeding from the scene plus the migration's tombstones stops the resurrection", () => {
+    // +page.svelte:134 — `new Scene([...elements, ...migrated.removed])` — so
+    // `scene.toArray()` carries the tombstones DrawSurface seeds both the engine and
+    // the broadcaster from.
+    const migrated = migrateLegacyStickyGroups(legacyGroup(), now, () => 1);
+    const migratedPage = new LiveSceneBroadcaster();
+    migratedPage.reset([...migrated.elements, ...migrated.removed]);
+
+    const inventory = migratedPage.inventory();
+    expect(inventory.shadow).toBeDefined();
+    expect(inventory.date).toBeDefined();
+
+    const stalePeer = new LiveSceneBroadcaster();
+    stalePeer.reset(legacyGroup());
+
+    const lacking = stalePeer.missing(inventory).map((element) => element.id);
+    expect(lacking).not.toContain("shadow");
+    expect(lacking).not.toContain("date");
   });
 });
 

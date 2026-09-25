@@ -56,8 +56,15 @@ selected, a pick under the N tool sets the next note's colours only.
 | A label migrated without a `fontFamily` keeps the legacy metrics and is not re-laid when fonts load.                                                                                                                                                                 | `fonts_loaded` re-lays texts that name a family only, as for every legacy text.                   |
 | Boards saved with the old four-element note are migrated on load, open and paste (`apps/web/src/lib/notes/stickyNotes.ts`): a group of exactly a shadow, a pad, a free date text and at most the pad's label; a yearless date takes the latest year not after today. | Recognised by shape, never id: a paste re-mints ids. Anything else is left as it is.              |
 
-**Open** — the migration is saved through the autosaver, not the live link. A peer tab
-still running the old code, open when a new page migrates the board, answers the new
-page's `join` with the old shadow and date (the new page's inventory lacks them), so they
-come back on that page beside the native note. Reloading the stale tab ends it; seeding the
-live inventory with the migration's tombstones would close it.
+**VERIFIED** — a migrated page's live seeding carries the migration's tombstones, not only
+its live elements: `+page.svelte` builds `Scene` from `[...elements, ...migrated.removed]`,
+so both `DrawSurface`'s `engine.setScene()` and its `liveBroadcast.reset()` read them
+(`DrawSurface.svelte` ~950). A peer tab still holding the pre-migration shadow and date
+then answers this page's `join` with them at their old stamp, and both sides refuse the
+resurrection on stamp alone: the live broadcaster's inventory already advertises a newer
+(tombstoned) copy, so a peer computing what this page is missing does not resend them
+(`liveBroadcast.ts` › `missing`); and if a copy arrives anyway, the engine's own scene —
+loaded with the tombstones as deleted elements — refuses it the same way it refuses any
+stale remote edit (`apply_remote_patch_step`, `engine/clipboard.rs`; native evidence in
+`ci_live_sync.rs` › `a_tombstone_loaded_at_boot_refuses_a_stale_remote_copy`). Reloading the
+stale tab still ends the discrepancy for good, since it runs the migration too.
