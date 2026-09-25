@@ -157,7 +157,30 @@ for (const [tool, kind] of [
   });
 }
 
-test("a font family change re-wraps the label, and its font arriving does not stamp it", async ({
+/** Whether the browser has loaded a face of `family` from `fonts.css`. */
+function faceLoaded(page: Page, family: string): Promise<unknown> {
+  return page.waitForFunction(
+    (name) =>
+      [...document.fonts].some(
+        (face) => face.family.replace(/"/g, "") === name && face.status === "loaded",
+      ),
+    family,
+  );
+}
+
+/** The widest of `lines` in `font`, measured on a canvas of its own. */
+function widest(page: Page, lines: string[], font: string): Promise<number> {
+  return page.evaluate(
+    ({ lines, font }) => {
+      const probe = document.createElement("canvas").getContext("2d")!;
+      probe.font = font;
+      return Math.max(...lines.map((line) => probe.measureText(line || " ").width));
+    },
+    { lines, font },
+  );
+}
+
+test("a font family change re-wraps the label, and its font arriving re-lays it unstamped", async ({
   page,
 }) => {
   const board = await openBoard(page);
@@ -169,8 +192,10 @@ test("a font family change re-wraps the label, and its font arriving does not st
   const before = await shapeAndLabel(page);
   const maxWidth = MAX_WIDTH.rectangle!(before.shape.width);
 
-  // The family picker is a later package; the engine call is what it will make.
-  const stampAfterChange = await page.evaluate(() => {
+  // The family picker is a later package; the engine call is what it will make. Read in
+  // the same task, so the label is as the change left it: laid out in the fallback,
+  // since nothing had asked for Cascadia yet.
+  const changed = await page.evaluate(() => {
     const engine = window.__drawEngine as unknown as TextEngine;
     const counted = window as unknown as { fontsLoadedCalls: number };
     counted.fontsLoadedCalls = 0;
@@ -183,7 +208,7 @@ test("a font family change re-wraps the label, and its font arriving does not st
     const label = JSON.parse(engine.exportJson()).elements.find(
       (element: SceneElement) => element.type === "text",
     );
-    return label.version as number;
+    return { version: label.version as number, width: label.width as number };
   });
 
   const after = await shapeAndLabel(page);
@@ -194,20 +219,54 @@ test("a font family change re-wraps the label, and its font arriving does not st
   expect(after.shape.height).toBeGreaterThan(before.shape.height);
 
   // Drawing in Cascadia asked the browser for it; once it is in, the page tells the
-  // engine, which re-lays the label in the real face without an edit.
-  await page.waitForFunction(() => document.fonts.check("20px Cascadia"));
+  // engine, which lays the label out again in the real face: other widths than the
+  // fallback's, and not an edit.
+  await faceLoaded(page, "Cascadia");
   await expect
-    .poll(() =>
-      page.evaluate(() => (window as unknown as { fontsLoadedCalls: number }).fontsLoadedCalls),
-    )
-    .toBeGreaterThan(0);
+    .poll(async () => Math.abs((await shapeAndLabel(page)).label.width - changed.width))
+    .toBeGreaterThan(0.5);
+  expect(
+    await page.evaluate(() => (window as unknown as { fontsLoadedCalls: number }).fontsLoadedCalls),
+  ).toBeGreaterThan(0);
   const settled = await shapeAndLabel(page);
-  expect(settled.label.version).toBe(stampAfterChange);
-  const widths = await page.evaluate((lines) => {
-    const engine = window.__drawEngine as unknown as TextEngine;
-    return lines.map((line) => engine.measureText(line, 20, 3).width);
-  }, settled.label.text!.split("\n"));
-  for (const width of widths) expect(width).toBeLessThanOrEqual(maxWidth + 0.5);
+  expect(settled.label.version).toBe(changed.version);
+  const lines = settled.label.text!.split("\n");
+  expect(settled.label.width).toBeCloseTo(await widest(page, lines, "20px Cascadia"), 1);
+  for (const line of lines) {
+    expect(await widest(page, [line], "20px Cascadia")).toBeLessThanOrEqual(maxWidth + 0.5);
+  }
+});
+
+test("new text is written in Excalifont, and laid out in it once its face is in", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await page.mouse.dblclick(
+    board.box.x + OPEN_CANVAS.left + 120,
+    board.box.y + OPEN_CANVAS.top + 120,
+  );
+  await expect(editor(board)).toBeVisible();
+  const words = "Hello Excalidraw";
+  await page.keyboard.type(words);
+  await page.keyboard.press("Control+Enter");
+  await expect(editor(board)).toHaveCount(0);
+
+  const text = await page.evaluate(() =>
+    JSON.parse(window.__drawEngine!.exportJson()).elements.find(
+      (element: SceneElement) => element.type === "text",
+    ),
+  );
+  expect(text.fontFamily).toBe(5);
+
+  // The face is served, and the browser has it: the text measures as Excalifont does,
+  // not as `sans-serif`, the next name in its stack.
+  await faceLoaded(page, "Excalifont");
+  const excalifont = await widest(page, [words], "20px Excalifont");
+  const fallback = await widest(page, [words], "20px sans-serif");
+  expect(Math.abs(excalifont - fallback)).toBeGreaterThan(1);
+  await expect
+    .poll(async () => (await sceneElements(page)).find((el) => el.type === "text")!.width)
+    .toBeCloseTo(excalifont, 1);
 });
 
 test("the SVG export draws each label line in its family, inside its shape", async ({ page }) => {
