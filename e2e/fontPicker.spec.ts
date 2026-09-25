@@ -196,6 +196,13 @@ test("a family only hovered while typing is not the one a press on the board com
   // The search hovers Nunito: the editor shows it, nothing is picked.
   await panel(page).getByRole("button", { name: "Show font picker" }).click();
   await expect(picker(page)).toBeVisible();
+  // Every face the list is shown in has arrived, and Nunito's, before the hover: no face
+  // arriving afterwards restyles the editor, so the hover itself has to.
+  await page.evaluate(async () => {
+    await document.fonts.load("10px Nunito");
+    await document.fonts.ready;
+    await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  });
   await page.keyboard.type("nun");
   await expect(picker(page).locator('[data-hovered="true"]')).toHaveText("Nunito");
   await expect(editor(board)).toHaveCSS("font-family", /Nunito/);

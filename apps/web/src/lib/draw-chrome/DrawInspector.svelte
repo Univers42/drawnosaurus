@@ -122,7 +122,8 @@
    * A family is laid out in its own face, so the face is loaded first
    * (`actionProperties.tsx@1118751f:1302-1356`): measured in a fallback, a shape grown
    * to hold its label would keep the growth. A hover waits the same way, and one the
-   * pointer has already left by then is dropped.
+   * pointer has already left by then is dropped; it is run as the panel's other writes
+   * are, so the text being typed takes the hovered face.
    */
   let previewRequest = 0;
 
@@ -130,7 +131,7 @@
     const request = ++previewRequest;
     if (!engine) return;
     if (id !== null) await loadFontFamily(document.fonts, engine.fontFamily(id));
-    if (request === previewRequest) engine.previewFontFamily(id ?? undefined);
+    if (request === previewRequest) run((e) => e.previewFontFamily(id ?? undefined));
   }
 
   async function pickFont(id: number): Promise<void> {
