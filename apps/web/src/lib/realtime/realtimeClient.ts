@@ -28,6 +28,14 @@ export interface PeerCursor {
    * top-left corner of every board.
    */
   pointed?: boolean;
+  /**
+   * What they are pointing with, as of their last cursor update. Missing — an older
+   * peer's frame, or one of ours before this field existed — reads as `"pointer"`: never
+   * a laser, the same default Excalidraw's own collaborator pointer resolves to.
+   */
+  tool?: "laser" | "pointer";
+  /** Whether their pointer button is down, as of their last cursor update. Missing reads as up. */
+  down?: boolean;
   /** The server's name for their connection, so its `gone` can be matched to them. */
   socket?: string;
   lastActive: number;
@@ -39,7 +47,21 @@ export interface Peer<T> extends PeerCursor, PeerState<T> {}
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
 
 export type RealtimeMessage<T extends StampedElement> =
-  | { type: "cursor"; clientId: string; name: string; color: string; x: number; y: number }
+  /**
+   * `tool`/`down` are additive: an old peer's frame carries neither, and reads as
+   * `"pointer"`/up — see `PeerCursor`. Sent only for the laser, so an ordinary cursor's
+   * wire shape (and every existing test asserting it) is unchanged.
+   */
+  | {
+      type: "cursor";
+      clientId: string;
+      name: string;
+      color: string;
+      x: number;
+      y: number;
+      tool?: "laser" | "pointer";
+      down?: boolean;
+    }
   | { type: "patch"; clientId: string; patch: ScenePatch<T> }
   /** `have`: what the newcomer has, so those already here can send what it lacks. */
   | {
@@ -388,7 +410,12 @@ export class RealtimeChannel<T extends StampedElement> {
     return liveSocketUrl(env.PUBLIC_REALTIME_WS_URL ?? "", window.location.href);
   }
 
-  sendCursor(x: number, y: number): void {
+  /**
+   * `tool`/`down` ride along only for the laser (`DrawSurface` passes them while it is
+   * the active tool): an ordinary cursor's wire payload is exactly what it was before
+   * either existed, which is what keeps this additive rather than a format bump.
+   */
+  sendCursor(x: number, y: number, tool: "laser" | "pointer" = "pointer", down = false): void {
     void this.send({
       type: "cursor",
       clientId: this.profile.clientId,
@@ -396,6 +423,7 @@ export class RealtimeChannel<T extends StampedElement> {
       color: this.profile.color,
       x,
       y,
+      ...(tool === "laser" ? { tool, down } : {}),
     });
   }
 
@@ -582,6 +610,8 @@ export class RealtimeChannel<T extends StampedElement> {
         x: msg.x,
         y: msg.y,
         pointed: true,
+        tool: msg.tool ?? "pointer",
+        down: msg.down ?? false,
       });
       this.notifyPeers();
     } else if (msg.type === "join") {

@@ -79,6 +79,10 @@ heavily.
 - **You see what the others do while they do it.** A shape someone is drawing grows on
   your screen as they draw it; one they are moving, resizing or turning moves on yours
   before they let go. Their cursor and name follow their mouse.
+- **The laser pointer (`K`) shows on every screen**, not only the presenter's: a trail
+  follows their mouse while they hold the button down, in their colour, and fades out the
+  way it does for them once they let go. It is a gesture, not a mark — it never becomes
+  part of the drawing, so there is nothing to undo and nothing saved.
 - **What someone has selected is theirs until they let go.** It is outlined in their
   colour with their name on it, and nobody else can select it, move it, resize it, edit
   its text, delete it or erase it — the eraser passes over it, and undo leaves it as they

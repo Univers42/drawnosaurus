@@ -134,6 +134,69 @@ describe("realtimeClient", () => {
     unsubscribe();
   });
 
+  it("an old peer's cursor frame — no tool or down field at all — reads as pointer, up", () => {
+    const channel = new RealtimeChannel("test-slug");
+    let peers: { tool?: string; down?: boolean }[] = [];
+    channel.onPeers((list) => {
+      peers = list;
+    });
+
+    // Exactly the shape a pre-upgrade peer's message decodes to: the fields are absent,
+    // not merely `undefined` — nothing here to distinguish "old peer" from "new peer
+    // pointing normally" past this test, which is the point of the default.
+    channel.handleMessage({
+      type: "cursor",
+      clientId: "peer_old",
+      name: "Alice",
+      color: "#e03131",
+      x: 1,
+      y: 2,
+    });
+
+    expect(peers).toEqual([expect.objectContaining({ tool: "pointer", down: false })]);
+  });
+
+  it("a laser cursor frame carries the tool and whether the button is down", () => {
+    const channel = new RealtimeChannel("test-slug");
+    let peers: { tool?: string; down?: boolean }[] = [];
+    channel.onPeers((list) => {
+      peers = list;
+    });
+
+    channel.handleMessage({
+      type: "cursor",
+      clientId: "peer_laser",
+      name: "Bob",
+      color: "#1971c2",
+      x: 5,
+      y: 6,
+      tool: "laser",
+      down: true,
+    });
+
+    expect(peers).toEqual([expect.objectContaining({ tool: "laser", down: true })]);
+  });
+
+  it("sendCursor puts no tool or button state on the wire for an ordinary cursor", () => {
+    const channel = new RealtimeChannel("test-slug");
+    channel.sendCursor(1, 2);
+    const queued = (channel as unknown as { pendingOutbound: Record<string, unknown>[] })
+      .pendingOutbound;
+    const cursorMsg = queued.find((m) => m.type === "cursor");
+    expect(cursorMsg).toMatchObject({ x: 1, y: 2 });
+    expect(cursorMsg).not.toHaveProperty("tool");
+    expect(cursorMsg).not.toHaveProperty("down");
+  });
+
+  it("sendCursor puts the tool and button state on the wire for the laser", () => {
+    const channel = new RealtimeChannel("test-slug");
+    channel.sendCursor(3, 4, "laser", true);
+    const queued = (channel as unknown as { pendingOutbound: Record<string, unknown>[] })
+      .pendingOutbound;
+    const cursorMsg = queued.find((m) => m.type === "cursor");
+    expect(cursorMsg).toMatchObject({ x: 3, y: 4, tool: "laser", down: true });
+  });
+
   it("handles join as presence before any cursor moves", () => {
     const channel = new RealtimeChannel("test-slug");
     let receivedPeers: { clientId: string; name: string }[] = [];

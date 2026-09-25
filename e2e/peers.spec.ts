@@ -160,3 +160,76 @@ test("the other person's cursor is where they point, not in the corner", async (
     .toEqual({ x: AT.x, y: AT.y });
   await close();
 });
+
+/**
+ * The laser (`K`) is a presentation tool: nothing it draws belongs in the scene, so
+ * broadcasting it cannot reuse the patch path — only a peer's own screen ever saw their
+ * trail. See `engine/peers.rs` › `peer_laser`, and `realtimeClient.ts`'s `cursor` frame,
+ * which now carries the tool and the button state a laser stroke needs.
+ */
+test("a peer's laser trail is visible on the other screen, in their colour, and fades after they let go", async ({
+  page,
+  browser,
+}) => {
+  const { host, colleague, close } = await together(page, browser);
+  const other = colleague.page;
+  const region = around(AT.x, AT.y);
+
+  // Nothing there yet — the board is blank and neither page has pointed at it.
+  expect(await chromaInk(other, region)).toBe(0);
+
+  await pickTool(host.page, "Laser pointer");
+  await host.page.mouse.move(host.box.x + AT.x, host.box.y + AT.y);
+  await host.page.mouse.down();
+  await host.page.mouse.move(host.box.x + AT.x + 60, host.box.y + AT.y + 40, { steps: 6 });
+
+  await expect
+    .poll(() => chromaInk(other, region), {
+      message: "no laser trail appeared on the peer's screen while the button was held",
+    })
+    .toBeGreaterThan(0.001);
+
+  await host.page.mouse.up();
+
+  // A laser mark is a gesture, not an edit: it never reaches the scene, so nothing was
+  // sent as a patch and nothing shows up as an element.
+  expect(await sceneElements(other)).toEqual([]);
+
+  // `LASER_DECAY_TIME_MS` (engine/interaction/laser.rs) is 1000ms; give it room to run out.
+  await expect
+    .poll(() => chromaInk(other, region), {
+      timeout: 3_000,
+      message: "the trail never faded after the button came up",
+    })
+    .toBeLessThan(0.0005);
+
+  await close();
+});
+
+test("a peer's laser trail is dropped when they leave mid-stroke", async ({ page, browser }) => {
+  const { host, colleague, close } = await together(page, browser);
+  const other = colleague.page;
+  const region = around(AT.x, AT.y);
+
+  await pickTool(host.page, "Laser pointer");
+  await host.page.mouse.move(host.box.x + AT.x, host.box.y + AT.y);
+  await host.page.mouse.down();
+  await host.page.mouse.move(host.box.x + AT.x + 60, host.box.y + AT.y + 40, { steps: 6 });
+
+  await expect
+    .poll(() => chromaInk(other, region), { message: "no laser trail appeared before the drop" })
+    .toBeGreaterThan(0.001);
+
+  // Gone without an "up": a tab closed, a network drop — `relay()` announces `gone` the
+  // same way a real connection loss does.
+  await host.page.close();
+
+  await expect
+    .poll(() => chromaInk(other, region), {
+      timeout: 3_000,
+      message: "the trail outlived the peer who was drawing it",
+    })
+    .toBeLessThan(0.0005);
+
+  await close();
+});
