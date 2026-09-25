@@ -4,6 +4,7 @@ import {
   activeTool,
   chromaInk,
   clickElement,
+  expectBesidePanel,
   focusBoard,
   OPEN_CANVAS,
   openBoard,
@@ -155,6 +156,8 @@ test.describe("the colour picker", () => {
     await panel(page).getByRole("button", { name: "Stroke", exact: true }).click();
     const picker = page.getByRole("dialog", { name: "Stroke colour picker" });
     await expect(picker).toBeVisible();
+    await expect(picker).toBeFocused();
+    await expectBesidePanel(page, picker);
     await expect(picker.getByRole("button", { name: / — [a-z]$/ })).toHaveCount(15);
     await expect(picker).toContainText("No shades available for this color");
     const canEyeDrop = await page.evaluate(() => "EyeDropper" in window);

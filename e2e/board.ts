@@ -486,6 +486,21 @@ export async function listenForPicker(page: Page): Promise<{ opened: Promise<Fil
 }
 
 /** The tool the engine currently has active. */
+/**
+ * A picker the style panel opens sits beside the panel, on screen, and leaves the panel
+ * as it was. The panel scrolls and blurs what is behind it, so it is the containing block
+ * of a `position: fixed` child: one placed in viewport pixels lands inside it, clipped,
+ * and focusing it scrolls the panel sideways, blank, to bring it into view.
+ */
+export async function expectBesidePanel(page: Page, picker: Locator): Promise<void> {
+  const panel = page.getByRole("complementary", { name: "Style inspector" });
+  const at = (await picker.boundingBox())!;
+  const side = (await panel.boundingBox())!;
+  expect(at.x, "beside the panel").toBeGreaterThanOrEqual(side.x + side.width);
+  expect(at.x + at.width, "on screen").toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(await panel.evaluate((node) => node.scrollLeft), "the panel scrolled sideways").toBe(0);
+}
+
 export function activeTool(page: Page): Promise<string> {
   return page.evaluate(() => window.__drawEngine!.getTool());
 }

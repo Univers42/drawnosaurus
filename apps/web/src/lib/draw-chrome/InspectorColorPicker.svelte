@@ -86,7 +86,10 @@
           top: Math.max(8, Math.min(rect.top - 12, window.innerHeight - height - 8)),
         };
       }
-      void tick().then(() => dialog?.focus());
+      void tick().then(() => {
+        dialog?.showPopover();
+        dialog?.focus();
+      });
     });
   });
 
@@ -213,6 +216,7 @@
   <div
     bind:this={dialog}
     class="picker draw-panel"
+    popover="manual"
     role="dialog"
     aria-label={`${label} colour picker`}
     tabindex="-1"
@@ -370,9 +374,17 @@
     background: var(--line);
   }
 
+  /*
+   * A popover, so it is drawn in the top layer: the panel it opens from scrolls and blurs
+   * what is behind it, which makes the panel the box a fixed child is placed in and
+   * clipped by. `inset`, `margin`, `color` and `overflow` undo the popover's own defaults.
+   */
   .picker {
     position: fixed;
-    z-index: 30;
+    inset: auto;
+    margin: 0;
+    color: inherit;
+    overflow: visible;
     width: 13.5rem;
     padding: 12px;
     border-radius: 10px;
