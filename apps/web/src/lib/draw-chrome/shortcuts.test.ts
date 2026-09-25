@@ -27,12 +27,12 @@ describe("shortcut labels", () => {
     expect(shortcutLabel("CtrlOrCmd+Shift+G", true)).toBe("⌘⇧G");
   });
 
-  it("labels front and back with the chord the engine's keymap takes", () => {
-    // Excalidraw's is Ctrl+Shift off a Mac (`actionZindex.tsx@1118751f:109-112`,
-    // `:147-150`), which the keymap does not bind yet; `e2e/console.spec.ts` presses
-    // what the menu names.
-    expect(zOrderShortcut("front", false)).toBe("Ctrl+Alt+]");
-    expect(zOrderShortcut("back", false)).toBe("Ctrl+Alt+[");
+  it("labels front and back as excalidraw does on each platform", () => {
+    // Ctrl+Shift off a Mac, Cmd+Alt on one (`actionZindex.tsx@1118751f:109-112`,
+    // `:147-150`). The engine's keymap takes both everywhere, and `e2e/console.spec.ts`
+    // presses what the menu names.
+    expect(zOrderShortcut("front", false)).toBe("Ctrl+Shift+]");
+    expect(zOrderShortcut("back", false)).toBe("Ctrl+Shift+[");
     expect(zOrderShortcut("front", true)).toBe("⌘⌥]");
     expect(zOrderShortcut("back", true)).toBe("⌘⌥[");
     expect(zOrderShortcut("forward", false)).toBe("Ctrl+]");

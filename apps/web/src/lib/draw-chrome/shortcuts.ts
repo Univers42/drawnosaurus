@@ -22,13 +22,11 @@ export function shortcutLabel(chord: string, mac: boolean = IS_MAC): string {
 }
 
 /**
- * The z-order chords, as the engine's keymap takes them: to the front and back is
- * Ctrl/Cmd+Alt (`engine/src/host/keys.ts`).
- *
- * Divergence, until the keymap takes the oracle's chord: off a Mac Excalidraw writes and
- * binds Ctrl+Shift (`actions/actionZindex.tsx@1118751f:109-112`, `:147-150`), because
- * Ctrl+Alt is AltGr on many keyboards. A label must name a chord that works, so this
- * flips to `CtrlOrCmd+Shift` off a Mac once the engine binds it.
+ * The z-order chords as Excalidraw writes them: to the front and back is Cmd+Alt on a
+ * Mac and Ctrl+Shift elsewhere, where Ctrl+Alt is AltGr on many keyboards
+ * (`actions/actionZindex.tsx@1118751f:109-112`, `:147-150`). The engine's keymap takes
+ * both chords on every platform (`engine/src/host/keys.ts`), so either label names one
+ * that works.
  */
 export function zOrderShortcut(
   mode: "front" | "forward" | "backward" | "back",
@@ -36,7 +34,7 @@ export function zOrderShortcut(
 ): string {
   const bracket = mode === "front" || mode === "forward" ? "]" : "[";
   if (mode === "forward" || mode === "backward") return shortcutLabel(`CtrlOrCmd+${bracket}`, mac);
-  return shortcutLabel(`CtrlOrCmd+Alt+${bracket}`, mac);
+  return shortcutLabel(`CtrlOrCmd+${mac ? "Alt" : "Shift"}+${bracket}`, mac);
 }
 
 /** Whether a key pressed on `target` is typing, which no shortcut may take. */

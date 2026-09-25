@@ -291,8 +291,9 @@ test.describe("copy and paste styles", () => {
 });
 
 test("the menu names front and back chords the keys act on", async ({ page }) => {
-  // The hints follow the platform, and each has to be a chord the keymap takes. They
-  // named Ctrl+Shift+] off a Mac, which the engine's keymap at this pin passes over.
+  // The hints follow the platform as Excalidraw's do — Ctrl+Shift off a Mac
+  // (`actions/actionZindex.tsx@1118751f:109-112`, `:147-150`) — and each has to be a
+  // chord the keymap takes: pressing what the menu names must restack.
   const board = await openBoard(page);
   await drawBox(board);
   await drawBox(board, AT.x + 250);
@@ -300,12 +301,13 @@ test("the menu names front and back chords the keys act on", async ({ page }) =>
   const [first, second] = await order();
   const KEY: Record<string, string> = { Ctrl: "Control", "]": "BracketRight", "[": "BracketLeft" };
 
-  async function pressHinted(item: string, index: number): Promise<void> {
+  async function pressHinted(item: string, index: number, named: string): Promise<void> {
     await clickElement(board, index, { button: "right" });
     const hint = await page
       .getByRole("menuitem", { name: new RegExp(`^${item}`) })
       .locator(".hint")
       .innerText();
+    expect(hint, `the chord named for ${item}`).toBe(named);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menu")).toBeHidden();
     await clickElement(board, index);
@@ -317,9 +319,9 @@ test("the menu names front and back chords the keys act on", async ({ page }) =>
     );
   }
 
-  await pressHinted("Bring to front", 0);
+  await pressHinted("Bring to front", 0, "Ctrl+Shift+]");
   expect(await order(), "the chord named for bring to front did nothing").toEqual([second, first]);
-  await pressHinted("Send to back", 1);
+  await pressHinted("Send to back", 1, "Ctrl+Shift+[");
   expect(await order(), "the chord named for send to back did nothing").toEqual([first, second]);
 });
 
