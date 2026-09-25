@@ -113,7 +113,7 @@ export const RULES: readonly Rule[] = [
     section: "Lines & arrows",
     text: /Cycle\/change arrow type/,
     status: "gap",
-    why: "Arrow-type cycling needs the elbow-arrow work.",
+    why: "The arrow type is changed from the panel's Arrow type row, sharp or curved (ci_next_style.rs, e2e/arrowType.spec.ts), but pressing the arrow tool's key again does not cycle it (App.tsx@1118751f:5695-5714), and the elbow type it cycles through needs the elbow-arrow work.",
   },
   {
     section: "Lines & arrows",
@@ -285,6 +285,14 @@ export const RULES: readonly Rule[] = [
     section: "🔗 Element linking",
     status: "gap",
     why: "No link on an element. Schema field, inspector row, click handling and export preservation, in that order.",
+  },
+  // Sharp or curved, and the heads: the panel's rows, which with nothing selected set the
+  // next arrow's (docs/reference/console.md).
+  {
+    section: "➡️ Advanced arrows",
+    text: /sharp arrows|curved arrows|Change arrowhead type/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_next_style.rs`, `${ENGINE}/ci_style.rs`, "e2e/arrowType.spec.ts"],
   },
   {
     section: "➡️ Advanced arrows",
@@ -474,6 +482,26 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_group_locks_frames.rs`, `${ENGINE}/ci_hover.rs`],
   },
+  // What the next element is drawn with, carved out of the section rule, which claimed the
+  // next arrowhead while choosing one with nothing selected did nothing.
+  {
+    section: "1. Core architecture",
+    text: /Current font|Current arrowhead/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_next_style.rs`, "e2e/arrowType.spec.ts", "e2e/fontSize.spec.ts"],
+  },
+  // A text bound into a shape, given back, or wrapped in a new one — the context menu's
+  // bound-text actions (actionBoundText.tsx@1118751f).
+  {
+    section: "1. Core architecture",
+    text: /Element container relationships/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_bound_text_actions.rs`,
+      `${ENGINE}/ci_text_model.rs`,
+      "e2e/boundText.spec.ts",
+    ],
+  },
   {
     section: "1. Core architecture",
     text: /custom data|library|visibility/i,
@@ -544,6 +572,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "7. Arrow",
+    text: /Arrowhead|Straight arrows|Curved arrows/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_next_style.rs`, `${ENGINE}/ci_style.rs`, "e2e/arrowType.spec.ts"],
+  },
+  {
+    section: "7. Arrow",
     text: /label\/text/,
     status: "covered",
     tests: [`${ENGINE}/ci_text_model.rs`, `${ENGINE}/ci_export.rs`, "e2e/textEditRequest.spec.ts"],
@@ -583,7 +617,9 @@ export const RULES: readonly Rule[] = [
     tests: [
       `${ENGINE}/ci_text.rs`,
       `${ENGINE}/ci_text_model_compat.rs`,
+      `${ENGINE}/ci_next_style.rs`,
       "e2e/textEditRequest.spec.ts",
+      "e2e/fontSize.spec.ts",
     ],
   },
   // Laid out as Excalidraw lays it out (docs/reference/text-model.md › Layout): a label
@@ -610,11 +646,28 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Text wraps as Excalidraw's does, from originalText, whenever its words or its room change: typed, a font size, family or alignment change, a column's width set, a font arriving (ci_text_wrap_oracle.rs, ci_text_box.rs, ci_text_model.rs). A resize handle does not lay text out yet, so a resized shape keeps its label's lines and a column resized by its handle keeps its lines, where Excalidraw re-wraps on every resize (textElement.ts@1118751f:94-98, 192-196, resizeElements.ts@1118751f:371-375). The resize package lays it out as every writer does (laid_out).",
   },
+  // Drawn, measured and exported in its family, and chosen from the panel's font picker,
+  // its face loaded first. Liberation Sans is not shipped: the file Excalidraw ships is
+  // Liberation 1.05, under Red Hat's GPL v2 font-exception licence, not the OFL of 2.00
+  // and later (apps/web/static/fonts/LICENSES.md) — and the oracle's picker never lists
+  // it either; a text in it is drawn in the fallback (docs/reference/console.md › Gaps).
   {
     section: "9. Text",
-    text: /IME|Bold|Italic|[Ll]etter spacing|Font family/,
+    text: /Font family/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_text_model.rs`,
+      `${ENGINE}/ci_next_style.rs`,
+      `${WEB}/draw-chrome/fonts.test.ts`,
+      "e2e/textLayout.spec.ts",
+      "e2e/fontPicker.spec.ts",
+    ],
+  },
+  {
+    section: "9. Text",
+    text: /IME|Bold|Italic|[Ll]etter spacing/,
     status: "gap",
-    why: "Font family: text is drawn, measured and exported in its family (ci_text_model.rs, e2e/textLayout.spec.ts) and the faces whose licence is established are shipped (apps/web/static/fonts/LICENSES.md) — Excalifont, the default, is shipped and tested in the browser, but there is no picker yet, and Liberation Sans is not shipped: the file Excalidraw ships is Liberation 1.05, under Red Hat's GPL v2 font-exception licence, not the OFL of 2.00 and later (apps/web/static/fonts/LICENSES.md). Bold, italic and letter spacing: Excalidraw has none of them either. IME: the overlay is a plain textarea, untested with composition.",
+    why: "Bold, italic and letter spacing: Excalidraw has none of them either. IME: the overlay is a plain textarea, untested with composition.",
   },
   { section: "9. Text", status: "covered", tests: [`${ENGINE}/ci_text.rs`] },
   {
@@ -944,8 +997,12 @@ export const RULES: readonly Rule[] = [
   {
     section: "35. Properties panel",
     text: /Font picker/,
-    status: "gap",
-    why: "No font family row: the fonts are vendored and setFontFamily works (ci_text_model.rs), but no picker calls it yet; one is to load the face before calling it, as changeFontFamily does (actionProperties.tsx@1118751f:1302-1356).",
+    status: "covered",
+    tests: [
+      `${WEB}/draw-chrome/fonts.test.ts`,
+      `${ENGINE}/ci_next_style.rs`,
+      "e2e/fontPicker.spec.ts",
+    ],
   },
   {
     section: "35. Properties panel",
