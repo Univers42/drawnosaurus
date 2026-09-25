@@ -13,7 +13,7 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { DrawPeer } from "@osionos/draw-engine/types";
   import { cursorForTool } from "./style.ts";
-  import { screenFontPx, zoomPercent } from "./camera.ts";
+  import { zoomPercent } from "./camera.ts";
   import {
     persistCanvasBackground,
     persistThemePreference,
@@ -189,12 +189,25 @@
     if (!dragging) panelVisible = want;
   });
   let textEdit = $state<TextEditRequest | null>(null);
+  /**
+   * Moves when the text being typed may have moved or changed look without a style
+   * change — the camera, a face arriving, a peer — so its editor reads it again.
+   */
+  let editorRevision = $state(0);
+  /**
+   * A primary press on the board just ended an edit. A press of the text tool then only
+   * ends it, rather than starting another text (`App.tsx@1118751f:9815-9824`).
+   */
+  let pressEndedEdit = false;
 
   // Text first laid out in a fallback's widths is re-laid once its face arrives.
   $effect(() => {
     const current = engine;
     if (!current) return;
-    return watchFonts(document.fonts, () => current.fontsLoaded());
+    return watchFonts(document.fonts, () => {
+      current.fontsLoaded();
+      editorRevision += 1;
+    });
   });
   let zoom = $state(100);
   let contentVisible = $state(true);
@@ -674,6 +687,10 @@
     point: { x: number; y: number },
     event?: PointerEvent,
   ): boolean | void {
+    if (pressEndedEdit) {
+      pressEndedEdit = false;
+      if (tool === "text") return true;
+    }
     // Any press on the board takes the pointer back from a page: a press inside the
     // page's own frame never reaches the canvas at all.
     activeEmbed = null;
@@ -805,6 +822,7 @@
     if (told === toldEngine) return;
     toldEngine = told;
     engine.setPeers(resolved as unknown as DrawPeer[]);
+    editorRevision += 1;
   }
 
   /** Says what we now hold: the selection, each element with when it was taken. */
@@ -829,21 +847,6 @@
   let previewSent = false;
   let previewJson = "";
   let previewAt = 0;
-  /**
-   * The text being typed, while the editor is open. Streamed like a gesture, so the words
-   * appear on everyone's screen as they are written — and held, so nobody moves or erases
-   * a text from under the person typing it.
-   */
-  let textDraft: { id: string; text: string } | null = null;
-
-  /** What the gesture in progress — or the text being typed — looks like right now. */
-  function gestureNow(current: DrawEngine): StampedElement[] {
-    if (textDraft) {
-      const typed = current.textPreview(textDraft.id, textDraft.text);
-      return typed ? [typed as unknown as StampedElement] : [];
-    }
-    return current.gestureElements() as unknown as StampedElement[];
-  }
 
   function startPreviews(): void {
     if (!previewRaf) previewRaf = requestAnimationFrame(previewTick);
@@ -852,7 +855,9 @@
   function previewTick(): void {
     previewRaf = 0;
     if (!engine || !realtime) return;
-    const running = dragging || engine.linearInProgress() || textDraft !== null;
+    // A text being typed is a gesture too (`engine/text_session.rs`): the words appear on
+    // everyone's screen as they are written, and it is held while they are.
+    const running = dragging || engine.linearInProgress() || textEdit !== null;
     if (!running || peers.length === 0) {
       if (previewSent) {
         realtime.sendPreviewEnd();
@@ -864,7 +869,7 @@
       realtime.connectionStatus === "connected" &&
       performance.now() - previewAt >= previewInterval(previewJson.length)
     ) {
-      const elements = gestureNow(engine);
+      const elements = engine.gestureElements() as unknown as StampedElement[];
       const json = JSON.stringify(elements);
       if (elements.length > 0 && json !== previewJson) {
         realtime.sendPreview(elements);
@@ -1034,6 +1039,7 @@
   });
 
   function onCameraChange(camera: Camera): void {
+    if (textEdit) editorRevision += 1;
     pending = camera;
     currentCamera = camera;
     if (raf) return;
@@ -1282,6 +1288,7 @@
       onNotice={(notice) => notify(NOTICE_TEXT[notice])}
       onRequestTextEdit={(request) => {
         textEdit = request;
+        if (realtime) startPreviews();
       }}
       onContextMenu={(point) => {
         if (!engine) return;
@@ -1423,19 +1430,26 @@
   <DrawZoomBar {engine} {zoom} {contentVisible} />
 
   {#if textEdit && engine}
-    <DrawTextEditor
-      {engine}
-      request={textEdit}
-      fontSizePx={screenFontPx(textEdit.fontSize, engine.getFontSize(), zoom)}
-      onDraft={(id, text) => {
-        textDraft = { id, text };
-        if (realtime) startPreviews();
-      }}
-      onDone={() => {
-        textEdit = null;
-        textDraft = null;
-      }}
-    />
+    {#key textEdit.id}
+      <DrawTextEditor
+        {engine}
+        request={textEdit}
+        revision={styleRevision + editorRevision}
+        onInput={() => {
+          if (realtime) startPreviews();
+        }}
+        onDone={(boardPress) => {
+          textEdit = null;
+          if (boardPress) {
+            pressEndedEdit = true;
+            // Only for the press under way: one that never reached the board's handler
+            // must not swallow the next.
+            setTimeout(() => (pressEndedEdit = false));
+          }
+          refreshStyle();
+        }}
+      />
+    {/key}
   {/if}
 
   <DrawModals
