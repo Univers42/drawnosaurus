@@ -79,7 +79,7 @@ Nor is the element itself put back deleted-or-not by an edit that never named it
 a move on an element a peer deleted since must not resurrect it. The oracle's delta for a
 plain edit carries only the properties that changed — never `isDeleted`, unless the step
 itself deleted or undeleted the element — so applying it merges just those onto the
-*current* (tombstoned) element and leaves `isDeleted` exactly as it has it
+_current_ (tombstoned) element and leaves `isDeleted` exactly as it has it
 (`ElementsDelta.calculate`/`applyDelta`, `delta.ts@1118751f:1234-1259,1732-1781`).
 `replay_step` mirrors the outcome by skipping such an element outright when the step's own
 before and after agree it was never deleted (`engine/stamp.rs`). Pinned by

@@ -157,6 +157,18 @@ export const RULES: readonly Rule[] = [
     tests: [`${ENGINE}/ci_multi_select.rs`, `${ENGINE}/ci_lasso.rs`, "e2e/multiSelect.spec.ts"],
   },
   {
+    // "Special navigation depending on active editor/context" is flowchart mode: held on
+    // a flowchart-eligible selection it previews a connected node
+    // (`flowchart_create`/`flowchart_commit`); this app never uses Ctrl/Cmd+Arrow as a
+    // nudge (`keys.ts` excludes it from the plain-arrow nudge explicitly), so the
+    // section's own blanket rule below — which does not exercise this chord — is carved
+    // around it.
+    section: "🖱️ Selection",
+    text: /Ctrl\/Cmd \+ Arrow/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_flowchart.rs`, "engine/src/host/keys.test.ts", "e2e/flowchart.spec.ts"],
+  },
+  {
     section: "🖱️ Selection",
     status: "covered",
     tests: [
@@ -346,9 +358,61 @@ export const RULES: readonly Rule[] = [
     ],
   },
   {
+    // Ctrl/Cmd+Arrow: previews a cluster off the selected node, held outside the scene
+    // until the modifier is released, which commits it as one step
+    // (`flowchart.rs` › `flowchart_create`/`flowchart_commit`, `keys.ts`).
     section: "🔄 Flowcharts",
+    text: /create connected nodes/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_flowchart.rs`, "engine/src/host/keys.test.ts", "e2e/flowchart.spec.ts"],
+  },
+  {
+    // Turning an arbitrary element (a line, a frame, an image) into something flowchart
+    // mode will grow from — distinct from starting a cluster off a shape that already
+    // qualifies (`is_flowchart_node`), which is covered above.
+    section: "🔄 Flowcharts",
+    text: /Convert a generic shape/,
     status: "gap",
-    why: "No flowchart mode: node creation from a shape, keyboard navigation between nodes, and automatic bound-arrow connection. Bindings and shapes underneath it are done.",
+    why: "Flowchart mode works from a rectangle, diamond, ellipse or sticky note as the oracle's own is_flowchart_node does; there is no conversion of an arbitrary element into one of those first.",
+  },
+  {
+    // Alt+Arrow: same-level cycling with a fallback to any unvisited linked node
+    // (`FlowchartNavigator::explore`).
+    section: "🔄 Flowcharts",
+    text: /keyboard navigation to move between flowchart/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_flowchart.rs`, "e2e/flowchart.spec.ts"],
+  },
+  {
+    // The commit's own arrow, bound at both ends (`binding_arrow`) — not the general
+    // binding system, which "18. Binding system" already covers.
+    section: "🔄 Flowcharts",
+    text: /Connect nodes with bound arrows/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_flowchart.rs`, "e2e/flowchart.spec.ts"],
+  },
+  {
+    // Ctrl+D duplicates whatever is selected by kind alone; a flowchart node is a
+    // rectangle/diamond/ellipse, so it needs no code of its own to duplicate.
+    section: "🔄 Flowcharts",
+    text: /Duplicate flowchart nodes/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_duplicate.rs`],
+  },
+  {
+    // A bound arrow follows the shape it is anchored to on every move — the general
+    // binding system ("18. Binding system"), exercised here on shapes a flowchart
+    // cluster produced same as any other.
+    section: "🔄 Flowcharts",
+    text: /preserving connections/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_arrow_drag.rs`, "e2e/arrowDrag.spec.ts"],
+  },
+  {
+    section: "🔄 Flowcharts",
+    text: /elbow arrows/,
+    status: "out-of-scope",
+    why: "This engine draws no elbow-routed arrows at all (engine.ts's own doc comment) — a flowchart binding is a straight line, same as every other bound arrow here. See docs/reference/flowchart.md.",
   },
   {
     section: "🧠 Autoshape / Smart drawing",
@@ -999,8 +1063,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "26. Autoshape / flowchart logic",
     text: /[Ff]lowchart|connection points|Automatic arrow/,
-    status: "gap",
-    why: "No flowchart mode — see the Flowcharts rule.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_flowchart.rs`, "e2e/flowchart.spec.ts"],
   },
   {
     section: "26. Autoshape / flowchart logic",
@@ -1011,7 +1075,7 @@ export const RULES: readonly Rule[] = [
     section: "27. Keyboard system",
     text: /Tab/,
     status: "gap",
-    why: "Tab does nothing on the canvas. It is the flowchart navigation key, so it waits on that.",
+    why: "Tab does nothing on the canvas. The oracle's own Tab opens the shape-conversion popup (App.tsx), not flowchart navigation — that is Alt+Arrow, covered under Flowcharts. This one is still unclaimed.",
   },
   {
     section: "27. Keyboard system",

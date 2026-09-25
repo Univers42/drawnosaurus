@@ -13,7 +13,9 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { DrawPeer } from "@osionos/draw-engine/types";
   import { cursorForTool } from "./style.ts";
-  import { zoomPercent } from "./camera.ts";
+  import { boundsOf, easeOutProgress, revealPan, worldToScreen, zoomPercent } from "./camera.ts";
+  import FlowchartShapeStrip from "./FlowchartShapeStrip.svelte";
+  import type { FlowchartShape } from "@osionos/draw-engine/types";
   import {
     persistCanvasBackground,
     persistThemePreference,
@@ -816,6 +818,67 @@
     syncPeers();
   }
 
+  // A flowchart cluster being previewed (Ctrl/Cmd+Arrow still held) can grow off screen
+  // before it is ever committed — the engine only eases the camera at commit/navigate
+  // (`DrawEngine::reveal`), so this covers the still-pending case with a short ease of
+  // its own, never a jump. `onFlowchartReveal` fires once per keypress; the RAF loop
+  // restarts on top of whatever pan is still in flight rather than stacking two.
+  const FLOWCHART_REVEAL_MS = 220;
+  let revealRaf = 0;
+  let revealStart = 0;
+  let revealTarget = { dx: 0, dy: 0 };
+  let revealApplied = { dx: 0, dy: 0 };
+
+  function startFlowchartReveal(): void {
+    if (!engine || !canvasHost) return;
+    const bounds = boundsOf(engine.pendingFlowchartElements());
+    if (!bounds) return;
+    const rect = canvasHost.getBoundingClientRect();
+    const pan = revealPan({ width: rect.width, height: rect.height }, engine.camera, bounds);
+    if (!pan) return;
+    revealTarget = pan;
+    revealApplied = { dx: 0, dy: 0 };
+    revealStart = performance.now();
+    if (!revealRaf) revealRaf = requestAnimationFrame(flowchartRevealTick);
+  }
+
+  function flowchartRevealTick(): void {
+    revealRaf = 0;
+    if (!engine) return;
+    const progress = easeOutProgress(performance.now() - revealStart, FLOWCHART_REVEAL_MS);
+    const dx = revealTarget.dx * progress;
+    const dy = revealTarget.dy * progress;
+    engine.panBy(dx - revealApplied.dx, dy - revealApplied.dy);
+    revealApplied = { dx, dy };
+    if (progress < 1) revealRaf = requestAnimationFrame(flowchartRevealTick);
+  }
+
+  // Extra the oracle lacks: a small floating strip beside the node being created offers
+  // the same 1/2/3 shape choice by click. Shown only while a cluster is pending
+  // (`onFlowchartCreatingChange`) and positioned from the pending cluster's own bounds —
+  // recomputed on every keypress that can move or grow it (`onFlowchartCreatingChange`
+  // fires on every Ctrl/Cmd+Arrow, held-and-repeated included).
+  let flowchartCreating = $state(false);
+  let flowchartStripPos = $state<{ x: number; y: number } | null>(null);
+
+  function updateFlowchartStripPosition(): void {
+    if (!engine || !currentCamera) {
+      flowchartStripPos = null;
+      return;
+    }
+    const bounds = boundsOf(engine.pendingFlowchartElements());
+    if (!bounds) {
+      flowchartStripPos = null;
+      return;
+    }
+    const { sx, sy } = worldToScreen(currentCamera, bounds.x + bounds.width / 2, bounds.y);
+    flowchartStripPos = { x: sx, y: sy };
+  }
+
+  function chooseFlowchartShape(shape: FlowchartShape): void {
+    engine?.flowchartSetShape(shape);
+  }
+
   // Our gesture in progress, streamed to peers while it runs so a shape moves on their
   // screens as it moves on ours. At most once per `previewInterval`, only when something
   // changed and someone is there to see it, and ended once the gesture is: after its
@@ -1014,6 +1077,7 @@
     if (raf) cancelAnimationFrame(raf);
     if (cursorRaf) cancelAnimationFrame(cursorRaf);
     if (previewRaf) cancelAnimationFrame(previewRaf);
+    if (revealRaf) cancelAnimationFrame(revealRaf);
     eraserTrail.clear();
     realtime?.disconnect();
   });
@@ -1313,6 +1377,12 @@
       onToolLockChange={(locked) => {
         toolLocked = locked;
       }}
+      onFlowchartReveal={startFlowchartReveal}
+      onFlowchartCreatingChange={(creating) => {
+        flowchartCreating = creating;
+        if (creating) updateFlowchartStripPosition();
+        else flowchartStripPos = null;
+      }}
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
@@ -1324,6 +1394,13 @@
           fill={themeMode === "dark" ? "rgba(255, 255, 255, 0.3)" : "rgba(0, 0, 0, 0.2)"}
         />
       </svg>
+    {/if}
+    {#if flowchartCreating && flowchartStripPos}
+      <FlowchartShapeStrip
+        x={flowchartStripPos.x}
+        y={flowchartStripPos.y}
+        onChoose={chooseFlowchartShape}
+      />
     {/if}
   </div>
 
