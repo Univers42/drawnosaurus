@@ -420,3 +420,176 @@ test("a new text's first line is centred on the point it was started at", async 
   expect(text.top).toBeCloseTo(at.y - 12.5, 0);
   expect(text.left).toBeCloseTo(at.x, 0);
 });
+
+test("a new text is snapped to the grid when the grid is on", async ({ page }) => {
+  const board = await openBoard(page);
+  await page.evaluate(() => window.__drawEngine!.setGrid({ enabled: true }));
+  await pickTool(page, "Text");
+  const at = { x: OPEN_CANVAS.left + 203, y: OPEN_CANVAS.top + 197 };
+  await page.mouse.click(board.box.x + at.x, board.box.y + at.y);
+  await page.keyboard.type("Hi");
+  await page.keyboard.press("Escape");
+
+  const grid = await page.evaluate(() => window.__drawEngine!.getGrid());
+  const text = await onCanvas(page, await byType(page, "text"));
+  expect(text.left % grid.size).toBeCloseTo(0, 0);
+  expect(text.top % grid.size).toBeCloseTo(0, 0);
+});
+
+test("a click on a text that was already the sole selection opens the caret there", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await pickTool(page, "Text");
+  const at = { x: OPEN_CANVAS.left + 200, y: OPEN_CANVAS.top + 200 };
+  await page.mouse.click(board.box.x + at.x, board.box.y + at.y);
+  await page.keyboard.type("hello");
+  await page.keyboard.press("Escape");
+  await expect(editor(page)).toHaveCount(0);
+
+  // Reopening from scratch — Enter, same as every other entry point — selects it all.
+  await page.keyboard.press("Enter");
+  await expect(editor(page)).toBeFocused();
+  const whole = await editor(page).evaluate((n) => [
+    (n as HTMLTextAreaElement).selectionStart,
+    (n as HTMLTextAreaElement).selectionEnd,
+  ]);
+  expect(whole).toEqual([0, 5]);
+  await page.keyboard.press("Escape");
+
+  // A click on it, already the sole selection, opens at the click instead
+  // (`getCaretIndexFromInitialSceneCoords`, `textWysiwyg.tsx@1118751f:491-538`).
+  const box = await onCanvas(page, await byType(page, "text"));
+  await page.mouse.click(board.box.x + (box.left + box.right) / 2, board.box.y + box.top + 5);
+  await expect(editor(page)).toBeFocused();
+  const caret = await editor(page).evaluate((n) => [
+    (n as HTMLTextAreaElement).selectionStart,
+    (n as HTMLTextAreaElement).selectionEnd,
+  ]);
+  expect(caret[0]).toBe(caret[1]);
+  expect(caret[0]).toBeGreaterThan(0);
+  expect(caret[0]).toBeLessThan(5);
+});
+
+test("a fixed-width text shows its box outline while it is typed, an auto-sizing one none", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  const fixed = {
+    id: "fixed",
+    type: "text",
+    x: OPEN_CANVAS.left + 100,
+    y: OPEN_CANVAS.top + 100,
+    width: 160,
+    height: 25,
+    angle: 0,
+    text: "",
+    fontSize: 20,
+    textAlign: "left",
+    verticalAlign: "top",
+    autoResize: false,
+    strokeColor: "#1e1e1e",
+    backgroundColor: "transparent",
+    fillStyle: "solid",
+    strokeWidth: 2,
+    strokeStyle: "solid",
+    roughness: 1,
+    opacity: 100,
+    roundness: null,
+    seed: 1,
+    version: 1,
+    versionNonce: 1,
+    updated: 0,
+    isDeleted: false,
+    groupIds: [],
+  };
+  await page.evaluate((element) => {
+    window.__drawEngine!.loadScene(
+      JSON.stringify({ type: "osidraw", version: 1, elements: [element] }),
+    );
+  }, fixed);
+
+  const box = await onCanvas(page, await byType(page, "text"));
+  await page.mouse.dblclick(
+    board.box.x + (box.left + box.right) / 2,
+    board.box.y + (box.top + box.bottom) / 2,
+  );
+  await expect(editor(page)).toBeFocused();
+  await expect(editor(page)).toHaveClass(/boxed/);
+  await expect(editor(page)).toHaveCSS("outline-style", "dashed");
+  await page.keyboard.press("Escape");
+
+  // The common case — a text that grows with what is typed — has none: its own edges are
+  // already the box.
+  await pickTool(page, "Text");
+  await page.mouse.click(board.box.x + OPEN_CANVAS.left + 400, board.box.y + OPEN_CANVAS.top + 300);
+  await expect(editor(page)).toBeFocused();
+  await expect(editor(page)).not.toHaveClass(/boxed/);
+});
+
+/**
+ * The confirming Enter, Tab and Escape belong to the IME's composition, not to the
+ * editor's own bindings for those keys, or a still-composing word is cut in two by the
+ * key that was meant to keep composing it. Driven through CDP because that is the only
+ * way to raise a real `isComposing`/keyCode-229 keydown — a dispatched event is the
+ * documented exception here, as `Input.dispatchKeyEvent` already is for Alt+S in
+ * `objectsSnap.spec.ts`, for the same reason: the browser is the only thing that can
+ * produce it.
+ */
+test("Ctrl/Cmd+Enter, Tab and Escape are held while an IME composes, and act once it commits", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await pickTool(page, "Text");
+  const at = { x: OPEN_CANVAS.left + 200, y: OPEN_CANVAS.top + 200 };
+  await page.mouse.click(board.box.x + at.x, board.box.y + at.y);
+  await expect(editor(page)).toBeFocused();
+
+  const cdp = await page.context().newCDPSession(page);
+  const compose = () =>
+    cdp.send("Input.imeSetComposition", { text: "n", selectionStart: 1, selectionEnd: 1 });
+  const dispatch = async (key: string, windowsVirtualKeyCode: number, modifiers = 0) => {
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key,
+      code: key,
+      windowsVirtualKeyCode,
+      modifiers,
+    });
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key,
+      code: key,
+      windowsVirtualKeyCode,
+      modifiers,
+    });
+  };
+
+  // Ctrl+Enter mid-composition: held, so the edit stays open under it.
+  await compose();
+  await dispatch("Enter", 13, 2 /* Ctrl */);
+  await expect(editor(page)).toHaveCount(1);
+  await expect(editor(page)).toBeFocused();
+
+  // Tab mid-composition: held, so it is not four spaces.
+  await compose();
+  await dispatch("Tab", 9);
+  await expect(editor(page)).not.toHaveValue(/^ {4}/);
+
+  // Escape mid-composition: held too — an IME's own Escape cancels its composition, and
+  // must not also end the whole edit out from under it.
+  await compose();
+  await dispatch("Escape", 27);
+  await expect(editor(page)).toHaveCount(1);
+
+  // The control: once the IME commits — `Input.insertText`, the same way a real one
+  // finalises a still-open composition — the same keys do what they always did. Without
+  // this the three checks above would just as well pass for keys that are simply broken.
+  await cdp.send("Input.insertText", { text: "ん" });
+  await expect(editor(page)).toHaveValue("ん");
+  await dispatch("Tab", 9);
+  await expect(editor(page)).toHaveValue("    ん");
+  await dispatch("Escape", 27);
+  await expect(editor(page)).toHaveCount(0);
+  expect((await byType(page, "text")).text).toBe("    ん");
+});
