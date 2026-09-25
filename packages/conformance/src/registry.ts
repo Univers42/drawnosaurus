@@ -980,12 +980,13 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "The engine exposes methods, not named actions. Nothing addressable by name means no command palette and no single place a shortcut, a menu item and a button agree on — design.md is right that this is the load-bearing one.",
   },
-  // A typing session is one step, stamped once, at its commit; undo waits for it.
+  // A typing session is one step, stamped once, at its commit — styles written while it
+  // is typed included; undo waits for it.
   {
     section: "29. Undo / redo",
     text: /Text editing transactions/,
     status: "covered",
-    tests: [`${ENGINE}/ci_text_edit.rs`],
+    tests: [`${ENGINE}/ci_text_edit.rs`, "e2e/fontSize.spec.ts"],
   },
   {
     section: "29. Undo / redo",
