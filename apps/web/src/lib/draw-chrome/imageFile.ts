@@ -79,7 +79,7 @@ export function describeRejection(reason: ImageRejection): string {
 /** The images among a drop's files, in the order they were dropped. */
 /**
  * The longest side an inserted image keeps, in pixels. Excalidraw's
- * `DEFAULT_MAX_IMAGE_WIDTH_OR_HEIGHT` (`packages/common/src/constants.ts:388`).
+ * `DEFAULT_MAX_IMAGE_WIDTH_OR_HEIGHT` (`packages/common/src/constants.ts@1118751f:401`).
  *
  * Larger images are scaled down on insertion, **before** the size check. The order is the
  * point: a phone photo is routinely over 4 MB, and checking first refused it outright
@@ -110,7 +110,7 @@ export function scaledToFit(
  * Whether a file of this type and size is shrunk on the way in.
  *
  * SVG never is: it has no pixels to reduce, and rasterising it would throw away the one
- * thing that makes it worth using. Excalidraw exempts it the same way (`data/blob.ts:365`).
+ * thing that makes it worth using. Excalidraw exempts it the same way (`data/blob.ts@1118751f:365`).
  */
 export function needsDownscale(type: string, width: number, height: number): boolean {
   const kind = type.toLowerCase();
@@ -128,7 +128,7 @@ export function smallerOf<F extends { size: number }>(shrunk: F, original: F): F
 export type PreparedImage<F> = { file: F } | { rejection: ImageRejection };
 
 /**
- * Type, then shrink, then size — Excalidraw's order (`App.tsx:12649-12668`).
+ * Type, then shrink, then size — Excalidraw's order (`App.tsx@1118751f:12657-12676`).
  *
  * The order is the point: a phone photo is routinely over the size limit *before* it is
  * brought down to 1440px, and checking the size first refused it outright. `shrink` is
@@ -149,7 +149,7 @@ export async function prepareImageFile<F extends { type: string; size: number }>
  *
  * Returns the original file whenever it does not need shrinking **or cannot be shrunk**
  * — no canvas, a decode failure, a browser that will not encode the type. Excalidraw's
- * does the same (`App.tsx:12650-12660`): a failed resize is logged and the original goes
+ * does the same (`App.tsx@1118751f:12658-12668`): a failed resize is logged and the original goes
  * on to the size check, which is then the only thing that can refuse it.
  */
 export async function downscaleImageFile(file: File): Promise<File> {

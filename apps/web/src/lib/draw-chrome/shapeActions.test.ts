@@ -359,7 +359,7 @@ describe("the bucket fill tool", () => {
   it("offers a fill style even when the shared background is transparent", () => {
     // Excalidraw special-cases exactly this, and says why in situ: "bucket fill never
     // renders transparent (it falls back to a real color), so its fill style stays
-    // relevant either way" — `shapeActionPredicates.ts:131-135`. Without the special
+    // relevant either way" — `shapeActionPredicates.ts@1118751f:131-135`. Without the special
     // case the fill row is hidden precisely when nothing has been picked yet, which is
     // every first use of the tool.
     expect(getShapeActions("bucketfill", factsOf([]), "transparent").fill).toBe(true);
@@ -372,7 +372,7 @@ describe("the bucket fill tool", () => {
 
   it("offers nothing that paint has no use for", () => {
     // The paint it leaves behind has no stroke at all, so a stroke colour, width or
-    // dash would be controls that change nothing. `comparisons.ts:19-64` omits
+    // dash would be controls that change nothing. `comparisons.ts@1118751f:19-64` omits
     // `bucketfill` from every one of them.
     const actions = getShapeActions("bucketfill", factsOf([]), "#b2f2bb");
     expect(actions.strokeColor).toBe(false);

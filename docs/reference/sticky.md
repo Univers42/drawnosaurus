@@ -3,7 +3,7 @@
 Markers: **OBSERVED**, **VERIFIED**, **INFERRED**, **IMPLEMENTATION DETAIL**, **UNKNOWN**.
 
 Oracle pinned at `scripts/oracle-sha.txt` (1118751f): `packages/element/src/stickyNote.ts`,
-`resizeElements.ts`, `actions/colorTargets.ts`, `App.tsx:11812-11890` for the tool.
+`resizeElements.ts`, `actions/colorTargets.ts`, `App.tsx@1118751f:11820-11898` for the tool.
 
 ## One element
 

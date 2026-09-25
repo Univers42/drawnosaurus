@@ -11,9 +11,9 @@ inside out), `ci_binding.rs`, `ci_arrow_drag.rs` and `ci_line_multipoint.rs`.
 
 ## What an end stores
 
-**VERIFIED** — Excalidraw's "simple" binding (`element/src/binding.ts:644-953`, the
+**VERIFIED** — Excalidraw's "simple" binding (`element/src/binding.ts@1118751f:654-962`, the
 default; the "complex" strategy is behind a feature flag). A bound end is a
-`FixedPointBinding` (`element/src/types.ts:316-333`): the shape's id, a `fixedPoint` —
+`FixedPointBinding` (`element/src/types.ts@1118751f:316-333`): the shape's id, a `fixedPoint` —
 a ratio of the shape's **unrotated** width and height — and a `mode`:
 
 - `inside`: the end sits exactly on the anchor;
@@ -28,10 +28,10 @@ centre, in orbit — on the same line between the two centres it was always draw
 ends move by a few units, to Excalidraw's gap, the first time it or a shape it is bound
 to is part of a commit, and are stamped with that commit. An edit elsewhere on the board
 leaves it as stored: bindings are refreshed for what a commit touched, a peer's patch
-included (`refresh_bindings_in_place`, as `align.ts:45-48` updates only what moved).
+included (`refresh_bindings_in_place`, as `align.ts@1118751f:45-48` updates only what moved).
 Undo and redo count as touching what they put back, so an arrow bound to a restored
 shape follows it, stamped with the step — one a peer drew after the undone edit
-included (`ElementsDelta.applyTo`, `delta.ts:2044-2047,2107-2114`).
+included (`ElementsDelta.applyTo`, `delta.ts@1118751f:2044-2047,2107-2114`).
 `set_anchor` is the only writer of the three fields, so a released end never keeps an
 anchor.
 
@@ -43,26 +43,26 @@ shape's own frame (`focus_point` turns it with the shape), so both are gone.
 
 ## Where an end binds
 
-**VERIFIED** — `anchor_for_drop` transcribes `binding.ts:644-953`:
+**VERIFIED** — `anchor_for_drop` transcribes `binding.ts@1118751f:654-962`:
 
-| Where the end is let go                     | Binding                           |
-| ------------------------------------------- | --------------------------------- |
-| nowhere near a target                       | unbound                           |
-| near the shape the other end is bound to    | both ends `inside`, where put     |
-| inside a shape's outline (fill-independent) | `inside`, exactly there           |
-| near one, Alt held                          | `inside`, exactly there           |
-| beside one, near a side midpoint (no grid)  | `orbit`, anchored at the midpoint |
-| beside one, otherwise                       | `orbit`, projected (below)        |
-| Ctrl/Cmd held                               | unbound (`App.tsx:5753-5761`)     |
+| Where the end is let go                     | Binding                                |
+| ------------------------------------------- | -------------------------------------- |
+| nowhere near a target                       | unbound                                |
+| near the shape the other end is bound to    | both ends `inside`, where put          |
+| inside a shape's outline (fill-independent) | `inside`, exactly there                |
+| near one, Alt held                          | `inside`, exactly there                |
+| beside one, near a side midpoint (no grid)  | `orbit`, anchored at the midpoint      |
+| beside one, otherwise                       | `orbit`, projected (below)             |
+| Ctrl/Cmd held                               | unbound (`App.tsx@1118751f:5754-5762`) |
 
-The projection (`element/src/utils.ts:697-787`) continues the arrow's own line — from
+The projection (`element/src/utils.ts@1118751f:810-902`) continues the arrow's own line — from
 the far anchor for a straight arrow, from the neighbouring point of a bent one —
 through the drop until it meets the shape's diagonals (inset 15 from the corners for a
 rectangle) or centre lines (anything else); the anchor is that meeting point, or the
 drop itself when it misses. So the end arrives along the side it came in on, at the
 height it was aimed. With Shift held the far end's orbit anchor is re-projected too, so
-the held angle survives (`binding.ts:933-950`). Shift and grid snapping both turn the
-midpoint snap off (`binding.ts:876-878`): it would pull the end off the angle or the grid.
+the held angle survives (`binding.ts@1118751f:942-959`). Shift and grid snapping both turn the
+midpoint snap off (`binding.ts@1118751f:885-887`): it would pull the end off the angle or the grid.
 
 "Inside" is the painted outline (`is_inside`, `isPointInElement`,
 `collision.ts@1118751f:823-878`): the cut-away of a rounded corner is outside, and so is a
@@ -70,7 +70,7 @@ point exactly on the outline — **OBSERVED** on excalidraw.com, a point on a sq
 binds it in orbit.
 
 A new arrow binds its tail at the press on the same terms
-(`App.tsx:10317-10339`). Whether the gesture was a drag or a click is read off the hand —
+(`App.tsx@1118751f:10325-10347`). Whether the gesture was a drag or a click is read off the hand —
 screen pixels from press to release — never off the arrow, whose bound ends are pulled
 onto outlines and can be a few pixels apart, or collapsed, after a long drag. A path
 placed click by click finishes when a click binds it in orbit, or beside the shape it
@@ -120,17 +120,17 @@ tail pinned inside for the rest of the drag; nobody drawing across a shape means
 
 ## Where an end is drawn
 
-**VERIFIED** — `resolve_end` follows `updateBoundPoint` (`binding.ts:1938-2094`): an
+**VERIFIED** — `resolve_end` follows `updateBoundPoint` (`binding.ts@1118751f:1948-2104`): an
 `inside` end is its anchor; an `orbit` end runs from its anchor toward the far anchor (a
 straight arrow) or its neighbouring point (a bent one) and stops where that line leaves
 the outline pushed out by the gap — a box grows into a rounded box, so a corner keeps
-the same gap as a side (`intersectElementWithLineSegment`, `collision.ts:627-751`). When
+the same gap as a side (`intersectElementWithLineSegment`, `collision.ts@1118751f:675-799`). When
 the line never leaves (an anchor the person put outside the shape) the end is its anchor,
-as Excalidraw keeps one on its focus (`utils.ts:782-786`, `binding.ts:880`).
+as Excalidraw keeps one on its focus (`utils.ts@1118751f:897-901`, `binding.ts@1118751f:889`).
 
 **IMPLEMENTATION DETAIL, deliberate divergence** — Excalidraw also sends an orbiting end
 _onto_ its anchor when the arrow gets shorter than 10 or its outline point falls inside
-the far shape (`binding.ts:2026-2083`). Its anchors mostly sit on the outline, so there
+the far shape (`binding.ts@1118751f:2036-2093`). Its anchors mostly sit on the outline, so there
 that is a small step; for a centre anchor — every legacy arrow — it was a jump deep into
 the shape. Here an orbiting end never enters its shape. What those rules guard against,
 an arrow turned inside out, is handled directly: a straight arrow orbiting at both ends
@@ -140,14 +140,14 @@ anchor outside its shape is never trapped. **OBSERVED** on excalidraw.com: one r
 another, the arrow went 228, 128, 48, then 0 long and stayed 0, never entering either.
 
 **IMPLEMENTATION DETAIL, deliberate divergence** — the midpoint snap works from the
-press. Excalidraw's check for an arrow with no length (`utils.ts:706-708`) also turns the
+press. Excalidraw's check for an arrow with no length (`utils.ts@1118751f:834-836`) also turns the
 snap off at the press while its hover still draws the midpoint dot, a promise the press
 then breaks. Only the projection, which needs a direction, waits for one.
 
 ## At any depth
 
 **IMPLEMENTATION DETAIL, deliberate divergence** — Excalidraw's gap is `5 + strokeWidth/2`
-scene units for every shape (`binding.ts:115-135`). A shape drawn deep inside a zoomed
+scene units for every shape (`binding.ts@1118751f:116-131`). A shape drawn deep inside a zoomed
 presentation can be a unit across, and a six-unit gap floated its arrows shapes away
 from it. `binding_gap` caps the gap to a quarter of the shape's shorter side; for
 anything over 24 units — everything drawn at ordinary zoom — it is exactly Excalidraw's.
@@ -170,7 +170,7 @@ is 3 px at 10% (`MIN_ZOOM`), where it was 32. Both are the oracle's.
 distance" and dc2c16d9, two days after our pinned SHA — excalidraw.com serves 1118751f):
 
 - targets are rectangles, diamonds, ellipses, images, embeds, frames and free text
-  (`isBindableElement`, `typeChecks.ts:184-202`) — not a label, not a line or arrow;
+  (`isBindableElement`, `typeChecks.ts@1118751f:184-202`) — not a label, not a line or arrow;
 - each is measured by its **signed distance to its painted outline**
   (`signed_outline_distance`: positive inside, negative outside; rounded corners are the
   painter's quadratics, `distanceToElement`) and counts inside it, or outside within the
@@ -178,7 +178,7 @@ distance" and dc2c16d9, two days after our pinned SHA — excalidraw.com serves 
   (`FRAME_STYLE.roundness: null`, `constants.ts@1118751f:209`) however ours are painted;
   and a frame counts only from outside, so a point inside a slide is aimed at what the
   slide holds; and a shape inside a frame is skipped where the frame clips it from view
-  (`isPointClippedByEnclosingFrame`, `collision.ts:283-298`);
+  (`isPointClippedByEnclosingFrame`, `collision.ts@1118751f:283-298`);
 - candidates are walked top of the z-order first, and the walk **stops at the first
   opaque one the point is inside** — a shape with a background, or a picture
   (`isOpaqueForBinding`, `:346-348`). A locked shape is never a candidate, but an opaque
@@ -211,7 +211,7 @@ locked. The note is now one `stickynote` element with a painted shadow
 notes rebinds an arrow bound to a shadow onto its note (`stickyNotes.test.ts`).
 
 Ctrl+D copies ten units down and right, as the oracle does (`DEFAULT_GRID_SIZE / 2`,
-`actionDuplicateSelection.tsx:78-79`); it was twelve.
+`actionDuplicateSelection.tsx@1118751f:78-79`); it was twelve.
 
 `bindable_among` / `bindable_at` remain for **labels** (a text placed into a container):
 rectangles, diamonds and ellipses, smallest area wins, not fill-aware.
@@ -219,11 +219,11 @@ rectangles, diamonds and ellipses, smallest area wins, not fill-aware.
 ## Suggesting a binding
 
 **VERIFIED** — with the arrow tool in hand and nothing being drawn, the shape an arrow
-started here would attach to lights up (`App.tsx:7939-7973`). The host forwards moves
+started here would attach to lights up (`App.tsx@1118751f:7941-7979`). The host forwards moves
 with no button held, coalesced per frame, to `hoverPointer`; every tool but the arrow
 returns at once. The highlight is the shape's outline plus a dot on the side midpoint
 the pointer is near — in the highlight colour where a drop would snap to it, grey
-within twice that (`interactiveScene.ts:284-322`) — and nothing inside the shape, where
+within twice that (`interactiveScene.ts@1118751f:284-322`) — and nothing inside the shape, where
 a drop binds exactly where it is. The dot is in the highlight colour only when the drop
 really snaps: never on the grid, and during a drag only when the anchor the drop chose
 is that midpoint — not with Shift held, nor on the shape the far end is bound to.
@@ -235,9 +235,9 @@ deleted.
 ## Moving things
 
 **VERIFIED** — an arrow turned or resized on its own lets go of both ends
-(`resizeElements.ts:241-252`, `930-946`). A group turned or scaled carries its arrows
+(`resizeElements.ts@1118751f:241-252`, `930-946`). A group turned or scaled carries its arrows
 rigidly, and an end bound to a shape outside the group lets go
-(`resizeElements.ts:464-475`, `1550-1569`). A line or arrow in a group is transformed
+(`resizeElements.ts@1118751f:464-475`, `1550-1569`). A line or arrow in a group is transformed
 through its points (`group_transform.rs`), so it keeps no angle of its own and a leftward
 line no longer jumps a width when the group is flipped. A copy keeps an end's anchor
 only when the shape was copied with it.

@@ -113,8 +113,8 @@ nothing at all for an image with no picture yet, rather than a broken reference
 
 **VERIFIED** — a flipped image mirrors its pixels, as Excalidraw's does. The oracle keeps
 width and height positive and multiplies a `scale: [sx, sy]` field by -1 on the flipped
-axis (`element/src/resizeElements.ts:1484-1489`); its painter translates to the element's
-centre, rotates, then scales by it (`element/src/renderElement.ts:820-837` at 1118751f).
+axis (`element/src/resizeElements.ts@1118751f:1484-1489`); its painter translates to the element's
+centre, rotates, then scales by it (`element/src/renderElement.ts@1118751f:816-833` at 1118751f).
 Ours stores the same fact as a **negative width or height**: `element_matrix` in
 `wasm/paint.rs` applies it as a scale of -1 in the same order — centre, rotation, mirror —
 and the SVG export writes the same `translate · rotate · scale` (`export/svg.rs` ›

@@ -18,9 +18,9 @@ that is a class of bug, and state-reading tests cannot see it.
 
 **VERIFIED** — shift-click adds; shift-click on a held element removes it on the
 release, so a shift-drag from a held element moves everything held
-(`App.tsx:9656-9660`, `:12183-12260`); shift-drag extends; shift on empty canvas keeps the
+(`App.tsx@1118751f:9664-9668`, `:12191-12268`); shift-drag extends; shift on empty canvas keeps the
 selection. A plain click on empty canvas clears, and so does one in the hole of the
-selection's box, where a drag would move it (`App.tsx:12344-12387`, `ci_grab_selected.rs`).
+selection's box, where a drag would move it (`App.tsx@1118751f:12352-12395`, `ci_grab_selected.rs`).
 Each rule is another's escape hatch (`ci_multi_select.rs`).
 
 ## Moving
@@ -29,7 +29,7 @@ Each rule is another's escape hatch (`ci_multi_select.rs`).
 narrow the selection to it.
 
 **VERIFIED** — a bound arrow moved on its own **releases** each end whose shape is not
-moving with it (`dragElements.ts:110-167`). An end whose shape is in the drag stays bound.
+moving with it (`dragElements.ts@1118751f:110-157`). An end whose shape is in the drag stays bound.
 A lone arrow must first travel 10px (`DRAGGING_THRESHOLD`) so the click that selects it
 cannot detach it.
 
@@ -46,7 +46,7 @@ handle and bends it rather than moving it. The oracle does the same.
 ## The chrome
 
 **VERIFIED** — each selected element gets its own outline, and a multi-selection gets a
-dotted box around all of them (`interactiveScene.ts:1922-1948`, `:2027-2052`). Canvas
+dotted box around all of them (`interactiveScene.ts@1118751f:1864-1890`, `:1969-1994`). Canvas
 dash state is sticky, so chrome sets its dash explicitly or inherits the last element's.
 
 ## Undo and redo

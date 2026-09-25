@@ -130,12 +130,12 @@ What is measured, and how, follows the oracle:
 **IMPLEMENTATION DETAIL, divergent**:
 
 - **Char widths are cached per full char.** The oracle keys its cache by the first UTF-16
-  unit (`textMeasurements.ts:179-208`). So there, two astral chars with the same high
+  unit (`textMeasurements.ts@1118751f:179-208`). So there, two astral chars with the same high
   surrogate share whichever width was measured first. This only shows in `wrapWord` and
   trailing whitespace; a lone astral token is measured whole. The fixture's `table` model
   gives astral chars their width by high surrogate, so the difference cannot show there.
 - **Offsets point into the source text.** `getWrappedTextLines` reports code units of
-  the NFC text (`textWrapping.ts:378-381`). `WrappedLine` reports byte ranges of the
+  the NFC text (`textWrapping.ts@1118751f:378-381`). `WrappedLine` reports byte ranges of the
   source instead, even where NFC rewrote the line. Inside a segment NFC rewrote, only
   its edges map back exactly: the segment counts as the earlier line's.
 - **NFC comes from two places.** In the browser it is the platform's

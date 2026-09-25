@@ -126,7 +126,7 @@ describe("the hex field", () => {
   });
 
   it("says which way a colour is wrong", () => {
-    // `ColorInput.tsx:40-58`: digits that are only the wrong length get the length
+    // `ColorInput.tsx@1118751f:40-58`: digits that are only the wrong length get the length
     // message, anything else the general one, and an empty field no message at all.
     expect(readColorInput("ff000", noCss)).toEqual({ color: null, error: INVALID_HEX_LENGTH });
     expect(readColorInput("zz", noCss)).toEqual({ color: null, error: INVALID_COLOR });
