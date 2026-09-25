@@ -103,6 +103,10 @@ test("in the text being typed, the chords step it and the typing is kept", async
 test("a size typed into the panel is what the text takes", async ({ page }) => {
   const board = await openBoard(page);
   const text = await writeText(board, AT, "typed");
+  // `writeText` leaves the text as the sole selection, and a plain click on that —
+  // already the sole selection — reopens it for typing instead of just selecting it
+  // (`ci_text_edit.rs` › entry). Deselect first so the click here is a fresh select.
+  await focusBoard(board);
   await clickOn(board, text.id);
   await sizeField(page).fill("45");
   await sizeField(page).press("Enter");
@@ -124,8 +128,10 @@ test("a text typed into again takes the chords, a family and a colour in the one
 }) => {
   const board = await openBoard(page);
   const text = await writeText(board, AT, "steps");
+  // `writeText` leaves the text as the sole selection, so this plain click reopens it
+  // directly, caret at the click — the one entry point that does not select it all, so
+  // End is what puts the caret back at the end of the line (`ci_text_edit.rs` › entry).
   await clickOn(board, text.id);
-  await page.keyboard.press("Enter");
   await expect(editor(board)).toBeFocused();
   await page.keyboard.press("End");
   await page.keyboard.type(" more");

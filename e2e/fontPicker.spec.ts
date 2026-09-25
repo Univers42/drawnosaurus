@@ -82,6 +82,11 @@ test("the list is searched and walked from the keyboard, and shows a family befo
 }) => {
   const board = await openBoard(page);
   const text = await writeText(board, AT, WORDS);
+  // `writeText` leaves the text as the sole selection, and a plain click on that —
+  // already the sole selection — reopens it for typing instead of just selecting it
+  // (`ci_text_edit.rs` › entry), which would swallow Shift+F below as a letter typed.
+  // Deselect first so the click here is a fresh select.
+  await focusBoard(board);
   await clickOn(board, text.id);
 
   // Shift+F opens it, on the search (`App.tsx@1118751f:5921-5950`).
