@@ -361,6 +361,33 @@ test("a colour picked in the panel restyles the text being typed, which stays op
   expect(label.strokeColor).toBe("#e03131");
 });
 
+test("the colour picker closed while typing gives the keys back to the typing", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await drawShape(board);
+  const node = await openLabel(board);
+  await page.keyboard.type("Red");
+  await page.getByRole("button", { name: "Stroke", exact: true }).click();
+  const picker = page.getByRole("dialog", { name: "Stroke colour picker" });
+  await expect(picker).toBeVisible();
+  // The picker has the keys while it is open: B is red.
+  await page.keyboard.press("b");
+  await page.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
+
+  // Back to typing, as the oracle's editor takes the focus back
+  // (`textWysiwyg.tsx@1118751f:1008-1016`) — not to the board, where "e" is the eraser.
+  await expect(node).toBeFocused();
+  await page.keyboard.type("der");
+  await expect(node).toHaveValue("Redder");
+  await page.keyboard.press("Escape");
+  const label = await byType(page, "text");
+  expect(label.text).toBe("Redder");
+  expect(label.strokeColor).toBe("#e03131");
+  expect(await activeTool(page)).toBe("select");
+});
+
 test("with the text tool kept, a press on the board only ends the edit", async ({ page }) => {
   const board = await openBoard(page);
   await pickTool(page, "Text");

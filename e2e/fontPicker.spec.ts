@@ -160,3 +160,27 @@ test("a family picked while typing is the one the editor types in", async ({ pag
   const [text] = await sceneElements(page);
   expect(text).toMatchObject({ type: "text", text: "abc", fontFamily: 8 });
 });
+
+test("a family picked from the list while typing gives the keys back to the typing", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await page.mouse.dblclick(board.box.x + AT.x, board.box.y + AT.y);
+  await expect(editor(board)).toBeFocused();
+  await page.keyboard.type("abc");
+
+  // The list takes the keys while it is open; once a family is picked, the editor has
+  // them again, as the oracle's takes the focus back (`textWysiwyg.tsx@1118751f:1008-1016`).
+  await panel(page).getByRole("button", { name: "Show font picker" }).click();
+  await expect(picker(page)).toBeVisible();
+  await picker(page).getByRole("button", { name: "Nunito" }).hover();
+  await picker(page).getByRole("button", { name: "Nunito" }).click();
+  await expect(picker(page)).toBeHidden();
+  await expect(editor(board)).toBeFocused();
+  await page.keyboard.type("de");
+  await expect(editor(board)).toHaveValue("abcde");
+
+  await page.keyboard.press("Control+Enter");
+  const [text] = await sceneElements(page);
+  expect(text).toMatchObject({ type: "text", text: "abcde", fontFamily: 6 });
+});
