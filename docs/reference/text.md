@@ -7,8 +7,9 @@ Markers: **OBSERVED**, **VERIFIED**, **INFERRED**, **IMPLEMENTATION DETAIL**, **
 **VERIFIED**: every soft wrap in the engine goes through one function,
 `text::layout::layout_text` (`engine/crates/draw-engine/src/text/layout.rs`, see
 `text-model.md` › Layout), which wraps with `Measure::wrap` over the memo. It runs whenever a
-text's words or its room change: `set_element_text` (the editor's commit), `text_preview`
-(what peers see while it is typed), `set_text_box_width`, a font size, family or alignment
+text's words or its room change: `update_text_edit` and `commit_text_edit` (every keystroke
+of the editor and its commit, `engine/text_session.rs`), `set_element_text` (the one-shot
+write), `text_preview` (what a one-shot host shows peers), `set_text_box_width`, a font size, family or alignment
 change, a pasted style, the label wrap and auto-resize switches, and `fonts_loaded`. The wrap itself is `crate::text`
 (`engine/crates/draw-engine/src/text/`), a line-for-line port of Excalidraw's
 `packages/element/src/textWrapping.ts` at the pinned SHA:

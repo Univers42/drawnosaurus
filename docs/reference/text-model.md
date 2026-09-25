@@ -95,8 +95,11 @@ port of the one `textWysiwyg` runs (`packages/excalidraw/wysiwyg/textWysiwyg.tsx
 The request opens it; `updateTextEdit(text)` lays out every keystroke — wrapped, measured, the
 shape grown or shrunk and the arrows bound to it following — with no history step and no stamp;
 `commitTextEdit(text, viaKeyboard)` records the whole edit as one step. Emptied, a text made for
-the edit leaves nothing, and an existing one is deleted. Undo and redo do nothing meanwhile: the
-textarea's own undo is the one that applies. **VERIFIED** by `ci_text_edit.rs`.
+the edit leaves nothing — its shape, the arrows bound to it and their labels go back as they
+were — and an existing one is deleted; `setElementText(id, "")`, the one-shot write, empties a
+text through the same routine. Undo and redo do nothing meanwhile: the textarea's own undo is
+the one that applies. The text deleted while it is open (`deleteSelection`, as a host writing
+text whole ends an empty one) ends the session. **VERIFIED** by `ci_text_edit.rs`.
 
 The canvas does not paint the text being typed, nor its selection frame
 (`Renderer.ts@1118751f:259-267`): the editor is its only copy, so it is never on screen twice.
@@ -116,15 +119,21 @@ edge, and it has 5% of height to spare (`:386-431`). A label or a fixed-width te
 arriving and resize (`e2e/textEditor.spec.ts`, `e2e/textEditRequest.spec.ts`,
 `e2e/textLayout.spec.ts`).
 
-Escape and Ctrl/Cmd+Enter end the edit, leaving the text or the label's shape selected; Tab,
+Escape and Ctrl/Cmd+Enter end the edit, leaving the text or the label's shape selected — nothing
+with the tool locked or the autoshape tool (`App.tsx@1118751f:6446-6453`); Tab,
 Shift+Tab and Ctrl/Cmd+] / [ indent and outdent the selected lines by four spaces; Ctrl/Cmd
 with + − 0, without Shift, zoom the board; Ctrl/Cmd+Enter and Tab are held while an input method composes
 (`:662-805`, `textEditor.test.ts`). Every other key is the textarea's, so no letter reaches a
 tool or a style shortcut, and the font-size chord goes on up to the board. A press on the
-board ends the edit, and with the text tool kept it only ends it (`App.tsx@1118751f:9815-9824`);
-a press on the style panel or the zoom bar, or a middle-button pan, leaves it open
-(`textWysiwyg.tsx@1118751f:947-998`); leaving the page ends it. Ending it gives the keyboard
-back to the board.
+style panel — its slider included, but not a field that takes typing of its own
+(`isWritableElement`, `packages/common/src/utils.ts@1118751f:99-118`) unless it is in the
+colour picker — or on the zoom buttons, or a middle-button pan, leaves it open
+(`textWysiwyg.tsx@1118751f:947-998`); the zoom bar's fit button, which the oracle's footer
+lacks, counts as a zoom button. Any other press ends it: on the board, and with the text tool
+kept it only ends it (`App.tsx@1118751f:9815-9824`); on Undo or Redo, which sit beside the zoom
+buttons and not among them (`components/footer/Footer.tsx@1118751f:48-62`), it ends and the
+click then undoes it (`textEditor.test.ts`, `e2e/textEditor.spec.ts`). Leaving the page ends it.
+Ending it gives the keyboard back to the board.
 
 ### Where the editor departs from the oracle
 

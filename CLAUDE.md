@@ -161,7 +161,9 @@ eraser, text edit, undo), and previews are painted as live but never enter the s
 autosave (`engine/crates/draw-engine/src/engine/peers.rs`). A preview carries the pre-gesture
 version, so a commit outranks it whichever arrives first. Frames go out in send order: sealing
 is async, and a preview landing after its end would freeze a shape mid-move. A text being typed
-is streamed the same way (`engine.textPreview`).
+is a gesture too: `engine.gestureElements()` carries it and the shape it grows, laid out per
+keystroke by `updateTextEdit` and committed once by `commitTextEdit`
+(`engine/crates/draw-engine/src/engine/text_session.rs`).
 
 The server only has what has been saved, so a `join` carries the newcomer's inventory (each
 id with its stamp) and everyone there answers with a `sync` of what it lacks plus their own
