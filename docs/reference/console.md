@@ -23,25 +23,29 @@ tracking each one (`e2e/console.spec.ts`).
 **IMPLEMENTATION DETAIL**: measured with criterion (`benches/editing.rs` ›
 `selection_style`) on a shared 20-core host:
 
-| selection            | time    |
-| -------------------- | ------- |
-| 1,000 of 1,000       | 252 µs  |
-| 5,000 of 5,000       | 1.67 ms |
-| 5,000 of 5,000, JSON | 2.47 ms |
-| 1 of 5,000           | 649 µs  |
+| selection                       | time    | before the fix below |
+| ------------------------------- | ------- | -------------------- |
+| 1,000 of 1,000                  | 237 µs  | 239 µs               |
+| 5,000 of 5,000                  | 1.59 ms | 1.62 ms              |
+| 5,000 of 5,000, JSON            | 1.60 ms | 1.60 ms              |
+| 5,000 of 5,000, grouped in twos | 2.70 ms | 10.86 ms             |
+| 1 of 5,000                      | 48.7 µs | 610 µs               |
 
-Most of the 5k cost is counting arrange units (`edit::units`, whose ungrouped path
-searches linearly per element). Most of the 1-of-5k cost is `selection_is_group` cloning
-the scene.
+The fix: counting arrange units (`edit::units`) found each element's unit by walking the
+units found so far, which a selection of many groups made quadratic; it is one lookup by
+group now. And `selection_is_group` copied the whole board to ask about one element; it
+reads the scene in place now.
 
 ## What a style reaches
 
-**VERIFIED** — `changeProperty(..., includeBoundText)` reaches a shape's label only for the
-stroke colour and the opacity (`actionProperties.tsx`). The label keeps its own
-background, width and dash. Choosing a style for the selection also makes it the next
-element's style (`currentItem*`). An element the patch leaves unchanged keeps its version
-(`newElementWith`, `packages/element/src/mutateElement.ts:170-172`). Covered by
-`ci_style_reach.rs`.
+**VERIFIED** — `changeProperty(..., includeBoundText)` reaches a shape's label only for
+the stroke colour and the opacity (`actionProperties.tsx`). The label keeps its own
+background, width and dash. That holds for a label selected along with its shape too, as
+Select All and a click on a group hold one: the summary reads it through its shape, so a
+single labelled shape is "Rectangle", not "2 selected". Choosing a style for the selection
+also makes it the next element's style (`currentItem*`). An element the patch leaves
+unchanged keeps its version (`newElementWith`,
+`packages/element/src/mutateElement.ts:170-172`). Covered by `ci_style_reach.rs`.
 
 ## Copy and paste styles
 
@@ -49,25 +53,33 @@ element's style (`currentItem*`). An element the patch leaves unchanged keeps it
 Copy takes the first selected element in stacking order, plus its label. Paste applies
 the shared style to every target:
 
-- roundness only where the kind takes it;
-- a text's font from the source, or the defaults;
+- roundness only where the kind takes it. A text keeps its own, which it does not paint:
+  the engine makes text with the default style's corners, where the oracle's has none
+  (`packages/element/src/newElement.ts:105`). Its size and alignment are written only
+  when they differ as read, so pasting a text's own style onto it is not an edit;
+- a text's font from the source, or the defaults. From a shape, that is the family new
+  text is written in: today none, the system stack.
+  `ci_selection_style.rs` › `from_a_shape_a_text_takes_the_family_new_text_gets` asks
+  the engine, so it fails once new text gets Excalifont and paste still writes none
+  (the oracle writes `DEFAULT_FONT_FAMILY`, `actions/actionStyles.ts:143`);
 - arrowheads only from an arrow to an arrow;
 - a frame target keeps a transparent background and no roundness.
 
 Ctrl/Cmd+Alt+C and +V are matched on `event.code`, as the oracle does, because Option+C
-types "ç" on a Mac. The context menu carries both items.
+types "ç" on a Mac. The context menu carries both items, and its copy says "Copied
+styles." as the keys do (`actions/actionStyles.ts:73`).
 
 ## Divergences
 
-| what                            | Excalidraw                                                                                                                                                                                        | here                                                                                                                                                         |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **S** with nothing selected     | opens the stroke picker under a drawing tool (`components/App.tsx:5895-5918`)                                                                                                                     | only with a selection. Our S is also the lasso key, which Excalidraw folds into the selection tool, and with nothing selected the key keeps that meaning     |
-| eyedropper                      | its own sampler: it reads the canvas's pixels (`components/EyeDropper.tsx:107-120`), applies live while the pointer is held, and is also opened by holding Alt (`ColorPicker/ColorInput.tsx:141`) | the browser's `EyeDropper` API, Chromium only, opened by the button or **I**; no Alt hold and no live application. The button is absent where the API is     |
-| arrowheads of a mixed selection | a non-arrow counts as the next element's arrowheads (`actionProperties.tsx:2002-2028`), so a box plus an arrow reads as mixed whenever the arrow's heads differ from those                        | read from the arrows only: a box plus an arrow shows the arrow's heads                                                                                       |
-| opacity of a frame              | offered for everything but the autoshape tool (`components/shapeActionPredicates.ts:157`)                                                                                                         | a frame alone gets no style rows, opacity included (it predates this package; `shapeActions.test.ts` › a frame has a fixed appearance)                       |
-| top picks in the dark theme     | the same five values, painted through the dark-mode filter (`ColorPicker/TopPicks.tsx`)                                                                                                           | darker values of their own (`inspector.ts` › `DARK_*_SWATCHES`, which predates this package); the popover's grid uses the light palette as Excalidraw's does |
-| top picks                       | reorderable by drag and replaceable from a context menu (`ColorPicker/TopPicks.tsx:48`, `:75`)                                                                                                    | fixed                                                                                                                                                        |
-| "Copied styles." toast          | on every path (`actions/actionStyles.ts:73`)                                                                                                                                                      | on the keyboard path only. The context menu lives in `DrawModals.svelte`, which has no way to raise a notice                                                 |
+| what                            | Excalidraw                                                                                                                                                                                        | here                                                                                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **S** with nothing selected     | opens the stroke picker under a drawing tool (`components/App.tsx:5895-5918`)                                                                                                                     | only with a selection. Our S is also the lasso key, which Excalidraw folds into the selection tool, and with nothing selected the key keeps that meaning                                         |
+| eyedropper                      | its own sampler: it reads the canvas's pixels (`components/EyeDropper.tsx:107-120`), applies live while the pointer is held, and is also opened by holding Alt (`ColorPicker/ColorInput.tsx:141`) | the browser's `EyeDropper` API, Chromium only, opened by the button or **I**; no Alt hold and no live application. The button is absent where the API is                                         |
+| arrowheads of a mixed selection | a non-arrow counts as the next element's arrowheads (`actionProperties.tsx:2002-2028`), so a box plus an arrow reads as mixed whenever the arrow's heads differ from those                        | read from the arrows only: a box plus an arrow shows the arrow's heads                                                                                                                           |
+| top picks in the dark theme     | the same five values, painted through the dark-mode filter (`ColorPicker/TopPicks.tsx`)                                                                                                           | darker values of their own (`inspector.ts` › `DARK_*_SWATCHES`, which predates this package); the popover's grid uses the light palette as Excalidraw's does                                     |
+| front and back chords off a Mac | Ctrl+Shift+] and Ctrl+Shift+[, as written and bound (`actions/actionZindex.tsx:109-112`, `:147-150`); Ctrl+Alt is AltGr on many keyboards                                                         | Ctrl+Alt+] and Ctrl+Alt+[, the chord the engine's keymap takes at this pin (`shortcuts.ts` › `zOrderShortcut`). The label flips once the keymap binds Ctrl+Shift                                 |
+| Select All                      | skips labels and locked elements (`actions/actionSelectAll.ts:32-38`)                                                                                                                             | takes both, so locked elements can be unlocked from the menu (`edit/group.rs` › `carried_by`). A label is read and styled through its shape; a style chosen then reaches the locked elements too |
+| top picks                       | reorderable by drag and replaceable from a context menu (`ColorPicker/TopPicks.tsx:48`, `:75`)                                                                                                    | fixed                                                                                                                                                                                            |
 
 ## Gaps
 
