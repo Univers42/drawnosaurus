@@ -711,9 +711,15 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "9. Text",
-    text: /IME|Bold|Italic|[Ll]etter spacing/,
+    text: /IME support/,
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/textEditor.test.ts`, "e2e/textEditor.spec.ts"],
+  },
+  {
+    section: "9. Text",
+    text: /Bold|Italic|[Ll]etter spacing/,
     status: "gap",
-    why: "Bold, italic and letter spacing: Excalidraw has none of them either. IME: the editor holds Ctrl/Cmd+Enter and Tab while an input method is composing, as Excalidraw's does (textEditor.test.ts, textWysiwyg.tsx@1118751f:687-702), but composition itself is untested in a browser.",
+    why: "Excalidraw has none of them either.",
   },
   {
     section: "9. Text",
