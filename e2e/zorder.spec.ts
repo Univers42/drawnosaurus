@@ -158,7 +158,8 @@ test.describe("what joins a frame", () => {
   /**
    * A shape drawn inside a frame goes directly below it, not on top of the board
    * (`App.tsx@1118751f:7754-7782`, `frame.ts@1118751f:521-536`). That moves it in the
-   * stack as it is created, which a delta cannot say: the save carries the order.
+   * stack as it is created: the engine's delta carries the order (`sceneMirror.ts`), and
+   * the save carries it on.
    */
   test("a shape drawn in a frame is saved directly below it", async ({ page }) => {
     const board = await openBoard(page);
