@@ -51,12 +51,40 @@ bracket key (Dvorak, QWERTZ). The oracle matches zoom by physical key too
 | a command that moves nothing        | the store records no step for unchanged elements                                                                                                                | the same, and no scene is sent to the host                                                                                                                                                  |
 | each frame's pass of Bring to front | scans the whole stack, once per frame whose children move (`getIndicesToMove`, `:36-70`)                                                                        | scans that frame's range: the same result, O(n) over the board (`cargo bench --bench editing -- reorder`)                                                                                   |
 
+## What joins a frame
+
+**OBSERVED** on excalidraw.com (2026-09-25) and **VERIFIED** against the source — what joins
+a frame goes **directly below it**, above the frame's other children
+(`getFrameChildrenInsertionIndex`, `frame.ts@1118751f:521-536`):
+
+- a shape **drawn** in a frame (`insertNewElements`, `App.tsx@1118751f:7754-7782`);
+- a shape **dragged** into one, and a shape a new frame is **drawn over** — which then sits
+  directly below that frame, on top of the board (`addElementsToFrame`,
+  `frame.ts@1118751f:538-635`);
+- a copy **pasted** into one (`duplicateAtSceneCoords`, `App.duplicate.ts@1118751f:79-136`).
+
+A label goes with its shape (`:578-582`). A selection dragged in partly from inside the frame
+already goes below it as one run, in stacking order (`:601-608` reorders nothing only when
+every element was already the frame's). A child moved inside its frame keeps its place. The
+scan looks from the top for the frame or one of its children, so with a child above its
+frame (a stack the commands leave, see `[C2, F, C1, X]` above) the newcomer goes above that
+child. Pinned by `ci_zorder.rs` › "What joins a frame" and `e2e/zorder.spec.ts`.
+
+**IMPLEMENTATION DETAIL** — the commit judges membership (`judge_frame_membership`,
+`engine/pointer_end.rs`) and restacks the run under the frame (`stack_under_frame`) in the
+same step, so undo takes both back. The stack moved, so the host is sent the whole scene
+rather than a delta, and the autosave sends the order it holds (`sceneDiff.ts`).
+
+**VERIFIED**, a quirk kept — a copy keeps its original's `frameId`
+(`duplicate.ts@1118751f:597-598` clears it only when the frame is not kept), so a copy of a
+frame child pasted back into that frame is already the frame's and is not restacked
+(`frame.ts@1118751f:601-608`): it lands on top of the board, above the frame, in both.
+
 ## Open
 
-**Not done** — the oracle also keeps a frame's children in one run directly below it
-whenever membership changes: a new element drawn in a frame is inserted there
-(`insertNewElements`, `App.tsx:7754-7782`), and so is one dragged in or captured by a new
-frame (`addElementsToFrame`, `frame.ts:538-632`). Here a shape drawn in a frame lands on top
-of the board, above the frame. The commands above handle such a stack exactly as the
-oracle's do — its own tests pin that case ("DENORMALIZED") — but the stack itself is not
-the one Excalidraw would hold.
+**Ctrl+D** — the oracle puts each copy directly above its original
+(`duplicateElements`, `duplicate.ts@1118751f:430-436`), so a copy of a frame child stays in
+its frame's run. Here a copy goes on top of the board unless a group is being edited
+(`duplicate_selection`, `engine/clipboard.rs`), so a copied child sits above its frame.
+The commands above handle that stack as the oracle's do ("DENORMALIZED"), but it is not the
+stack Excalidraw would hold.
