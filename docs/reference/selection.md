@@ -75,6 +75,16 @@ not selected again (`filterSelectedElements`, `delta.ts@1118751f:875-902`), and 
 inside a group steps back into it (`editingGroupId`, `delta.ts@1118751f:806-818`).
 Pinned by `ci_history_selection.rs`.
 
+Nor is the element itself put back deleted-or-not by an edit that never named it: undoing
+a move on an element a peer deleted since must not resurrect it. The oracle's delta for a
+plain edit carries only the properties that changed — never `isDeleted`, unless the step
+itself deleted or undeleted the element — so applying it merges just those onto the
+*current* (tombstoned) element and leaves `isDeleted` exactly as it has it
+(`ElementsDelta.calculate`/`applyDelta`, `delta.ts@1118751f:1234-1259,1732-1781`).
+`replay_step` mirrors the outcome by skipping such an element outright when the step's own
+before and after agree it was never deleted (`engine/stamp.rs`). Pinned by
+`undo_does_not_resurrect_what_a_peer_deleted_since` (`ci_version_stamps.rs`).
+
 | what               | Excalidraw                                                                                                          | here                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | a selection change | its own history entry when nothing else changed: undo walks back through selections (`history.ts@1118751f:117-137`) | never a step: undo and redo move only through edits, each putting back the selection it recorded (`engine/stamp.rs`) |
