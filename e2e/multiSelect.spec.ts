@@ -343,6 +343,35 @@ test.describe("multi-select gestures reach the engine", () => {
  * `editor-inspector` — mid-gesture the engine reported `kind: "marquee"` and the inside of
  * the rectangle read zero ink.
  */
+test.describe("a side handle on the group frame", () => {
+  /**
+   * The frame around the two boxes is x:500..900, y:230..470 (`LEFT`/`RIGHT` above, at the
+   * camera's default 1:1 scale). Its east handle sits at (900, 350), 8px further out — and,
+   * unlike a single corner, moving it must touch width only (`docs/reference/resize.md` ›
+   * "a side of a multi-selection", `ci_group_resize.rs` ›
+   * the_groups_east_handle_resizes_it_along_one_axis).
+   */
+  test("resizes the group along one axis, holding the opposite side", async ({ page }) => {
+    const board = await drawTwoBoxes(page);
+    await marqueeBoth(board);
+    expect(await selection(page)).toHaveLength(2);
+    const [before] = await sceneElements(page); // LEFT, drawn first
+
+    const handle = at(board, RIGHT.x + RIGHT.w + 8, 350);
+    await page.mouse.move(handle.x, handle.y);
+    await page.mouse.down();
+    await page.mouse.move(handle.x - 100, handle.y, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+
+    const [left, right] = await sceneElements(page);
+    expect(left!.x, "the west edge holds").toBeCloseTo(LEFT.x, 0);
+    expect(left!.width, "the frame narrowed").toBeLessThan(before!.width);
+    expect(left!.height, "an east handle does not touch height").toBeCloseTo(LEFT.h, 0);
+    expect(right!.height).toBeCloseTo(RIGHT.h, 0);
+  });
+});
+
 test.describe("the rubber band", () => {
   test("is drawn while it is being dragged, not only once it is let go", async ({ page }) => {
     const board = await drawTwoBoxes(page);
