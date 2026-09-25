@@ -14,6 +14,7 @@
   import {
     editorBox,
     editorKey,
+    elementsClipboardText,
     indent,
     isWritable,
     normalizeText,
@@ -162,6 +163,25 @@
   }
 
   /**
+   * Pasting this scene's own clipboard JSON: the text of the elements it names goes in
+   * at the caret, as a normal edit, rather than the browser's default of the raw JSON
+   * (`elementsClipboardText`, `textWysiwyg.tsx@1118751f:571-606`). Anything else —
+   * plain text, another app's clipboard — is left to the browser's own paste, as before.
+   */
+  function onPaste(event: ClipboardEvent): void {
+    const clipped = event.clipboardData?.getData("text/plain") ?? "";
+    const text = clipped ? elementsClipboardText(clipped) : null;
+    if (text === null || !node) return;
+    event.preventDefault();
+    if (!text) return;
+    const { selectionStart, selectionEnd, value } = node;
+    node.value = value.slice(0, selectionStart) + text + value.slice(selectionEnd);
+    const at = selectionStart + text.length;
+    node.setSelectionRange(at, at);
+    typedIn();
+  }
+
+  /**
    * A press elsewhere (`onPointerDown`, `textWysiwyg.tsx@1118751f:947-998`): on the style
    * panel or the zoom buttons, or with the middle button, the edit stays open; anywhere else
    * it ends — before the board sees it, so a press on the board only ends it. Ended here
@@ -223,6 +243,7 @@
   style:opacity={layout?.opacity}
   oninput={typedIn}
   onkeydown={onKeydown}
+  onpaste={onPaste}
   onfocus={() => (blurEnds = true)}
   onblur={() => {
     if (blurEnds) finish(true);

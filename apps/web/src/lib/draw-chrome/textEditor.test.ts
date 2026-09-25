@@ -3,6 +3,7 @@ import type { TextEditLayout } from "@osionos/draw-engine/types";
 import {
   editorBox,
   editorKey,
+  elementsClipboardText,
   giveKeysBack,
   indent,
   isWritable,
@@ -168,6 +169,36 @@ describe("indent and outdent", () => {
 describe("normalizeText", () => {
   it("makes every line end a newline and a tab eight spaces", () => {
     expect(normalizeText("a\r\nb\rc\td")).toBe("a\nb\nc        d");
+  });
+});
+
+const osidraw = (elements: unknown[]): string =>
+  JSON.stringify({ type: "osidraw", version: 1, elements });
+
+describe("elementsClipboardText", () => {
+  it("joins the text of every text element, free texts and labels alike, with a blank line", () => {
+    const json = osidraw([
+      { id: "a", type: "rectangle" },
+      { id: "b", type: "text", text: "shape label", containerId: "a" },
+      { id: "c", type: "text", text: "free words" },
+    ]);
+    expect(elementsClipboardText(json)).toBe("shape label\n\nfree words");
+  });
+
+  it("pastes nothing when the elements carry no text, rather than falling back", () => {
+    const json = osidraw([
+      { id: "a", type: "rectangle" },
+      { id: "b", type: "arrow" },
+    ]);
+    expect(elementsClipboardText(json)).toBe("");
+  });
+
+  it("is null for anything that is not this scene's JSON, so the caller's own paste runs", () => {
+    expect(elementsClipboardText("not json")).toBeNull();
+    expect(elementsClipboardText("42")).toBeNull();
+    expect(elementsClipboardText(JSON.stringify({ type: "other", elements: [] }))).toBeNull();
+    expect(elementsClipboardText(JSON.stringify({ type: "osidraw" }))).toBeNull();
+    expect(elementsClipboardText("plain pasted text")).toBeNull();
   });
 });
 

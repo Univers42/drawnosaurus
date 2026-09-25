@@ -13,7 +13,6 @@ import {
   getFillSwatches,
   getStrokeSwatches,
   textWrap,
-  wrapWrites,
 } from "./inspector.ts";
 
 describe("quick colour picks", () => {
@@ -169,14 +168,5 @@ describe("the wrap row", () => {
     expect(textWrap(both)).toBeNull();
     expect(textWrap({ ...both, labelWrap: false })).toBe("grow");
     expect(textWrap(facts)).toBeNull();
-  });
-
-  it("writes each kind of text its own way, and only the kinds selected", () => {
-    expect(wrapWrites({ ...facts, hasFreeText: true }, "wrap")).toEqual({ autoResize: false });
-    expect(wrapWrites({ ...facts, hasLabel: true }, "grow")).toEqual({ labelWrap: false });
-    expect(wrapWrites({ ...facts, hasFreeText: true, hasLabel: true }, "grow")).toEqual({
-      autoResize: true,
-      labelWrap: false,
-    });
   });
 });

@@ -23,7 +23,6 @@
     type TextWrap,
     type ThemeMode,
     WIDTHS,
-    wrapWrites,
   } from "./inspector.ts";
   import { loadFontFamily, readFontSize } from "./fonts.ts";
   import { mostUsedCustomColors, type ColorKind } from "./colors.ts";
@@ -143,12 +142,10 @@
 
   const wrap = $derived(textWrap(summary));
 
+  // One engine call for both a free text's width and a label's wrap, so a selection
+  // holding both is one step of undo (`engine/style.rs` › `set_text_wrap`).
   function setWrap(next: TextWrap): void {
-    const writes = wrapWrites(summary, next);
-    run((e) => {
-      if (writes.autoResize !== undefined) e.setTextAutoResize(writes.autoResize);
-      if (writes.labelWrap !== undefined) e.setLabelWrap(writes.labelWrap);
-    });
+    run((e) => e.setTextWrap(next === "wrap"));
   }
 </script>
 
