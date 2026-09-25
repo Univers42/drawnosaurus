@@ -292,6 +292,46 @@ test("a click on a label selects its shape", async ({ page }) => {
   expect(await selection(page)).toEqual([(await byType(page, "rectangle")).id]);
 });
 
+test("the opacity slider restyles the text being typed, which stays open", async ({ page }) => {
+  const board = await openBoard(page);
+  await drawShape(board);
+  const node = await openLabel(board);
+  await page.keyboard.type("Half");
+  // A slider takes no typing, so the oracle keeps the edit open for it
+  // (`isWritableElement`, `packages/common/src/utils.ts@1118751f:99-118`).
+  const slider = page.getByRole("slider", { name: "Opacity" });
+  const track = (await slider.boundingBox())!;
+  await page.mouse.click(track.x + track.width / 2, track.y + track.height / 2);
+
+  await expect(node).toBeFocused();
+  const chosen = Number(await slider.inputValue());
+  expect(chosen).toBeLessThan(100);
+  await page.keyboard.type(" there");
+  await page.keyboard.press("Escape");
+  const label = await byType(page, "text");
+  expect(label.text).toBe("Half there");
+  expect(label.opacity).toBe(chosen);
+});
+
+test("Undo while typing ends the edit, then undoes it, as the oracle's does", async ({ page }) => {
+  const board = await openBoard(page);
+  await drawShape(board);
+  await openLabel(board);
+  await page.keyboard.type("one");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Enter");
+  await expect(editor(page)).toBeFocused();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" two");
+
+  // Undo sits beside the zoom buttons, outside them (`Footer.tsx@1118751f:48-62`).
+  await page.getByRole("button", { name: /^Undo/ }).click();
+  await expect(editor(page)).toHaveCount(0);
+  expect((await byType(page, "text")).text).toBe("one");
+  await page.getByRole("button", { name: /^Redo/ }).click();
+  expect((await byType(page, "text")).text).toBe("one two");
+});
+
 test("a colour picked in the panel restyles the text being typed, which stays open", async ({
   page,
 }) => {

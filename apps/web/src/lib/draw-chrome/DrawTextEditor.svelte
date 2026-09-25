@@ -15,6 +15,7 @@
     editorBox,
     editorKey,
     indent,
+    isWritable,
     normalizeText,
     outdent,
     pressKeepsEditor,
@@ -142,32 +143,34 @@
   }
 
   /**
-   * A press elsewhere (`onPointerDown`, `textWysiwyg.tsx@1118751f:947-998`): on the board it
-   * ends the edit — before the board sees it, so the press only ends it; on the style panel
-   * or the zoom bar, or with the middle button, the edit stays open.
+   * A press elsewhere (`onPointerDown`, `textWysiwyg.tsx@1118751f:947-998`): on the style
+   * panel or the zoom buttons, or with the middle button, the edit stays open; anywhere else
+   * it ends — before the board sees it, so a press on the board only ends it. Ended here
+   * rather than by the blur the press brings: a button that keeps the board's focus, undo
+   * or a tool, brings none, and its click is then run after the commit, as the oracle's is.
    */
   function onWindowPointerDown(event: PointerEvent): void {
     if (finished || event.target === node) return;
     if (pressKeepsEditor(event.target as Element | null, event.button)) {
       blurEnds = false;
       window.addEventListener("pointerup", onPressEnd);
-    } else if (event.target instanceof HTMLCanvasElement) {
-      finish(true, false, event.button === 0);
+    } else {
+      const onBoard = event.target instanceof HTMLCanvasElement;
+      finish(true, false, onBoard && event.button === 0);
     }
   }
 
   /**
-   * After a press that kept the edit open, the typing carries on — unless the press left
-   * the focus in something that takes keys of its own, a field or the colour picker.
+   * After a press that kept the edit open, the typing carries on — the slider let go of,
+   * say — unless the press left the focus in something that takes keys of its own: a field,
+   * a list, or the colour picker.
    */
   function onPressEnd(): void {
     window.removeEventListener("pointerup", onPressEnd);
     setTimeout(() => {
       if (finished || !node) return;
       const active = document.activeElement;
-      const keeps = active?.closest(
-        'input, textarea, select, [contenteditable="true"], [role="dialog"]',
-      );
+      const keeps = isWritable(active) || active?.closest('select, [role="dialog"]');
       if (keeps && active !== node) return;
       blurEnds = true;
       node.focus();

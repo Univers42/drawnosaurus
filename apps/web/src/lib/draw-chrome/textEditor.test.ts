@@ -4,6 +4,7 @@ import {
   editorBox,
   editorKey,
   indent,
+  isWritable,
   normalizeText,
   outdent,
   pressKeepsEditor,
@@ -157,20 +158,76 @@ describe("normalizeText", () => {
 });
 
 describe("pressKeepsEditor", () => {
-  const inside = (selector: string | null, tagName = "BUTTON") => ({
+  /**
+   * A pressed element inside `within` — simple selectors, outermost first — with a
+   * `closest` that matches a selector list whose every compound part it sits in.
+   */
+  const pressed = (within: string[], tagName = "BUTTON", type?: string) => ({
     tagName,
-    closest: (wanted: string) => (selector && wanted.includes(selector) ? {} : null),
+    type,
+    closest: (selectors: string) =>
+      selectors
+        .split(",")
+        .some((selector) =>
+          (selector.match(/(?:\[[^\]]*\]|[^\s[])+/g) ?? []).every((part) => within.includes(part)),
+        )
+        ? {}
+        : null,
+  });
+  const PANEL = '[aria-label="Style inspector"]';
+  const ZOOM = ".zoom-actions";
+  const BAR = '[aria-label="Zoom and history controls"]';
+
+  it("keeps the edit open for the style panel and the zoom buttons", () => {
+    expect(pressKeepsEditor(pressed([PANEL]), 0)).toBe(true);
+    expect(pressKeepsEditor(pressed([BAR, ZOOM]), 0)).toBe(true);
   });
 
-  it("keeps the edit open for the style panel and the zoom bar, but not for their fields", () => {
-    expect(pressKeepsEditor(inside("Style inspector"), 0)).toBe(true);
-    expect(pressKeepsEditor(inside("Zoom and history controls"), 0)).toBe(true);
-    expect(pressKeepsEditor(inside("Style inspector", "INPUT"), 0)).toBe(false);
+  it("keeps it for a slider in the panel, which does not take typing (`isWritableElement`)", () => {
+    expect(pressKeepsEditor(pressed([PANEL], "INPUT", "range"), 0)).toBe(true);
+    expect(pressKeepsEditor(pressed([PANEL], "INPUT", "checkbox"), 0)).toBe(true);
+  });
+
+  it("ends it for a field of the panel's own, but not one in the panel's popup", () => {
+    expect(pressKeepsEditor(pressed([PANEL], "INPUT", "text"), 0)).toBe(false);
+    expect(pressKeepsEditor(pressed([PANEL], "INPUT", "number"), 0)).toBe(false);
+    expect(pressKeepsEditor(pressed([PANEL], "TEXTAREA"), 0)).toBe(false);
+    expect(pressKeepsEditor(pressed([PANEL, '[role="dialog"]'], "INPUT"), 0)).toBe(true);
+  });
+
+  it("ends it for undo and redo, which sit beside the zoom buttons, not among them", () => {
+    expect(pressKeepsEditor(pressed([BAR]), 0)).toBe(false);
   });
 
   it("ends it for a press anywhere else, unless it is a middle-button pan", () => {
-    expect(pressKeepsEditor(inside(null), 0)).toBe(false);
-    expect(pressKeepsEditor(inside(null, "CANVAS"), 1)).toBe(true);
+    expect(pressKeepsEditor(pressed([]), 0)).toBe(false);
+    expect(pressKeepsEditor(pressed(['[role="dialog"]'], "INPUT"), 0)).toBe(false);
+    expect(pressKeepsEditor(pressed([], "CANVAS"), 1)).toBe(true);
     expect(pressKeepsEditor(null, 0)).toBe(false);
+  });
+});
+
+describe("isWritable", () => {
+  const element = (tagName: string, type?: string, isContentEditable = false) => ({
+    tagName,
+    type,
+    isContentEditable,
+  });
+
+  it("is a textarea, an editable or a text, number, password or search input", () => {
+    expect(isWritable(element("TEXTAREA"))).toBe(true);
+    expect(isWritable(element("DIV", undefined, true))).toBe(true);
+    for (const type of ["text", "number", "password", "search"]) {
+      expect(isWritable(element("INPUT", type)), type).toBe(true);
+    }
+  });
+
+  it("is not a slider, a box to tick, a button or nothing", () => {
+    for (const type of ["range", "checkbox", "radio", "color"]) {
+      expect(isWritable(element("INPUT", type)), type).toBe(false);
+    }
+    expect(isWritable(element("BUTTON"))).toBe(false);
+    expect(isWritable(element("SELECT"))).toBe(false);
+    expect(isWritable(null)).toBe(false);
   });
 });

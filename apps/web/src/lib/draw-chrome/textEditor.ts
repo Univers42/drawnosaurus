@@ -5,7 +5,6 @@
  * the text out and grows its shape (`engine/text_session.rs`); the editor only shows it.
  */
 import type { TextEditLayout } from "@osionos/draw-engine/types";
-import { isTextField } from "./shortcuts.ts";
 
 export interface EditorBox {
   left: number;
@@ -151,22 +150,49 @@ export function normalizeText(text: string): string {
   return text.replace(/\r?\n|\r/g, "\n").replace(/\t/g, "        ");
 }
 
-/**
- * The chrome a press may land in without ending the edit: the style panel, whose changes
- * restyle the text being typed, and the zoom bar — the oracle's shape-actions menu and zoom
- * actions (`textWysiwyg.tsx@1118751f:962-981`).
- */
-const KEEPS_EDITOR_OPEN =
-  '[aria-label="Style inspector"], [aria-label="Zoom and history controls"]';
+const WRITABLE_INPUTS = new Set(["text", "number", "password", "search"]);
 
 /**
- * Whether a press leaves the editor open: a middle-button pan anywhere, or a press on the
- * style panel or the zoom bar that is not on a field of its own (`:947-998`).
+ * Whether `target` takes typing of its own, so a press on it ends the edit —
+ * `isWritableElement` (`packages/common/src/utils.ts@1118751f:99-118`): a textarea,
+ * something editable, or a text, number, password or search input. A slider, a box to tick,
+ * a list or a button is not.
+ */
+export function isWritable(target: unknown): boolean {
+  const element = target as { tagName?: string; type?: string; isContentEditable?: boolean } | null;
+  if (!element) return false;
+  if (element.isContentEditable === true || element.tagName === "TEXTAREA") return true;
+  return element.tagName === "INPUT" && WRITABLE_INPUTS.has(element.type ?? "text");
+}
+
+/**
+ * The chrome a press may land in without ending the edit: the style panel, whose changes
+ * restyle the text being typed, and the zoom buttons — the oracle's shape-actions menu and
+ * zoom actions (`textWysiwyg.tsx@1118751f:962-981`, `ZoomActions` in
+ * `components/Actions.tsx@1118751f:884-896`). Undo and redo sit beside the zoom buttons,
+ * outside them, as the oracle's do (`components/footer/Footer.tsx@1118751f:48-62`): a press
+ * there ends the edit, and the click then undoes it.
+ */
+const KEEPS_EDITOR_OPEN = '[aria-label="Style inspector"], .zoom-actions';
+
+/**
+ * The style panel's popups — the colour picker — keep the edit open even on a field of
+ * their own, as the oracle's `.properties-content` does (`textWysiwyg.tsx@1118751f:964-968`).
+ */
+const PANEL_POPUP = '[aria-label="Style inspector"] [role="dialog"]';
+
+/**
+ * Whether a press leaves the editor open (`onPointerDown`, `textWysiwyg.tsx@1118751f:947-998`):
+ * a middle-button pan anywhere, a press in one of the style panel's popups, or a press on
+ * the style panel or the zoom buttons that is not on a field taking typing of its own. Any
+ * other press ends the edit.
  */
 export function pressKeepsEditor(
   target: { closest?: (selector: string) => unknown } | null,
   button: number,
 ): boolean {
   if (button === 1) return true;
-  return Boolean(target?.closest?.(KEEPS_EDITOR_OPEN)) && !isTextField(target as EventTarget);
+  if (!target?.closest) return false;
+  if (target.closest(PANEL_POPUP)) return true;
+  return Boolean(target.closest(KEEPS_EDITOR_OPEN)) && !isWritable(target);
 }
