@@ -290,6 +290,17 @@ test("a click on a label selects its shape", async ({ page }) => {
     board.box.y + (label.top + label.bottom) / 2,
   );
   expect(await selection(page)).toEqual([(await byType(page, "rectangle")).id]);
+
+  // And so does a right-click, which opens the menu on what it selects
+  // (`openContextMenu`, `App.tsx@1118751f:13276-13279`).
+  await page.keyboard.press("Escape");
+  await focusBoard(board);
+  await page.mouse.click(
+    board.box.x + (label.left + label.right) / 2,
+    board.box.y + (label.top + label.bottom) / 2,
+    { button: "right" },
+  );
+  expect(await selection(page)).toEqual([(await byType(page, "rectangle")).id]);
 });
 
 test("the opacity slider restyles the text being typed, which stays open", async ({ page }) => {
