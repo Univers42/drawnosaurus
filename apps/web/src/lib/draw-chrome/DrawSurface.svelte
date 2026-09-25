@@ -15,7 +15,9 @@
   import { cursorForTool } from "./style.ts";
   import {
     animateCamera,
+    boundsOf,
     fitCamera,
+    revealPan,
     setCameraExact,
     worldToScreen,
     zoomPercent,
@@ -31,6 +33,8 @@
   } from "./presentation.ts";
   import DrawPresentBar from "./DrawPresentBar.svelte";
   import DrawFollowNotice from "./DrawFollowNotice.svelte";
+  import FlowchartShapeStrip from "./FlowchartShapeStrip.svelte";
+  import type { FlowchartShape } from "@osionos/draw-engine/types";
   import {
     persistCanvasBackground,
     persistThemePreference,
@@ -877,6 +881,56 @@
     syncPeers();
   }
 
+  // A flowchart cluster being previewed (Ctrl/Cmd+Arrow still held) can grow off screen
+  // before it is ever committed — the engine only eases the camera at commit/navigate
+  // (`DrawEngine::reveal`), so this covers the still-pending case with a short ease of
+  // its own, never a jump. `onFlowchartReveal` fires once per keypress; each one takes
+  // over from wherever the pan still in flight had got to rather than stacking two.
+  const FLOWCHART_REVEAL_MS = 220;
+  let revealAnim: CameraAnimation | null = null;
+
+  function startFlowchartReveal(): void {
+    if (!engine || !canvasHost) return;
+    const bounds = boundsOf(engine.pendingFlowchartElements());
+    if (!bounds) return;
+    const rect = canvasHost.getBoundingClientRect();
+    const from = engine.camera;
+    const pan = revealPan({ width: rect.width, height: rect.height }, from, bounds);
+    if (!pan) return;
+    revealAnim?.cancel();
+    const to = { x: from.x + pan.dx, y: from.y + pan.dy, scale: from.scale };
+    revealAnim = animateCamera(from, to, (camera) => setCameraExact(engine!, camera), {
+      durationMs: FLOWCHART_REVEAL_MS,
+      reducedMotion: prefersReducedMotion(),
+    });
+  }
+
+  // Extra the oracle lacks: a small floating strip beside the node being created offers
+  // the same 1/2/3 shape choice by click. Shown only while a cluster is pending
+  // (`onFlowchartCreatingChange`) and positioned from the pending cluster's own bounds —
+  // recomputed on every keypress that can move or grow it (`onFlowchartCreatingChange`
+  // fires on every Ctrl/Cmd+Arrow, held-and-repeated included).
+  let flowchartCreating = $state(false);
+  let flowchartStripPos = $state<{ x: number; y: number } | null>(null);
+
+  function updateFlowchartStripPosition(): void {
+    if (!engine || !currentCamera) {
+      flowchartStripPos = null;
+      return;
+    }
+    const bounds = boundsOf(engine.pendingFlowchartElements());
+    if (!bounds) {
+      flowchartStripPos = null;
+      return;
+    }
+    const { sx, sy } = worldToScreen(currentCamera, bounds.x + bounds.width / 2, bounds.y);
+    flowchartStripPos = { x: sx, y: sy };
+  }
+
+  function chooseFlowchartShape(shape: FlowchartShape): void {
+    engine?.flowchartSetShape(shape);
+  }
+
   // Our gesture in progress, streamed to peers while it runs so a shape moves on their
   // screens as it moves on ours. At most once per `previewInterval`, only when something
   // changed and someone is there to see it, and ended once the gesture is: after its
@@ -1264,6 +1318,7 @@
     if (previewRaf) cancelAnimationFrame(previewRaf);
     presentAnim?.cancel();
     followAnim?.cancel();
+    revealAnim?.cancel();
     eraserTrail.clear();
     realtime?.disconnect();
   });
@@ -1575,6 +1630,12 @@
       onToolLockChange={(locked) => {
         toolLocked = locked;
       }}
+      onFlowchartReveal={startFlowchartReveal}
+      onFlowchartCreatingChange={(creating) => {
+        flowchartCreating = creating;
+        if (creating) updateFlowchartStripPosition();
+        else flowchartStripPos = null;
+      }}
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={handleCanvasPointerMove}
       onPointerUp={handleCanvasPointerUp}
@@ -1620,6 +1681,13 @@
         style:right="0"
         style:height={`${dimBands.height}px`}
       ></div>
+    {/if}
+    {#if flowchartCreating && flowchartStripPos}
+      <FlowchartShapeStrip
+        x={flowchartStripPos.x}
+        y={flowchartStripPos.y}
+        onChoose={chooseFlowchartShape}
+      />
     {/if}
   </div>
 

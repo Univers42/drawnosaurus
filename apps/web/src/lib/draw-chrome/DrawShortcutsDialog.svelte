@@ -62,6 +62,14 @@
         { key: "Esc", desc: "Exit presentation" },
       ],
     },
+    {
+      cat: "Flowchart",
+      items: [
+        { key: "⌘ Arrow", desc: "Create a connected node in that direction (release to commit)" },
+        { key: "1 / 2 / 3", desc: "Rectangle / diamond / ellipse — while a node is being created" },
+        { key: "⌥ Arrow", desc: "Navigate to the connected node in that direction" },
+      ],
+    },
   ];
 </script>
 
