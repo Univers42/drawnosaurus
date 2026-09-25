@@ -12,6 +12,7 @@
     element,
     onPickArrowhead,
     onRun,
+    onCopyStyles,
     onEditLink,
     onClose,
   }: {
@@ -20,6 +21,8 @@
     element: MenuElementInfo | null;
     onPickArrowhead: (patch: { start?: Arrowhead; end?: Arrowhead }) => void;
     onRun: (action: (engine: DrawEngine, at: { x: number; y: number }) => void) => void;
+    /** The keyboard's copy, so both say "Copied styles." (`actionStyles.ts@1118751f:73`). */
+    onCopyStyles: () => void;
     onEditLink: (id: string) => void;
     onClose: () => void;
   } = $props();
@@ -102,7 +105,7 @@
     </button>
     <div class="rule" aria-hidden="true"></div>
     <!-- Excalidraw's copy/paste styles (`actions/actionStyles.ts@1118751f:51-236`). -->
-    <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.copyStyles())}>
+    <button type="button" role="menuitem" onclick={onCopyStyles}>
       <span>Copy styles</span><span class="hint">{shortcutLabel("CtrlOrCmd+Alt+C")}</span>
     </button>
     <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.pasteStyles())}>

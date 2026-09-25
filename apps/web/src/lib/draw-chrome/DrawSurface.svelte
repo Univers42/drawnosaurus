@@ -1439,6 +1439,7 @@
     bind:showMermaid
     bind:showShare
     bind:showShortcuts
+    onCopyStyles={copyStyles}
     onEditEmbedLink={(id) => {
       const url = embedFrames.find((frame) => frame.id === id)?.url;
       if (url) editingEmbed = { id, url };

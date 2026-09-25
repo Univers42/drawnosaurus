@@ -278,6 +278,7 @@ test.describe("copy and paste styles", () => {
 
     await clickElement(board, 1, { button: "right" });
     await page.getByRole("menuitem", { name: /^Copy styles/ }).click();
+    await expect(page.getByText("Copied styles."), "the menu copied without a word").toBeVisible();
     await clickElement(board, 0, { button: "right" });
     await page.getByRole("menuitem", { name: /^Paste styles/ }).click();
 
