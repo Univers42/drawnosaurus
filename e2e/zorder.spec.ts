@@ -205,3 +205,119 @@ test.describe("what joins a frame", () => {
     expect(body.order).toEqual(final);
   });
 });
+
+/** A world point as an absolute page position, given the camera the engine reports now. */
+async function worldToScreen(
+  page: Page,
+  board: { box: { x: number; y: number } },
+  world: { x: number; y: number },
+): Promise<{ x: number; y: number }> {
+  const { x, y, scale } = await camera(page);
+  return { x: board.box.x + world.x * scale + x, y: board.box.y + world.y * scale + y };
+}
+
+test.describe("duplicate", () => {
+  /**
+   * The oracle puts each copy directly above its original (`duplicate.ts@1118751f:
+   * 430-436`) — `ci_duplicate.rs` pins the rule through the engine; this checks it reaches
+   * the board.
+   */
+  test("a copy lands directly above its source, not on top of the board", async ({ page }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await load(page, GROUP_BOARD);
+    await select(page, ["Y"]);
+
+    await page.keyboard.press("Control+d");
+
+    const [copy] = await selection(page);
+    const final = await stack(page);
+    expect(final).toEqual(["G1", "G2", "Y", copy, "Z"]);
+  });
+
+  test("a duplicated group lands as one block directly above the group", async ({ page }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await load(page, GROUP_BOARD);
+    await select(page, ["G1", "G2"]);
+
+    await page.keyboard.press("Control+d");
+
+    // `getSelection()` holds a set, not the run's order, so the two copies are checked as
+    // a set too: the block sits directly above the group, in front of Y and Z.
+    const copies = await selection(page);
+    const final = await stack(page);
+    expect(final.slice(0, 2)).toEqual(["G1", "G2"]);
+    expect(final.slice(4)).toEqual(["Y", "Z"]);
+    expect(final.slice(2, 4).sort()).toEqual([...copies].sort());
+  });
+});
+
+test.describe("right-click on the selection's own frame", () => {
+  /**
+   * Two grouped rectangles, well inside `OPEN_CANVAS` wherever the camera has settled, and
+   * the world point their top-left corner sits at.
+   */
+  async function twoGroupedRectsInView(page: Page): Promise<{ x: number; y: number }> {
+    const { x, y, scale } = await camera(page);
+    const at = { x: (OPEN_CANVAS.left + 40 - x) / scale, y: (OPEN_CANVAS.top + 40 - y) / scale };
+    await load(page, [
+      { id: "G1", type: "rectangle", x: at.x, y: at.y, width: 60, height: 60, groupIds: ["g"] },
+      {
+        id: "G2",
+        type: "rectangle",
+        x: at.x + 80,
+        y: at.y,
+        width: 60,
+        height: 60,
+        groupIds: ["g"],
+      },
+    ]);
+    return at;
+  }
+
+  /**
+   * Nothing under the point, but still inside the padded box around the selection: the
+   * oracle opens the element menu there too, selection untouched
+   * (`isHittingCommonBoundingBoxOfSelectedElements`, `App.tsx@1118751f:9791-9812,
+   * 13276-13279`).
+   */
+  test("opens the element menu and keeps the selection", async ({ page }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    const at = await twoGroupedRectsInView(page);
+    await select(page, ["G1", "G2"]);
+
+    // Between G1 (x: at.x to at.x+60) and G2 (x: at.x+80 to at.x+140): inside their
+    // common box, on neither shape's own fill or outline.
+    const gap = await worldToScreen(page, board, { x: at.x + 70, y: at.y + 30 });
+    await page.mouse.click(gap.x, gap.y, { button: "right" });
+
+    await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
+    // `getSelection()` holds a set, not the order `select()` was given.
+    expect((await selection(page)).sort()).toEqual(["G1", "G2"]);
+  });
+
+  /**
+   * Nothing under the point and outside the box too: the board menu opens, as it did
+   * before, but a right-click runs no selection-clearing path in the oracle at all
+   * (`openContextMenu`, `App.tsx@1118751f:13296-13326`) — the menu kind is decided by
+   * the hit alone, independent of what stays selected.
+   */
+  test("opens the board menu and keeps the selection outside that box", async ({ page }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await twoGroupedRectsInView(page);
+    await select(page, ["G1", "G2"]);
+
+    // Far from the rectangles, still inside `OPEN_CANVAS` so the click reaches the canvas.
+    const at = {
+      x: board.box.x + OPEN_CANVAS.right - 40,
+      y: board.box.y + OPEN_CANVAS.bottom - 40,
+    };
+    await page.mouse.click(at.x, at.y, { button: "right" });
+
+    await expect(page.getByRole("menuitem", { name: "Select all" })).toBeVisible();
+    expect((await selection(page)).sort()).toEqual(["G1", "G2"]);
+  });
+});

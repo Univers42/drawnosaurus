@@ -43,7 +43,7 @@ bracket key (Dvorak, QWERTZ). The oracle matches zoom by physical key too
 | what                                | Excalidraw                                                                                                                                                      | here                                                                                                                                                                                                                              |
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | a label's frame and groups          | the bound text carries its container's `frameId` and `groupIds` (`frame.ts:562-583`, `App.tsx:7081`)                                                            | a label carries no `frameId` (its shape holds the membership, `scene/frame.rs`) and an old one may carry no groups: both are read from its shape. The same on an oracle board                                                     |
-| a label whose shape is not live     | still finds the deleted shape (`zindex.ts:94-107`)                                                                                                              | read as unlabelled: the engine restacks only the live stack, tombstones stay at the bottom (`Scene::set_order`)                                                                                                                   |
+| a label whose shape is not live     | still finds the deleted shape (`zindex.ts:94-107`)                                                                                                              | read as unlabelled: the engine restacks only the live stack, tombstones stay at the bottom (`Scene::reorder_live`, sharing `set_order`'s tombstone handling — see "Z-order commands: a delta, not the whole scene" below)         |
 | a locked element in the selection   | never there on its own — Select All skips locked elements (`actionSelectAll.ts:32-38`)                                                                          | this Select All takes them, to unlock from the menu; the command moves the carried set, so a loose locked element stays and a locked group member goes with its group                                                             |
 | a label in the selection            | never there: Select All skips bound text (`actionSelectAll.ts:32-38`), and a click on a label hits its shape, since bound text is not hit (`App.tsx:6726-6736`) | Select All takes labels, but not one whose shape a peer holds, and a label moves only with its shape, so a lone label stays where it is. A click or a right-click on a label selects its shape, as the oracle's does, moving both |
 | a peer's hold                       | —                                                                                                                                                               | a frame child or label a peer holds still moves with what carries it: the stack is not stamped, so it takes nothing from their edit                                                                                               |
@@ -105,11 +105,44 @@ before, so its step still keeps the two lists, as every z-order command's does.
 frame child pasted back into that frame is already the frame's and is not restacked
 (`frame.ts@1118751f:601-608`): it lands on top of the board, above the frame, in both.
 
-## Open
+## Duplicate
 
-**Ctrl+D** — the oracle puts each copy directly above its original
-(`duplicateElements`, `duplicate.ts@1118751f:430-436`), so a copy of a frame child stays in
-its frame's run. Here a copy goes on top of the board unless a group is being edited
-(`duplicate_selection`, `engine/clipboard.rs`), so a copied child sits above its frame.
-The commands above handle that stack as the oracle's do ("DENORMALIZED"), but it is not the
-stack Excalidraw would hold.
+**FIXED** — the oracle puts each copy directly above its original (`duplicateElements`,
+`duplicate.ts@1118751f:322-436`), a group, a frame's children or a container's label moving
+as the run they already are, found with `findLastIndex`/`insertBeforeOrAfterIndex`
+(`:333-436`). `duplicate_selection` (`engine/clipboard.rs`) now does the same:
+`duplicate_runs` (`edit/clipboard.rs`) groups the copied source into runs — a group (or, with
+no sub-group of its own, the group being edited), a frame with its duplicated children, a
+container with its duplicated label, anything else a run of one — and the caller resolves
+each run's anchor against the _live scene_, not the copied sources: a run's anchor (a group's
+other, untouched member, say) can be an element that was never itself duplicated. One
+`place_above` per run, not per copy. Pinned by `ci_duplicate.rs` and `e2e/zorder.spec.ts`'s
+"duplicate" block.
+
+A copy pasted back into its own frame is still the quirk above ("VERIFIED, a quirk kept"): it
+keeps the frame's id without joining the frame's run, so it lands on top of the board, above
+the frame, in both — the paste path (`materialize`) is untouched by this fix, only Ctrl+D's
+`materialize_within` is.
+
+**MEASURED** (`cargo bench --bench editing -- duplicate`, native) — the correct placement
+costs one extra `O(board)` restack per run, the same cost model `stack_under_frame` above
+already pays: `one_of_100` 13.8µs → 24.4µs, `one_of_1000` 141µs → 222µs, `one_of_4000` 721µs
+→ 1.02ms, `run_of_100` (100 sequential Ctrl+D presses, each doubling the board) 278µs →
+312µs. Still sub-millisecond at 4,000 elements — the accepted cost of landing where the
+oracle lands, not a regression to chase.
+
+## Z-order commands: a delta, not the whole scene
+
+**FIXED** — Bring forward/backward/to front/to back went through `Scene::set_order`, which
+forces a full scene resync (`structural = true`) even though no element's content changes,
+only where it stands. `reorder_selection` (`engine/arrange.rs`) now calls the new
+`Scene::reorder_live`, sharing `set_order`'s live-stack restack and tombstone handling but
+marking the change `reordered` rather than `structural`, so `Scene::take_delta` hands the
+host an order-only delta — the same shape a frame join's restack already sent (see
+"IMPLEMENTATION DETAIL" and "MEASURED" above). Pinned by `ci_zorder.rs`'s
+`a_zorder_command_reaches_the_host_as_a_delta_with_the_order`.
+
+**MEASURED** (`cargo bench --bench editing -- reorder/delta`, native, restack to events) —
+Bring to front of one element, whole gesture: 5,000 elements 5.02ms → 1.70ms, 20,000 elements
+35.7ms → 7.93ms. The restack itself costs the same either way (still `O(board)`, the accepted
+cost model above); this is the wire cost the delta removes.

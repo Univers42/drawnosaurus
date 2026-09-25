@@ -855,12 +855,15 @@ export const RULES: readonly Rule[] = [
     // Frames, groups, labels and the entered group as the oracle's own zindex.test.tsx
     // pins them; undo and redo of a reorder in ci_version_stamps.rs. Paste ordering: on
     // top, or directly below the frame it lands in, as what is drawn or dragged into one
-    // goes (ci_zorder.rs, frame.ts@1118751f:521-635).
+    // goes (ci_zorder.rs, frame.ts@1118751f:521-635). Ctrl+D: each copy lands directly
+    // above its own run — a group, a frame's children, a container's label — rather than
+    // on top of the board (ci_duplicate.rs, duplicate.ts@1118751f:322-436).
     status: "covered",
     tests: [
       `${ENGINE}/ci_edit.rs`,
       `${ENGINE}/ci_group_structure.rs`,
       `${ENGINE}/ci_zorder.rs`,
+      `${ENGINE}/ci_duplicate.rs`,
       `${ENGINE}/ci_version_stamps.rs`,
       "e2e/zorder.spec.ts",
     ],
