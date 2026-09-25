@@ -230,6 +230,34 @@ describe("a sticky note's fields", () => {
   });
 });
 
+describe("a line's polygon flag", () => {
+  const loop = element({
+    type: "line",
+    points: [
+      [0, 0],
+      [40, 0],
+      [20, 40],
+      [0, 0],
+    ],
+  });
+
+  it("accepts a closed line", () => {
+    const parsed = drawElementSchema.parse({ ...loop, polygon: true });
+    expect(parsed.polygon).toBe(true);
+  });
+
+  it("adds nothing to a line that carries none: absent must read as false, the open polyline it always was", () => {
+    const parsed = drawElementSchema.parse(loop);
+    expect(parsed).not.toHaveProperty("polygon");
+    expect(parsed).toEqual(loop);
+  });
+
+  it("refuses a non-boolean value", () => {
+    expect(drawElementSchema.safeParse({ ...loop, polygon: "true" }).success).toBe(false);
+    expect(drawElementSchema.safeParse({ ...loop, polygon: 1 }).success).toBe(false);
+  });
+});
+
 describe("osidrawFileSchema", () => {
   it("accepts the envelope the engine emits", () => {
     const parsed = osidrawFileSchema.safeParse({

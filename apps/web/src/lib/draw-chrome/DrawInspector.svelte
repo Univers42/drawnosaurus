@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Arrowhead, DrawElementStyle, SelectionStyle } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
+  import Icon from "./Icon.svelte";
   import InspectorRow from "./InspectorRow.svelte";
   import InspectorColorPicker from "./InspectorColorPicker.svelte";
   import InspectorSegmented from "./InspectorSegmented.svelte";
@@ -88,6 +89,13 @@
         engine?.colorCounts(kind === "stroke" ? "strokeColor" : "backgroundColor") ?? [],
       );
   }
+
+  /**
+   * Whether the toggle should show pressed: every eligible selected line already is a
+   * polygon. `null` — a mixed selection, or nothing the toggle applies to — reads as not
+   * pressed, same as every other tri-state row in `summary`.
+   */
+  const isPolygon = $derived(summary.isPolygon ?? false);
 
   /**
    * Whether the slider has previewed since it last committed. A release commits whatever
@@ -231,6 +239,22 @@
         value={summary.edges}
         onPick={(v) => onApply({ roundness: roundnessFor(v === "round" ? "round" : "sharp") })}
       />
+    </InspectorRow>
+  {/if}
+  {#if can.polygon}
+    <InspectorRow label="Close shape">
+      <button
+        type="button"
+        class="polygon-toggle"
+        class:on={isPolygon}
+        aria-pressed={isPolygon}
+        aria-label={`Close shape into a filled polygon — ${isPolygon ? "on" : "off"}`}
+        title="Close the line into a filled shape"
+        onmousedown={(event) => event.preventDefault()}
+        onclick={() => run((e) => e.togglePolygon())}
+      >
+        <Icon name="polygonClosed" size={14} />
+      </button>
     </InspectorRow>
   {/if}
   {#if can.arrowType}
@@ -572,6 +596,23 @@
   .heads button.on {
     background: var(--accent);
     color: #ffffff;
+  }
+
+  .polygon-toggle {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+  }
+
+  .polygon-toggle.on {
+    color: var(--accent);
+    background: var(--accent-subtle);
   }
 
   /* The start head points the other way, so the same glyph is mirrored rather than

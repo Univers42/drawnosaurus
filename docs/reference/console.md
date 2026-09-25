@@ -140,6 +140,31 @@ out. The arrowhead rows with nothing selected set the next arrow's heads
 (`currentItemStartArrowhead` / `currentItemEndArrowhead`, `:1944-1982`), which a line
 never takes (`ci_next_style.rs`, `e2e/arrowType.spec.ts`).
 
+## Polygons
+
+**VERIFIED** — a line's `polygon` flag (Excalidraw's, `packages/element/src/types.ts@1118751f:382`)
+marks it closed on its first point and filled like a shape rather than drawn as an open
+stroke. Closing a multi-point line onto its own first point while drawing sets it
+(`actionFinalize.tsx`, `engine/multi_linear.rs`); a two-point loop (three points once
+closed) stays a segment, since `isValidPolygon` needs more than three
+(`scene::geometry::is_valid_polygon`). The Close shape row does the same as a toggle,
+gated on every selected line carrying at least four points
+(`actionLinearEditor.tsx@1118751f:127-138`) and read pressed off `selectionStyle()`'s
+`isPolygon`, `None` for a mixed selection the same way `arrowType` is; opening a polygon
+clears its background, closing keeps it (`:159-164`). Dragging or removing the first or
+last point keeps the two mirrored so a polygon stays closed, and removing a vertex below
+three distinct points opens it (`selection/linear.rs`).
+
+The flag is authoritative once set and never inferred from geometry: an older document's
+line that happens to close a loop reads as open, because only an explicit `true` ever
+promoted it, corrected back to `false` on load if its points no longer support it
+(`restore.ts@1118751f:645-651`, `scene::element::normalize_polygon`). Render fill and the
+inside hit-test stay geometric rather than flag-gated — `isPathALoop`, the same rule for
+both (`shape.ts@1118751f:242-250`, `collision.ts@1118751f:820-860`) — so a hand-drawn or
+bucket-filled closed line paints and picks up exactly like a toggled one; only the toggle,
+the point-drag coupling and the JSON round trip read the flag itself
+(`crates/draw-engine/tests/ci_polygon.rs`, `crates/draw-engine/tests/ci_line_multipoint.rs`).
+
 ## Bound text
 
 **VERIFIED** — the context menu's three bound-text actions

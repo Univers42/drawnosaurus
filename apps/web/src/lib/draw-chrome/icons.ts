@@ -55,7 +55,8 @@ export type IconName =
   | "fontHeading"
   | "fontCode"
   | "arrowSharp"
-  | "arrowRound";
+  | "arrowRound"
+  | "polygonClosed";
 
 export type SvgNode =
   | { tag: "path"; d: string }
@@ -375,4 +376,6 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
     { tag: "path", d: "M16,12L20,9L16,6" },
     { tag: "path", d: "M6 20c0 -6.075 4.925 -11 11 -11h3" },
   ],
+  // A closed line, filled: the shape the polygon toggle turns a selected line into.
+  polygonClosed: [{ tag: "path", d: "M12 2 2 9.5 5.5 21h13L22 9.5Z" }],
 };

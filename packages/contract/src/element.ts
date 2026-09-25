@@ -116,6 +116,11 @@ export const drawElementSchema = z.object({
 
   seed: finite,
   points: z.array(point).max(MAX_POINTS_PER_ELEMENT).optional(),
+  // A line closed on its first point, filled like a shape (Excalidraw's `polygon`,
+  // `packages/element/src/types.ts@1118751f:382`). Optional and undefaulted: a line
+  // saved before this existed carries none, and absent must read as `false` — the open
+  // polyline it always was.
+  polygon: z.boolean().optional(),
 
   startBinding: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   endBinding: z.string().max(MAX_ID_LENGTH).nullable().optional(),
