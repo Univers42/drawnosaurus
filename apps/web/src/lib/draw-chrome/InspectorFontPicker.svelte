@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import Icon from "./Icon.svelte";
+  import { giveKeysBack } from "./textEditor.ts";
   import { QUICK_FONTS, fontGroups, fontLabel, fontPickerKey, type FontChoice } from "./fonts.ts";
 
   /**
@@ -96,10 +97,10 @@
     onPreview(null);
   }
 
-  /** Back to the board, so the next key is a board key again. */
+  /** Back to the text being typed, or to the board. */
   function close(): void {
     onToggle(false);
-    document.querySelector<HTMLElement>('.draw-chrome [role="application"]')?.focus();
+    giveKeysBack(document);
   }
 
   function pick(id: number): void {

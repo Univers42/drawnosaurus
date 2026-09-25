@@ -371,6 +371,9 @@ test("the colour picker closed while typing gives the keys back to the typing", 
   await page.getByRole("button", { name: "Stroke", exact: true }).click();
   const picker = page.getByRole("dialog", { name: "Stroke colour picker" });
   await expect(picker).toBeVisible();
+  // Everything the press on the panel left pending has run: the keys come back when the
+  // picker closes, not because a press ended while it was open.
+  await painted(page);
   // The picker has the keys while it is open: B is red.
   await page.keyboard.press("b");
   await page.keyboard.press("Escape");

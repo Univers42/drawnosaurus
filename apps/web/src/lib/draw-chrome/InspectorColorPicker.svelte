@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import Icon from "./Icon.svelte";
+  import { giveKeysBack } from "./textEditor.ts";
   import {
     COLOR_HOTKEYS,
     COLOR_LABELS,
@@ -99,10 +100,10 @@
     onPick(color);
   }
 
-  /** Back to the board, so the next key is a board key again. */
+  /** Back to the text being typed, or to the board. */
   function close(): void {
     onToggle(false);
-    document.querySelector<HTMLElement>('.draw-chrome [role="application"]')?.focus();
+    giveKeysBack(document);
   }
 
   async function eyeDrop(): Promise<void> {

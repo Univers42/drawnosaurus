@@ -3,6 +3,7 @@ import type { TextEditLayout } from "@osionos/draw-engine/types";
 import {
   editorBox,
   editorKey,
+  giveKeysBack,
   indent,
   isWritable,
   normalizeText,
@@ -229,5 +230,26 @@ describe("isWritable", () => {
     expect(isWritable(element("BUTTON"))).toBe(false);
     expect(isWritable(element("SELECT"))).toBe(false);
     expect(isWritable(null)).toBe(false);
+  });
+});
+
+describe("giveKeysBack", () => {
+  const root = (present: string[], focused: string[]) => ({
+    querySelector: (selector: string) =>
+      present.some((name) => selector.includes(name))
+        ? { focus: () => void focused.push(selector) }
+        : null,
+  });
+
+  it("gives the keys to the text being typed while there is one", () => {
+    const focused: string[] = [];
+    giveKeysBack(root(["Text editor", "application"], focused));
+    expect(focused).toEqual(['.draw-chrome textarea[aria-label="Text editor"]']);
+  });
+
+  it("gives them to the board otherwise", () => {
+    const focused: string[] = [];
+    giveKeysBack(root(["application"], focused));
+    expect(focused).toEqual(['.draw-chrome [role="application"]']);
   });
 });

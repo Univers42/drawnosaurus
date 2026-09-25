@@ -196,3 +196,18 @@ export function pressKeepsEditor(
   if (target.closest(PANEL_POPUP)) return true;
   return Boolean(target.closest(KEEPS_EDITOR_OPEN)) && !isWritable(target);
 }
+
+/** The text being typed on the board, then the board itself. */
+const EDITOR = '.draw-chrome textarea[aria-label="Text editor"]';
+const BOARD = '.draw-chrome [role="application"]';
+
+/**
+ * Where the keys go when one of the panel's popups closes: back to the text being typed,
+ * while there is one, as the oracle's editor takes the focus back once no popup holds it
+ * (`textWysiwyg.tsx@1118751f:1008-1016`); else to the board, so the next key is a board key.
+ */
+export function giveKeysBack(root: {
+  querySelector(selector: string): { focus(): void } | null;
+}): void {
+  (root.querySelector(EDITOR) ?? root.querySelector(BOARD))?.focus();
+}
