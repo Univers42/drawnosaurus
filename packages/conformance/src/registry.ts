@@ -44,7 +44,11 @@ export const RULES: readonly Rule[] = [
     section: "⚡ Essential shortcuts",
     text: /Sticky note/,
     status: "covered",
-    tests: [`${WEB}/notes/stickyNotes.test.ts`, `${WEB}/draw-chrome/tools.test.ts`],
+    tests: [
+      `${ENGINE}/ci_shortcuts.rs`,
+      `${WEB}/draw-chrome/tools.test.ts`,
+      "e2e/stickyNote.spec.ts",
+    ],
   },
   {
     section: "⚡ Essential shortcuts",
@@ -359,7 +363,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "📝 Sticky notes",
     status: "covered",
-    tests: [`${WEB}/notes/stickyNotes.test.ts`, "e2e/shortcuts.spec.ts"],
+    tests: [`${ENGINE}/ci_sticky.rs`, "e2e/stickyNote.spec.ts"],
   },
   {
     section: "🔴 Laser pointer",
@@ -750,7 +754,15 @@ export const RULES: readonly Rule[] = [
   {
     section: "11. Sticky notes",
     status: "covered",
-    tests: [`${WEB}/notes/stickyNotes.test.ts`],
+    tests: [
+      `${ENGINE}/ci_sticky.rs`,
+      "e2e/stickyNote.spec.ts",
+      `${WEB}/draw-chrome/shapeActions.test.ts`,
+      `${WEB}/draw-chrome/inspector.test.ts`,
+      `${WEB}/notes/stickyNotes.test.ts`,
+      "packages/contract/tests/element.test.ts",
+      "apps/api/tests/integration/boards.test.ts",
+    ],
   },
   {
     section: "12. Frames",

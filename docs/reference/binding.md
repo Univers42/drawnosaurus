@@ -202,20 +202,13 @@ painted ones are rounded (at most w/32 at the tip). The frame-background occlusi
 1118751f (`occludingFrameId`) is not ported: a frame has no background there
 (`hasBackground`), so it never applies.
 
-**OBSERVED, mitigated** — a sticky note from the N tool is a group with a filled shadow
-rectangle 3 units down and right of the note, underneath. Beside the note's right or
-bottom edge the shadow's outline is the nearer one, so from about 1.5 units out to about
-18 (the reach past the shadow's edge) the rule binds the **shadow**: inside it, a
-waypoint, up to 3 units out, in orbit beyond. The oracle's rule gives the same answer on
-that scene; the previous rule bound the note once the point was outside the shadow
-(equal sizes, tie to the top). A new note's shadow is therefore **locked**
-(`createStickyNote`; `e2e/arrow-dense.spec.ts` › "an arrow aimed beside a sticky note"):
-never a candidate, and still an occluder. A group carries its locked members
-(`carried_by`, the eraser's `erased_with`) — **OBSERVED** with a new note: moved,
-duplicated, deleted and erased, its shadow went with it. **Open:** a note
-made before this change, or unlocked from the menu (which unlocks its shadow too), still
-offers the shadow. The fix is the planned single-element sticky note, whose migration
-must also rebind arrows bound to a shadow onto its note.
+**VERIFIED, resolved** — a sticky note used to be a group whose filled shadow rectangle
+sat 3 units down and right of the note, and beside the note's right or bottom edge the
+shadow's outline was the nearer one, so an arrow bound the **shadow** until shadows were
+locked. The note is now one `stickynote` element with a painted shadow
+(`docs/reference/sticky.md`), so the note is the only candidate
+(`e2e/arrow-dense.spec.ts` › "an arrow aimed beside a sticky note"). The migration of old
+notes rebinds an arrow bound to a shadow onto its note (`stickyNotes.test.ts`).
 
 Ctrl+D copies ten units down and right, as the oracle does (`DEFAULT_GRID_SIZE / 2`,
 `actionDuplicateSelection.tsx:78-79`); it was twelve.
