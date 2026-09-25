@@ -6,20 +6,27 @@
   import InspectorSegmented from "./InspectorSegmented.svelte";
   import InspectorIconRow from "./InspectorIconRow.svelte";
   import InspectorIconChoice from "./InspectorIconChoice.svelte";
+  import InspectorFontPicker from "./InspectorFontPicker.svelte";
   import {
+    ARROW_TYPES,
     EDGES,
     FILL_STYLES,
     FONT_SIZES,
     SLOPPINESS,
     STROKE_STYLES,
     TEXT_ALIGNS,
+    TEXT_WRAPS,
     VERTICAL_ALIGNS,
     getFillSwatches,
     getStrokeSwatches,
     roundnessFor,
+    textWrap,
+    type TextWrap,
     type ThemeMode,
     WIDTHS,
+    wrapWrites,
   } from "./inspector.ts";
+  import { loadFontFamily, readFontSize } from "./fonts.ts";
   import { mostUsedCustomColors, type ColorKind } from "./colors.ts";
   import type { ShapeActions } from "./shapeActions.ts";
   import { zOrderShortcut } from "./shortcuts.ts";
@@ -55,9 +62,9 @@
     can: ShapeActions;
     engine: DrawEngine | null;
     themeMode?: ThemeMode;
-    /** Which colour picker is open — the S and G keys open them from outside. */
-    openPicker: ColorKind | null;
-    onOpenPicker: (kind: ColorKind | null) => void;
+    /** Which picker is open — the S, G and Shift+F keys open them from outside. */
+    openPicker: ColorKind | "font" | null;
+    onOpenPicker: (kind: ColorKind | "font" | null) => void;
     /** Applies a style to the selection, or to the next element with nothing selected. */
     onApply: (patch: Partial<DrawElementStyle>) => void;
     /** Shows a style without committing it — a slider in motion. */
@@ -109,6 +116,39 @@
 
   function setArrowhead(end: "start" | "end", kind: Arrowhead): void {
     run((e) => e.setArrowheads({ [end]: kind }));
+  }
+
+  /**
+   * A family is laid out in its own face, so the face is loaded first
+   * (`actionProperties.tsx@1118751f:1302-1356`): measured in a fallback, a shape grown
+   * to hold its label would keep the growth. A hover waits the same way, and one the
+   * pointer has already left by then is dropped.
+   */
+  let previewRequest = 0;
+
+  async function previewFont(id: number | null): Promise<void> {
+    const request = ++previewRequest;
+    if (!engine) return;
+    if (id !== null) await loadFontFamily(document.fonts, engine.fontFamily(id));
+    if (request === previewRequest) engine.previewFontFamily(id ?? undefined);
+  }
+
+  async function pickFont(id: number): Promise<void> {
+    if (!engine) return;
+    previewRequest++;
+    engine.previewFontFamily(undefined);
+    await loadFontFamily(document.fonts, engine.fontFamily(id));
+    run((e) => e.setFontFamily(id));
+  }
+
+  const wrap = $derived(textWrap(summary));
+
+  function setWrap(next: TextWrap): void {
+    const writes = wrapWrites(summary, next);
+    run((e) => {
+      if (writes.autoResize !== undefined) e.setTextAutoResize(writes.autoResize);
+      if (writes.labelWrap !== undefined) e.setLabelWrap(writes.labelWrap);
+    });
   }
 </script>
 
@@ -194,19 +234,59 @@
       />
     </InspectorRow>
   {/if}
+  {#if can.arrowType}
+    <InspectorRow label="Arrow type">
+      <InspectorIconChoice
+        ariaLabel="Arrow type"
+        options={ARROW_TYPES}
+        value={summary.arrowType}
+        onPick={(v) => run((e) => e.setArrowType(v))}
+      />
+    </InspectorRow>
+  {/if}
   <!--
     The text rows read the label of a selected shape as well as a selected text: once a
     shape has a label, the shape is the only thing a click can select. The font family
     goes above the size, as the oracle has it.
   -->
   {#if can.text}
-    <InspectorRow label="Font size">
-      <InspectorSegmented
-        ariaLabel="Font size"
-        options={FONT_SIZES}
-        value={summary.fontSize}
-        onPick={(v) => run((e) => e.setFontSize(Number(v)))}
+    <InspectorRow label="Font family">
+      <InspectorFontPicker
+        value={summary.fontFamily}
+        open={openPicker === "font"}
+        sceneFamilies={() => engine?.sceneFontFamilies() ?? []}
+        stackOf={(id) => engine?.fontFamily(id) ?? "sans-serif"}
+        onToggle={(open) => onOpenPicker(open ? "font" : null)}
+        onPick={(id) => void pickFont(id)}
+        onPreview={(id) => void previewFont(id)}
       />
+    </InspectorRow>
+    <InspectorRow label="Font size">
+      <div class="font-size">
+        <InspectorSegmented
+          ariaLabel="Font size"
+          options={FONT_SIZES}
+          value={summary.fontSize}
+          onPick={(v) => run((e) => e.setFontSize(Number(v)))}
+        />
+        <!--
+          Divergence: any size, typed. The oracle offers the four presets and the
+          Ctrl+Shift+< / > steps (`actionProperties.tsx@1118751f:999-1141`).
+        -->
+        <input
+          type="number"
+          min={1}
+          max={1000}
+          step={1}
+          aria-label="Font size in pixels"
+          placeholder="mixed"
+          value={summary.fontSize ?? ""}
+          onchange={(event) => {
+            const size = readFontSize(event.currentTarget.value);
+            if (size !== null) run((e) => e.setFontSize(size));
+          }}
+        />
+      </div>
     </InspectorRow>
   {/if}
   {#if can.text && can.textAlign}
@@ -226,6 +306,16 @@
         options={VERTICAL_ALIGNS}
         value={summary.verticalAlign}
         onPick={(v) => run((e) => e.setVerticalAlign(v))}
+      />
+    </InspectorRow>
+  {/if}
+  {#if can.wrap}
+    <InspectorRow label="Text wrap">
+      <InspectorSegmented
+        ariaLabel="Text wrap"
+        options={TEXT_WRAPS}
+        value={wrap}
+        onPick={(v) => setWrap(v === "wrap" ? "wrap" : "grow")}
       />
     </InspectorRow>
   {/if}
@@ -437,6 +527,22 @@
   .arrowheads {
     display: grid;
     gap: 4px;
+  }
+
+  .font-size {
+    display: grid;
+    gap: 4px;
+  }
+
+  .font-size input {
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--fg-strong);
+    font: inherit;
+    font-size: 12px;
   }
 
   .heads {

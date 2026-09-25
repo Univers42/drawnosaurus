@@ -72,6 +72,9 @@ const canChangeRoundness = (kind: Kind): boolean =>
 
 const canHaveArrowheads = (kind: Kind): boolean => asElementKind(kind) === "arrow";
 
+/** `toolIsArrow` (`shapeActionPredicates.ts@1118751f:147`): the same test, named for its row. */
+const isArrowKind = canHaveArrowheads;
+
 const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
 
 /**
@@ -110,11 +113,19 @@ export interface ShapeActions {
   strokeStyle: boolean;
   sloppiness: boolean;
   roundness: boolean;
+  /** Sharp or curved, for arrows and the arrow tool. */
+  arrowType: boolean;
   arrowheads: boolean;
-  /** Font size — and, from wave 3, the font family. */
+  /** The font family and size rows. */
   text: boolean;
   textAlign: boolean;
   verticalAlign: boolean;
+  /**
+   * Whether text wraps: a free text's fixed width, a label's wrapping in its shape. Not a
+   * row of the oracle's — its free text wraps once a side handle sets a width, and its
+   * labels always wrap — so shown only for a selection that holds either.
+   */
+  wrap: boolean;
   opacity: boolean;
   /** Actions on things that exist: z-order, mirror, group, align. */
   layers: boolean;
@@ -145,6 +156,10 @@ export interface SelectionFacts {
   /** Whether align and distribute would move anything, counted in units by the engine. */
   canAlign: boolean;
   canDistribute: boolean;
+  /** A free text is selected. */
+  hasFreeText: boolean;
+  /** A label is selected, or carried by a selected shape. */
+  hasLabel: boolean;
 }
 
 export function getShapeActions(
@@ -185,10 +200,12 @@ export function getShapeActions(
     strokeStyle: forToolOrSelection(hasStrokeStyle),
     sloppiness: forToolOrSelection(hasRoughness),
     roundness: forToolOrSelection(canChangeRoundness),
+    arrowType: forToolOrSelection(isArrowKind),
     arrowheads: forToolOrSelection(canHaveArrowheads),
     text: activeTool === "text" || kinds.some(isTextKind),
     textAlign: activeTool === "text" || selection.textAlignable,
     verticalAlign: selection.verticalAlignable,
+    wrap: selection.hasFreeText || selection.hasLabel,
     // `shapeActionPredicates.ts@1118751f:157`: every selection, a frame included, and
     // every tool but the auto-shape one. The panel's own visibility rules out the tools
     // that draw nothing.

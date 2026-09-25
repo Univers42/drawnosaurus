@@ -37,6 +37,8 @@ const factsOf = (selected: readonly Sel[]): SelectionFacts => {
     filledKinds: [...filledKinds],
     textAlignable: labelled || selected.some((e) => e.type === "text"),
     verticalAlignable: labelled,
+    hasFreeText: selected.some((e) => e.type === "text"),
+    hasLabel: selected.some((e) => e.boundTextId),
   };
 };
 
@@ -69,6 +71,23 @@ describe("panel visibility", () => {
 });
 
 describe("controls follow the element", () => {
+  it("the arrow type is offered for arrows and the arrow tool alone", () => {
+    // `forToolOrSelection(toolIsArrow)` (`shapeActionPredicates.ts@1118751f:147`).
+    expect(actions("arrow").arrowType).toBe(true);
+    expect(actions("select", [el("arrow"), el("rectangle")]).arrowType).toBe(true);
+    for (const t of ["rectangle", "line", "text", "freedraw"] as const) {
+      expect(actions("select", [el(t)]).arrowType, t).toBe(false);
+    }
+    expect(actions("line").arrowType).toBe(false);
+  });
+
+  it("the wrap row shows for a free text or a label, and never for a tool alone", () => {
+    expect(actions("select", [el("text")]).wrap).toBe(true);
+    expect(actions("select", [{ ...el("rectangle"), boundTextId: "l" }]).wrap).toBe(true);
+    expect(actions("select", [el("rectangle")]).wrap).toBe(false);
+    expect(actions("text").wrap).toBe(false);
+  });
+
   it("an arrow gets arrowheads, and nothing else does", () => {
     expect(actions("select", [el("arrow")]).arrowheads).toBe(true);
     for (const t of ["rectangle", "ellipse", "diamond", "line", "text", "freedraw"] as const) {

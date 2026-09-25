@@ -50,7 +50,12 @@ export type IconName =
   | "zoomOut"
   | "fit"
   | "focus"
-  | "eyeDropper";
+  | "eyeDropper"
+  | "fontNormal"
+  | "fontHeading"
+  | "fontCode"
+  | "arrowSharp"
+  | "arrowRound";
 
 export type SvgNode =
   | { tag: "path"; d: string }
@@ -339,5 +344,35 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
       tag: "path",
       d: "m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l.4.4a2.1 2.1 0 1 1-3 3l-3.8-3.8a2.1 2.1 0 1 1 3-3l.4.4Z",
     },
+  ],
+  // The font picker's family icons and the arrow-type row's, the oracle's own paths
+  // (`packages/excalidraw/components/icons.tsx@1118751f`): FontFamilyNormalIcon,
+  // FontFamilyHeadingIcon, FontFamilyCodeIcon, sharpArrowIcon, roundArrowIcon — the
+  // normal one scaled from its 20-unit box to this 24.
+  fontNormal: [
+    { tag: "path", d: "M7 20V8a4 4 0 0 1 4-4h2a4 4 0 0 1 4 4v12" },
+    { tag: "path", d: "M7 13h10" },
+  ],
+  fontHeading: [
+    { tag: "path", d: "M7 12h10" },
+    { tag: "path", d: "M7 5v14" },
+    { tag: "path", d: "M17 5v14" },
+    { tag: "path", d: "M15 19h4" },
+    { tag: "path", d: "M15 5h4" },
+    { tag: "path", d: "M5 19h4" },
+    { tag: "path", d: "M5 5h4" },
+  ],
+  fontCode: [
+    { tag: "path", d: "M7 8l-4 4l4 4" },
+    { tag: "path", d: "M17 8l4 4l-4 4" },
+    { tag: "path", d: "M14 4l-4 16" },
+  ],
+  arrowSharp: [
+    { tag: "path", d: "M6 18l12 -12" },
+    { tag: "path", d: "M18 10v-4h-4" },
+  ],
+  arrowRound: [
+    { tag: "path", d: "M16,12L20,9L16,6" },
+    { tag: "path", d: "M6 20c0 -6.075 4.925 -11 11 -11h3" },
   ],
 };

@@ -1,6 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { type FontEvents, type LoadedFace, TEXT_FAMILIES, watchFonts } from "./fonts.ts";
+import {
+  FONT_CHOICES,
+  QUICK_FONTS,
+  type FontEvents,
+  type LoadedFace,
+  TEXT_FAMILIES,
+  fontGroups,
+  fontLabel,
+  fontPickerKey,
+  loadFontFamily,
+  readFontSize,
+  watchFonts,
+} from "./fonts.ts";
 
 function fakeFonts(): FontEvents & { done(...faces: LoadedFace[]): void } {
   const target = new EventTarget();
@@ -75,5 +87,112 @@ describe("TEXT_FAMILIES", () => {
     const css = readFileSync(new URL("./fonts.css", import.meta.url), "utf8");
     const declared = new Set([...css.matchAll(/font-family:\s*"([^"]+)"/g)].map((m) => m[1]));
     expect([...declared].sort()).toEqual([...TEXT_FAMILIES].sort());
+  });
+});
+
+describe("the font picker's list", () => {
+  const ids = (fonts: readonly { id: number }[]) => fonts.map((font) => font.id);
+
+  it("offers the families excalidraw lists, in label order", () => {
+    // `FontPickerList.tsx@1118751f:126-155`: private (Liberation Sans) and fallback faces
+    // are never listed.
+    expect(FONT_CHOICES.map((font) => font.label)).toEqual([
+      "Cascadia",
+      "Comic Shanns",
+      "Excalifont",
+      "Helvetica",
+      "Lilita One",
+      "Nunito",
+      "Virgil",
+    ]);
+  });
+
+  it("puts the board's families first, and leaves the old ones out unless the board uses them", () => {
+    const { inScene, available } = fontGroups([1, 6], "");
+    expect(ids(inScene)).toEqual([6, 1]);
+    // Cascadia, Helvetica and Virgil are deprecated (`font-metadata.ts@1118751f:68-95`).
+    expect(ids(available)).toEqual([8, 5, 7]);
+  });
+
+  it("narrows both groups to the labels holding the search, whatever its case", () => {
+    const { inScene, available } = fontGroups([3], "  CA ");
+    expect(ids(inScene)).toEqual([3]);
+    expect(ids(available)).toEqual([5]);
+    expect(fontGroups([], "nothing like it")).toEqual({ inScene: [], available: [] });
+  });
+
+  it("names the quick picks as excalidraw does", () => {
+    // `DEFAULT_FONTS`, `FontPicker.tsx@1118751f:42-61`.
+    expect(QUICK_FONTS.map((font) => [font.id, font.label])).toEqual([
+      [5, "Hand-drawn"],
+      [6, "Normal"],
+      [8, "Code"],
+    ]);
+  });
+
+  it("labels a family, the system stack and a mixed selection", () => {
+    expect(fontLabel(7)).toBe("Lilita One");
+    expect(fontLabel(0)).toBe("System");
+    expect(fontLabel(null)).toBe("mixed");
+  });
+});
+
+describe("fontPickerKey", () => {
+  const key = (k: string, shiftKey = false) => ({
+    key: k,
+    shiftKey,
+    ctrlKey: false,
+    metaKey: false,
+  });
+  const listed = [6, 8, 5];
+
+  it("walks the list round from either end", () => {
+    // `arrayToList` links head and tail (`packages/common/src/utils.ts@1118751f:599-620`).
+    expect(fontPickerKey(key("ArrowDown"), 6, listed)).toEqual({ kind: "hover", id: 8 });
+    expect(fontPickerKey(key("ArrowDown"), 5, listed)).toEqual({ kind: "hover", id: 6 });
+    expect(fontPickerKey(key("ArrowUp"), 6, listed)).toEqual({ kind: "hover", id: 5 });
+  });
+
+  it("starts from the first or the last when nothing listed is hovered", () => {
+    expect(fontPickerKey(key("ArrowDown"), null, listed)).toEqual({ kind: "hover", id: 6 });
+    expect(fontPickerKey(key("ArrowUp"), 1, listed)).toEqual({ kind: "hover", id: 5 });
+    expect(fontPickerKey(key("ArrowDown"), null, [])).toEqual({ kind: "none" });
+  });
+
+  it("picks on Enter, closes on Escape and goes back to the search on Shift+F", () => {
+    expect(fontPickerKey(key("Enter"), 8, listed)).toEqual({ kind: "select", id: 8 });
+    expect(fontPickerKey(key("Enter"), null, listed)).toEqual({ kind: "none" });
+    expect(fontPickerKey(key("Escape"), 8, listed)).toEqual({ kind: "close" });
+    expect(fontPickerKey(key("F", true), 8, listed)).toEqual({ kind: "focusSearch" });
+  });
+
+  it("leaves typing to the search field", () => {
+    expect(fontPickerKey(key("f"), 8, listed)).toBeNull();
+    expect(fontPickerKey(key("a"), 8, listed)).toBeNull();
+    expect(fontPickerKey({ ...key("F", true), ctrlKey: true }, 8, listed)).toBeNull();
+  });
+});
+
+describe("loadFontFamily", () => {
+  it("asks for the face before anything is laid out in it", async () => {
+    const asked: string[] = [];
+    await loadFontFamily({ load: async (font) => void asked.push(font) }, '"Nunito", sans-serif');
+    expect(asked).toEqual(['10px "Nunito", sans-serif']);
+  });
+
+  it("settles when the face cannot be loaded, so the family still changes", async () => {
+    await expect(
+      loadFontFamily({ load: () => Promise.reject(new Error("offline")) }, "Nunito"),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("readFontSize", () => {
+  it("reads a number and refuses anything else, an empty field included", () => {
+    expect(readFontSize("24")).toBe(24);
+    expect(readFontSize(" 12.5 ")).toBe(12.5);
+    expect(readFontSize("")).toBeNull();
+    expect(readFontSize("big")).toBeNull();
+    expect(readFontSize("Infinity")).toBeNull();
   });
 });

@@ -174,6 +174,35 @@
         <span>Group</span><span class="hint">{shortcutLabel("CtrlOrCmd+G")}</span>
       </button>
     {/if}
+    <!-- Between Group and Ungroup, as the oracle lists them (`App.tsx@1118751f:13775-13780`). -->
+    {#if element.text.autoResize}
+      <button
+        type="button"
+        role="menuitem"
+        onclick={() => onRun((engine) => engine.setTextAutoResize(true))}
+      >
+        <span>Enable text auto-resizing</span>
+      </button>
+    {/if}
+    {#if element.text.unbind}
+      <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.unbindText())}>
+        <span>Unbind text</span>
+      </button>
+    {/if}
+    {#if element.text.bind}
+      <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.bindText())}>
+        <span>Bind text to the container</span>
+      </button>
+    {/if}
+    {#if element.text.wrap}
+      <button
+        type="button"
+        role="menuitem"
+        onclick={() => onRun((engine) => engine.wrapTextInContainer())}
+      >
+        <span>Wrap text in a container</span>
+      </button>
+    {/if}
     {#if element.grouped}
       <button
         type="button"

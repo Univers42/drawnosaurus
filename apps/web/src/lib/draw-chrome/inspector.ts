@@ -1,4 +1,11 @@
-import type { FillStyle, StrokeStyle, TextAlign, VerticalAlign } from "@osionos/draw-engine/types";
+import type {
+  ArrowType,
+  FillStyle,
+  SelectionStyle,
+  StrokeStyle,
+  TextAlign,
+  VerticalAlign,
+} from "@osionos/draw-engine/types";
 import type { IconName } from "./icons.ts";
 
 export type ThemeMode = "light" | "dark";
@@ -127,3 +134,55 @@ export const VERTICAL_ALIGNS: Array<{ label: string; icon: IconName; value: Vert
   { label: "Align text middle", icon: "textAlignMiddle", value: "middle" },
   { label: "Align text bottom", icon: "textAlignBottom", value: "bottom" },
 ];
+
+/**
+ * The arrow-type row: `actionChangeArrowType`'s options
+ * (`packages/excalidraw/actions/actionProperties.tsx@1118751f:2057-2242`) without the
+ * elbow, which this engine does not route — a gap in `docs/reference/console.md`.
+ */
+export const ARROW_TYPES: Array<{ label: string; icon: IconName; value: ArrowType }> = [
+  { label: "Sharp arrow", icon: "arrowSharp", value: "sharp" },
+  { label: "Curved arrow", icon: "arrowRound", value: "round" },
+];
+
+/**
+ * The wrap row, a divergence addition (`docs/reference/console.md`): a text wraps in a
+ * width it keeps, or grows to hold its lines. For a free text that is `autoResize`
+ * (`actionTextAutoResize.ts@1118751f`, which the oracle offers only in the context menu,
+ * and only one way); for a label, the engine's `wrap` — the oracle's labels always wrap.
+ */
+export type TextWrap = "wrap" | "grow";
+
+export const TEXT_WRAPS: Array<{ label: string; value: TextWrap }> = [
+  { label: "Wrap", value: "wrap" },
+  { label: "Grow", value: "grow" },
+];
+
+type WrapFacts = Pick<SelectionStyle, "hasFreeText" | "autoResize" | "hasLabel" | "labelWrap">;
+
+/** What the selection's texts do, or `null` when they disagree or there are none. */
+export function textWrap(style: WrapFacts): TextWrap | null {
+  const values: Array<boolean | null> = [];
+  if (style.hasFreeText) values.push(style.autoResize === null ? null : !style.autoResize);
+  if (style.hasLabel) values.push(style.labelWrap);
+  const [first] = values;
+  if (first === undefined || first === null || values.some((value) => value !== first)) {
+    return null;
+  }
+  return first ? "wrap" : "grow";
+}
+
+/**
+ * What a pick writes, for the kinds of text selected: `setTextAutoResize` for free texts,
+ * `setLabelWrap` for labels. ponytail: a selection holding both takes two engine calls,
+ * so two steps of undo; one engine call for both is the upgrade.
+ */
+export function wrapWrites(
+  style: Pick<WrapFacts, "hasFreeText" | "hasLabel">,
+  wrap: TextWrap,
+): { autoResize?: boolean; labelWrap?: boolean } {
+  return {
+    ...(style.hasFreeText ? { autoResize: wrap === "grow" } : {}),
+    ...(style.hasLabel ? { labelWrap: wrap === "wrap" } : {}),
+  };
+}

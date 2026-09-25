@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DrawElement } from "@osionos/draw-engine/types";
-import { clampMenuPosition, menuElementFromSelection } from "./menu.ts";
+import { clampMenuPosition, menuElementFromSelection, textMenu } from "./menu.ts";
 
 const el = (patch: Partial<DrawElement> & Pick<DrawElement, "type" | "id">): DrawElement => ({
   x: 0,
@@ -83,6 +83,17 @@ describe("menuElementFromSelection", () => {
     expect(info?.locked).toBe(true);
   });
 
+  it("offers no heads for a locked line or arrow, which a style passes by", () => {
+    const locked = el({ id: "a", type: "arrow", locked: true });
+    expect(menuElementFromSelection([locked], true, false)?.linear).toBeNull();
+    // Beside one that is not locked, the row is that one's.
+    const free = el({ id: "b", type: "arrow", startArrowhead: "dot" });
+    expect(menuElementFromSelection([locked, free], false, false)?.linear).toEqual({
+      start: "dot",
+      end: "arrow",
+    });
+  });
+
   it("marks a multi-selection and a group", () => {
     const info = menuElementFromSelection(
       [el({ id: "a", type: "rectangle" }), el({ id: "b", type: "ellipse" })],
@@ -90,5 +101,43 @@ describe("menuElementFromSelection", () => {
       true,
     );
     expect(info).toMatchObject({ linear: null, multi: true, grouped: true });
+  });
+});
+
+describe("textMenu", () => {
+  const facts = {
+    count: 1,
+    hasFreeText: false,
+    autoResize: null,
+    canBindText: false,
+    canUnbindText: false,
+  };
+
+  it("offers auto-resizing for one text of a fixed width, and only then", () => {
+    // `actionTextAutoResize`'s predicate (`actions/actionTextAutoResize.ts@1118751f:27-34`).
+    expect(textMenu({ ...facts, hasFreeText: true, autoResize: false }).autoResize).toBe(true);
+    expect(textMenu({ ...facts, hasFreeText: true, autoResize: true }).autoResize).toBe(false);
+    expect(textMenu({ ...facts, count: 2, hasFreeText: true, autoResize: false }).autoResize).toBe(
+      false,
+    );
+  });
+
+  it("offers each bound-text action on the engine's answer", () => {
+    expect(textMenu({ ...facts, canBindText: true })).toEqual({
+      autoResize: false,
+      unbind: false,
+      bind: true,
+      wrap: false,
+    });
+    expect(textMenu({ ...facts, canUnbindText: true }).unbind).toBe(true);
+    expect(textMenu({ ...facts, count: 3, hasFreeText: true }).wrap).toBe(true);
+  });
+
+  it("is carried by the element menu, and offers nothing without the engine's answer", () => {
+    const text = el({ id: "t", type: "text" });
+    expect(
+      menuElementFromSelection([text], false, false, { ...facts, hasFreeText: true })?.text.wrap,
+    ).toBe(true);
+    expect(menuElementFromSelection([text], false, false)?.text.wrap).toBe(false);
   });
 });
