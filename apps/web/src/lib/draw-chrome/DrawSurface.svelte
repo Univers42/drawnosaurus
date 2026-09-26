@@ -1774,6 +1774,8 @@
       }}
       onToolChange={(next: DrawTool) => {
         tool = next;
+        // The arrow key again keeps the tool and moves the next arrow's type.
+        refreshStyle();
         if (next === "image") openImagePicker();
         if (next === "embed") showEmbed = true;
       }}

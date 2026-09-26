@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ARROW_TYPES,
   CANVAS_BACKGROUNDS,
   DARK_FILL_SWATCHES,
   DARK_STROKE_SWATCHES,
@@ -148,6 +149,26 @@ describe("the other option rows", () => {
       const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
       expect((r + g + b) / 3, color).toBeGreaterThan(200);
     }
+  });
+});
+
+describe("the arrow-type row", () => {
+  it("offers the oracle's three types in its order, each with its label and an icon that exists", () => {
+    expect(ARROW_TYPES.map((t) => [t.value, t.label])).toEqual([
+      ["sharp", "Sharp arrow"],
+      ["round", "Curved arrow"],
+      ["elbow", "Elbow arrow"],
+    ]);
+    for (const option of ARROW_TYPES) {
+      expect(ICONS[option.icon].length, option.label).toBeGreaterThan(0);
+    }
+  });
+
+  it("draws the elbow as the oracle's elbowArrowIcon", () => {
+    expect(ICONS.arrowElbow).toEqual([
+      { tag: "path", d: "M4,19L10,19C11.097,19 12,18.097 12,17L12,9C12,7.903 12.903,7 14,7L21,7" },
+      { tag: "path", d: "M18 4l3 3l-3 3" },
+    ]);
   });
 });
 

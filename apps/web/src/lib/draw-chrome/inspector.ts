@@ -182,13 +182,13 @@ export const VERTICAL_ALIGNS: Array<{ label: string; icon: IconName; value: Vert
 ];
 
 /**
- * The arrow-type row: `actionChangeArrowType`'s options
- * (`packages/excalidraw/actions/actionProperties.tsx@1118751f:2057-2242`) without the
- * elbow, which this engine does not route — a gap in `docs/reference/console.md`.
+ * The arrow-type row: `actionChangeArrowType`'s options, in its order, with its labels and
+ * icons (`packages/excalidraw/actions/actionProperties.tsx@1118751f:2255-2275`).
  */
 export const ARROW_TYPES: Array<{ label: string; icon: IconName; value: ArrowType }> = [
   { label: "Sharp arrow", icon: "arrowSharp", value: "sharp" },
   { label: "Curved arrow", icon: "arrowRound", value: "round" },
+  { label: "Elbow arrow", icon: "arrowElbow", value: "elbow" },
 ];
 
 /** The Shapes picker's kind row, mirroring `ARROW_TYPES`. Mirrors the engine's

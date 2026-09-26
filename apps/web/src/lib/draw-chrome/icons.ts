@@ -56,6 +56,7 @@ export type IconName =
   | "fontCode"
   | "arrowSharp"
   | "arrowRound"
+  | "arrowElbow"
   | "polygonClosed"
   // The Shapes tool (toolbar) and its kind picker (inspector): one glyph per
   // `FigureKind`, plus the toolbar's own — a hexagon, the default figure.
@@ -384,6 +385,11 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
   arrowRound: [
     { tag: "path", d: "M16,12L20,9L16,6" },
     { tag: "path", d: "M6 20c0 -6.075 4.925 -11 11 -11h3" },
+  ],
+  // `elbowArrowIcon` (`icons.tsx@1118751f:2411-2418`).
+  arrowElbow: [
+    { tag: "path", d: "M4,19L10,19C11.097,19 12,18.097 12,17L12,9C12,7.903 12.903,7 14,7L21,7" },
+    { tag: "path", d: "M18 4l3 3l-3 3" },
   ],
   // A closed line, filled: the shape the polygon toggle turns a selected line into.
   polygonClosed: [{ tag: "path", d: "M12 2 2 9.5 5.5 21h13L22 9.5Z" }],
