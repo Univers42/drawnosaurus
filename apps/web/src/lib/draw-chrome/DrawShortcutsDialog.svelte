@@ -55,7 +55,7 @@
     {
       cat: "Presentation",
       items: [
-        { key: shortcutLabel("CtrlOrCmd+Shift+P"), desc: "Present — the board's frames as slides" },
+        { key: shortcutLabel("CtrlOrCmd+Alt+P"), desc: "Present — the board's frames as slides" },
         { key: "→ ↓ Space", desc: "Next slide" },
         { key: "← ↑", desc: "Previous slide" },
         { key: "Home / End", desc: "First / last slide" },

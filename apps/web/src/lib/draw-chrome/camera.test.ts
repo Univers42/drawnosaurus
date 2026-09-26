@@ -4,7 +4,10 @@ import {
   boundsOf,
   easeInOutCubic,
   fitCamera,
+  focusCamera,
   lerpCamera,
+  persistFocusModePreference,
+  readFocusModePreference,
   revealPan,
   setCameraExact,
   worldToScreen,
@@ -274,5 +277,73 @@ describe("revealPan", () => {
     const at1x = revealPan(viewport, { x: 0, y: 0, scale: 1 }, target)!;
     const at2x = revealPan(viewport, { x: 0, y: 0, scale: 2 }, target)!;
     expect(Math.abs(at2x.dx)).toBeGreaterThan(Math.abs(at1x.dx));
+  });
+});
+
+describe("focusCamera", () => {
+  const viewport = { width: 1000, height: 800 };
+
+  it("zooms in so the shape fills the viewport width, minus the margin", () => {
+    const bounds = { x: 100, y: 100, width: 500, height: 100 };
+    const camera = focusCamera(bounds, viewport, { x: 0, y: 0, scale: 1 });
+    // Default margin: the shape's width becomes 80% of the viewport's. (Comfortably
+    // under the 2x cap, so the cap is not what this test is about.)
+    expect(camera.scale).toBeCloseTo((viewport.width * 0.8) / bounds.width, 5);
+  });
+
+  it("centres the shape on screen", () => {
+    const bounds = { x: 100, y: 100, width: 200, height: 100 };
+    const camera = focusCamera(bounds, viewport, { x: 0, y: 0, scale: 1 });
+    const centerX = bounds.x + bounds.width / 2;
+    const centerY = bounds.y + bounds.height / 2;
+    expect(centerX * camera.scale + camera.x).toBeCloseTo(viewport.width / 2, 5);
+    expect(centerY * camera.scale + camera.y).toBeCloseTo(viewport.height / 2, 5);
+  });
+
+  it("caps at the maximum zoom for a small shape rather than zooming in arbitrarily far", () => {
+    const bounds = { x: 0, y: 0, width: 10, height: 10 };
+    const camera = focusCamera(bounds, viewport, { x: 0, y: 0, scale: 1 });
+    expect(camera.scale).toBeCloseTo(2, 5);
+  });
+
+  it("never zooms out below the current zoom, even for a shape already bigger than the margin", () => {
+    const bounds = { x: 0, y: 0, width: 5000, height: 100 };
+    const camera = focusCamera(bounds, viewport, { x: 0, y: 0, scale: 1.5 });
+    expect(camera.scale).toBeCloseTo(1.5, 5);
+  });
+
+  it("a custom maxScale overrides the default 2x cap", () => {
+    const bounds = { x: 0, y: 0, width: 10, height: 10 };
+    const camera = focusCamera(bounds, viewport, { x: 0, y: 0, scale: 1 }, { maxScale: 4 });
+    expect(camera.scale).toBeCloseTo(4, 5);
+  });
+});
+
+describe("focus mode preference persistence", () => {
+  const store = (value: string | null) => ({ getItem: () => value });
+
+  it("defaults to on for an unset, unknown or absent store", () => {
+    expect(readFocusModePreference(store(null))).toBe(true);
+    expect(readFocusModePreference(store("nonsense"))).toBe(true);
+    expect(readFocusModePreference(undefined)).toBe(true);
+  });
+
+  it("round-trips an explicit off", () => {
+    const written: Record<string, string> = {};
+    persistFocusModePreference({ setItem: (k, v) => void (written[k] = v) }, false);
+    expect(readFocusModePreference({ getItem: (k) => written[k] ?? null })).toBe(false);
+  });
+
+  it("survives storage that throws", () => {
+    const hostile = {
+      getItem: (): string => {
+        throw new Error("blocked");
+      },
+      setItem: (): void => {
+        throw new Error("blocked");
+      },
+    };
+    expect(readFocusModePreference(hostile)).toBe(true);
+    expect(() => persistFocusModePreference(hostile, false)).not.toThrow();
   });
 });

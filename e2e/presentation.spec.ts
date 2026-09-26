@@ -120,7 +120,7 @@ test.describe("presentation", () => {
     await expect(page.locator('[aria-label="Canvas header"]')).toBeVisible();
     await expect(page.getByRole("toolbar", { name: "Drawing tools" })).toBeVisible();
 
-    await page.keyboard.press("Control+Shift+p");
+    await page.keyboard.press("Control+Alt+p");
 
     await expect(page.locator('[aria-label="Canvas header"]')).toBeHidden();
     await expect(page.getByRole("toolbar", { name: "Drawing tools" })).toBeHidden();
@@ -144,7 +144,7 @@ test.describe("presentation", () => {
     page,
   }) => {
     const board = await openThreeFrameBoard(page);
-    await page.keyboard.press("Control+Shift+p");
+    await page.keyboard.press("Control+Alt+p");
     await expect(page.getByText("1 / 3")).toBeVisible();
 
     await page.keyboard.press("ArrowRight");
@@ -170,7 +170,7 @@ test.describe("presentation", () => {
 
   test("the Prev/Next/Exit buttons work the same as the keys", async ({ page }) => {
     const board = await openThreeFrameBoard(page);
-    await page.keyboard.press("Control+Shift+p");
+    await page.keyboard.press("Control+Alt+p");
 
     await page.getByRole("button", { name: "Next slide" }).click();
     await expect(page.getByText("2 / 3")).toBeVisible();
@@ -187,7 +187,7 @@ test.describe("presentation", () => {
   test("a drag leaves laser ink on screen and adds no element", async ({ page }) => {
     const board = await openThreeFrameBoard(page);
     const before = await sceneElements(page);
-    await page.keyboard.press("Control+Shift+p");
+    await page.keyboard.press("Control+Alt+p");
     await expect(page.getByRole("group", { name: "Presentation controls" })).toBeVisible();
     expect(await activeTool(page)).toBe("laser");
     // One repaint before trusting the canvas bitmap — the same settle `openBoard` waits
@@ -223,7 +223,7 @@ test.describe("presentation", () => {
     const toolBefore = await activeTool(page);
     const elementsBefore = await sceneElements(page);
 
-    await page.keyboard.press("Control+Shift+p");
+    await page.keyboard.press("Control+Alt+p");
     await page.keyboard.press("ArrowRight");
     await expect(page.getByText("2 / 3")).toBeVisible();
 
@@ -245,7 +245,7 @@ test.describe("presentation", () => {
     await openThreeFrameBoard(page);
     const toolBefore = await activeTool(page);
 
-    await page.keyboard.press("Control+Shift+p");
+    await page.keyboard.press("Control+Alt+p");
     const controls = page.getByRole("group", { name: "Presentation controls" });
     await expect(controls).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
@@ -265,7 +265,7 @@ test.describe("presentation", () => {
     const board = await openBoard(page);
     await load(page, ONE_RECT);
 
-    await page.keyboard.press("Control+Shift+p");
+    await page.keyboard.press("Control+Alt+p");
 
     await expect(page.getByText("1 / 1")).toBeVisible();
     await expectCameraFits(board, { minX: 40, minY: 40, maxX: 160, maxY: 120 });
@@ -305,7 +305,7 @@ test.describe("presentation — Follow", () => {
   }) => {
     const { host, colleague, close } = await together(page, browser);
 
-    await host.page.keyboard.press("Control+Shift+p");
+    await host.page.keyboard.press("Control+Alt+p");
 
     const notice = colleague.page.getByRole("status");
     await expect(notice).toContainText("is presenting — Follow");

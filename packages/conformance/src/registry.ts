@@ -647,8 +647,17 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "⚡ Command Palette",
+    text: /recently used/i,
     status: "gap",
-    why: "No command palette, and the prerequisite is the action registry from design.md §28 — commands have to be addressable by name before anything can list them.",
+    why: "The registry ranks by fuzzy match alone; there is no usage history to give a recently-run command a boost the way the oracle's own palette does.",
+  },
+  {
+    section: "⚡ Command Palette",
+    status: "covered",
+    // buildCommands (commandPalette.ts) turns real host actions — tools, view/zoom,
+    // theme, grid/snap, Present, export, every style preset — into searchable commands;
+    // DrawCommandPalette.svelte is the thin dialog over it. Track B, Part 1.
+    tests: [`${WEB}/draw-chrome/commandPalette.test.ts`, "e2e/keyboardDiagram.spec.ts"],
   },
   {
     section: "🔲 Grid",
@@ -2172,9 +2181,18 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "34. Menus",
-    text: /Command palette|Search commands|Keyboard navigation|Execute actions|Shortcut display|Link|Add to library|Properties/,
+    text: /Link|Add to library|Properties/,
     status: "gap",
-    why: "The command palette and the menu entries that depend on features not built yet (links, library, a stats panel).",
+    why: "The menu entries that depend on features not built yet (links, library, a stats panel).",
+  },
+  {
+    section: "34. Menus",
+    text: /Command palette|Search commands|Keyboard navigation|Execute actions|Shortcut display/,
+    status: "covered",
+    // Track B, Part 1: DrawCommandPalette.svelte + commandPalette.ts — fuzzy search
+    // ("Search commands"), arrow-key navigation, Enter to run ("Execute actions"), and a
+    // shortcut printed beside each command ("Shortcut display").
+    tests: [`${WEB}/draw-chrome/commandPalette.test.ts`, "e2e/keyboardDiagram.spec.ts"],
   },
   // Each action is implemented and tested at the engine/store level (grouping, z-order,
   // lock, duplicate, delete, copy/paste) but no test clicks the context-menu entry

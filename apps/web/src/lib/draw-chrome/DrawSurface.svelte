@@ -17,6 +17,9 @@
     animateCamera,
     boundsOf,
     fitCamera,
+    focusCamera,
+    persistFocusModePreference,
+    readFocusModePreference,
     revealPan,
     setCameraExact,
     worldToScreen,
@@ -54,6 +57,18 @@
     type ThemePreference,
   } from "./theme.ts";
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
+  import { buildCommands, type PaletteHost } from "./commandPalette.ts";
+  import {
+    BUILTIN_PRESETS,
+    allPresets,
+    deleteUserPreset,
+    persistUserPresets,
+    pickStyleFields,
+    readUserPresets,
+    renameUserPreset,
+    saveUserPreset,
+    type StylePreset,
+  } from "./stylePresets.ts";
   import { migrateLegacyStickyJson } from "../notes/stickyNotes.ts";
   import { EraserTrail } from "../eraser/eraserTrail.ts";
   import {
@@ -216,6 +231,15 @@
    */
   let editorRevision = $state(0);
   /**
+   * Focus mode: Enter on a selected shape eases the camera in on it; leaving the edit
+   * eases back. A double-click opens the same editor without moving the camera — see
+   * `onFocusModeKeydown`, the only place `pendingKeyboardTextEdit` is set.
+   */
+  let focusModeEnabled = $state(true);
+  let pendingKeyboardTextEdit = false;
+  let cameraBeforeFocus: Camera | null = null;
+  let focusAnim: CameraAnimation | null = null;
+  /**
    * A primary press on the board just ended an edit. A press of the text tool then only
    * ends it, rather than starting another text (`App.tsx@1118751f:9815-9824`).
    */
@@ -294,6 +318,10 @@
   let showMermaid = $state(false);
   let showShare = $state(false);
   let showShortcuts = $state(false);
+  let showPalette = $state(false);
+
+  // Style presets — built-ins plus whatever the viewer saved, read once on mount.
+  let userPresets = $state<StylePreset[]>([]);
 
   // Realtime
   let peers = $state<PeerCursor[]>([]);
@@ -343,6 +371,37 @@
   function pasteStyles(): void {
     engine?.pasteStyles();
     refreshStyle();
+  }
+
+  /** A preset by id — built-in or the viewer's own — applied through `applyStyle`, the
+   *  same one-undo-step path the panel's own pickers use. */
+  function applyStylePresetById(id: string): void {
+    const preset = allPresets(userPresets).find((p) => p.id === id);
+    if (preset) applyStyle(preset.style);
+  }
+
+  /** Captures the first selected element's look, or the next element's with nothing
+   *  selected — `engine.getNextStyle()`, the same source `apply_style` itself falls back
+   *  to. Named generically; the panel's rename control is how it gets a real name. */
+  function saveCurrentAsPreset(): void {
+    if (!engine) return;
+    const source = engine.getSelectedElements()[0] ?? engine.getNextStyle();
+    userPresets = saveUserPreset(
+      userPresets,
+      `Preset ${userPresets.length + 1}`,
+      pickStyleFields(source),
+    );
+    persistUserPresets(localStorage, userPresets);
+  }
+
+  function renamePreset(id: string, name: string): void {
+    userPresets = renameUserPreset(userPresets, id, name);
+    persistUserPresets(localStorage, userPresets);
+  }
+
+  function deletePreset(id: string): void {
+    userPresets = deleteUserPreset(userPresets, id);
+    persistUserPresets(localStorage, userPresets);
   }
 
   /**
@@ -454,6 +513,15 @@
     canvasBackground = color;
     persistCanvasBackground(typeof localStorage === "undefined" ? undefined : localStorage, color);
     applyTheme();
+  }
+
+  /** The main menu switch and the palette command. */
+  function toggleFocusMode(): void {
+    focusModeEnabled = !focusModeEnabled;
+    persistFocusModePreference(
+      typeof localStorage === "undefined" ? undefined : localStorage,
+      focusModeEnabled,
+    );
   }
 
   let canvasHost: HTMLDivElement | undefined = $state();
@@ -769,6 +837,17 @@
     handleToolSelect("select");
   }
 
+  /** The command palette's "Add rectangle / diamond / ellipse": a default-sized shape at
+   *  the viewport's centre, selected, one undo step — so Ctrl+Arrow (flowchart) and Enter
+   *  (focus mode's type-in-the-node) work on it immediately, keyboard-only. */
+  function insertShapeAtViewportCentre(kind: "rectangle" | "diamond" | "ellipse"): void {
+    if (!engine) return;
+    const at = viewportCentre();
+    const id = engine.insertDefaultShape(kind, at.x, at.y);
+    if (id) handleToolSelect("select");
+    refreshStyle();
+  }
+
   function handleToolSelect(next: DrawTool): void {
     tool = next;
     engine?.setTool(next);
@@ -1054,6 +1133,56 @@
     return { width: rect?.width ?? 0, height: rect?.height ?? 0 };
   }
 
+  /**
+   * Captured ahead of the engine's own key listener — same reason and same technique as
+   * `onStyleShortcut` — because the engine's `onRequestTextEdit` carries no origin: a
+   * double-click and an Enter both arrive as the identical request. Set unconditionally
+   * on a plain Enter over the board, and cleared by the following microtask whether or
+   * not this press turns out to open an edit at all, so a later double-click is never
+   * mistaken for a keyboard one.
+   */
+  function onFocusModeKeydown(event: KeyboardEvent): void {
+    if (
+      event.key === "Enter" &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.altKey &&
+      keyTarget(event.target) === "board"
+    ) {
+      pendingKeyboardTextEdit = true;
+      // Not `queueMicrotask`: the DOM runs a microtask checkpoint after *every* listener in
+      // one event's dispatch, capture and bubble alike, so a microtask queued here would
+      // reset the flag before the engine's own bubble-phase listener — several callbacks
+      // later in the same dispatch — ever ran. `setTimeout` waits for the whole chain to
+      // settle instead, same as `pressEndedEdit`'s reset below.
+      setTimeout(() => (pendingKeyboardTextEdit = false));
+    }
+  }
+
+  /** Eases the camera in on the shape just entered from the keyboard. */
+  function enterFocusMode(): void {
+    if (!engine) return;
+    const bounds = boundsOf(engine.getSelectedElements());
+    if (!bounds) return;
+    cameraBeforeFocus = engine.camera;
+    const target = focusCamera(bounds, viewportSize(), engine.camera);
+    focusAnim?.cancel();
+    focusAnim = animateCamera(engine.camera, target, (camera) => setCameraExact(engine!, camera), {
+      reducedMotion: prefersReducedMotion(),
+    });
+  }
+
+  /** Eases back to the camera from before `enterFocusMode`, if it ran. */
+  function exitFocusMode(): void {
+    if (!engine || !cameraBeforeFocus) return;
+    const restore = cameraBeforeFocus;
+    cameraBeforeFocus = null;
+    focusAnim?.cancel();
+    focusAnim = animateCamera(engine.camera, restore, (camera) => setCameraExact(engine!, camera), {
+      reducedMotion: prefersReducedMotion(),
+    });
+  }
+
   /** The live scene's elements, as `presentation.ts` needs them. */
   function currentSlideElements(): SlideElement[] {
     if (!engine) return [];
@@ -1221,6 +1350,8 @@
     canvasBackground = readCanvasBackground(localStorage);
     grid = readGridPreference(localStorage);
     objectsSnap = readObjectsSnapPreference(localStorage);
+    focusModeEnabled = readFocusModePreference(localStorage);
+    userPresets = readUserPresets(localStorage);
     // In case the engine was ready first; `onReady` covers the usual order.
     engine?.setObjectsSnap(objectsSnap);
     themeMode = resolveThemeMode(themePreference, systemPrefersDark());
@@ -1495,11 +1626,41 @@
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
-    } else if (mod && event.shiftKey && key === "p" && !presenting) {
+    } else if (mod && event.altKey && event.code === "KeyP" && !presenting) {
+      // Was Ctrl/Cmd+Shift+P; the palette (Track B, Part 1) takes that chord now, matching
+      // the oracle (`CommandPalette.tsx@1118751f:145-146`). Ctrl/Cmd+Alt+P is unused in the
+      // oracle's own keymap and not reserved by Chrome or Firefox — the same kind of chord
+      // this project already trusts for copy/paste styles (Ctrl/Cmd+Alt+C/V) — and matched
+      // on `code`, not `key`, for the same reason as Alt+S above: on a Mac, Option+P types "π".
       event.preventDefault();
       void enterPresent();
+    } else if (mod && (event.key === "/" || (event.shiftKey && key === "p"))) {
+      // Ctrl/Cmd+/ and Ctrl/Cmd+Shift+P open the command palette — the oracle's own
+      // toggle chord (`CommandPalette.tsx@1118751f:145-146`), free for this once Present
+      // moved to Ctrl/Cmd+Alt+P above.
+      event.preventDefault();
+      showPalette = true;
     }
   }
+
+  const paletteHost = $derived.by((): PaletteHost => ({
+    setTool: handleToolSelect,
+    insertShape: insertShapeAtViewportCentre,
+    zoomIn: () => engine?.zoomIn(),
+    zoomOut: () => engine?.zoomOut(),
+    zoomReset: () => engine?.zoomReset(),
+    fit: () => engine?.fit(),
+    zoomToSelection: () => engine?.zoomToSelection(),
+    pickTheme,
+    toggleGrid: () => pickGrid({ enabled: !grid.enabled }),
+    toggleObjectsSnap: flipObjectsSnap,
+    toggleFocusMode,
+    openExport: () => (showExport = true),
+    enterPresent: () => void enterPresent(),
+    presets: allPresets(userPresets).map((preset) => ({ id: preset.id, name: preset.name })),
+    applyStylePreset: applyStylePresetById,
+  }));
+  const paletteCommands = $derived(buildCommands(paletteHost));
 </script>
 
 <svelte:window onkeydown={onAppShortcut} onresize={onWindowResize} />
@@ -1510,6 +1671,7 @@
   class="draw-chrome"
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
+    onFocusModeKeydown(e);
     if (!onPresentKeydown(e)) onStyleShortcut(e);
   }}
   ondragover={onChromeDragOver}
@@ -1534,10 +1696,12 @@
             {canvasBackground}
             {grid}
             {objectsSnap}
+            {focusModeEnabled}
             onPickTheme={pickTheme}
             onPickCanvasBackground={pickCanvasBackground}
             onPickGrid={pickGrid}
             onToggleObjectsSnap={flipObjectsSnap}
+            onToggleFocusMode={toggleFocusMode}
             onOpenExport={() => (showExport = true)}
             onOpenMermaid={() => (showMermaid = true)}
             onOpenShare={() => (showShare = true)}
@@ -1606,6 +1770,10 @@
       onNotice={(notice) => notify(NOTICE_TEXT[notice])}
       onRequestTextEdit={(request) => {
         textEdit = request;
+        if (pendingKeyboardTextEdit) {
+          pendingKeyboardTextEdit = false;
+          if (focusModeEnabled) enterFocusMode();
+        }
         if (realtime) startPreviews();
       }}
       onContextMenu={(point, kind) => {
@@ -1790,6 +1958,12 @@
       {engine}
       {themeMode}
       {openPicker}
+      builtinPresets={BUILTIN_PRESETS}
+      {userPresets}
+      onApplyPreset={(preset) => applyStyle(preset.style)}
+      onSavePreset={saveCurrentAsPreset}
+      onRenamePreset={renamePreset}
+      onDeletePreset={deletePreset}
       onOpenPicker={(kind) => (openPicker = kind)}
       onApply={applyStyle}
       onPreview={previewStyle}
@@ -1829,6 +2003,7 @@
         onSave={saveAsFile}
         onDone={(boardPress) => {
           textEdit = null;
+          exitFocusMode();
           if (boardPress) {
             pressEndedEdit = true;
             // Only for the press under way: one that never reached the board's handler
@@ -1853,6 +2028,8 @@
       bind:showMermaid
       bind:showShare
       bind:showShortcuts
+      bind:showPalette
+      {paletteCommands}
       onCopyStyles={copyStyles}
       onEditEmbedLink={(id) => {
         const url = embedFrames.find((frame) => frame.id === id)?.url;

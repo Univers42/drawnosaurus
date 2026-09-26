@@ -3,10 +3,12 @@
   import type { DrawElementDto } from "@drawnosaurus/contract";
   import type { ConnectionStatus, PeerCursor } from "../realtime/realtimeClient.ts";
   import type { MenuElementInfo } from "./menu.ts";
+  import type { Command } from "./commandPalette.ts";
   import DrawExportModal from "./DrawExportModal.svelte";
   import DrawMermaidModal from "./DrawMermaidModal.svelte";
   import DrawShareModal from "./DrawShareModal.svelte";
   import DrawShortcutsDialog from "./DrawShortcutsDialog.svelte";
+  import DrawCommandPalette from "./DrawCommandPalette.svelte";
   import DrawContextMenu from "./DrawContextMenu.svelte";
   import VectorizeDialog from "./VectorizeDialog.svelte";
 
@@ -21,6 +23,8 @@
     showMermaid = $bindable(false),
     showShare = $bindable(false),
     showShortcuts = $bindable(false),
+    showPalette = $bindable(false),
+    paletteCommands = [],
     onInsertMermaid,
     onEditEmbedLink,
     onCopyStyles,
@@ -35,6 +39,8 @@
     showMermaid: boolean;
     showShare: boolean;
     showShortcuts: boolean;
+    showPalette: boolean;
+    paletteCommands?: Command[];
     onInsertMermaid: (elements: DrawElementDto[]) => void;
     onEditEmbedLink: (id: string) => void;
     onCopyStyles: () => void;
@@ -54,6 +60,7 @@
 
     if (menu) menu = null;
     else if (vectorizeId) vectorizeId = null;
+    else if (showPalette) showPalette = false;
     else if (showExport) showExport = false;
     else if (showMermaid) showMermaid = false;
     else if (showShare) showShare = false;
@@ -81,6 +88,10 @@
 
 {#if showShortcuts}
   <DrawShortcutsDialog onClose={() => (showShortcuts = false)} />
+{/if}
+
+{#if showPalette}
+  <DrawCommandPalette commands={paletteCommands} onClose={() => (showPalette = false)} />
 {/if}
 
 {#if vectorizeId}
