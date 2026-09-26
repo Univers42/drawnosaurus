@@ -52,11 +52,11 @@ test("heads chosen with nothing selected are the next arrows', and never a line'
   const board = await openBoard(page);
   await pickTool(page, "Arrow");
   await panel(page).getByRole("radio", { name: "Start Triangle" }).click();
-  await panel(page).getByRole("radio", { name: "End Dot" }).click();
+  await panel(page).getByRole("radio", { name: "End Circle" }).click();
 
   for (const row of [0, 1]) {
     const arrow = await drawArrow(board, "Arrow", row);
-    expect(arrow).toMatchObject({ startArrowhead: "triangle", endArrowhead: "dot" });
+    expect(arrow).toMatchObject({ startArrowhead: "triangle", endArrowhead: "circle" });
   }
   const line = await drawArrow(board, "Line", 2);
   expect(line.startArrowhead ?? null).toBeNull();
