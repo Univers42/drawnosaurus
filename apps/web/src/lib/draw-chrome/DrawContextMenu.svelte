@@ -14,6 +14,7 @@
     onPickArrowhead,
     onRun,
     onCopyStyles,
+    onFit,
     onEditLink,
     onVectorize,
     onClose,
@@ -27,6 +28,7 @@
     onRun: (action: (engine: DrawEngine, at: { x: number; y: number }) => void) => void;
     /** The keyboard's copy, so both say "Copied styles." (`actionStyles.ts@1118751f:73`). */
     onCopyStyles: () => void;
+    onFit: () => void;
     onEditLink: (id: string) => void;
     onVectorize: (id: string) => void;
     onClose: () => void;
@@ -250,7 +252,7 @@
         <span>Unlock all</span>
       </button>
     {/if}
-    <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.fit())}>
+    <button type="button" role="menuitem" onclick={onFit}>
       <span>Zoom to fit</span><span class="hint">⇧1</span>
     </button>
   {/if}

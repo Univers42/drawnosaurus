@@ -540,6 +540,7 @@
   }
 
   let canvasHost: HTMLDivElement | undefined = $state();
+  let chromeRoot: HTMLDivElement | undefined = $state();
   let imageInput: HTMLInputElement | undefined = $state();
   /**
    * Why the last image was refused, if it was.
@@ -986,13 +987,25 @@
     syncPeers();
   }
 
-  // What a flowchart reveal keeps clear of, measured the oracle's way at the keypress
-  // that reveals (`App.viewport.ts@1118751f:502`) — the chrome may have moved since the
-  // last one. The engine eases the camera itself, for creation, commit and walk alike.
-  function measureRevealRoom(event: KeyboardEvent & { currentTarget: HTMLElement }): void {
-    if (!engine || !canvasHost) return;
-    if (!event.key.startsWith("Arrow") || !(event.ctrlKey || event.metaKey || event.altKey)) return;
-    engine.setViewportOffsets(measureViewportOffsets(event.currentTarget, canvasHost));
+  // What a flowchart reveal or a fit keeps clear of, measured the oracle's way at the
+  // keypress or click that moves the camera (`App.viewport.ts@1118751f:502`) — the chrome
+  // may have moved since the last one. The engine eases the camera itself.
+  function measureRoom(): void {
+    if (!engine || !canvasHost || !chromeRoot) return;
+    engine.setViewportOffsets(measureViewportOffsets(chromeRoot, canvasHost));
+  }
+
+  function measureRevealRoom(event: KeyboardEvent): void {
+    const reveal =
+      event.key.startsWith("Arrow") && (event.ctrlKey || event.metaKey || event.altKey);
+    const fit = event.shiftKey && /^Digit[123]$/.test(event.code);
+    if (reveal || fit) measureRoom();
+  }
+
+  // Shift+1, Shift+2 and Shift+3 by click: the zoom bar, the board menu and the palette.
+  function zoomToFit(): void {
+    measureRoom();
+    engine?.zoomToFit();
   }
 
   // Extra the oracle lacks: a small floating strip beside the node being created offers
@@ -1662,8 +1675,15 @@
     zoomIn: () => engine?.zoomIn(),
     zoomOut: () => engine?.zoomOut(),
     zoomReset: () => engine?.zoomReset(),
-    fit: () => engine?.fit(),
-    zoomToSelection: () => engine?.zoomToSelection(),
+    zoomToFit,
+    zoomToFitSelectionInViewport: () => {
+      measureRoom();
+      engine?.zoomToFitSelectionInViewport();
+    },
+    zoomToFitSelection: () => {
+      measureRoom();
+      engine?.zoomToFitSelection();
+    },
     pickTheme,
     toggleGrid: () => pickGrid({ enabled: !grid.enabled }),
     toggleObjectsSnap: flipObjectsSnap,
@@ -1682,6 +1702,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
+  bind:this={chromeRoot}
   class="draw-chrome"
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
@@ -1999,7 +2020,7 @@
   {/if}
 
   {#if !presenting}
-    <DrawZoomBar {engine} {zoom} {contentVisible} />
+    <DrawZoomBar {engine} {zoom} {contentVisible} onFit={zoomToFit} />
   {/if}
 
   {#if presenting}
@@ -2061,6 +2082,7 @@
       bind:showPalette
       {paletteCommands}
       onCopyStyles={copyStyles}
+      onFit={zoomToFit}
       onEditEmbedLink={(id) => {
         const url = embedFrames.find((frame) => frame.id === id)?.url;
         if (url) editingEmbed = { id, url };

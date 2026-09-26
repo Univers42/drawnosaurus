@@ -120,8 +120,9 @@ export interface PaletteHost {
   zoomIn: () => void;
   zoomOut: () => void;
   zoomReset: () => void;
-  fit: () => void;
-  zoomToSelection: () => void;
+  zoomToFit: () => void;
+  zoomToFitSelectionInViewport: () => void;
+  zoomToFitSelection: () => void;
   pickTheme: (mode: ThemePreference) => void;
   toggleGrid: () => void;
   toggleObjectsSnap: () => void;
@@ -202,17 +203,24 @@ export function buildCommands(host: PaletteHost): Command[] {
     },
     {
       id: "view:fit",
-      label: "Zoom to fit",
+      label: "Zoom to fit all elements",
       category: "View",
       shortcut: shortcutLabel("Shift+1"),
-      run: host.fit,
+      run: host.zoomToFit,
+    },
+    {
+      id: "view:zoomToFitViewport",
+      label: "Zoom to fit in viewport",
+      category: "View",
+      shortcut: shortcutLabel("Shift+2"),
+      run: host.zoomToFitSelectionInViewport,
     },
     {
       id: "view:zoomToSelection",
       label: "Zoom to selection",
       category: "View",
-      shortcut: shortcutLabel("Shift+2"),
-      run: host.zoomToSelection,
+      shortcut: shortcutLabel("Shift+3"),
+      run: host.zoomToFitSelection,
     },
     {
       id: "view:grid",

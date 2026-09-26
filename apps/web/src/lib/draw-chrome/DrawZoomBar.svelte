@@ -6,10 +6,13 @@
     engine,
     zoom,
     contentVisible,
+    onFit,
   }: {
     engine: DrawEngine | null;
     zoom: number;
     contentVisible: boolean;
+    /** Shift+1, measured against the chrome where it is now. */
+    onFit: () => void;
   } = $props();
 
   function holdFocus(event: MouseEvent): void {
@@ -57,7 +60,7 @@
       onmousedown={holdFocus}
       aria-label="Zoom to fit (⇧1)"
       title="Zoom to fit — ⇧1"
-      onclick={() => engine?.fit()}
+      onclick={onFit}
     >
       <Icon name="fit" size={15} />
     </button>

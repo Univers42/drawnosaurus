@@ -31,6 +31,7 @@
     onInsertTemplate,
     onEditEmbedLink,
     onCopyStyles,
+    onFit,
   }: {
     engine: DrawEngine | null;
     slug?: string;
@@ -49,6 +50,8 @@
     onInsertTemplate: (json: string) => void;
     onEditEmbedLink: (id: string) => void;
     onCopyStyles: () => void;
+    /** Shift+1, measured against the chrome where it is now. */
+    onFit: () => void;
   } = $props();
 
   /** The image the Vectorize dialog is open for — opened from the context menu only. */
@@ -127,6 +130,10 @@
     onCopyStyles={() => {
       menu = null;
       onCopyStyles();
+    }}
+    onFit={() => {
+      menu = null;
+      onFit();
     }}
     onEditLink={(id) => {
       menu = null;

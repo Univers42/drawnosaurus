@@ -125,8 +125,9 @@ describe("buildCommands", () => {
       zoomIn: vi.fn(),
       zoomOut: vi.fn(),
       zoomReset: vi.fn(),
-      fit: vi.fn(),
-      zoomToSelection: vi.fn(),
+      zoomToFit: vi.fn(),
+      zoomToFitSelectionInViewport: vi.fn(),
+      zoomToFitSelection: vi.fn(),
       pickTheme: vi.fn(),
       toggleGrid: vi.fn(),
       toggleObjectsSnap: vi.fn(),
@@ -179,9 +180,13 @@ describe("buildCommands", () => {
     const commands = buildCommands(h);
     commands.find((c) => c.id === "view:zoomIn")!.run();
     commands.find((c) => c.id === "view:fit")!.run();
+    commands.find((c) => c.id === "view:zoomToFitViewport")!.run();
+    commands.find((c) => c.id === "view:zoomToSelection")!.run();
     commands.find((c) => c.id === "view:present")!.run();
     expect(h.zoomIn).toHaveBeenCalledOnce();
-    expect(h.fit).toHaveBeenCalledOnce();
+    expect(h.zoomToFit).toHaveBeenCalledOnce();
+    expect(h.zoomToFitSelectionInViewport).toHaveBeenCalledOnce();
+    expect(h.zoomToFitSelection).toHaveBeenCalledOnce();
     expect(h.enterPresent).toHaveBeenCalledOnce();
   });
 
