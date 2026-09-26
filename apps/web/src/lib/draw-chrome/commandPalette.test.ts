@@ -7,7 +7,10 @@ import {
   paletteGroups,
   type Command,
   type PaletteHost,
+  type PaletteSelection,
 } from "./commandPalette.ts";
+import type { DrawEngine } from "@osionos/draw-engine/engine";
+import type { ShapeActions } from "./shapeActions.ts";
 import { ALL_TOOL_DEFS } from "./tools.ts";
 import { FIGURE_KIND_OPTIONS } from "./inspector.ts";
 
@@ -137,8 +140,46 @@ describe("buildCommands", () => {
       enterPresent: vi.fn(),
       presets: [],
       applyStylePreset: vi.fn(),
+      selection: null,
+      run: vi.fn(),
+      applyStyle: vi.fn(),
+      openPicker: vi.fn(),
+      openShapeSwitch: vi.fn(),
+      copyStyles: vi.fn(),
+      stepFontSize: vi.fn(),
       ...overrides,
     };
+  }
+
+  /** A selection the panel shows every row for, but for the rows in `off`. */
+  function selected(
+    off: (keyof ShapeActions)[] = [],
+    element: Partial<PaletteSelection["element"]> = {},
+  ): PaletteSelection {
+    const can = new Proxy({} as ShapeActions, {
+      get: (_, row) => !off.includes(row as keyof ShapeActions),
+    });
+    return {
+      can,
+      element: { locked: false, multi: true, grouped: false, ...element },
+      switchable: true,
+    };
+  }
+
+  /** The engine calls a command made, as `[method, ...args]`. */
+  function engineCalls(h: PaletteHost, id: string): unknown[][] {
+    const calls: unknown[][] = [];
+    const engine = new Proxy({} as DrawEngine, {
+      get:
+        (_, method) =>
+        (...args: unknown[]) =>
+          calls.push([method, ...args]),
+    });
+    vi.mocked(h.run).mockImplementation((action) => action(engine));
+    const command = buildCommands(h).find((c) => c.id === id);
+    expect(command, id).toBeDefined();
+    command!.run();
+    return calls;
   }
 
   it("has no duplicate ids", () => {
@@ -205,5 +246,50 @@ describe("buildCommands", () => {
     expect(preset?.category).toBe("Style presets");
     preset!.run();
     expect(h.applyStylePreset).toHaveBeenCalledWith("sketch");
+  });
+
+  it("offers nothing to act on with nothing selected", () => {
+    const ids = buildCommands(host()).map((c) => c.id);
+    expect(ids.filter((id) => /^(element|style):/.test(id))).toEqual([]);
+    expect(ids).toContain("editor:undo");
+  });
+
+  it("offers the oracle's element commands, each running its engine action", () => {
+    const h = host({ selection: selected() });
+    expect(engineCalls(h, "element:centerVertically")).toEqual([["alignSelection", "centerY"]]);
+    expect(engineCalls(h, "element:centerHorizontally")).toEqual([["alignSelection", "centerX"]]);
+    expect(engineCalls(h, "element:bringToFront")).toEqual([["reorderSelection", "front"]]);
+    expect(engineCalls(h, "element:flipVertical")).toEqual([["flipSelection", "vertical"]]);
+    expect(engineCalls(h, "element:group")).toEqual([["groupSelection"]]);
+    expect(engineCalls(h, "editor:undo")).toEqual([["undo"]]);
+  });
+
+  it("offers group or ungroup, and lock or unlock, as the context menu does", () => {
+    const labels = (selection: PaletteSelection) =>
+      buildCommands(host({ selection })).map((c) => c.label);
+    expect(labels(selected())).toEqual(expect.arrayContaining(["Group selection", "Lock"]));
+    expect(labels(selected())).not.toContain("Ungroup selection");
+    const group = labels(selected([], { grouped: true, locked: true }));
+    expect(group).toEqual(expect.arrayContaining(["Ungroup selection", "Unlock"]));
+    expect(group).not.toContain("Group selection");
+  });
+
+  it("offers a style row only where the panel shows it, applied as the panel applies it", () => {
+    const h = host({ selection: selected(["strokeWidth", "align"]) });
+    const commands = buildCommands(h);
+    expect(commands.filter((c) => c.label.startsWith("Stroke width"))).toEqual([]);
+    expect(commands.filter((c) => c.id.startsWith("element:align"))).toEqual([]);
+    commands.find((c) => c.label === "Fill: Solid")!.run();
+    commands.find((c) => c.label === "Edges: Round")!.run();
+    expect(vi.mocked(h.applyStyle).mock.calls).toEqual([
+      [{ fillStyle: "solid" }],
+      [{ roundness: 8 }],
+    ]);
+    expect(engineCalls(h, "style:textAlign:center")).toEqual([["setTextAlign", "center"]]);
+  });
+
+  it("has no duplicate ids with everything offered", () => {
+    const ids = buildCommands(host({ selection: selected() })).map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

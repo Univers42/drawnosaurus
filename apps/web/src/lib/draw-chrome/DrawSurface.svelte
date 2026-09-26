@@ -60,7 +60,7 @@
     type ThemePreference,
   } from "./theme.ts";
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
-  import { buildCommands, type PaletteHost } from "./commandPalette.ts";
+  import { buildCommands, type PaletteHost, type PaletteSelection } from "./commandPalette.ts";
   import {
     BUILTIN_PRESETS,
     allPresets,
@@ -1718,7 +1718,18 @@
     }
   }
 
-  const paletteHost = $derived.by((): PaletteHost => ({
+  function paletteSelection(): PaletteSelection | null {
+    if (!engine) return null;
+    const element = menuElementFromSelection(
+      engine.getSelectedElements(),
+      engine.selectionLocked(),
+      engine.selectionIsGroup(),
+    );
+    return element && { can: shapeActions, element, switchable: engine.canConvertSelection() };
+  }
+
+  /** Built as the palette opens, so what it offers is what is selected then. */
+  const paletteHost = (): PaletteHost => ({
     setTool: handleToolSelect,
     insertShape: insertShapeAtViewportCentre,
     insertFigure,
@@ -1743,8 +1754,22 @@
     enterPresent: () => void enterPresent(),
     presets: allPresets(userPresets).map((preset) => ({ id: preset.id, name: preset.name })),
     applyStylePreset: applyStylePresetById,
-  }));
-  const paletteCommands = $derived(buildCommands(paletteHost));
+    selection: paletteSelection(),
+    run: (action) => {
+      if (!engine) return;
+      action(engine);
+      refreshStyle();
+    },
+    applyStyle,
+    openPicker: (kind) => (openPicker = kind),
+    openShapeSwitch: () => {
+      engine?.beginConversion();
+      placeShapeSwitch();
+    },
+    copyStyles,
+    stepFontSize,
+  });
+  const paletteCommands = $derived(showPalette ? buildCommands(paletteHost()) : []);
 </script>
 
 <svelte:window onkeydown={onAppShortcut} onresize={onWindowResize} />

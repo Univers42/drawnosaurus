@@ -6,11 +6,20 @@
  * each entry).
  */
 
-import type { DrawTool, FigureParams } from "@osionos/draw-engine/types";
+import type { DrawEngine } from "@osionos/draw-engine/engine";
+import type { DrawTool, FigureParams, StylePatch } from "@osionos/draw-engine/types";
 import { ALL_TOOL_DEFS, hotkeyLabel } from "./tools.ts";
 import { shortcutLabel } from "./shortcuts.ts";
 import { SHORTCUT_REGISTRY, shortcutFor } from "./shortcutRegistry.ts";
-import { FIGURE_KIND_OPTIONS } from "./inspector.ts";
+import {
+  ARROW_TYPES,
+  FIGURE_KIND_OPTIONS,
+  roundnessFor,
+  TEXT_ALIGNS,
+  VERTICAL_ALIGNS,
+} from "./inspector.ts";
+import type { MenuElementInfo } from "./menu.ts";
+import type { ShapeActions } from "./shapeActions.ts";
 import type { ThemePreference } from "./theme.ts";
 
 export interface Command {
@@ -112,6 +121,15 @@ export interface PresetSummary {
   name: string;
 }
 
+/** What is selected, as the panel (`getShapeActions`) and the context menu
+ *  (`menuElementFromSelection`) already read it — the palette asks nothing of its own. */
+export interface PaletteSelection {
+  can: ShapeActions;
+  element: Pick<MenuElementInfo, "locked" | "multi" | "grouped">;
+  /** Tab's shape switch has something to switch. */
+  switchable: boolean;
+}
+
 /** Every real host action the palette can run, gathered in one bag so `buildCommands` is a
  *  pure function of it — testable with plain spies, no engine or DOM. */
 export interface PaletteHost {
@@ -133,6 +151,283 @@ export interface PaletteHost {
   enterPresent: () => void;
   presets: readonly PresetSummary[];
   applyStylePreset: (id: string) => void;
+  /** `null` with nothing selected, which leaves the Elements and Style commands out, as
+   *  the oracle's predicate does (`CommandPalette.tsx@1118751f:347-356`). */
+  selection: PaletteSelection | null;
+  /** An engine action, run as the context menu and the panel run theirs. */
+  run: (action: (engine: DrawEngine) => void) => void;
+  applyStyle: (patch: StylePatch) => void;
+  openPicker: (kind: "stroke" | "background") => void;
+  openShapeSwitch: () => void;
+  copyStyles: () => void;
+  stepFontSize: (increase: boolean) => void;
+}
+
+type Offer = Omit<Command, "category"> & { when?: boolean };
+
+/** A command's `run` for an engine action. */
+function engineRun(host: PaletteHost, action: (engine: DrawEngine) => void): () => void {
+  return () => host.run(action);
+}
+
+/** `offers` whose `when` holds, in `category`. */
+function offered(category: string, offers: Offer[]): Command[] {
+  return offers
+    .filter((offer) => offer.when !== false)
+    .map(({ when: _when, ...command }) => ({ ...command, category }));
+}
+
+/**
+ * The oracle's Elements commands this app has, in its order and with its labels
+ * (`CommandPalette.tsx@1118751f:310-341`, `:452-500`; `en.json`), each offered when the
+ * panel or the context menu would offer it.
+ */
+function elementCommands(host: PaletteHost, { can, element, switchable }: PaletteSelection) {
+  return offered("Elements", [
+    {
+      id: "element:group",
+      label: "Group selection",
+      shortcut: shortcutFor("editor.group"),
+      when: element.multi && !element.grouped,
+      run: engineRun(host, (e) => e.groupSelection()),
+    },
+    {
+      id: "element:ungroup",
+      label: "Ungroup selection",
+      shortcut: shortcutFor("editor.ungroup"),
+      when: element.grouped,
+      run: engineRun(host, (e) => e.ungroupSelection()),
+    },
+    {
+      id: "element:cut",
+      label: "Cut",
+      shortcut: shortcutFor("editor.cut"),
+      run: engineRun(host, (e) => e.cutSelection()),
+    },
+    {
+      id: "element:copy",
+      label: "Copy",
+      shortcut: shortcutFor("editor.copy"),
+      run: engineRun(host, (e) => e.copySelection()),
+    },
+    {
+      id: "element:delete",
+      label: "Delete",
+      shortcut: shortcutFor("editor.delete"),
+      run: engineRun(host, (e) => e.deleteSelection()),
+    },
+    {
+      id: "element:copyStyles",
+      label: "Copy styles",
+      shortcut: shortcutFor("editor.copyStyles"),
+      run: host.copyStyles,
+    },
+    {
+      id: "element:pasteStyles",
+      label: "Paste styles",
+      shortcut: shortcutFor("editor.pasteStyles"),
+      run: engineRun(host, (e) => e.pasteStyles()),
+    },
+    ...(
+      [
+        ["bringToFront", "Bring to front", "front"],
+        ["bringForward", "Bring forward", "forward"],
+        ["sendBackward", "Send backward", "backward"],
+        ["sendToBack", "Send to back", "back"],
+      ] as const
+    ).map(([id, label, to]) => ({
+      id: `element:${id}`,
+      label,
+      shortcut: shortcutFor(`editor.${id}`),
+      when: can.layers,
+      run: engineRun(host, (e) => e.reorderSelection(to)),
+    })),
+    ...(
+      [
+        ["alignTop", "Align top", "top"],
+        ["alignBottom", "Align bottom", "bottom"],
+        ["alignLeft", "Align left", "left"],
+        ["alignRight", "Align right", "right"],
+        ["centerVertically", "Center vertically", "centerY"],
+        ["centerHorizontally", "Center horizontally", "centerX"],
+      ] as const
+    ).map(([id, label, mode]) => ({
+      id: `element:${id}`,
+      label,
+      shortcut: REGISTRY_IDS.has(`editor.${id}`) ? shortcutFor(`editor.${id}`) : undefined,
+      when: can.align,
+      run: engineRun(host, (e) => e.alignSelection(mode)),
+    })),
+    {
+      id: "element:duplicate",
+      label: "Duplicate",
+      shortcut: shortcutFor("editor.duplicate"),
+      run: engineRun(host, (e) => e.duplicateSelection()),
+    },
+    {
+      id: "element:flipHorizontal",
+      label: "Flip horizontal",
+      shortcut: shortcutFor("editor.flipHorizontal"),
+      when: can.mirror,
+      run: engineRun(host, (e) => e.flipSelection("horizontal")),
+    },
+    {
+      id: "element:flipVertical",
+      label: "Flip vertical",
+      shortcut: shortcutFor("editor.flipVertical"),
+      when: can.mirror,
+      run: engineRun(host, (e) => e.flipSelection("vertical")),
+    },
+    {
+      id: "element:increaseFontSize",
+      label: "Increase font size",
+      shortcut: shortcutFor("editor.increaseFontSize"),
+      when: can.text,
+      run: () => host.stepFontSize(true),
+    },
+    {
+      id: "element:decreaseFontSize",
+      label: "Decrease font size",
+      shortcut: shortcutFor("editor.decreaseFontSize"),
+      when: can.text,
+      run: () => host.stepFontSize(false),
+    },
+    {
+      id: "element:shapeSwitch",
+      label: "Switch shape",
+      shortcut: shortcutFor("tool.shapeSwitch"),
+      when: switchable,
+      run: host.openShapeSwitch,
+    },
+    {
+      id: "element:changeStroke",
+      label: "Change stroke color",
+      shortcut: shortcutFor("editor.showStroke"),
+      keywords: ["color", "outline"],
+      when: can.strokeColor,
+      run: () => host.openPicker("stroke"),
+    },
+    {
+      id: "element:changeBackground",
+      label: "Change background color",
+      shortcut: shortcutFor("editor.showBackground"),
+      keywords: ["color", "fill"],
+      when: can.backgroundColor,
+      run: () => host.openPicker("background"),
+    },
+    {
+      id: "element:lock",
+      label: element.locked ? "Unlock" : "Lock",
+      shortcut: shortcutFor("editor.toggleLock"),
+      run: engineRun(host, (e) => e.toggleLockSelection()),
+    },
+  ]);
+}
+
+/**
+ * Every choice of the panel's rows, one command each — beyond the oracle's palette, which
+ * leaves them to its panel, because here the panel is out of the keyboard's reach while a
+ * shape is selected: Tab is the shape switch's. Named as the oracle names the buttons
+ * (`en.json`), offered where the panel shows the row, applied as the panel applies it.
+ */
+function styleCommands(host: PaletteHost, { can }: PaletteSelection): Command[] {
+  const rows: { row: keyof ShapeActions; name: string; picks: [string, StylePatch][] }[] = [
+    {
+      row: "fill",
+      name: "Fill",
+      picks: [
+        ["Hachure", { fillStyle: "hachure" }],
+        ["Cross-hatch", { fillStyle: "cross-hatch" }],
+        ["Solid", { fillStyle: "solid" }],
+      ],
+    },
+    {
+      row: "strokeWidth",
+      name: "Stroke width",
+      picks: [
+        ["Thin", { strokeWidth: 1 }],
+        ["Bold", { strokeWidth: 2 }],
+        ["Extra bold", { strokeWidth: 4 }],
+      ],
+    },
+    {
+      row: "strokeStyle",
+      name: "Stroke style",
+      picks: [
+        ["Solid", { strokeStyle: "solid" }],
+        ["Dashed", { strokeStyle: "dashed" }],
+        ["Dotted", { strokeStyle: "dotted" }],
+      ],
+    },
+    {
+      row: "sloppiness",
+      name: "Sloppiness",
+      picks: [
+        ["Architect", { roughness: 0 }],
+        ["Artist", { roughness: 1 }],
+        ["Cartoonist", { roughness: 2 }],
+      ],
+    },
+    {
+      row: "roundness",
+      name: "Edges",
+      picks: [
+        ["Sharp", { roundness: roundnessFor("sharp") }],
+        ["Round", { roundness: roundnessFor("round") }],
+      ],
+    },
+    {
+      row: "text",
+      name: "Font size",
+      picks: [
+        ["Small", { fontSize: 16 }],
+        ["Medium", { fontSize: 20 }],
+        ["Large", { fontSize: 28 }],
+        ["Very large", { fontSize: 36 }],
+      ],
+    },
+  ];
+  const commands = rows
+    .filter(({ row }) => can[row])
+    .flatMap(({ name, picks }) =>
+      picks.map(([pick, patch]) => ({
+        id: `style:${name}:${pick}`,
+        label: `${name}: ${pick}`,
+        category: "Style",
+        run: () => host.applyStyle(patch),
+      })),
+    );
+  // The rows the panel sets through the engine rather than a style patch.
+  return [
+    ...commands,
+    ...offered(
+      "Style",
+      TEXT_ALIGNS.map(({ label, value }) => ({
+        id: `style:textAlign:${value}`,
+        label,
+        when: can.textAlign,
+        run: engineRun(host, (e) => e.setTextAlign(value)),
+      })),
+    ),
+    ...offered(
+      "Style",
+      VERTICAL_ALIGNS.map(({ label, value }) => ({
+        id: `style:verticalAlign:${value}`,
+        label,
+        when: can.verticalAlign,
+        run: engineRun(host, (e) => e.setVerticalAlign(value)),
+      })),
+    ),
+    ...offered(
+      "Style",
+      ARROW_TYPES.map(({ label, value }) => ({
+        id: `style:arrowType:${value}`,
+        label,
+        when: can.arrowType,
+        run: engineRun(host, (e) => e.setArrowType(value)),
+      })),
+    ),
+  ];
 }
 
 const REGISTRY_IDS = new Set(SHORTCUT_REGISTRY.map((entry) => entry.id));
@@ -150,14 +445,43 @@ function registryShortcut(id: string, fallback: string | undefined): string | un
  * hardcoded duplicate of what `DrawSurface.svelte` does.
  */
 export function buildCommands(host: PaletteHost): Command[] {
-  const commands: Command[] = ALL_TOOL_DEFS.map((tool) => ({
-    id: `tool:${tool.tool}`,
-    label: tool.label,
-    category: "Tools",
-    shortcut: registryShortcut(`tool.${tool.tool}`, hotkeyLabel(tool)),
-    keywords: [tool.tool],
-    run: () => host.setTool(tool.tool),
-  }));
+  const commands: Command[] = [];
+  if (host.selection) {
+    commands.push(...elementCommands(host, host.selection), ...styleCommands(host, host.selection));
+  }
+  commands.push(
+    ...offered("Editor", [
+      {
+        id: "editor:undo",
+        label: "Undo",
+        shortcut: shortcutFor("editor.undo"),
+        run: engineRun(host, (e) => e.undo()),
+      },
+      {
+        id: "editor:redo",
+        label: "Redo",
+        shortcut: shortcutFor("editor.redo"),
+        run: engineRun(host, (e) => e.redo()),
+      },
+      {
+        id: "editor:selectAll",
+        label: "Select all",
+        shortcut: shortcutFor("editor.selectAll"),
+        run: engineRun(host, (e) => e.selectAll()),
+      },
+      { id: "editor:unlockAll", label: "Unlock all", run: engineRun(host, (e) => e.unlockAll()) },
+    ]),
+  );
+  commands.push(
+    ...ALL_TOOL_DEFS.map((tool) => ({
+      id: `tool:${tool.tool}`,
+      label: tool.label,
+      category: "Tools",
+      shortcut: registryShortcut(`tool.${tool.tool}`, hotkeyLabel(tool)),
+      keywords: [tool.tool],
+      run: () => host.setTool(tool.tool),
+    })),
+  );
 
   commands.push(
     {
