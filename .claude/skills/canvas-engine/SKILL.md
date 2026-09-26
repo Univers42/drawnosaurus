@@ -60,6 +60,9 @@ world  = (screen - (x, y)) / scale     screen_to_world
     call `page.emulateMedia({ reducedMotion: "reduce" })`, or wait on
     `waitForCameraStable` (`e2e/board.ts`).
   - The wheel is instant, as in the oracle.
+  - The chrome's own eases (`camera.ts` › `animateCamera`: focus mode, present, follow)
+    pass `source: engine` and stop once the engine moves the camera itself, e.g. a fit.
+    Specs wait for a landing with `waitForCameraLanded` (camera = `engine.cameraTarget`).
 
 ## Rendering budget
 
@@ -101,6 +104,12 @@ world  = (screen - (x, y)) / scale     screen_to_world
   `shortcutRegistry.test.ts` (parse the chord, run it through the handler that owns it —
   `dispatchKeyDown`, `styleShortcut`, `presentKeyAction`, `appShortcut`, or `switchKey` —
   and assert it does what the label says).
+- Tab is the shape switch's while `engine.canConvertSelection()` (`shapeSwitch.ts`), so the
+  panel is out of the keyboard's reach then: every panel choice is also a palette command,
+  gated on the same `getShapeActions`. Proof without a pointer event:
+  `e2e/keyboardFlowchart.spec.ts`, `e2e/paletteStyle.spec.ts` (`locator.focus()` the board).
+- A middle-button pan drops the paste Linux fires on its release (`host/pointerInput.ts`,
+  window capture phase); the engine would paste its own clipboard for any unparsed text.
 
 ## Arrow bindings
 
