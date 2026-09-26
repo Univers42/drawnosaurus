@@ -25,6 +25,7 @@ import { appShortcut, styleShortcut } from "./shortcuts.ts";
 import { presentKeyAction } from "./presentation.ts";
 import { switchKey } from "./shapeSwitch.ts";
 import { buildCommands, type PaletteHost } from "./commandPalette.ts";
+import type { ShapeActions } from "./shapeActions.ts";
 
 function entry(id: string): ShortcutEntry {
   const found = SHORTCUT_REGISTRY.find((candidate) => candidate.id === id);
@@ -518,8 +519,31 @@ describe("the command palette prints this registry's own text", () => {
     enterPresent: () => {},
     presets: [],
     applyStylePreset: () => {},
+    // Everything selected and every panel row shown, so every element command is printed.
+    selection: {
+      can: new Proxy({} as ShapeActions, { get: () => true }),
+      element: { locked: false, multi: true, grouped: false },
+      switchable: true,
+    },
+    run: () => {},
+    applyStyle: () => {},
+    openPicker: () => {},
+    openShapeSwitch: () => {},
+    copyStyles: () => {},
+    stepFontSize: () => {},
   };
   const commands = buildCommands(host);
+
+  it("every element and editor command with a registry entry prints that entry's text", () => {
+    const printed = commands.filter((c) => /^(element|editor):/.test(c.id));
+    expect(printed.length).toBeGreaterThan(20);
+    for (const command of printed) {
+      const registryId = `editor.${command.id.split(":")[1]}`;
+      if (SHORTCUT_REGISTRY.some((e) => e.id === registryId)) {
+        expect(command.shortcut, command.id).toBe(shortcutFor(registryId));
+      }
+    }
+  });
 
   it("never repeats a command id", () => {
     const ids = commands.map((c) => c.id);
