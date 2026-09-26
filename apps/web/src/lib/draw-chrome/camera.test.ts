@@ -206,6 +206,54 @@ describe("animateCamera", () => {
     expect(clock.pending, "does not schedule past the end").toBe(false);
   });
 
+  /** An engine whose camera the animation drives, and which can start moves of its own. */
+  function fakeEngine(start: { x: number; y: number; scale: number }) {
+    return {
+      camera: start,
+      cameraTarget: start,
+      apply(camera: { x: number; y: number; scale: number }) {
+        this.camera = camera;
+        this.cameraTarget = camera;
+      },
+    };
+  }
+
+  it("stops, and says so, when something else moves the camera", () => {
+    const clock = fakeClock();
+    const engine = fakeEngine({ x: 0, y: 0, scale: 1 });
+    const onDone = vi.fn();
+    animateCamera(engine.camera, { x: 100, y: 0, scale: 1 }, (c) => engine.apply(c), {
+      durationMs: 400,
+      source: engine,
+      onDone,
+      ...clock,
+    });
+    clock.tick(100);
+    const panned = { x: -50, y: 0, scale: 1 };
+    engine.apply(panned);
+    clock.tick(100);
+    expect(engine.camera).toEqual(panned);
+    expect(clock.pending).toBe(false);
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops when the engine starts an eased move of its own, before that move's first frame", () => {
+    const clock = fakeClock();
+    const engine = fakeEngine({ x: 0, y: 0, scale: 1 });
+    animateCamera(engine.camera, { x: 100, y: 0, scale: 1 }, (c) => engine.apply(c), {
+      durationMs: 400,
+      source: engine,
+      ...clock,
+    });
+    clock.tick(100);
+    const before = engine.camera;
+    // A fit: headed somewhere, not there yet.
+    engine.cameraTarget = { x: 10, y: 10, scale: 0.5 };
+    clock.tick(100);
+    expect(engine.camera).toBe(before);
+    expect(clock.pending).toBe(false);
+  });
+
   it("cancel() stops the schedule before it reaches the end", () => {
     const clock = fakeClock();
     const applied: unknown[] = [];

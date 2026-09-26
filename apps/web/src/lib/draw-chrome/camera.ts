@@ -134,6 +134,10 @@ export function setCameraExact(engine: CameraSetter, target: CameraLike): void {
   }
 }
 
+function sameCamera(a: CameraLike, b: CameraLike): boolean {
+  return a.x === b.x && a.y === b.y && a.scale === b.scale;
+}
+
 export interface CameraAnimation {
   cancel(): void;
 }
@@ -143,8 +147,17 @@ export interface AnimateCameraOptions {
   durationMs?: number;
   /** `prefers-reduced-motion`: jump straight to `to` in one step. */
   reducedMotion?: boolean;
-  /** Called once, after the last frame is applied (or at once, for `reducedMotion`). */
+  /** Called once when it stops: after the last frame (at once, for `reducedMotion`), or
+   *  when `source` shows the camera was taken over. */
   onDone?: () => void;
+  /**
+   * The engine the camera belongs to. Given it, the animation yields: it stops, leaving
+   * the camera where it is, as soon as something else has moved it — or has started an
+   * eased move of the engine's own (`cameraTarget` is not the camera), which the next
+   * frame's `panBy` would otherwise cancel. A fit, a zoom or a reveal asked for while
+   * this runs is kept, not undone a frame later.
+   */
+  source?: { readonly camera: CameraLike; readonly cameraTarget: CameraLike };
   raf?: (cb: (time: number) => void) => number;
   caf?: (id: number) => void;
   now?: () => number;
@@ -171,10 +184,20 @@ export function animateCamera(
   const raf = options.raf ?? ((cb: (time: number) => void) => requestAnimationFrame(cb));
   const caf = options.caf ?? ((id: number) => cancelAnimationFrame(id));
   const start = now();
+  const source = options.source;
   let id = 0;
+  let applied: CameraLike | null = null;
   const tick = (): void => {
+    if (source && applied) {
+      const camera = source.camera;
+      if (!sameCamera(camera, applied) || !sameCamera(source.cameraTarget, camera)) {
+        options.onDone?.();
+        return;
+      }
+    }
     const t = clamp((now() - start) / duration, 0, 1);
     apply(lerpCamera(from, to, easeInOutCubic(t)));
+    applied = source?.camera ?? null;
     if (t < 1) {
       id = raf(tick);
     } else {

@@ -1189,11 +1189,14 @@
     if (!engine) return;
     const bounds = boundsOf(engine.getSelectedElements());
     if (!bounds) return;
-    cameraBeforeFocus = engine.camera;
+    // Where the camera is headed, not where it is: Enter pressed while a reveal still
+    // eases would otherwise come back to a camera halfway there.
+    cameraBeforeFocus = engine.cameraTarget;
     const target = focusCamera(bounds, viewportSize(), engine.camera);
     focusAnim?.cancel();
     focusAnim = animateCamera(engine.camera, target, (camera) => setCameraExact(engine!, camera), {
       reducedMotion: prefersReducedMotion(),
+      source: engine,
     });
   }
 
@@ -1205,6 +1208,7 @@
     focusAnim?.cancel();
     focusAnim = animateCamera(engine.camera, restore, (camera) => setCameraExact(engine!, camera), {
       reducedMotion: prefersReducedMotion(),
+      source: engine,
     });
   }
 
@@ -1231,6 +1235,7 @@
         (camera) => setCameraExact(engine!, camera),
         {
           reducedMotion: options.instant || prefersReducedMotion(),
+          source: engine,
         },
       );
     }
@@ -1321,6 +1326,7 @@
     const target = fitCamera(slide.bounds, viewportSize(), PRESENT_MARGIN);
     followAnim = animateCamera(engine.camera, target, (camera) => setCameraExact(engine!, camera), {
       reducedMotion: prefersReducedMotion(),
+      source: engine,
       onDone: () => {
         followDriving = false;
       },

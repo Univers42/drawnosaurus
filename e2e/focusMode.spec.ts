@@ -1,6 +1,14 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { OPEN_CANVAS, camera, focusBoard, openBoard, type Board } from "./board.ts";
+import {
+  OPEN_CANVAS,
+  camera,
+  focusBoard,
+  openBoard,
+  waitForCameraLanded,
+  waitForCameraStable,
+  type Board,
+} from "./board.ts";
 
 /**
  * Focus mode: Enter on a selected shape eases the camera in on it; Escape — which already
@@ -97,6 +105,28 @@ test.describe("focus mode", () => {
     expect(restored.x).toBeCloseTo(before.x, 3);
     expect(restored.y).toBeCloseTo(before.y, 3);
     expect(restored.scale).toBeCloseTo(before.scale, 5);
+  });
+
+  // Motion on, unlike the rest: what is proved is that two eased moves do not undo each
+  // other — focus mode's own, and the engine's.
+  test("a fit pressed while Escape eases back is where the camera ends up", async ({ page }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await placeFilledRectangle(board, { x: OPEN_CANVAS.left + 60, y: OPEN_CANVAS.top + 60 });
+    await board.page.evaluate(() =>
+      (window.__drawEngine as unknown as SelectHandle).select(["shape"]),
+    );
+    await page.keyboard.press("Enter");
+    await expect(editor(page)).toBeFocused();
+    await waitForCameraStable(page);
+
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Shift+Digit1");
+    const fitted = await page.evaluate(() => window.__drawEngine!.cameraTarget);
+    const landed = await waitForCameraLanded(page);
+    expect(landed.x).toBeCloseTo(fitted.x, 3);
+    expect(landed.y).toBeCloseTo(fitted.y, 3);
+    expect(landed.scale).toBeCloseTo(fitted.scale, 5);
   });
 
   test("a double-click opens the same editor without moving the camera", async ({ page }) => {

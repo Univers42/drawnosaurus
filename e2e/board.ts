@@ -33,6 +33,8 @@ declare global {
     /** Set by `DrawSurface` under `import.meta.env.DEV`; absent from a production build. */
     __drawEngine?: {
       readonly camera: Camera;
+      /** Where an eased move is taking the camera; the camera itself when none runs. */
+      readonly cameraTarget: Camera;
       screenToWorld(sx: number, sy: number): { x: number; y: number };
       zoomAt(sx: number, sy: number, factor: number): void;
       exportJson(): string;
@@ -349,6 +351,27 @@ export async function waitForCameraStable(page: Page): Promise<Camera> {
     await page.waitForTimeout(16);
   }
   throw new Error("the camera never settled");
+}
+
+/**
+ * Waits out an eased move the engine has started — a fit, a reveal — until the camera is
+ * where it was headed, then until nothing else moves it. `waitForCameraStable` alone can
+ * return between the key and the move's first frame, when the camera has not moved yet.
+ */
+export async function waitForCameraLanded(page: Page): Promise<Camera> {
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const { camera, cameraTarget } = window.__drawEngine!;
+        return (
+          camera.x === cameraTarget.x &&
+          camera.y === cameraTarget.y &&
+          camera.scale === cameraTarget.scale
+        );
+      }),
+    )
+    .toBe(true);
+  return waitForCameraStable(page);
 }
 
 /** The zoom percentage the toolbar shows, read from its accessible name. */
