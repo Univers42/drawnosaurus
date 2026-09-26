@@ -160,5 +160,9 @@ test("the arrow's stroke leaves no ink under the label", async ({ page }) => {
     bottom: board.box.y + Y + 3,
   };
   expect(await regionInk(page, onStroke), "control: the bare stroke has ink").toBeGreaterThan(0);
-  expect(await regionInk(page, holeLeft), "no stroke ink under the label").toBe(0);
+  // Polled: the commit lays the label out again, and the canvas shows it a frame later —
+  // under a loaded suite the first read could still be the frame before.
+  await expect
+    .poll(() => regionInk(page, holeLeft), { message: "no stroke ink under the label" })
+    .toBe(0);
 });
