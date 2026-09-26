@@ -1,6 +1,9 @@
 # Live collaboration transport — realtime-agnostic (engine/realtime).
 # Build context: engine/realtime. WS pub/sub only; no DB CDC.
-FROM public.ecr.aws/docker/library/rust:1.89-slim-bookworm AS builder
+# Base images come from Docker Hub, like every other image in this stack. public.ecr.aws
+# meters anonymous pulls per source IP, and GitHub's shared runners exhaust that quota
+# ("429 toomanyrequests: Data limit exceeded"), which failed CI run 36230407015.
+FROM rust:1.89-slim-bookworm AS builder
 WORKDIR /build
 RUN apt-get update && apt-get install -y pkg-config && rm -rf /var/lib/apt/lists/*
 COPY Cargo.toml Cargo.lock ./
@@ -8,7 +11,7 @@ COPY crates/ crates/
 COPY tests/ tests/
 RUN cargo build --release --bin realtime-server
 
-FROM public.ecr.aws/docker/library/debian:bookworm-slim
+FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd -g 1001 app \
