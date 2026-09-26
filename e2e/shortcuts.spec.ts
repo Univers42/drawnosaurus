@@ -189,10 +189,14 @@ test.describe("tool shortcuts", () => {
 });
 
 test.describe("navigation shortcuts", () => {
-  test("Ctrl+= zooms in and Ctrl+- zooms out", async ({ page }) => {
-    // Zoom eases over 250ms (`CAMERA_ZOOM_MS`); reduced motion lands each step in one
-    // frame so two reads back to back compare settled values, not a moving target.
+  // Zoom and fit ease over 250ms (`CAMERA_ZOOM_MS`). These tests are about where the
+  // camera lands, so reduced motion lands every move in one frame: a read, or a click
+  // aimed from the camera, never meets a camera still on its way.
+  test.beforeEach(async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
+  });
+
+  test("Ctrl+= zooms in and Ctrl+- zooms out", async ({ page }) => {
     const board = await openBoard(page);
     await focusBoard(board);
     const start = (await camera(page)).scale;
@@ -206,8 +210,6 @@ test.describe("navigation shortcuts", () => {
   });
 
   test("Ctrl+0 resets the zoom to 100%", async ({ page }) => {
-    // Same as above: a settled read after each key, not one mid-ease.
-    await page.emulateMedia({ reducedMotion: "reduce" });
     const board = await openBoard(page);
     await focusBoard(board);
     await page.keyboard.press("Control+Equal");
