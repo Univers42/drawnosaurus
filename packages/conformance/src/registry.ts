@@ -261,7 +261,7 @@ export const RULES: readonly Rule[] = [
     section: "🔤 Text",
     text: /Mermaid/,
     status: "covered",
-    tests: [`${WEB}/mermaid/mermaid.test.ts`],
+    tests: [`${WEB}/mermaid/mermaid.test.ts`, "e2e/mermaid.spec.ts"],
   },
   {
     section: "🔤 Text",
@@ -664,31 +664,36 @@ export const RULES: readonly Rule[] = [
   {
     section: "🧜 Mermaid",
     text: /^Open Mermaid/,
-    status: "gap",
-    why: "implemented, untested — DrawMainMenu opens DrawMermaidModal.svelte, but no test exercises the menu action or the modal opening.",
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/commandPalette.test.ts`, "e2e/mermaid.spec.ts"],
   },
   {
     section: "🧜 Mermaid",
     text: /^Preview the generated diagram$/,
-    status: "gap",
-    why: "not implemented — DrawMermaidModal.svelte parses and inserts directly on its Insert button; there is no preview step shown before committing to the board.",
+    status: "covered",
+    tests: ["e2e/mermaid.spec.ts"],
   },
   {
     section: "🧜 Mermaid",
     text: /^Supported diagram types include/,
-    status: "gap",
-    why: "overclaimed — only flowchart syntax is parsed (mermaidParser.ts's parseMermaidFlowchart); sequence, class, entity-relationship and state diagrams are not supported.",
+    status: "covered",
+    tests: ["e2e/mermaidFuzz.spec.ts", `${WEB}/mermaid/mermaid.test.ts`],
   },
   {
     section: "🧜 Mermaid",
     text: /Paste Mermaid directly/,
-    status: "gap",
-    why: "not implemented as auto-detection — Mermaid syntax must be typed or pasted inside the manually-opened modal; a canvas-level paste does not detect or trigger it.",
+    status: "covered",
+    tests: ["e2e/mermaid.spec.ts", `${WEB}/mermaid/mermaid.test.ts`],
   },
   {
     section: "🧜 Mermaid",
     status: "covered",
-    tests: [`${WEB}/mermaid/mermaid.test.ts`],
+    tests: [
+      `${WEB}/mermaid/mermaid.test.ts`,
+      `${ENGINE}/ci_insert_json.rs`,
+      "e2e/mermaid.spec.ts",
+      "e2e/mermaidFuzz.spec.ts",
+    ],
   },
   {
     section: "🤖 AI / diagram generation",
@@ -788,8 +793,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "📋 Clipboard tricks",
     text: /Paste Mermaid syntax to trigger Mermaid handling/,
-    status: "gap",
-    why: "not implemented as an auto-trigger — Mermaid syntax must be typed or pasted inside the manually-opened DrawMermaidModal; a canvas-level paste never detects or opens it (same gap as prompt/shortkey.md:321).",
+    status: "covered",
+    tests: ["e2e/mermaid.spec.ts"],
   },
   {
     section: "📋 Clipboard tricks",
