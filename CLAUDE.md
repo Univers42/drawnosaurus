@@ -33,6 +33,8 @@ envelopes. User guide: `docs/collaboration.md`.
 **The boundary rule:** the engine never talks to the network, the server never runs WASM. The only
 thing crossing between them is an `.osidraw` scene document.
 
+Camera math, shortcuts, bindings and the frame budget: `.claude/skills/canvas-engine/SKILL.md`.
+
 ## Commands
 
 Everything runs in Docker via the Makefile; there is no host Node requirement for the gate.
