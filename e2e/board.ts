@@ -79,6 +79,8 @@ export interface SceneElement {
   angle?: number;
   /** The groups it is in, innermost first. The array *is* the nesting. */
   groupIds?: string[];
+  /** Absent reads as false. */
+  locked?: boolean;
   frameId?: string | null;
   /** Point-based kinds only — a line, an arrow or a freehand stroke. */
   points?: [number, number][];
