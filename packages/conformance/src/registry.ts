@@ -898,6 +898,7 @@ export const RULES: readonly Rule[] = [
       `${WEB}/draw-chrome/camera.test.ts`,
       `${WEB}/realtime/realtime.test.ts`,
       "e2e/presentation.spec.ts",
+      "e2e/presentationPath.spec.ts",
     ],
   },
   {

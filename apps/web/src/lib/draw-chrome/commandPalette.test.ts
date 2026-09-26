@@ -139,6 +139,7 @@ describe("buildCommands", () => {
       openTemplates: vi.fn(),
       openMermaid: vi.fn(),
       enterPresent: vi.fn(),
+      openPath: vi.fn(),
       presets: [],
       applyStylePreset: vi.fn(),
       selection: null,
@@ -225,6 +226,16 @@ describe("buildCommands", () => {
       commands.find((c) => c.id === `insert:figure:${kind.value}`)!.run();
       expect(h.insertFigure).toHaveBeenCalledWith({ kind: kind.value });
     }
+  });
+
+  it("opens the presentation path, found by 'path' or 'order'", () => {
+    const h = host();
+    const commands = buildCommands(h);
+    for (const query of ["path", "order"]) {
+      expect(filterCommands(commands, query).map((c) => c.id)).toContain("view:path");
+    }
+    commands.find((c) => c.id === "view:path")!.run();
+    expect(h.openPath).toHaveBeenCalledOnce();
   });
 
   it("wires view actions to the matching host callback", () => {

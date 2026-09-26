@@ -9,13 +9,36 @@ counter text) and the camera math it shares with the rest of the chrome, in
 Both are plain, tested functions with no engine or DOM in them; `DrawSurface.svelte`
 wires them to the board.
 
-## Slides
+## Slides: the path
 
-The board's frames, in the order they were made — z-order is array position (see the root
-`CLAUDE.md` › "Server"), which is also creation order, so a slide list needs no separate
-sort. A board with no frames presents as **one slide**, fit to everything on it
-(`slidesFromScene`, `sceneBounds`/`elementBounds` from `packages/contract`). Frame titles
-are not drawn while presenting.
+The board's frames, in path order (`slidesFromScene`):
+
+- Frames the path editor placed come first, by the step it gave each. The step is the
+  frame's own `pathStep` field (engine `scene/element.rs`, contract `element.ts`).
+- Frames it never placed follow in the order they were made. Z-order is array position
+  (see the root `CLAUDE.md` › "Server"), which is also creation order, and the sort is
+  stable. So a board nobody ordered presents exactly as it did before the path existed.
+- A board with no frames presents as **one slide**, fit to everything on it
+  (`sceneBounds`/`elementBounds` from `packages/contract`).
+- Frame titles are not drawn while presenting.
+
+The step lives on each frame, not in a list on the board. Moving one stop writes only the
+frames whose step changed, and two people reordering at once merge element by element,
+like any other edit.
+
+## The path editor
+
+Prezi's path sidebar (`DrawPathPanel.svelte`), opened from the main menu or the palette
+("Presentation path…"):
+
+- It lists every frame as a numbered stop, and each frame on the board wears its number
+  on its corner (`pathBadges`).
+- A click on a stop flies the camera there, as Present will.
+- A drag, Alt+↑/↓, or the ↑/↓ buttons move a stop. The focus stays on the stop that moved.
+- Each move is one call to `engine.setPresentationPath(ids)`. That numbers the frames
+  0, 1, 2… as one step, so one undo takes a reorder back.
+- **Present** at the bottom starts the show from the first stop.
+- Escape closes the editor.
 
 ## Entering and moving around
 
@@ -27,8 +50,8 @@ Alt+Shift combo (an OS layout switcher on Windows/Linux), and matched on `code` 
 `key` since Option+P types "π" on a Mac — the same reasoning already applied to the copy/paste
 style shortcuts (Ctrl/Cmd+Alt+C/V). Entering:
 
-- fits the camera to the first slide, eased in and out over ~400ms
-  (`prefers-reduced-motion` skips straight to the target);
+- flies the camera to the first slide (below; `prefers-reduced-motion` jumps straight to
+  it);
 - hides the header, toolbar, inspector, zoom bar and every menu;
 - dims everything on the board outside the current frame, with four plain CSS bands
   computed from the frame's on-screen rect (`dimBands` in `DrawSurface.svelte`) rather
@@ -42,7 +65,30 @@ style shortcuts (Ctrl/Cmd+Alt+C/V). Entering:
 | `→` `↓` `Space` `Page Down` `Enter` | Next slide         |
 | `←` `↑` `Page Up` `Backspace`       | Previous slide     |
 | `Home` / `End`                      | First / last slide |
+| a number, then `Enter`              | That slide         |
+| `B` or `.`                          | Blank black        |
+| `W` or `,`                          | Blank white        |
 | `Esc`                               | Exit               |
+
+These are PowerPoint's keys, which are also what a presentation clicker sends: Page
+Up/Down, and `B` or `.` for its blank button. A blanked screen covers everything. The
+next key, or a click, brings the slide back as it was, without stepping.
+
+### The flight between stops
+
+The camera travels van Wijk & Nuij's path, "Smooth and efficient zooming and panning"
+(InfoVis 2003), which is Prezi's transition (`camera.ts` › `flight`).
+
+- Between stops far apart, it zooms out on the way, so the next stop comes into view
+  while the camera travels, then zooms back in to land.
+- Into a frame nested in the one on screen, it is a zoom about their shared centre.
+- A flight takes 700ms per unit of its length (ρ = √2, zoom counted in e-folds), held
+  between 400 and 1800ms.
+- It is eased at both ends, and lands with `setCameraExact`. Follow flies the same way.
+- `e2e/presentationPath.spec.ts` walks a 10-frame nested path and checks:
+  - each stop lands within 1px of its fit;
+  - every frame drawn on the way fits a 60Hz budget (`p95CpuMs`);
+  - the flight between two sibling scenes pulls back past both.
 
 A resize refits the current slide instantly (no easing — a resize is not a gesture with a
 "before"). Every key but `Tab` is caught before it reaches the engine's own listener, so a
@@ -90,6 +136,9 @@ who opens the board mid-show sees the notice at once rather than at the next sli
 
 ## Known limits
 
+- Every frame is a stop, and each is visited once. The path cannot skip a frame or come
+  back to one: Prezi can do both.
+- A frame drawn after the path was set goes to the end of it.
 - Following tracks the presenter's _slide_, not a live view of their camera between
   slides — if they pan within one, a follower's camera does not move until the next
   `present`.

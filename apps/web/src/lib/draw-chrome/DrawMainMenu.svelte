@@ -43,6 +43,7 @@
     onOpenShare,
     onOpenShortcuts,
     onOpenPresent,
+    onOpenPath,
     onClose,
   }: {
     engine: DrawEngine | null;
@@ -62,6 +63,7 @@
     onOpenShare: () => void;
     onOpenShortcuts: () => void;
     onOpenPresent: () => void;
+    onOpenPath: () => void;
     onClose: () => void;
   } = $props();
 
@@ -248,6 +250,16 @@
       <MainMenuIcon name="play" />
       <span class="dropdown-menu-item__text">Present</span>
       <span class="dropdown-menu-item__shortcut">Ctrl+Alt+P</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(onOpenPath)}
+    >
+      <MainMenuIcon name="route" />
+      <span class="dropdown-menu-item__text">Presentation path…</span>
     </button>
 
     <button

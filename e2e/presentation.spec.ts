@@ -134,7 +134,7 @@ test.describe("presentation", () => {
     const board = await openThreeFrameBoard(page);
 
     await page.getByRole("button", { name: "Open main menu" }).click();
-    await page.getByRole("menuitem", { name: /^Present/ }).click();
+    await page.getByRole("menuitem", { name: /^Present(?!ation)/ }).click();
 
     await expect(page.getByRole("group", { name: "Presentation controls" })).toBeVisible();
     await expectCameraFits(board, frameBounds(THREE_FRAMES[0]!));

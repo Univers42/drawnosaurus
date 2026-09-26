@@ -494,6 +494,15 @@ describe("presentation stepping chords", () => {
     expect(presentKeyAction(parseChord(end!).key)).toBe("end");
   });
 
+  it("B and . blank the screen black, W and , white", () => {
+    for (const chord of entry("presentation.black").chords) {
+      expect(presentKeyAction(parseChord(chord).key), chord).toBe("black");
+    }
+    for (const chord of entry("presentation.white").chords) {
+      expect(presentKeyAction(parseChord(chord).key), chord).toBe("white");
+    }
+  });
+
   it("Escape exits", () => {
     expect(presentKeyAction(parseChord(entry("presentation.exit").chords[0]!).key)).toBe("exit");
   });
@@ -518,6 +527,7 @@ describe("the command palette prints this registry's own text", () => {
     openTemplates: () => {},
     openMermaid: () => {},
     enterPresent: () => {},
+    openPath: () => {},
     presets: [],
     applyStylePreset: () => {},
     // Everything selected and every panel row shown, so every element command is printed.

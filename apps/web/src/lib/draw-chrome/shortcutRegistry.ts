@@ -288,6 +288,18 @@ export const SHORTCUT_REGISTRY: readonly ShortcutEntry[] = [
     chords: ["Home", "End"],
   },
   {
+    id: "presentation.black",
+    section: "Presentation",
+    label: "Blank the screen black, and back",
+    chords: ["B", "."],
+  },
+  {
+    id: "presentation.white",
+    section: "Presentation",
+    label: "Blank the screen white, and back",
+    chords: ["W", ","],
+  },
+  {
     id: "presentation.exit",
     section: "Presentation",
     label: "Exit presentation",

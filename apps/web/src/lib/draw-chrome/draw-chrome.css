@@ -128,6 +128,40 @@
   z-index: 5;
 }
 
+/* A stop's number on its frame's corner while the presentation path is edited — see
+   `pathBadges` in DrawSurface. Placed inline at the corner, nudged inside it. */
+.path-badge {
+  position: absolute;
+  z-index: 6;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  transform: translate(6px, 6px);
+  border-radius: 11px;
+  background: var(--accent, #6965db);
+  color: #fff;
+  font:
+    700 12px/1 system-ui,
+    sans-serif;
+  pointer-events: none;
+}
+
+/* The screen a presenter blanked with B or W: over everything, the bar included, and a
+   click on it brings the slide back as a key would. */
+.present-blank {
+  position: absolute;
+  inset: 0;
+  z-index: 95;
+  background: #000;
+}
+
+.present-blank.white {
+  background: #fff;
+}
+
 /* Visually gone but still operable. A file input hidden with `display: none` cannot be
    opened by script in every browser, and this one is only ever opened by script. */
 .sr-only {

@@ -63,6 +63,9 @@ world  = (screen - (x, y)) / scale     screen_to_world
   - The chrome's own eases (`camera.ts` › `animateCamera`: focus mode, present, follow)
     pass `source: engine` and stop once the engine moves the camera itself, e.g. a fit.
     Specs wait for a landing with `waitForCameraLanded` (camera = `engine.cameraTarget`).
+  - Present and Follow fly rather than ease: `camera.ts` › `flight` is van Wijk & Nuij's
+    zoom-out-and-in path, 400–1800ms by its length. Judge closeness by centre and scale,
+    never `camera.x`: far out, a 1% zoom error is a hundred pixels of `x`.
 
 ## Rendering budget
 

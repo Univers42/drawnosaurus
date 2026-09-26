@@ -150,6 +150,7 @@ export interface PaletteHost {
   openTemplates: () => void;
   openMermaid: () => void;
   enterPresent: () => void;
+  openPath: () => void;
   presets: readonly PresetSummary[];
   applyStylePreset: (id: string) => void;
   /** `null` with nothing selected, which leaves the Elements and Style commands out, as
@@ -591,6 +592,13 @@ export function buildCommands(host: PaletteHost): Command[] {
       category: "View",
       shortcut: shortcutFor("presentation.enter"),
       run: host.enterPresent,
+    },
+    {
+      id: "view:path",
+      label: "Presentation path…",
+      category: "View",
+      keywords: ["path", "order", "slides", "frames", "prezi", "stops"],
+      run: host.openPath,
     },
   );
 

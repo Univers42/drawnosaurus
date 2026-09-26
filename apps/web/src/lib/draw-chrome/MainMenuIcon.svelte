@@ -19,7 +19,8 @@
     | "sun"
     | "moon"
     | "system"
-    | "play";
+    | "play"
+    | "route";
 
   let { name }: { name: MenuIconName } = $props();
 
@@ -88,6 +89,15 @@
     // Tabler's `player-play`, for "Present" — not from the oracle, which has no such
     // feature; picked because it is the shape every presentation tool already uses.
     play: { width: 1.5, paths: ["M7 4v16l13 -8z"] },
+    // Tabler's `route`, for "Presentation path": two stops and the way between them.
+    route: {
+      width: 1.5,
+      paths: [
+        "M3 19a2 2 0 1 0 4 0a2 2 0 0 0 -4 0",
+        "M19 7a2 2 0 1 0 0 -4a2 2 0 0 0 0 4z",
+        "M11 19h5.5a3.5 3.5 0 0 0 0 -7h-8a3.5 3.5 0 0 1 0 -7h4.5",
+      ],
+    },
   };
 
   const small = $derived(SMALL[name]);

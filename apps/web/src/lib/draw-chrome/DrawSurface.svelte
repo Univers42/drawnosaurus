@@ -20,6 +20,7 @@
     animateCamera,
     boundsOf,
     fitCamera,
+    flight,
     focusCamera,
     persistFocusModePreference,
     readFocusModePreference,
@@ -27,16 +28,19 @@
     worldToScreen,
     zoomPercent,
     type CameraAnimation,
+    type CameraLike,
   } from "./camera.ts";
   import {
     PRESENT_MARGIN,
-    presentKeyAction,
+    presentKey,
     slidesFromScene,
     stepSlideIndex,
+    type Blank,
     type Slide,
     type SlideElement,
   } from "./presentation.ts";
   import DrawPresentBar from "./DrawPresentBar.svelte";
+  import DrawPathPanel from "./DrawPathPanel.svelte";
   import DrawFollowNotice from "./DrawFollowNotice.svelte";
   import ShapeStrip from "./ShapeStrip.svelte";
   import { sharedShape, switchKey, switchPanelAt } from "./shapeSwitch.ts";
@@ -337,6 +341,19 @@
   let showShare = $state(false);
   let showShortcuts = $state(false);
   let showPalette = $state(false);
+  /** The presentation path editor, and the stops it lists — read while it is open. */
+  let showPath = $state(false);
+  let pathStops = $state<Slide[]>([]);
+  /** Each stop's number, where its frame's corner is on screen, while the editor is open. */
+  const pathBadges = $derived.by(() => {
+    const camera = currentCamera;
+    if (!showPath || presenting || !camera) return [];
+    return pathStops.flatMap((stop, index) => {
+      if (!stop.bounds) return [];
+      const { sx, sy } = worldToScreen(camera, stop.bounds.minX, stop.bounds.minY);
+      return [{ id: stop.frameId, step: index + 1, x: sx, y: sy }];
+    });
+  });
 
   // Style presets — built-ins plus whatever the viewer saved, read once on mount.
   let userPresets = $state<StylePreset[]>([]);
@@ -966,6 +983,7 @@
     refreshStyle();
     onSceneChange?.(json);
     refreshEmbedFrames();
+    refreshPathStops();
     if (shapeSwitch) placeShapeSwitch();
     if (!realtime) return;
     liveBroadcast.observe(json);
@@ -1185,6 +1203,7 @@
     // Otherwise a delta keeps tombstones visible to the autosave tracker.
     onSceneChange?.(patch.order?.length ? engine.exportJson() : remotePatchToSceneEvent(patch));
     refreshEmbedFrames();
+    refreshPathStops();
   }
 
   /**
@@ -1301,18 +1320,57 @@
     const slide = slides[slideIndex];
     presentAnim?.cancel();
     if (slide?.bounds) {
-      const target = fitCamera(slide.bounds, viewportSize(), PRESENT_MARGIN);
-      presentAnim = animateCamera(
-        engine.camera,
-        target,
-        (camera) => setCameraExact(engine!, camera),
-        {
-          reducedMotion: options.instant || prefersReducedMotion(),
-          source: engine,
-        },
-      );
+      presentAnim = flyCamera(fitCamera(slide.bounds, viewportSize(), PRESENT_MARGIN), {
+        instant: options.instant,
+      });
     }
     if (realtime) realtime.sendPresent(slide?.frameId ?? null);
+  }
+
+  /**
+   * Flies the camera to `target` the way Prezi travels between stops — out and back in on
+   * van Wijk & Nuij's path (`flight` in `camera.ts`), for as long as its length asks — or
+   * jumps there for reduced motion. Lands with `setCameraExact`, so a stop is exact.
+   */
+  function flyCamera(
+    target: CameraLike,
+    options: { instant?: boolean; onDone?: () => void } = {},
+  ): CameraAnimation | null {
+    if (!engine) return null;
+    const way = flight(engine.camera, target, viewportSize());
+    return animateCamera(engine.camera, target, (camera) => setCameraExact(engine!, camera), {
+      durationMs: way.durationMs,
+      path: way.at,
+      reducedMotion: options.instant || prefersReducedMotion(),
+      source: engine,
+      onDone: options.onDone,
+    });
+  }
+
+  /** The stops the path editor lists: the frames, in path order. */
+  function refreshPathStops(): void {
+    if (showPath) pathStops = slidesFromScene(currentSlideElements()).filter((s) => s.frameId);
+  }
+
+  function openPath(): void {
+    showPath = true;
+    refreshPathStops();
+  }
+
+  /** A click on a stop in the path editor: the camera flies to its frame, as it will
+   *  when presenting. */
+  let pathAnim: CameraAnimation | null = null;
+  function visitStop(frameId: string): void {
+    const bounds = pathStops.find((stop) => stop.frameId === frameId)?.bounds;
+    if (!bounds) return;
+    pathAnim?.cancel();
+    pathAnim = flyCamera(fitCamera(bounds, viewportSize(), PRESENT_MARGIN));
+  }
+
+  function reorderPath(frameIds: string[]): void {
+    if (!engine) return;
+    engine.setPresentationPath(frameIds);
+    refreshPathStops();
   }
 
   function stepPresent(step: "next" | "prev" | "home" | "end"): void {
@@ -1345,6 +1403,10 @@
   /** Whether Present put the page in fullscreen, so that leaving it leaves the show. */
   let presentFullscreen = false;
 
+  /** A blanked screen while presenting (B / W), and the slide number typed so far. */
+  let blank = $state<Blank | null>(null);
+  let typedSlide = "";
+
   /** The browser keeps Esc for itself while fullscreen: the key that ends the show never
    *  reaches the page — only the end of the fullscreen it was shown in does. */
   function onFullscreenChange(): void {
@@ -1356,6 +1418,8 @@
     presentAnim?.cancel();
     presenting = false;
     slides = [];
+    blank = null;
+    typedSlide = "";
     const restore = presentRestore;
     presentRestore = null;
     if (engine && restore) {
@@ -1396,10 +1460,7 @@
     if (!slide?.bounds) return;
     followAnim?.cancel();
     followDriving = true;
-    const target = fitCamera(slide.bounds, viewportSize(), PRESENT_MARGIN);
-    followAnim = animateCamera(engine.camera, target, (camera) => setCameraExact(engine!, camera), {
-      reducedMotion: prefersReducedMotion(),
-      source: engine,
+    followAnim = flyCamera(fitCamera(slide.bounds, viewportSize(), PRESENT_MARGIN), {
       onDone: () => {
         followDriving = false;
       },
@@ -1425,10 +1486,15 @@
     if (!presenting && !following) return false;
     if (event.key === "Tab") return false;
     if (presenting) {
-      const action = presentKeyAction(event.key);
+      const { action, typed } = presentKey(event.key, typedSlide);
+      typedSlide = typed;
       event.preventDefault();
       event.stopPropagation();
       if (action === "exit") void exitPresent();
+      else if (action === "black" || action === "white") blank = blank === action ? null : action;
+      // The first key after a blank brings the slide back, as it was.
+      else if (action && blank) blank = null;
+      else if (typeof action === "object" && action) showSlide(action.goto);
       else if (action) stepPresent(action);
       return true;
     }
@@ -1782,6 +1848,7 @@
     openTemplates: () => (showTemplates = true),
     openMermaid: () => (showMermaid = true),
     enterPresent: () => void enterPresent(),
+    openPath,
     presets: allPresets(userPresets).map((preset) => ({ id: preset.id, name: preset.name })),
     applyStylePreset: applyStylePresetById,
     selection: paletteSelection(),
@@ -1852,6 +1919,7 @@
             onOpenShare={() => (showShare = true)}
             onOpenShortcuts={() => (showShortcuts = true)}
             onOpenPresent={() => void enterPresent()}
+            onOpenPath={openPath}
             onClose={() => (showMainMenu = false)}
           />
         {/if}
@@ -2005,6 +2073,14 @@
         style:height={`${dimBands.height}px`}
       ></div>
     {/if}
+    {#each pathBadges as badge (badge.id)}
+      <span
+        class="path-badge"
+        aria-hidden="true"
+        style:left={`${badge.x}px`}
+        style:top={`${badge.y}px`}>{badge.step}</span
+      >
+    {/each}
     {#if flowchartCreating && flowchartStripPos}
       <ShapeStrip
         label="Flowchart node shape"
@@ -2147,6 +2223,25 @@
 
   {#if !presenting}
     <DrawZoomBar {engine} {zoom} {contentVisible} onFit={zoomToFit} />
+  {/if}
+
+  {#if showPath && !presenting}
+    <DrawPathPanel
+      stops={pathStops}
+      onVisit={visitStop}
+      onReorder={reorderPath}
+      onPresent={() => void enterPresent()}
+      onClose={() => (showPath = false)}
+    />
+  {/if}
+
+  {#if presenting && blank}
+    <div
+      class="present-blank"
+      class:white={blank === "white"}
+      role="presentation"
+      onclick={() => (blank = null)}
+    ></div>
   {/if}
 
   {#if presenting}
