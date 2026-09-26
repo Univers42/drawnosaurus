@@ -137,6 +137,7 @@ describe("buildCommands", () => {
       toggleFocusMode: vi.fn(),
       openExport: vi.fn(),
       openTemplates: vi.fn(),
+      openMermaid: vi.fn(),
       enterPresent: vi.fn(),
       presets: [],
       applyStylePreset: vi.fn(),
@@ -196,6 +197,16 @@ describe("buildCommands", () => {
       command!.run();
       expect(h.setTool).toHaveBeenCalledWith(tool.tool);
     }
+  });
+
+  it("opens the Mermaid dialog from the tools, found by 'mermaid' or 'flowchart'", () => {
+    const h = host();
+    const commands = buildCommands(h);
+    const command = commands.find((c) => c.id === "tool:mermaid")!;
+    expect(command.category).toBe("Tools");
+    expect(filterCommands(commands, "flowchart").map((c) => c.id)).toContain("tool:mermaid");
+    command.run();
+    expect(h.openMermaid).toHaveBeenCalledOnce();
   });
 
   it("adds rectangle / diamond / ellipse insert commands", () => {

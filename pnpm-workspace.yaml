@@ -13,3 +13,10 @@ minimumReleaseAge: 10080
 # its binary step or Vite cannot build at all.
 onlyBuiltDependencies:
   - esbuild
+
+# The Mermaid the oracle's lockfile resolves for its converter (third_party/excalidraw's
+# yarn.lock). A newer 11.x renders subgraphs under ids the converter cannot find, and every
+# flowchart with one came out as a picture instead of shapes.
+overrides:
+  mermaid: 11.12.2
+  "@mermaid-js/parser": 0.6.3

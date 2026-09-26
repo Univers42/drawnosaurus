@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@drawnosaurus/contract": "workspace:*",
+    "@excalidraw/mermaid-to-excalidraw": "2.2.2",
     "@noble/ciphers": "^2.4.0",
     "@noble/hashes": "^2.4.0",
     "uqr": "^0.1.3"

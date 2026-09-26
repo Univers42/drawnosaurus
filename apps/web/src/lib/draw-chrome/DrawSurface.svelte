@@ -61,6 +61,7 @@
   } from "./theme.ts";
   import { menuElementFromSelection, type MenuElementInfo } from "./menu.ts";
   import { buildCommands, type PaletteHost, type PaletteSelection } from "./commandPalette.ts";
+  import { looksLikeMermaid, mermaidToElements, sceneJson } from "../mermaid/importMermaid.ts";
   import {
     BUILTIN_PRESETS,
     allPresets,
@@ -212,7 +213,13 @@
    */
   function exposeForDevTools(instance: DrawEngine): void {
     if (!import.meta.env.DEV) return;
-    (window as unknown as { __drawEngine?: DrawEngine }).__drawEngine = instance;
+    const devWindow = window as unknown as {
+      __drawEngine?: DrawEngine;
+      __mermaidToElements?: typeof mermaidToElements;
+    };
+    devWindow.__drawEngine = instance;
+    // The Mermaid fuzz suite converts in the page, where Mermaid can lay a diagram out.
+    devWindow.__mermaidToElements = mermaidToElements;
   }
 
   /** What the panel shows: one engine call per `styleRevision`, not one per row. */
@@ -718,6 +725,12 @@
     const files = imagesFrom(Array.from(event.clipboardData?.files ?? []));
     if (files.length === 0) {
       const text = event.clipboardData?.getData("text/plain") ?? "";
+      if (engine && looksLikeMermaid(text)) {
+        event.preventDefault();
+        event.stopPropagation();
+        void pasteMermaid(engine, text);
+        return;
+      }
       const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
       const migrated = text ? migrateLegacyStickyJson(text, Date.now(), nonce) : null;
       if (migrated === null || !engine) return;
@@ -729,6 +742,22 @@
     event.preventDefault();
     event.stopPropagation();
     void placeImages(files, lastPointer ?? viewportCentre());
+  }
+
+  /**
+   * A pasted Mermaid definition goes in as its diagram, at the pointer and with the camera
+   * left where it is, as the oracle's paste does (`App.tsx@1118751f:4686-4708`). A definition
+   * that does not convert is pasted as the text it is, the way the engine's own paste would
+   * have taken it.
+   */
+  async function pasteMermaid(target: DrawEngine, text: string): Promise<void> {
+    const at = lastPointer ?? viewportCentre();
+    const world = target.screenToWorld(at.x, at.y);
+    try {
+      target.insertJson(sceneJson(await mermaidToElements(text)), world);
+    } catch {
+      if (!target.pasteJson(text, world)) target.pasteJson(null, world);
+    }
   }
 
   /**
@@ -1751,6 +1780,7 @@
     toggleFocusMode,
     openExport: () => (showExport = true),
     openTemplates: () => (showTemplates = true),
+    openMermaid: () => (showMermaid = true),
     enterPresent: () => void enterPresent(),
     presets: allPresets(userPresets).map((preset) => ({ id: preset.id, name: preset.name })),
     applyStylePreset: applyStylePresetById,
@@ -2184,7 +2214,15 @@
         if (url) editingEmbed = { id, url };
       }}
       onInsertMermaid={(elements) => {
-        if (engine) engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements }));
+        if (!engine) return;
+        // In the middle of the view, then the view fitted to it, zoomed out to hold it —
+        // the oracle's `position: "center", fit: "scale-down"` (`TTDDialog/common.ts@1118751f:159-164`).
+        const screen = viewportCentre();
+        if (!engine.insertJson(sceneJson(elements), engine.screenToWorld(screen.x, screen.y))) {
+          return;
+        }
+        measureRoom();
+        engine.zoomToFitSelectionInViewport();
       }}
       onInsertTemplate={(json) => {
         if (!engine) return;

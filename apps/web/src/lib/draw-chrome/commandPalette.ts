@@ -148,6 +148,7 @@ export interface PaletteHost {
   toggleFocusMode: () => void;
   openExport: () => void;
   openTemplates: () => void;
+  openMermaid: () => void;
   enterPresent: () => void;
   presets: readonly PresetSummary[];
   applyStylePreset: (id: string) => void;
@@ -481,6 +482,14 @@ export function buildCommands(host: PaletteHost): Command[] {
       keywords: [tool.tool],
       run: () => host.setTool(tool.tool),
     })),
+    // The oracle files its dialog with the tools (`CommandPalette.tsx@1118751f:577-590`).
+    {
+      id: "tool:mermaid",
+      label: "Mermaid to diagram…",
+      category: "Tools",
+      keywords: ["mermaid", "flowchart", "sequence", "import"],
+      run: host.openMermaid,
+    },
   );
 
   commands.push(

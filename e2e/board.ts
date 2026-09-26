@@ -59,7 +59,13 @@ declare global {
       copySelection(): string | null;
       /** Rasterises the current view exactly as the Export dialog's PNG button does. */
       exportPng(): Promise<Blob | null>;
+      /** Empties the board: no undo step, no autosave — a fuzzer's reset between cases. */
+      clear(): void;
+      /** Places a scene document's elements as the Mermaid dialog's Insert does. */
+      insertJson(json: string, at?: { x: number; y: number }): boolean;
     };
+    /** The Mermaid dialog's converter, set beside `__drawEngine`. */
+    __mermaidToElements?: (definition: string) => Promise<Record<string, unknown>[]>;
   }
 }
 

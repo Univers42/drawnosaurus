@@ -7,6 +7,7 @@
   let query = $state("");
   let activeIndex = $state(0);
   let inputEl: HTMLInputElement | undefined = $state();
+  let root: HTMLElement | undefined = $state();
   let previouslyFocused: HTMLElement | null = null;
 
   const groups = $derived(paletteGroups(commands, query));
@@ -21,7 +22,10 @@
   });
 
   onDestroy(() => {
-    previouslyFocused?.focus?.();
+    // Unless the command gave focus somewhere to go — a dialog it opened, focusing its
+    // own field — which handing it back would take away from under the keyboard.
+    const now = document.activeElement;
+    if (now === null || now === document.body || root?.contains(now)) previouslyFocused?.focus?.();
   });
 
   function runActive(): void {
@@ -51,7 +55,13 @@
   }
 </script>
 
-<div class="modal-backdrop" role="dialog" aria-modal="true" aria-label="Command palette">
+<div
+  bind:this={root}
+  class="modal-backdrop"
+  role="dialog"
+  aria-modal="true"
+  aria-label="Command palette"
+>
   <div class="palette-card">
     <input
       bind:this={inputEl}

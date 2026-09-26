@@ -1,55 +1,194 @@
 import { describe, expect, it } from "vitest";
-import { drawElementSchema } from "@drawnosaurus/contract";
-import { parseMermaidFlowchart } from "./mermaidParser.ts";
-import { mermaidToElements } from "./mermaidToElements.ts";
+import { drawElementSchema, type DrawElementDto } from "@drawnosaurus/contract";
+import {
+  NOT_EDITABLE,
+  SkeletonError,
+  restoreEntities,
+  skeletonToElements,
+  type Skeleton,
+} from "./skeleton.ts";
+import { looksLikeMermaid } from "./importMermaid.ts";
 
-describe("mermaidParser", () => {
-  it("parses simple graph TD with rectangles and edges", () => {
-    const code = `
-      graph TD
-      A[Start Service] --> B[Processing]
-      B --> C[Finish]
-    `;
-    const res = parseMermaidFlowchart(code);
-    expect(res.direction).toBe("TD");
-    expect(res.nodes.length).toBe(3);
-    expect(res.edges.length).toBe(2);
-    expect(res.nodes[0]?.label).toBe("Start Service");
-    expect(res.nodes[0]?.shape).toBe("rectangle");
+/**
+ * The skeletons below are shaped as `@excalidraw/mermaid-to-excalidraw` writes them —
+ * `converter/types/flowchart.js`, `class.js`, `graphImage.js` — so the converter is pinned
+ * without Mermaid, which needs a browser to lay a diagram out (`e2e/mermaid*.spec.ts`).
+ */
+
+const node = (id: string, x: number, text?: string): Skeleton => ({
+  id,
+  type: "rectangle",
+  x,
+  y: 0,
+  width: 100,
+  height: 40,
+  strokeWidth: 2,
+  ...(text ? { label: { text, fontSize: 20 } } : {}),
+});
+
+const byType = (elements: DrawElementDto[], type: string) =>
+  elements.filter((element) => element.type === type);
+
+describe("skeletonToElements", () => {
+  it("gives a labelled shape its label, bound both ways and left for the engine to size", () => {
+    const elements = skeletonToElements({ elements: [node("A", 0, "Start")] });
+    const [shape] = byType(elements, "rectangle");
+    const [label] = byType(elements, "text");
+    expect(shape!.boundTextId).toBe(label!.id);
+    expect(label!.containerId).toBe(shape!.id);
+    expect([label!.text, label!.originalText, label!.fontSize]).toEqual(["Start", "Start", 20]);
+    expect([label!.textAlign, label!.verticalAlign]).toEqual(["center", "middle"]);
+    expect([label!.width, label!.height]).toEqual([0, 0]);
   });
 
-  it("parses diamonds, ellipses and edge labels", () => {
-    const code = `
-      flowchart TD
-      A((Start)) --> B{Is Valid?}
-      B -->|Yes| C[Process]
-      B -->|No| D((End))
-    `;
-    const res = parseMermaidFlowchart(code);
-    expect(res.nodes.length).toBe(4);
-    const diamond = res.nodes.find((n) => n.id === "B");
-    expect(diamond?.shape).toBe("diamond");
-    const circle = res.nodes.find((n) => n.id === "A");
-    expect(circle?.shape).toBe("ellipse");
-    expect(res.edges.some((e) => e.label === "Yes")).toBe(true);
+  it("binds an arrow to the shapes its start and end name, label and points kept", () => {
+    const elements = skeletonToElements({
+      elements: [
+        node("A", 0),
+        node("B", 200),
+        {
+          id: "A_B",
+          type: "arrow",
+          x: 100,
+          y: 20,
+          points: [
+            [0, 0],
+            [50, 30],
+            [100, 0],
+          ],
+          label: { text: "go" },
+          start: { id: "A" },
+          end: { id: "B" },
+          roundness: { type: 2 },
+        },
+      ],
+    });
+    const [a, b] = byType(elements, "rectangle");
+    const [arrow] = byType(elements, "arrow");
+    expect([arrow!.startBinding, arrow!.endBinding]).toEqual([a!.id, b!.id]);
+    expect([arrow!.width, arrow!.height]).toEqual([100, 30]);
+    expect([arrow!.startArrowhead, arrow!.endArrowhead]).toEqual(["none", "arrow"]);
+    expect(arrow!.roundness).not.toBeNull();
+    expect(byType(elements, "text")[0]!.containerId).toBe(arrow!.id);
   });
 
-  it("converts parsed diagram to valid DrawElementDto instances", () => {
-    const code = `
-      graph TD
-      A[Input] --> B{Verify}
-      B --> C[Output]
-    `;
-    const parsed = parseMermaidFlowchart(code);
-    const elements = mermaidToElements(parsed, 100, 100);
+  it("reads arrowheads as the converter writes them: null is none, a crow's foot kept", () => {
+    const [arrow] = skeletonToElements({
+      elements: [
+        {
+          type: "arrow",
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 0,
+          startArrowhead: null,
+          endArrowhead: "crowfoot_many",
+        },
+      ],
+    });
+    expect([arrow!.startArrowhead, arrow!.endArrowhead]).toEqual(["none", "crowfoot_many"]);
+  });
 
-    expect(elements.length).toBeGreaterThanOrEqual(6); // 3 shapes + 3 texts + 2 arrows = 8 elements
-    for (const el of elements) {
-      const parsedEl = drawElementSchema.safeParse(el);
-      expect(
-        parsedEl.success,
-        `Element ${el.id} (${el.type}) failed validation: ${parsedEl.error?.message}`,
-      ).toBe(true);
+  it("frames what a frame lists, 10 around, under what it holds", () => {
+    const elements = skeletonToElements({
+      elements: [
+        node("A", 0, "a"),
+        node("B", 200, "b"),
+        { type: "frame", name: "ns", children: ["A", "B"] },
+      ],
+    });
+    const frame = elements[0]!;
+    expect(frame.type).toBe("frame");
+    expect([frame.x, frame.y, frame.width, frame.height]).toEqual([-10, -10, 320, 60]);
+    expect(frame.name).toBe("ns");
+    for (const element of elements.slice(1)) expect(element.frameId).toBe(frame.id);
+  });
+
+  it("puts a picture in with a badge saying it is one, grouped so they move together", () => {
+    const dataURL = "data:image/svg+xml;base64,PHN2Zy8+";
+    const [image, badge] = skeletonToElements({
+      elements: [{ type: "image", x: 0, y: 0, width: 300, height: 200, fileId: "f" }],
+      files: { f: { dataURL } },
+    });
+    expect(image!.dataUrl).toBe(dataURL);
+    expect(badge!.text).toBe(NOT_EDITABLE);
+    expect(badge!.y).toBeGreaterThan(image!.y + image!.height);
+    expect(image!.groupIds).toHaveLength(1);
+    expect(badge!.groupIds).toEqual(image!.groupIds);
+  });
+
+  it("leaves out what has nowhere finite to go and keeps the rest", () => {
+    // Mermaid lays an empty sequence block out at NaN, and what follows it.
+    const nan = { ...node("A", 0, "lost"), x: Number.NaN };
+    const infinite: Skeleton = {
+      type: "line",
+      x: 0,
+      y: 0,
+      points: [
+        [0, 0],
+        [Infinity, 1],
+      ],
+    };
+    const elements = skeletonToElements({
+      elements: [nan, infinite, { type: "hexagon" }, node("B", 200, "kept")],
+    });
+    expect(elements.map((element) => element.type)).toEqual(["rectangle", "text"]);
+    expect(elements[1]!.text).toBe("kept");
+  });
+
+  it("throws when nothing at all could be placed", () => {
+    const nan = { ...node("A", 0), x: Number.NaN };
+    expect(() => skeletonToElements({ elements: [nan] })).toThrow(SkeletonError);
+    expect(() => skeletonToElements({ elements: [{ type: "hexagon" }] })).toThrow(SkeletonError);
+  });
+
+  it("writes the entity codes the converter left hidden as what they stand for", () => {
+    const [, , arrow, title] = skeletonToElements({
+      elements: [
+        node("A", 0),
+        node("B", 200),
+        { type: "arrow", x: 0, y: 0, width: 10, height: 0, label: { text: "xﬂ°lt¶ßy ﬂ°°9829¶ß ﬂ°zz¶ß" } },
+      ],
+    });
+    expect(arrow!.type).toBe("arrow");
+    expect(title!.text).toBe("x<y ♥ #zz;");
+    expect(restoreEntities("a ﬂ°amp¶ß b")).toBe("a & b");
+  });
+
+  it("writes only what the server accepts", () => {
+    const styled: Skeleton = {
+      ...node("B", 200, "b"),
+      strokeColor: "#f66",
+      backgroundColor: "#f9f",
+      strokeStyle: "dashed",
+    };
+    const elements = skeletonToElements({
+      elements: [
+        node("A", 0, "a"),
+        styled,
+        { type: "arrow", x: 0, y: 0, width: 10, height: 10, start: { id: "A" }, end: { id: "B" } },
+        { type: "text", x: 0, y: 100, text: "note" },
+        { type: "line", x: 0, y: 0, width: 0, height: 80 },
+        { type: "frame", children: ["A"] },
+      ],
+    });
+    for (const element of elements) {
+      expect(drawElementSchema.safeParse(element).success, element.type).toBe(true);
     }
+  });
+});
+
+describe("looksLikeMermaid", () => {
+  it("takes a definition by its first keyword, a directive before it allowed", () => {
+    expect(looksLikeMermaid("flowchart TD\n A-->B")).toBe(true);
+    expect(looksLikeMermaid("  sequenceDiagram\n A->>B: hi")).toBe(true);
+    expect(looksLikeMermaid("%%{init: {'theme': 'dark'}}%%\ngraph LR\n A-->B")).toBe(true);
+    expect(looksLikeMermaid("xychart-beta\n x-axis [a, b]")).toBe(true);
+  });
+
+  it("leaves ordinary text alone", () => {
+    expect(looksLikeMermaid("graphs are nice")).toBe(false);
+    expect(looksLikeMermaid("hello flowchart")).toBe(false);
+    expect(looksLikeMermaid("")).toBe(false);
   });
 });

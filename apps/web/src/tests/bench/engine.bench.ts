@@ -1,32 +1,9 @@
 import { bench, describe } from "vitest";
 import { SceneDiffTracker } from "../../lib/autosave/sceneDiff.ts";
-import { parseMermaidFlowchart } from "../../lib/mermaid/mermaidParser.ts";
-import { mermaidToElements } from "../../lib/mermaid/mermaidToElements.ts";
 import { migrateLegacyStickyGroups } from "../../lib/notes/stickyNotes.ts";
 import type { DrawElementDto } from "@drawnosaurus/contract";
 
 describe("Drawnosaurus Benchmark Suite", () => {
-  const MERMAID_DIAGRAM = `
-    graph TD
-    A[Start] --> B{Valid?}
-    B -->|Yes| C[Process Stage 1]
-    B -->|No| D[Log Error]
-    C --> E[Process Stage 2]
-    E --> F[Database Write]
-    F --> G[Cache Invalidate]
-    G --> H((Complete))
-  `;
-
-  const parsed = parseMermaidFlowchart(MERMAID_DIAGRAM);
-
-  bench("Mermaid: parse flowchart syntax", () => {
-    parseMermaidFlowchart(MERMAID_DIAGRAM);
-  });
-
-  bench("Mermaid: convert parsed diagram to 50+ DrawElements", () => {
-    mermaidToElements(parsed, 100, 100);
-  });
-
   const baseScene: DrawElementDto[] = Array.from({ length: 500 }, (_, i) => ({
     id: `el_${i}`,
     type: "rectangle",

@@ -516,6 +516,7 @@ describe("the command palette prints this registry's own text", () => {
     toggleFocusMode: () => {},
     openExport: () => {},
     openTemplates: () => {},
+    openMermaid: () => {},
     enterPresent: () => {},
     presets: [],
     applyStylePreset: () => {},
