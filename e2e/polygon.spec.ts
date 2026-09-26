@@ -4,6 +4,7 @@ import {
   activeTool,
   openBoard,
   pickTool,
+  regionInk,
   sceneElements,
   selection,
   type Board,
@@ -18,12 +19,9 @@ import {
  * a click landing inside the paint, the panel's toggle, what undo and redo cross, and
  * what survives export.
  *
- * Dragging an individual vertex is not exercised here: the double-click that opens a
- * line's point handles (`engine::handle_double_click`, `ci_handles.rs` ›
- * `double_clicking_a_polygon_opens_its_points`) has no caller anywhere in the host — a
- * pre-existing gap in every multi-point line, not something this feature introduced.
- * What the host does wire up — resizing a closed shape by its box — is covered below
- * instead, the same substitution `bucket.spec.ts` makes for the paint it produces.
+ * A selected polygon offers a circle on each vertex under its box, as the oracle does,
+ * so a vertex is dragged on its own and the box still resizes the whole
+ * (`ci_handles.rs`, `ci_curved_linear.rs`).
  */
 
 const START = { x: OPEN_CANVAS.left + 120, y: OPEN_CANVAS.top + 120 };
@@ -102,6 +100,56 @@ test.describe("a closed line as a filled polygon", () => {
     expect(await selection(page), "the interior of a filled polygon is a hit target").toEqual([
       filled.id,
     ]);
+  });
+
+  test("a rounded polygon's hatching fills its curve, not the triangle of its points", async ({
+    page,
+  }) => {
+    const board = await openBoard(page);
+    await drawTriangle(board);
+    await pickYellowBackground(board);
+    await page.mouse.click(board.box.x + START.x - 60, board.box.y + START.y - 60);
+    await page.waitForTimeout(120);
+    const line = await theLine(board);
+    expect(line.roundness, "rounded by default, so drawn as a curve").toBeTruthy();
+    expect(line.fillStyle).toBe("hachure");
+
+    // The right edge runs from (220, 0) to (110, 180). At y = 101 it is at x ≈ 158 and
+    // the curve bows out to x ≈ 186: x = 175 is inside the paint, outside the triangle.
+    const patch = (x: number, y: number) => ({
+      left: START.x + x - 6,
+      top: START.y + y - 6,
+      right: START.x + x + 6,
+      bottom: START.y + y + 6,
+    });
+    expect(await regionInk(page, patch(175, 101)), "hatched inside the bulge").toBeGreaterThan(
+      0.02,
+    );
+    expect(await regionInk(page, patch(205, 101)), "and nothing beyond the curve").toBe(0);
+  });
+
+  test("a vertex of the selected polygon is dragged on its own", async ({ page }) => {
+    const board = await openBoard(page);
+    await drawTriangle(board);
+    const before = await theLine(board);
+    expect(await selection(page), "drawing leaves it selected").toEqual([before.id]);
+
+    const from = at(board, START.x + 220, START.y);
+    const to = at(board, START.x + 260, START.y - 40);
+    await page.mouse.move(from.x, from.y, { steps: 4 });
+    await page.mouse.down();
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(120);
+
+    const after = await theLine(board);
+    const world = (el: typeof after) => el.points!.map((p) => [el.x + p[0]!, el.y + p[1]!]);
+    const was = world(before);
+    const now = world(after);
+    expect(now[1], "the vertex followed the pointer").toEqual([START.x + 260, START.y - 40]);
+    expect(now[0], "the others stayed").toEqual(was[0]);
+    expect(now[2]).toEqual(was[2]);
+    expect(after.polygon, "still closed").toBe(true);
   });
 
   test("the panel's toggle opens and closes it, clearing the fill only on open", async ({

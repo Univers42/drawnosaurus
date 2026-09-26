@@ -68,6 +68,7 @@ export interface SceneElement {
   isDeleted?: boolean;
   strokeColor?: string;
   backgroundColor?: string;
+  fillStyle?: string;
   strokeWidth?: number;
   roughness?: number;
   opacity?: number;
