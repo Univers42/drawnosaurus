@@ -35,7 +35,20 @@ export async function mermaidToElements(definition: string): Promise<DrawElement
       throw error;
     }
   }
-  return skeletonToElements(result);
+  return skeletonToElements(result, { lifelines: diagramType(definition) === "sequenceDiagram" });
+}
+
+/**
+ * The keyword that names `definition`'s diagram type — its first word once the front
+ * matter (`---` … `---`), `%%{…}%%` directives and `%%` comments Mermaid allows ahead of
+ * it are skipped.
+ */
+export function diagramType(definition: string): string {
+  const body = definition
+    .replace(/^\s*---\r?\n[\s\S]*?\r?\n---[^\n]*/, "")
+    .replace(/%%\{[\s\S]*?\}%%/g, "");
+  const line = body.split(/\r?\n/).find((l) => l.trim() !== "" && !l.trim().startsWith("%%"));
+  return line?.trim().split(/[\s;:]/)[0] ?? "";
 }
 
 /** `elements` as the scene document `engine.insertJson` places. */

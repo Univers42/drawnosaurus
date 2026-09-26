@@ -5,9 +5,10 @@ import {
   SkeletonError,
   restoreEntities,
   skeletonToElements,
+  type SkeletonResult,
   type Skeleton,
 } from "./skeleton.ts";
-import { looksLikeMermaid } from "./importMermaid.ts";
+import { diagramType, looksLikeMermaid } from "./importMermaid.ts";
 
 /**
  * The skeletons below are shaped as `@excalidraw/mermaid-to-excalidraw` writes them —
@@ -72,9 +73,9 @@ describe("skeletonToElements", () => {
     expect(byType(elements, "text")[0]!.containerId).toBe(arrow!.id);
   });
 
-  it("binds an end only to a shape it reaches, so a message stays on its lifelines", () => {
+  it("leaves a sequence diagram's messages unbound, so each stays on its lifelines", () => {
     // The sequence converter binds each message to the boxes atop both lifelines.
-    const [, , arrow] = skeletonToElements({
+    const skeletons: SkeletonResult = {
       elements: [
         node("A", 0),
         node("B", 200),
@@ -90,9 +91,13 @@ describe("skeletonToElements", () => {
           end: { id: "B" },
         },
       ],
-    });
-    expect([arrow!.startBinding, arrow!.endBinding]).toEqual([undefined, undefined]);
-    expect([arrow!.x, arrow!.y]).toEqual([50, 300]);
+    };
+    const [, , message] = skeletonToElements(skeletons, { lifelines: true });
+    expect([message!.startBinding, message!.endBinding]).toEqual([undefined, undefined]);
+    expect([message!.x, message!.y]).toEqual([50, 300]);
+    // Anywhere else an arrow is bound to what it names, however far the converter put it.
+    const [a, b, edge] = skeletonToElements(skeletons);
+    expect([edge!.startBinding, edge!.endBinding]).toEqual([a!.id, b!.id]);
   });
 
   it("reads arrowheads as the converter writes them: null is none, a crow's foot kept", () => {
@@ -205,6 +210,20 @@ describe("skeletonToElements", () => {
     for (const element of elements) {
       expect(drawElementSchema.safeParse(element).success, element.type).toBe(true);
     }
+  });
+});
+
+describe("diagramType", () => {
+  it("is the first word, past front matter, directives and comments", () => {
+    expect(diagramType("sequenceDiagram\n  A->>B: hi")).toBe("sequenceDiagram");
+    expect(diagramType("  flowchart LR\n a-->b")).toBe("flowchart");
+    expect(diagramType("---\ntitle: Login\n---\nsequenceDiagram\n A->>B: hi")).toBe(
+      "sequenceDiagram",
+    );
+    expect(diagramType('%%{init: {"theme": "dark"}}%%\n%% a note\nsequenceDiagram')).toBe(
+      "sequenceDiagram",
+    );
+    expect(diagramType("")).toBe("");
   });
 });
 

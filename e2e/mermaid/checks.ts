@@ -111,19 +111,25 @@ const contains = (outer: Placed, inner: Placed): boolean =>
   inner.x + inner.width <= outer.x + outer.width + EPSILON &&
   inner.y + inner.height <= outer.y + outer.height + EPSILON;
 
-/** No two declared nodes' shapes overlap — a subgraph around them is not a node. */
-export function noOverlaps(kase: Case, elements: Placed[]): string[] {
-  const shapes = shapesByLabel(elements);
-  const nodes = kase.nodes
-    .map((node) => shapes.get(normalise(node)))
-    .filter((shape): shape is Placed => shape !== undefined);
+/**
+ * No two declared nodes' shapes overlap more than the converter already had them — a
+ * subgraph around them is not a node. Mermaid's layout is the baseline: the converter can
+ * size a long-labelled circle taller than the room Mermaid left it, and then it already
+ * touches its neighbour before the engine places anything.
+ */
+export function noOverlaps(kase: Case, converted: Placed[], placed: Placed[]): string[] {
+  const before = shapesByLabel(converted);
+  const after = shapesByLabel(placed);
   const failures: string[] = [];
-  for (let i = 0; i < nodes.length; i += 1) {
-    for (let j = i + 1; j < nodes.length; j += 1) {
-      const a = nodes[i]!;
-      const b = nodes[j]!;
-      if (overlapArea(a, b) > EPSILON && !contains(a, b) && !contains(b, a)) {
-        failures.push(`nodes overlap: ${a.id} and ${b.id}`);
+  for (let i = 0; i < kase.nodes.length; i += 1) {
+    for (let j = i + 1; j < kase.nodes.length; j += 1) {
+      const [p, q] = [normalise(kase.nodes[i]!), normalise(kase.nodes[j]!)];
+      const [a, b] = [after.get(p), after.get(q)];
+      if (!a || !b || contains(a, b) || contains(b, a)) continue;
+      const [a0, b0] = [before.get(p), before.get(q)];
+      const already = a0 && b0 ? overlapArea(a0, b0) : 0;
+      if (overlapArea(a, b) > already + EPSILON) {
+        failures.push(`nodes overlap: "${p}" and "${q}"`);
       }
     }
   }
@@ -199,7 +205,7 @@ export function check(
   return [
     ...failures,
     ...coverage(kase, placed),
-    ...noOverlaps(kase, placed),
+    ...noOverlaps(kase, converted, placed),
     ...labelsFit(placed),
     ...positionsKept(kase, converted, placed),
   ];

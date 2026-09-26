@@ -42,18 +42,16 @@ with the picture it describes.
   fonts. A label that no longer fits the box Mermaid made for it is set smaller, down to 12. Only then does the shape grow (`clipboard.rs` › `fitted`). The oracle grows the
   shape at once, so neighbours overlap. It shrinks only cylinders, down to
   `MIN_VERTEX_LABEL_FONT_SIZE` 12.
-- **An arrow is bound only to a shape its end reaches**, within 40 of the shape's box
-  (`skeleton.ts` › `BIND_REACH`).
-  - Our engine routes a bound end onto its shape straight away. The converter binds a
-    sequence message to the boxes at the top of both lifelines, so a bound message would
-    jump up to them.
+- **A sequence diagram's messages are not bound** (`skeleton.ts` › `lifelines`, told by
+  `importMermaid.ts` › `diagramType`).
+  - The converter binds each message to the boxes at the top of both lifelines. Our
+    engine routes a bound end onto its shape straight away, so a bound message would
+    jump up to those boxes.
   - The oracle binds it anyway and keeps its points until a box moves
     (`transform.ts@1118751f` › `bindLinearElementToElement`).
-  - The 40 comes from the converter's own output, measured over 60 seeds of each type.
-    An end stops at most 33 from the box it names in a class diagram, which is the room
-    Mermaid leaves for a marker. In a flowchart it is at most 5, in a state diagram at
-    most 3, and in an ER diagram 0. A sequence message runs 48 or more below its actor
-    box.
+  - Every other arrow is bound to the shapes it names, as the oracle binds it. The
+    routing then also mends edges the converter drew away from their shapes, as it does
+    in a class diagram with namespaces (fuzz seeds class 305 and 776).
 - **Entities are restored.** The converter leaves its placeholders (`ﬂ°name¶ß`,
   `ﬂ°°123¶ß`) in class relation titles, which the oracle shows as they are.
   `restoreEntities` turns them back into their characters.
@@ -82,8 +80,10 @@ Inherited from the converter, and not changed here:
   - The inputs range from 1 to 200 nodes, and include unicode, long labels, nested
     subgraphs, cycles and styles.
   - Each case checks that nothing throws and nothing is NaN, that every node has a
-    shape and every edge a bound arrow, that no shapes overlap, that labels fit and
-    that positions are kept.
+    shape and every edge a bound arrow, that labels fit and that positions are kept.
+  - It also checks that no two shapes overlap more than the converter already had them.
+    The converter can size a long-labelled circle taller than the room Mermaid left it
+    (flowchart seed 322).
   - A seed that failed goes in `e2e/mermaid/regressions.ts`, and every run replays it.
   - `make fuzz-mermaid` runs 1,000 cases per type (`CASES=` to change). The ordinary
     suite runs 5.
