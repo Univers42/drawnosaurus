@@ -9,6 +9,7 @@ import {
   focusBoard,
   labelArrow,
   labelOf,
+  maybeWriteTemplate,
   openBoard,
   placeFigureAt,
   placeFrame,
@@ -182,6 +183,8 @@ test("system architecture: three frames, services, a database, clients, and a sh
   const styledOrders = byId.get(orders.id)!;
   expect(styledAuth.strokeColor).toBe("#1971c2");
   expect(styledOrders.strokeColor).toBe("#1971c2");
+
+  await maybeWriteTemplate(board, "architecture");
 
   // Save → reload.
   const saved = await waitForAutosave(board);

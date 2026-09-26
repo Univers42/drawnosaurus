@@ -132,6 +132,7 @@ describe("buildCommands", () => {
       toggleObjectsSnap: vi.fn(),
       toggleFocusMode: vi.fn(),
       openExport: vi.fn(),
+      openTemplates: vi.fn(),
       enterPresent: vi.fn(),
       presets: [],
       applyStylePreset: vi.fn(),

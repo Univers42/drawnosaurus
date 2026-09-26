@@ -4,6 +4,7 @@ import {
   expectLabelBound,
   expectSceneMatches,
   exportPngAndSvg,
+  maybeWriteTemplate,
   openBoard,
   placeFrame,
   placeStickyAt,
@@ -115,6 +116,8 @@ test("sprint retro: three frames of sticky notes and a title", async ({ page }) 
   const savedTitle = byId.get(title.id)!;
   expect(savedTitle.text).toBe("Sprint Retro");
   expect(savedTitle.frameId ?? null, "the title sits above the frames, in none of them").toBeNull();
+
+  await maybeWriteTemplate(board, "retro");
 
   const saved = await waitForAutosave(board);
   expectSceneMatches(built, saved.values(), "the saved scene matches what was drawn");

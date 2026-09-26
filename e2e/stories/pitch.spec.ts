@@ -5,6 +5,7 @@ import {
   expectSceneMatches,
   exportPngAndSvg,
   focusBoard,
+  maybeWriteTemplate,
   openBoard,
   placeFigureAt,
   placeFrame,
@@ -111,6 +112,8 @@ test("pitch deck: four titled slides, three figures, and a run through Present",
     Math.hypot(first[0] - last[0], first[1] - last[1]),
     "the loop is shut exactly",
   ).toBeCloseTo(0, 6);
+
+  await maybeWriteTemplate(board, "pitch");
 
   // Present, step through all four, and exit.
   await focusBoard(board);

@@ -6,6 +6,7 @@
   import type { Command } from "./commandPalette.ts";
   import DrawExportModal from "./DrawExportModal.svelte";
   import DrawMermaidModal from "./DrawMermaidModal.svelte";
+  import DrawTemplatesModal from "./DrawTemplatesModal.svelte";
   import DrawShareModal from "./DrawShareModal.svelte";
   import DrawShortcutsDialog from "./DrawShortcutsDialog.svelte";
   import DrawCommandPalette from "./DrawCommandPalette.svelte";
@@ -21,11 +22,13 @@
     showMainMenu = $bindable(false),
     showExport = $bindable(false),
     showMermaid = $bindable(false),
+    showTemplates = $bindable(false),
     showShare = $bindable(false),
     showShortcuts = $bindable(false),
     showPalette = $bindable(false),
     paletteCommands = [],
     onInsertMermaid,
+    onInsertTemplate,
     onEditEmbedLink,
     onCopyStyles,
   }: {
@@ -37,11 +40,13 @@
     showMainMenu: boolean;
     showExport: boolean;
     showMermaid: boolean;
+    showTemplates: boolean;
     showShare: boolean;
     showShortcuts: boolean;
     showPalette: boolean;
     paletteCommands?: Command[];
     onInsertMermaid: (elements: DrawElementDto[]) => void;
+    onInsertTemplate: (json: string) => void;
     onEditEmbedLink: (id: string) => void;
     onCopyStyles: () => void;
   } = $props();
@@ -63,6 +68,7 @@
     else if (showPalette) showPalette = false;
     else if (showExport) showExport = false;
     else if (showMermaid) showMermaid = false;
+    else if (showTemplates) showTemplates = false;
     else if (showShare) showShare = false;
     else if (showShortcuts) showShortcuts = false;
     else if (showMainMenu) showMainMenu = false;
@@ -80,6 +86,10 @@
 
 {#if showMermaid}
   <DrawMermaidModal onInsert={onInsertMermaid} onClose={() => (showMermaid = false)} />
+{/if}
+
+{#if showTemplates}
+  <DrawTemplatesModal onInsert={onInsertTemplate} onClose={() => (showTemplates = false)} />
 {/if}
 
 {#if showShare}

@@ -6,6 +6,7 @@ import {
   expectLabelBound,
   expectSceneMatches,
   exportPngAndSvg,
+  maybeWriteTemplate,
   openBoard,
   placeFigureAt,
   placeShapeAt,
@@ -149,6 +150,8 @@ test("mind map: a central topic, six branches, and a scatter of coloured figures
   const colors = [star1, star2, triangle1, triangle2].map((el) => byId.get(el.id)?.strokeColor);
   expect(colors).toEqual(["#e03131", "#2f9e44", "#1971c2", "#f08c00"]);
   expect(new Set(colors).size, "four different colours").toBe(4);
+
+  await maybeWriteTemplate(board, "mindmap");
 
   const saved = await waitForAutosave(board);
   expectSceneMatches(built, saved.values(), "the saved scene matches what was drawn");

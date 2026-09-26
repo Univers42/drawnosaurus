@@ -317,6 +317,7 @@
   let showMainMenu = $state(false);
   let showExport = $state(false);
   let showMermaid = $state(false);
+  let showTemplates = $state(false);
   let showShare = $state(false);
   let showShortcuts = $state(false);
   let showPalette = $state(false);
@@ -1674,6 +1675,7 @@
     toggleObjectsSnap: flipObjectsSnap,
     toggleFocusMode,
     openExport: () => (showExport = true),
+    openTemplates: () => (showTemplates = true),
     enterPresent: () => void enterPresent(),
     presets: allPresets(userPresets).map((preset) => ({ id: preset.id, name: preset.name })),
     applyStylePreset: applyStylePresetById,
@@ -1722,6 +1724,7 @@
             onToggleFocusMode={toggleFocusMode}
             onOpenExport={() => (showExport = true)}
             onOpenMermaid={() => (showMermaid = true)}
+            onOpenTemplates={() => (showTemplates = true)}
             onOpenShare={() => (showShare = true)}
             onOpenShortcuts={() => (showShortcuts = true)}
             onOpenPresent={() => void enterPresent()}
@@ -2044,6 +2047,7 @@
       bind:showMainMenu
       bind:showExport
       bind:showMermaid
+      bind:showTemplates
       bind:showShare
       bind:showShortcuts
       bind:showPalette
@@ -2055,6 +2059,11 @@
       }}
       onInsertMermaid={(elements) => {
         if (engine) engine.pasteJson(JSON.stringify({ type: "osidraw", version: 1, elements }));
+      }}
+      onInsertTemplate={(json) => {
+        if (!engine) return;
+        const screen = viewportCentre();
+        engine.pasteJson(json, engine.screenToWorld(screen.x, screen.y));
       }}
     />
   {/if}

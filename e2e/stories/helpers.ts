@@ -417,3 +417,28 @@ export async function exportPngAndSvg(board: Board): Promise<void> {
   expect(await downloadSize(svg), "the SVG export is non-empty").toBeGreaterThan(0);
   await expect(dialog).toBeHidden();
 }
+
+/**
+ * The regeneration step for `apps/web/src/lib/templates/*.osidraw.json`: with
+ * `GENERATE_TEMPLATES` set, each story writes its own final scene out as that
+ * template's file, through the exact same path `saveToDisk`/reload use
+ * (`engine.exportJson()` — already `{type:"osidraw",version,elements}`, tombstones
+ * already dropped), so a template is never anything but "what this story built".
+ *
+ * A no-op otherwise — this runs inside every story's normal pass, not a separate
+ * script, so there is nothing extra to keep working. Regenerate with:
+ *
+ * ```sh
+ * docker run --rm --ipc=host -e CI= -e GENERATE_TEMPLATES=1 --user 1000:1000 -e HOME=/tmp \
+ *   -v "$PWD":/app -w /app mcr.microsoft.com/playwright:v1.63.0-noble \
+ *   node node_modules/@playwright/test/cli.js test e2e/stories --trace=off --reporter=line
+ * ```
+ */
+export async function maybeWriteTemplate(board: Board, name: string): Promise<void> {
+  if (!process.env.GENERATE_TEMPLATES) return;
+  const json = await board.page.evaluate(() => window.__drawEngine!.exportJson());
+  const { writeFile } = await import("node:fs/promises");
+  const { fileURLToPath } = await import("node:url");
+  const dir = fileURLToPath(new URL("../../apps/web/src/lib/templates/", import.meta.url));
+  await writeFile(`${dir}${name}.osidraw.json`, `${json}\n`, "utf8");
+}

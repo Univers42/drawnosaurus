@@ -11,6 +11,7 @@ import {
   insertLabeledRectangle,
   labelArrow,
   labelOf,
+  maybeWriteTemplate,
   openBoard,
   placeFigureAt,
   reopenWith,
@@ -88,6 +89,8 @@ test("checkout flow: cart, address, payment, a decision, and its two outcomes", 
   expectLabelBound(built, ordersDb.id, "Orders DB");
   expect(labelOf(built, paidToReceipt.id).text).toBe("yes");
   expect(labelOf(built, paidToOrders.id).text).toBe("no");
+
+  await maybeWriteTemplate(board, "checkout");
 
   // Save → reload: what autosave actually sent, reopened through the real load path.
   const saved = await waitForAutosave(board);

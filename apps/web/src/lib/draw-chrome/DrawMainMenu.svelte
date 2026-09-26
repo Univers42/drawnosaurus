@@ -39,6 +39,7 @@
     onToggleFocusMode,
     onOpenExport,
     onOpenMermaid,
+    onOpenTemplates,
     onOpenShare,
     onOpenShortcuts,
     onOpenPresent,
@@ -57,6 +58,7 @@
     onToggleFocusMode: () => void;
     onOpenExport: () => void;
     onOpenMermaid: () => void;
+    onOpenTemplates: () => void;
     onOpenShare: () => void;
     onOpenShortcuts: () => void;
     onOpenPresent: () => void;
@@ -215,6 +217,16 @@
     >
       <MainMenuIcon name="diagram" />
       <span class="dropdown-menu-item__text">Mermaid to diagram…</span>
+    </button>
+
+    <button
+      type="button"
+      role="menuitem"
+      class="dropdown-menu-item"
+      onclick={() => pick(onOpenTemplates)}
+    >
+      <MainMenuIcon name="diagram" />
+      <span class="dropdown-menu-item__text">Templates…</span>
     </button>
 
     <button

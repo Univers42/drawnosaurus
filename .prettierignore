@@ -25,3 +25,8 @@ prompts.md
 
 # Written by the tooling, not by hand.
 .claude/settings.local.json
+
+# `engine.exportJson()`'s own pretty-print (`serde_json::to_string_pretty`), byte-for-byte
+# — that is the point, since a template is "what a story built", not a reformatting of
+# it. Its arrays land one element per line, which Prettier collapses short ones out of.
+apps/web/src/lib/templates/*.osidraw.json

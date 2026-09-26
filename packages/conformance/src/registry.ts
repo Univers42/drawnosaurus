@@ -694,6 +694,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "📚 Library",
+    text: /Reuse diagrams\/components\/templates/,
+    status: "gap",
+    why: "Five fixed starter boards exist now (`apps/web/src/lib/templates`, `DrawTemplatesModal.svelte`, `docs/reference/templates.md`, `e2e/templates.spec.ts`) — a catalog to start a board from, not a library: nothing lets a viewer save their own diagram or component and reuse it later.",
+  },
+  {
+    section: "📚 Library",
     status: "gap",
     why: "No library. Needs item storage, preview rendering, id regeneration on insert and group preservation.",
   },

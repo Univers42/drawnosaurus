@@ -22,7 +22,7 @@ duplicated by hand:
 - **Add rectangle / diamond / ellipse** — keyboard-only diagramming, below;
 - zoom in/out/reset, fit, zoom to selection, grid and snap toggles, focus mode, Present;
 - theme (light/dark/system);
-- Export;
+- Export, Templates (`docs/reference/templates.md`);
 - every style preset, built-in and saved (`stylePresets.ts`, `docs/reference/
 stylePresets.md`), each its own command.
 

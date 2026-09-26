@@ -127,6 +127,7 @@ export interface PaletteHost {
   toggleObjectsSnap: () => void;
   toggleFocusMode: () => void;
   openExport: () => void;
+  openTemplates: () => void;
   enterPresent: () => void;
   presets: readonly PresetSummary[];
   applyStylePreset: (id: string) => void;
@@ -263,13 +264,21 @@ export function buildCommands(host: PaletteHost): Command[] {
     },
   );
 
-  commands.push({
-    id: "file:export",
-    label: "Export…",
-    category: "File",
-    shortcut: shortcutLabel("CtrlOrCmd+Shift+E"),
-    run: host.openExport,
-  });
+  commands.push(
+    {
+      id: "file:export",
+      label: "Export…",
+      category: "File",
+      shortcut: shortcutLabel("CtrlOrCmd+Shift+E"),
+      run: host.openExport,
+    },
+    {
+      id: "file:templates",
+      label: "Templates…",
+      category: "File",
+      run: host.openTemplates,
+    },
+  );
 
   for (const preset of host.presets) {
     commands.push({
