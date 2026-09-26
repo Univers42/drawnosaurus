@@ -17,6 +17,7 @@ import {
   reopenWith,
   sceneElements,
   waitForAutosave,
+  worldToCanvas,
 } from "./helpers.ts";
 
 /**
@@ -41,20 +42,23 @@ test("checkout flow: cart, address, payment, a decision, and its two outcomes", 
   const { node: paid, arrow: paymentToPaid } = await growNode(board, "ArrowRight", "Paid?", "2");
   expect(paid.type, "the decision is a diamond").toBe("diamond");
 
-  // The two outcomes: a figure each, placed clear of the flowchart chain (which may have
-  // panned the camera on its own reveal — `connect` below reads world positions, not
-  // screen ones, so where these land on screen does not matter).
+  // The two outcomes: a figure each, under the decision, placed from where the diamond is
+  // on screen once the camera has landed. The flowchart centres a node it grows off screen
+  // (`revealIfHidden`), so a fixed screen point can land on the chain itself.
+  const decision = (await sceneElements(page)).find((el) => el.id === paid.id)!;
+  const under = await worldToCanvas(board, decision.x, decision.y + decision.height);
+  const top = Math.min(under.y + 70, OPEN_CANVAS.bottom - 100);
   const receipt = await placeFigureAt(
     board,
     "Document",
-    { x: OPEN_CANVAS.left + 40, y: OPEN_CANVAS.bottom - 170 },
+    { x: under.x - 200, y: top },
     { w: 130, h: 90 },
     "Receipt",
   );
   const ordersDb = await placeFigureAt(
     board,
     "Cylinder",
-    { x: OPEN_CANVAS.left + 240, y: OPEN_CANVAS.bottom - 170 },
+    { x: under.x + 100, y: top },
     { w: 130, h: 90 },
     "Orders DB",
   );
