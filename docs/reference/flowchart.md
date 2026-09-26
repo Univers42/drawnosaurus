@@ -18,22 +18,23 @@ turned nodes, repeated presses, direction changes, Escape, frames, zooms, scroll
 offsets, and Alt+Arrow walks including the oracle's own navigation tests.
 `ci_flowchart_oracle.rs` replays each against the engine and compares, after every key,
 the pending cluster, the scene, the selection and the camera, within 1e-9: positions,
-sizes, styles, ids in order, frame membership, which element each arrow end binds and how,
-its anchor, its heads.
+sizes, styles, ids in order, frame membership, and each arrow whole — its elbow route
+point by point, its size, which element each end binds and how, its anchors, its heads.
 
-What is not compared, because the oracle's arrow is an elbow arrow and this engine does
-not route one yet: each arrow's points (and so its width and height); its x/y and anchors
-where an end sits on a diamond or a turned node, which the oracle snaps with elbow-only
-rules; and the camera after a reveal whose bounds take in an arrow's hand-drawn wobble or
-an elbow route. The test prints what it compared — 3064 anchors with 500 skipped, 1346
-camera positions with 116 skipped — and fails if the share compared drops.
+What is not compared: the camera after a reveal whose bounds take in an arrow's hand-drawn
+wobble, which follows each element's random seed; and the route and anchors of an arrow
+at a diamond given an explicit corner radius (see the divergences below) — its bindings
+still are. The test prints what it compared — 1750 arrows and 3500 anchors, with 32 arrows
+skipped; 1431 camera positions, with 31 skipped — and fails if the share compared drops.
 
 ## What it does
 
 **VERIFIED** — holding Ctrl/Cmd (without Shift) and pressing an arrow key, with exactly one
 flowchart node selected (rectangle, diamond, ellipse, sticky note — `is_flowchart_node`,
 `typeChecks.ts@1118751f:286-293` — and this app's figures), previews a new node off that
-side and an arrow bound to both. The preview is held outside the scene
+side and an elbow arrow bound to both, routed as the oracle's `createBindingArrow` routes
+it: bound in orbit, its anchors snapped to each node's outline, then routed twice — over
+the scene without the new node, then with it. The preview is held outside the scene
 (`FlowchartCreator::pending`) and painted over it at a fifth of its opacity, as the oracle
 paints `pendingFlowchartNodes` — nothing is added to the scene, the selection or the undo
 history until the modifier is released. Releasing inserts every pending element as
@@ -50,7 +51,8 @@ Escape drops the preview and nothing else: the start stays selected.
 direction, cycles through same-level nodes on a repeat press, and falls back to any
 unvisited linked node — `FlowchartNavigator::explore`, ported from `FlowChartNavigator`,
 with the oracle's own heading test (`headingForPointFromElement`) on the point where each
-arrow meets the node. With anything else selected Alt+Arrow is the plain nudge, as there.
+arrow meets the node. A link is an elbow arrow, as the oracle's `isElbowArrow` has it; a
+sharp or curved arrow between two nodes neither links them nor keeps a new node off them. With anything else selected Alt+Arrow is the plain nudge, as there.
 
 **VERIFIED** — every press, the commit and every walk reveal what they reach when it is not
 wholly on screen — `revealIfHidden` (`App.tsx@1118751f:5197`): the room is the canvas less
@@ -62,11 +64,10 @@ it. The toolbar is marked `top` and the inspector `side`, as the oracle marks it
 
 ## Divergences from the oracle, deliberate
 
-- **No elbow routing yet.** The arrow is built by one function, `binding_arrow`, with
-  everything the oracle's `createBindingArrow` sets — style, heads, both bindings, the
-  anchors — and today's straight arrow between the two anchors. The switch, when elbow
-  arrows land, is `elbowed: true` and the route there, `is_flowchart_link` narrowed to
-  elbow arrows, and the diamond/turned anchors from the elbow snapping.
+- **A diamond's explicit corner radius** is read up to half the span, where the oracle's
+  `getCornerRadius` caps `roundness.value` at a quarter: the engine's corner-radius handle
+  would otherwise stop a quarter of the way in. An arrow's end snaps to the rounded tip it
+  is painted with, so on such a diamond its anchor and route differ from the oracle's.
 - **Selection-only steps take no history.** The oracle captures a history entry when an
   Alt walk ends; this engine records only steps that changed the scene.
 - **The start node's `boundElements` is not rewritten** before the commit as the oracle's
@@ -103,9 +104,11 @@ offsets (`setViewportOffsets`) from the keydown.
 ## Cost
 
 **IMPLEMENTATION DETAIL** — `benches/editing.rs` › `flowchart/*`, beside a 200-node diagram:
-a press costs about 34µs on a 1,000-shape board and 90µs on a 20,000-shape one, a walk step
-3µs and 97µs, the release 26µs and 185µs. The preview is painted over the cached board, so
-a press does not repaint it.
+a press costs about 74µs on a 1,000-shape board and 151µs on a 20,000-shape one — routing
+the new elbow arrow is some 40µs of it — ten presses in a row (55 arrows routed) 3.1ms and
+3.8ms, a walk step 3µs and 120µs, the release 4µs and 7µs. The release routes nothing: the
+preview's arrows are inserted as built. The preview is painted over the cached board, so a
+press does not repaint it.
 
 ## Limits
 

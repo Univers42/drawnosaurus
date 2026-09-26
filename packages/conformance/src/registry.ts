@@ -545,7 +545,13 @@ export const RULES: readonly Rule[] = [
     section: "🔄 Flowcharts",
     text: /elbow arrows/,
     status: "covered",
-    tests: [`${ENGINE}/ci_elbow.rs`, `${ENGINE}/ci_elbow_oracle.rs`, "e2e/elbowArrow.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_elbow.rs`,
+      `${ENGINE}/ci_elbow_oracle.rs`,
+      `${ENGINE}/ci_flowchart_oracle.rs`,
+      "e2e/elbowArrow.spec.ts",
+      "e2e/flowchart.spec.ts",
+    ],
   },
   {
     section: "🧠 Autoshape / Smart drawing",
