@@ -107,6 +107,9 @@ test("the text being typed is on screen once: the editor's, not also the canvas'
 test("the editor is the text's own box, in world units, scaled and moved by the camera", async ({
   page,
 }) => {
+  // Zoom eases over 250ms; `check()` reads the camera and the editor's own CSS transform
+  // in two separate round trips, which would otherwise race a still-moving camera.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   const board = await openBoard(page);
   await drawShape(board);
   await page.getByRole("button", { name: /^Zoom in/ }).click();
