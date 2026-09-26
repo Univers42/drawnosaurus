@@ -204,14 +204,14 @@ export const RULES: readonly Rule[] = [
     tests: [`${ENGINE}/ci_group_structure.rs`, "e2e/layer.spec.ts"],
   },
   // copySelection/cutSelection are wired to Ctrl+C/Ctrl+X (keys.ts's handleModChords) and
-  // Ctrl+V is deliberately left unhandled so the browser's own paste event carries it —
-  // but no test dispatches Ctrl+C or Ctrl+X, and nothing drives an actual paste, so none
-  // of the three round-trips through a test. Same gap as "27. Keyboard system"'s.
+  // Ctrl+V rides the browser's own paste event — e2e/clipboard.spec.ts now dispatches all
+  // three for real and checks the round trip (and that Ctrl+V lands on the pointer, not a
+  // fixed offset — the bug this file exists for). Same fix closes "27. Keyboard system"'s.
   {
     section: "🖱️ Selection",
     text: /^`Ctrl\/Cmd \+ [CXV]` —/,
-    status: "gap",
-    why: "implemented, untested — copySelection/cutSelection answer Ctrl+C/Ctrl+X and paste rides the native clipboard event, but no test dispatches Ctrl+C/Ctrl+X or completes a paste to confirm any of the three actually round-trips.",
+    status: "covered",
+    tests: ["e2e/clipboard.spec.ts"],
   },
   {
     section: "🖱️ Selection",
@@ -711,11 +711,13 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "Copy-as-image and rich external paste. SVG export exists (ci_export.rs) but is not wired to the clipboard.",
   },
+  // e2e/clipboard.spec.ts dispatches real Ctrl+C and Ctrl+X and checks both against the
+  // actual OS clipboard (Ctrl+X deletes but a following Ctrl+V proves the cut landed there).
   {
     section: "📋 Clipboard tricks",
     text: /Ctrl\/Cmd \+ C`.*Copy|Ctrl\/Cmd \+ X`.*Cut/,
-    status: "gap",
-    why: "implemented, untested — the C/X keys call copySelection/cutSelection and write to the clipboard (engine/src/host/keys.ts:139-148), but keys.test.ts only stubs copySelection/cutSelection in its mock session and never dispatches Ctrl+C or Ctrl+X to assert either is called; ci_edit.rs has no clipboard tests.",
+    status: "covered",
+    tests: ["e2e/clipboard.spec.ts"],
   },
   {
     section: "📋 Clipboard tricks",
@@ -2026,15 +2028,13 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_multi_select.rs`],
   },
-  // copySelection/cutSelection exist (keys.ts's handleModChords) and Ctrl+V is proven
-  // deliberately unhandled so the browser's own paste event carries it — but no test
-  // dispatches Ctrl+C or Ctrl+X, and nothing drives an actual paste to confirm the round
-  // trip through the clipboard. "does not steal Ctrl+V" is non-interference, not a paste.
+  // copySelection/cutSelection exist (keys.ts's handleModChords) and Ctrl+V rides the
+  // browser's own paste event — e2e/clipboard.spec.ts now dispatches all three for real.
   {
     section: "27. Keyboard system",
     text: /^Cmd\/Ctrl\+[CXV]$/,
-    status: "gap",
-    why: "implemented, untested — copySelection/cutSelection are wired to Ctrl+C/Ctrl+X and paste rides the native clipboard event, but no test dispatches Ctrl+C/Ctrl+X or completes a paste to confirm any of the three actually round-trips.",
+    status: "covered",
+    tests: ["e2e/clipboard.spec.ts"],
   },
   {
     section: "27. Keyboard system",
