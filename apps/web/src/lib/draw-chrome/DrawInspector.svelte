@@ -210,7 +210,7 @@
   }
 </script>
 
-<aside class="draw-panel panel" aria-label="Style inspector">
+<aside class="draw-panel panel" aria-label="Style inspector" data-viewport-ui="side">
   <div class="title">{title}</div>
 
   <InspectorRow label="Presets">

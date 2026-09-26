@@ -72,7 +72,13 @@
 
 <svelte:window onpointerdown={onWindowPointerDown} />
 
-<div class="draw-panel bar" role="toolbar" aria-label="Drawing tools" bind:this={root}>
+<div
+  class="draw-panel bar"
+  role="toolbar"
+  aria-label="Drawing tools"
+  data-viewport-ui="top"
+  bind:this={root}
+>
   <button
     type="button"
     onmousedown={holdFocus}

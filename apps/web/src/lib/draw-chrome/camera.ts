@@ -13,9 +13,9 @@ export interface Box {
 /**
  * The union box of one or more elements' own `x/y/width/height`, unrotated.
  *
- * A flowchart cluster is created axis-aligned, so this is exact for the case it exists
- * for; a rotated element would need the true rotated AABB `packages/contract/bounds.ts`
- * computes, which this module has no reason to duplicate for a reveal nudge.
+ * Good enough to place chrome beside a selection or a pending flowchart cluster; a
+ * rotated element would need the true rotated AABB `packages/contract/bounds.ts`
+ * computes, which this module has no reason to duplicate for that.
  */
 export function boundsOf(elements: Box[]): Box | null {
   if (elements.length === 0) return null;
@@ -30,34 +30,6 @@ export function boundsOf(elements: Box[]): Box | null {
     bottom = Math.max(bottom, el.y + el.height);
   }
   return { x: left, y: top, width: right - left, height: bottom - top };
-}
-
-/**
- * The screen-space pan (`panBy`'s own units — added straight onto `camera.x/y`) that
- * brings `target` inside `viewport` with `padding` to spare, or `null` when it already
- * fits. Chosen over a re-fit so an in-progress flowchart never surprises the person by
- * changing their zoom out from under them — only scrolls, the way the oracle's own
- * `scale-down` fit would only if the cluster had outgrown the screen.
- */
-export function revealPan(
-  viewport: { width: number; height: number },
-  camera: { x: number; y: number; scale: number },
-  target: Box,
-  padding = 48,
-): { dx: number; dy: number } | null {
-  const left = target.x * camera.scale + camera.x;
-  const top = target.y * camera.scale + camera.y;
-  const right = left + target.width * camera.scale;
-  const bottom = top + target.height * camera.scale;
-
-  let dx = 0;
-  let dy = 0;
-  if (left < padding) dx = padding - left;
-  else if (right > viewport.width - padding) dx = viewport.width - padding - right;
-  if (top < padding) dy = padding - top;
-  else if (bottom > viewport.height - padding) dy = viewport.height - padding - bottom;
-
-  return dx === 0 && dy === 0 ? null : { dx, dy };
 }
 
 /** Mirrors the engine's `MIN_ZOOM`/`MAX_ZOOM` (`camera.rs`). */

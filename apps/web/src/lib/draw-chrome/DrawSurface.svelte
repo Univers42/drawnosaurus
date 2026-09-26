@@ -15,6 +15,7 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { DrawPeer } from "@osionos/draw-engine/types";
   import { cursorForTool } from "./style.ts";
+  import { measureViewportOffsets } from "./viewportOffsets.ts";
   import {
     animateCamera,
     boundsOf,
@@ -22,7 +23,6 @@
     focusCamera,
     persistFocusModePreference,
     readFocusModePreference,
-    revealPan,
     setCameraExact,
     worldToScreen,
     zoomPercent,
@@ -986,35 +986,21 @@
     syncPeers();
   }
 
-  // A flowchart cluster being previewed (Ctrl/Cmd+Arrow still held) can grow off screen
-  // before it is ever committed — the engine only eases the camera at commit/navigate
-  // (`DrawEngine::reveal`), so this covers the still-pending case with a short ease of
-  // its own, never a jump. `onFlowchartReveal` fires once per keypress; each one takes
-  // over from wherever the pan still in flight had got to rather than stacking two.
-  const FLOWCHART_REVEAL_MS = 220;
-  let revealAnim: CameraAnimation | null = null;
-
-  function startFlowchartReveal(): void {
+  // What a flowchart reveal keeps clear of, measured the oracle's way at the keypress
+  // that reveals (`App.viewport.ts@1118751f:502`) — the chrome may have moved since the
+  // last one. The engine eases the camera itself, for creation, commit and walk alike.
+  function measureRevealRoom(event: KeyboardEvent & { currentTarget: HTMLElement }): void {
     if (!engine || !canvasHost) return;
-    const bounds = boundsOf(engine.pendingFlowchartElements());
-    if (!bounds) return;
-    const rect = canvasHost.getBoundingClientRect();
-    const from = engine.camera;
-    const pan = revealPan({ width: rect.width, height: rect.height }, from, bounds);
-    if (!pan) return;
-    revealAnim?.cancel();
-    const to = { x: from.x + pan.dx, y: from.y + pan.dy, scale: from.scale };
-    revealAnim = animateCamera(from, to, (camera) => setCameraExact(engine!, camera), {
-      durationMs: FLOWCHART_REVEAL_MS,
-      reducedMotion: prefersReducedMotion(),
-    });
+    if (!event.key.startsWith("Arrow") || !(event.ctrlKey || event.metaKey || event.altKey)) return;
+    engine.setViewportOffsets(measureViewportOffsets(event.currentTarget, canvasHost));
   }
 
   // Extra the oracle lacks: a small floating strip beside the node being created offers
   // the same 1/2/3 shape choice by click. Shown only while a cluster is pending
   // (`onFlowchartCreatingChange`) and positioned from the pending cluster's own bounds —
   // recomputed on every keypress that can move or grow it (`onFlowchartCreatingChange`
-  // fires on every Ctrl/Cmd+Arrow, held-and-repeated included).
+  // fires on every Ctrl/Cmd+Arrow, held-and-repeated included) and as the reveal moves
+  // the camera under it.
   let flowchartCreating = $state(false);
   let flowchartStripPos = $state<{ x: number; y: number } | null>(null);
 
@@ -1475,7 +1461,6 @@
     if (previewRaf) cancelAnimationFrame(previewRaf);
     presentAnim?.cancel();
     followAnim?.cancel();
-    revealAnim?.cancel();
     eraserTrail.clear();
     realtime?.disconnect();
   });
@@ -1487,6 +1472,7 @@
     if (textEdit) editorRevision += 1;
     pending = camera;
     currentCamera = camera;
+    if (flowchartCreating) updateFlowchartStripPosition();
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
@@ -1701,6 +1687,7 @@
   onkeydowncapture={(e) => {
     onFocusModeKeydown(e);
     if (!onPresentKeydown(e)) onStyleShortcut(e);
+    measureRevealRoom(e);
   }}
   ondragover={onChromeDragOver}
   ondrop={onChromeDrop}
@@ -1833,7 +1820,6 @@
       onToolLockChange={(locked) => {
         toolLocked = locked;
       }}
-      onFlowchartReveal={startFlowchartReveal}
       onFlowchartCreatingChange={(creating) => {
         flowchartCreating = creating;
         if (creating) updateFlowchartStripPosition();
