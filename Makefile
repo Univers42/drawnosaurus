@@ -189,6 +189,14 @@ test-e2e: $(ENGINE_PKG) reclaim-host-files ## Browser tests (Playwright) — zoo
 		pnpm exec playwright test
 	@echo -e "$(GREEN)✔ e2e green$(RESET)"
 
+fuzz-mermaid: $(ENGINE_PKG) reclaim-host-files ## Mermaid import fuzz, 1000 seeds per diagram type (~35 min)
+	@mkdir -p "$(or $(PLAYWRIGHT_BROWSERS_PATH),$(HOME)/.cache/ms-playwright)"
+	PLAYWRIGHT_BROWSERS_PATH="$(or $(PLAYWRIGHT_BROWSERS_PATH),$(HOME)/.cache/ms-playwright)" \
+		pnpm exec playwright install chromium
+	MERMAID_FUZZ_CASES=$(or $(CASES),1000) \
+		PLAYWRIGHT_BROWSERS_PATH="$(or $(PLAYWRIGHT_BROWSERS_PATH),$(HOME)/.cache/ms-playwright)" \
+		pnpm exec playwright test e2e/mermaidFuzz.spec.ts
+
 # Excalidraw, installed and served from third_party for the parity benchmark. Its yarn
 # cache goes to sgoinfre because $HOME here is a 4.7G disk that is already full.
 parity-deps: oracle ## Install Excalidraw so it can be benchmarked against
@@ -353,6 +361,6 @@ clean: ## Remove containers, volumes, images, and build output
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
 .PHONY: all help submodules wasm install lock typecheck lint format test \
-	test-integration test-e2e reclaim-host-files conformance parity parity-deps quality verify \
+	test-integration test-e2e fuzz-mermaid reclaim-host-files conformance parity parity-deps quality verify \
 	dev build up down logs shell clean \
 	oracle oracle-fixtures bench inspector-smoke stale
