@@ -38,7 +38,8 @@
   } from "./presentation.ts";
   import DrawPresentBar from "./DrawPresentBar.svelte";
   import DrawFollowNotice from "./DrawFollowNotice.svelte";
-  import FlowchartShapeStrip from "./FlowchartShapeStrip.svelte";
+  import ShapeStrip from "./ShapeStrip.svelte";
+  import { sharedShape, switchKey, switchPanelAt } from "./shapeSwitch.ts";
   import type { FlowchartShape } from "@osionos/draw-engine/types";
   import {
     persistCanvasBackground,
@@ -936,6 +937,7 @@
     refreshStyle();
     onSceneChange?.(json);
     refreshEmbedFrames();
+    if (shapeSwitch) placeShapeSwitch();
     if (!realtime) return;
     liveBroadcast.observe(json);
     flushLive();
@@ -1033,6 +1035,48 @@
 
   function chooseFlowchartShape(shape: FlowchartShape): void {
     engine?.flowchartSetShape(shape);
+  }
+
+  // Tab's shape switch (`shapeSwitch.ts`): open from the first Tab over the board until
+  // Escape, a press on the canvas, or a selection left with nothing to switch — and kept
+  // under the selection as the camera, the shapes and their type move.
+  const SHAPE_SWITCH = "Switch shape";
+  let shapeSwitch = $state<{ x: number; y: number; current: FlowchartShape | null } | null>(null);
+
+  function onShapeSwitchKey(event: KeyboardEvent): void {
+    if (!engine || presenting) return;
+    const action = switchKey(event, {
+      open: shapeSwitch !== null,
+      switchable: engine.canConvertSelection(),
+      onBoard: (event.target as Element | null)?.matches?.('[role="application"]') ?? false,
+    });
+    if (!action) return;
+    // Escape still does its own job below: it closes the switch on the way.
+    if (action === "close") {
+      closeShapeSwitch();
+      return;
+    }
+    event.preventDefault();
+    if (action === "open") engine.beginConversion();
+    else engine.convertSelection(null, action === "forward");
+    placeShapeSwitch();
+  }
+
+  function placeShapeSwitch(): void {
+    if (!engine || !currentCamera) return;
+    const selected = engine.getSelectedElements();
+    const bounds = boundsOf(selected);
+    if (!bounds) {
+      closeShapeSwitch();
+      return;
+    }
+    shapeSwitch = { ...switchPanelAt(bounds, currentCamera), current: sharedShape(selected) };
+  }
+
+  function closeShapeSwitch(): void {
+    if (!shapeSwitch) return;
+    shapeSwitch = null;
+    engine?.endConversion();
   }
 
   // Our gesture in progress, streamed to peers while it runs so a shape moves on their
@@ -1492,6 +1536,7 @@
     pending = camera;
     currentCamera = camera;
     if (flowchartCreating) updateFlowchartStripPosition();
+    if (shapeSwitch) placeShapeSwitch();
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
@@ -1713,7 +1758,10 @@
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
     onFocusModeKeydown(e);
-    if (!onPresentKeydown(e)) onStyleShortcut(e);
+    if (!onPresentKeydown(e)) {
+      onStyleShortcut(e);
+      onShapeSwitchKey(e);
+    }
     measureRevealRoom(e);
   }}
   ondragover={onChromeDragOver}
@@ -1764,6 +1812,7 @@
     onpointermove={onCanvasPointerMove}
     onmouseleave={onCanvasPointerLeave}
     onpointerdowncapture={(e) => {
+      if (!(e.target as Element).closest?.(`[aria-label="${SHAPE_SWITCH}"]`)) closeShapeSwitch();
       dragging = true;
       sendLaserCursorEdge(e, true);
     }}
@@ -1811,6 +1860,8 @@
         openPicker = null;
         refreshStyle();
         claimSelected(ids);
+        if (shapeSwitch && engine?.canConvertSelection()) placeShapeSwitch();
+        else closeShapeSwitch();
       }}
       onNotice={(notice) => notify(NOTICE_TEXT[notice])}
       onRequestTextEdit={(request) => {
@@ -1901,10 +1952,25 @@
       ></div>
     {/if}
     {#if flowchartCreating && flowchartStripPos}
-      <FlowchartShapeStrip
+      <ShapeStrip
+        label="Flowchart node shape"
+        keyHints
         x={flowchartStripPos.x}
         y={flowchartStripPos.y}
         onChoose={chooseFlowchartShape}
+      />
+    {/if}
+    {#if shapeSwitch}
+      <ShapeStrip
+        label={SHAPE_SWITCH}
+        below
+        x={shapeSwitch.x}
+        y={shapeSwitch.y}
+        current={shapeSwitch.current}
+        onChoose={(shape) => {
+          engine?.convertSelection(shape);
+          placeShapeSwitch();
+        }}
       />
     {/if}
   </div>

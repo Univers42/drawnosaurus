@@ -82,7 +82,7 @@ it. The toolbar is marked `top` and the inspector `side`, as the oracle marks it
   `FLOWCHART_SHAPE_KEYS` in `keys.ts`). The preview updates at once; releasing Ctrl/Cmd
   commits with that shape. A node started from a sticky note keeps cloning sticky notes
   unless one of the three is explicitly picked (`parse_shape` refuses `"stickynote"`).
-- **A floating shape-chooser strip** (`FlowchartShapeStrip.svelte`) appears beside the
+- **A floating shape-chooser strip** (`ShapeStrip.svelte`) appears beside the
   node being created, offering the same three shapes by click, each with an accessible
   name (`"Rectangle (1)"`, etc.). Shown only while a cluster is pending
   (`onFlowchartCreatingChange`), positioned from the pending cluster's own bounds and kept

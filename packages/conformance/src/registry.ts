@@ -2088,8 +2088,12 @@ export const RULES: readonly Rule[] = [
   {
     section: "27. Keyboard system",
     text: /Tab/,
-    status: "gap",
-    why: "Tab does nothing on the canvas. The oracle's own Tab opens the shape-conversion popup (App.tsx), not flowchart navigation — that is Alt+Arrow, covered under Flowcharts. This one is still unclaimed.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_shape_convert.rs`,
+      `${WEB}/draw-chrome/shapeSwitch.test.ts`,
+      "e2e/shapeSwitch.spec.ts",
+    ],
   },
   // Shift-click is a pointer gesture, not a keydown, so it is absent from keys.test.ts —
   // the additive/subtractive click the section rule below never actually exercises.
