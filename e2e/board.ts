@@ -9,7 +9,7 @@ import {
 // The pixel probes live in `probes.ts` so `tools/editor-inspector` can import them
 // without dragging in the test runner. Re-exported here because every spec already
 // reaches for them through `board.ts`.
-export { canvasInk, chromaInk, inkCentroidX, regionInk } from "./probes.ts";
+export { canvasInk, chromaInk, inkCentroidX, pixelColor, regionInk } from "./probes.ts";
 
 /**
  * Opening a board in a browser, with nothing behind it.

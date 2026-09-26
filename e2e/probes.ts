@@ -131,6 +131,33 @@ export function inkCentroidX(
 }
 
 /**
+ * The RGB of one canvas pixel, canvas-relative CSS coordinates converted to the backing
+ * store the same way `regionInk` does.
+ *
+ * The other probes above only count *whether* something differs from a reference pixel;
+ * this reads an actual colour, for checks that need to know a fill matches a specific
+ * value — a theme's own background, say, not just "not white".
+ */
+export function pixelColor(page: Page, x: number, y: number): Promise<[number, number, number]> {
+  return page.evaluate(
+    ({ x, y }) => {
+      const canvas = document.querySelector("canvas");
+      if (!canvas) throw new Error("no canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("no 2d context");
+      const box = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / box.width;
+      const scaleY = canvas.height / box.height;
+      const px = Math.round(x * scaleX);
+      const py = Math.round(y * scaleY);
+      const { data } = ctx.getImageData(px, py, 1, 1);
+      return [data[0]!, data[1]!, data[2]!] as [number, number, number];
+    },
+    { x, y },
+  );
+}
+
+/**
  * How much *coloured* ink is inside a region, as a fraction of its pixels.
  *
  * `regionInk` counts anything that is not paper, which cannot tell selection chrome from
