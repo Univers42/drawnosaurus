@@ -1,7 +1,7 @@
 import { expect, test } from "../fixtures.ts";
 import {
   OPEN_CANVAS,
-  connect,
+  connectCurved,
   expectArrowBound,
   expectLabelBound,
   expectSceneMatches,
@@ -18,12 +18,13 @@ import {
 } from "./helpers.ts";
 
 /**
- * Story 5 — mind map: a central topic, six branches around it joined by arrows (curved
- * by default — `arrowType.spec.ts` — so nothing extra is needed to get the curve), and a
- * few stars and triangles (a polygon at 3 sides) scattered in different colours.
+ * Story 5 — mind map: a central topic, six branches around it joined by curved arrows
+ * (a real bend at each midpoint — `connectCurved`, since a straight two-point arrow
+ * renders the same whichever way `roundness` is set), and a few stars and triangles (a
+ * polygon at 3 sides) scattered in different colours.
  */
 
-const CENTER = { x: OPEN_CANVAS.left + 290, y: OPEN_CANVAS.top + 200, w: 140, h: 80 };
+const CENTER = { x: OPEN_CANVAS.left + 275, y: OPEN_CANVAS.top + 190, w: 170, h: 100 };
 const BRANCHES = [
   { x: OPEN_CANVAS.left + 555, y: OPEN_CANVAS.top + 215, label: "Design" },
   { x: OPEN_CANVAS.left + 425, y: OPEN_CANVAS.top + 85, label: "Budget" },
@@ -82,7 +83,7 @@ test("mind map: a central topic, six branches, and a scatter of coloured figures
       branch.label,
     );
     branches.push(node);
-    arrows.push(await connect(board, center, node));
+    arrows.push(await connectCurved(board, center, node));
   }
 
   const star1 = await placeFigureAt(
@@ -136,9 +137,12 @@ test("mind map: a central topic, six branches, and a scatter of coloured figures
     expectLabelBound(built, branch.id, BRANCHES[index]!.label);
   }
 
-  // Curved by default: every branch arrow carries roundness, as `arrowType.spec.ts` pins.
+  // Really curved, not just carrying the default roundness a straight two-point arrow
+  // would too (`arrowType.spec.ts` pins the default; a bend needs a third point to show
+  // at all — `render/outline.rs::curve`).
   for (const arrow of arrows) {
     expect(arrow.roundness ?? null, "arrows are curved by default").not.toBeNull();
+    expect(arrow.points ?? [], "a real bend, not a straight run").toHaveLength(3);
   }
 
   const byId = new Map(built.map((element) => [element.id, element as FigureElement]));

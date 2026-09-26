@@ -191,7 +191,9 @@ export async function placeFigureAt(
 }
 
 /** N, then a drag to size it, then typed text committed with Escape — `stickyNote.spec.ts`'s
- *  own `writeNote`, generalised to a chosen size and position. */
+ *  own `writeNote`, generalised to a chosen size and position. Held with Shift: a plain
+ *  drag settles a note square, to the larger of the two sides (`pointer_end.rs::end_sticky`),
+ *  so a `size` with `w !== h` needs Shift to keep the rectangle it asked for. */
 export async function placeStickyAt(
   board: Board,
   at: Pt,
@@ -203,8 +205,10 @@ export async function placeStickyAt(
   await page.keyboard.press("n");
   await page.mouse.move(box.x + at.x, box.y + at.y);
   await page.mouse.down();
+  await page.keyboard.down("Shift");
   await page.mouse.move(box.x + at.x + size.w, box.y + at.y + size.h, { steps: 6 });
   await page.mouse.up();
+  await page.keyboard.up("Shift");
   await expect(editor(board)).toBeVisible();
   await page.keyboard.type(text);
   await page.keyboard.press("Escape");
@@ -216,11 +220,21 @@ export async function placeStickyAt(
 
 /** A line placed point by point, closed by clicking back on its own start — the engine
  *  reads that as a polygon (`element.rs::is_polygon`), `lineMultipoint.spec.ts`'s own
- *  recipe for it. */
-export async function drawClosedLine(board: Board, points: readonly Pt[]): Promise<SceneElement> {
+ *  recipe for it. `sharp` picks the Edges row before the first point: it must land
+ *  *after* this function's own `focusBoard`, or that plain click — with the Line tool
+ *  already active from a caller picking it early to reach the Edges row itself — reads
+ *  as the start of a stray point of its own. */
+export async function drawClosedLine(
+  board: Board,
+  points: readonly Pt[],
+  options: { sharp?: boolean } = {},
+): Promise<SceneElement> {
   const { page, box } = board;
   await focusBoard(board);
   await pickTool(page, "Line");
+  if (options.sharp) {
+    await page.getByRole("group", { name: "Edges" }).getByRole("button", { name: "Sharp" }).click();
+  }
   const click = async (p: Pt) => {
     await page.mouse.move(box.x + p.x, box.y + p.y, { steps: 6 });
     await page.mouse.click(box.x + p.x, box.y + p.y);
@@ -241,8 +255,77 @@ export async function worldToCanvas(board: Board, wx: number, wy: number): Promi
   return { x: wx * scale + x, y: wy * scale + y };
 }
 
-/** Drags a bound arrow from the centre of `from` to the centre of `to` — `arrowDrag.spec.ts`'s
- *  own recipe for binding both ends, which does not need to land on either outline. */
+const centerOf = (el: SceneElement): Pt => ({ x: el.x + el.width / 2, y: el.y + el.height / 2 });
+
+/**
+ * A point `gap` outside `shape`'s bounding box, at the midpoint of whichever side faces
+ * `toward` — the same four points as the engine's own `side_midpoints`
+ * (`scene/binding.rs`), which is exactly where a real drag's `snapped_midpoint` pulls an
+ * orbiting end onto.
+ *
+ * Used to choose where an arrow drag or click lands *outside* a shape: `anchor_for_drop`
+ * binds `Inside` — straight through the centre, over whatever label sits there — when the
+ * drop is inside the shape, and `Orbit` — stopped a gap clear of the outline — when it is
+ * outside but within `max_binding_distance` (15 world units at zoom 1). Dropping on the
+ * centre, as a plain drag would, is always inside; this is how `connect`/`connectCurved`
+ * land beside the outline instead.
+ *
+ * A side's midpoint rather than a projection straight along the diagonal to `toward`
+ * (`binding.rs::attach_point`'s own approach, kept there for a caller that aims through a
+ * shape's true centre): aimed at a corner, a shape whose outline recedes a long way from
+ * its bounding box there — a cylinder's cap, a star's waist — landed outside
+ * `max_binding_distance` of its real outline even though the drop was close to the box,
+ * which left an arrow between two diagonally-placed figures unbound at both ends. A
+ * side's midpoint stays over the part of the shape closest to its own box on every kind
+ * this draws, exactly as it does for a rectangle, an ellipse (its curve touches the box
+ * there) and a diamond (its vertex is there).
+ *
+ * An ellipse gets `attach_point`'s own diagonal formula after all, rather than a side's
+ * midpoint: it is exact there (no corner for its curve to recede from), and several
+ * arrows fanning out from one ellipse — a mind map's topic — need it, since the
+ * midpoint-only approach sends every target on the same side of the shape to that one
+ * fixed point, fine when only one arrow ever leaves that side.
+ */
+function edgeApproach(shape: SceneElement, toward: Pt, gap: number): Pt {
+  const cx = shape.x + shape.width / 2;
+  const cy = shape.y + shape.height / 2;
+  if (shape.type === "ellipse") {
+    const rx = Math.max(shape.width / 2, 0.5);
+    const ry = Math.max(shape.height / 2, 0.5);
+    const rawX = toward.x - cx;
+    const rawY = toward.y - cy;
+    const length = Math.hypot(rawX, rawY) || 1e-6;
+    const dx = rawX / length;
+    const dy = rawY / length;
+    const reach = 1 / Math.hypot(dx / rx, dy / ry) + gap;
+    return { x: cx + dx * reach, y: cy + dy * reach };
+  }
+  const hx = shape.width / 2;
+  const hy = shape.height / 2;
+  const dx = toward.x - cx;
+  const dy = toward.y - cy;
+  // Whichever axis `toward` is further along, scaled by this shape's own half extent,
+  // decides which pair of sides faces it — left/right or top/bottom.
+  if (Math.abs(dx) * (hy || 1) >= Math.abs(dy) * (hx || 1)) {
+    return { x: cx + Math.sign(dx || 1) * (hx + gap), y: cy };
+  }
+  return { x: cx, y: cy + Math.sign(dy || 1) * (hy + gap) };
+}
+
+/** Clear of the outline but well under the 15-unit reach `max_binding_distance(1)` gives
+ *  at zoom 1 (`scene/binding.rs`), so a drop here still finds the shape and orbits it
+ *  instead of landing inside. */
+const ARROW_APPROACH_GAP = 8;
+
+/** How far a curved branch's midpoint bows off the straight line between its two
+ *  approach points — enough to read as a real curve, nowhere near either shape. */
+const ARROW_BEND_OFFSET = 24;
+
+/** Drags a bound arrow from just outside `from`'s outline, facing `to`, to just outside
+ *  `to`'s, facing `from` — both drops land in orbit range but outside the shape
+ *  (`edgeApproach`), so the arrow stops at each outline with a gap instead of running
+ *  through the centre and whatever label sits there, which is what dropping on the
+ *  centre itself (`anchor_for_drop`'s `Inside` case) would do. */
 export async function connect(
   board: Board,
   from: SceneElement,
@@ -250,8 +333,10 @@ export async function connect(
 ): Promise<SceneElement> {
   const { page } = board;
   await pickTool(page, "Arrow");
-  const start = await worldToCanvas(board, from.x + from.width / 2, from.y + from.height / 2);
-  const end = await worldToCanvas(board, to.x + to.width / 2, to.y + to.height / 2);
+  const startWorld = edgeApproach(from, centerOf(to), ARROW_APPROACH_GAP);
+  const endWorld = edgeApproach(to, centerOf(from), ARROW_APPROACH_GAP);
+  const start = await worldToCanvas(board, startWorld.x, startWorld.y);
+  const end = await worldToCanvas(board, endWorld.x, endWorld.y);
   await page.mouse.move(board.box.x + start.x, board.box.y + start.y);
   await page.mouse.down();
   await page.mouse.move(board.box.x + end.x, board.box.y + end.y, { steps: 10 });
@@ -261,6 +346,71 @@ export async function connect(
     .filter((el) => el.type === "arrow")
     .find((el) => el.startBinding === from.id && el.endBinding === to.id);
   if (!arrow) throw new Error(`no arrow bound ${from.id} -> ${to.id}`);
+  return arrow;
+}
+
+/**
+ * Like `connect`, but with a real bend at the midpoint, so the arrow is visibly curved —
+ * a straight two-point arrow renders identically whichever way its `roundness` is set,
+ * since a Catmull-Rom curve needs at least three points to bend at all
+ * (`render/outline.rs::curve`). Placed click by click rather than dragged: a drag only
+ * ever finishes as one straight segment, but a press-and-release too short to count as a
+ * drag opens the multi-point path (`pointer_end.rs::end_linear`), the same mechanic
+ * `arrowLabel.spec.ts`'s own `curvedArrow` uses. Both ends still drop just outside their
+ * shape (`edgeApproach`) so they bind in orbit; the last click lands in orbit range of
+ * `to`, which finishes the path and binds it there in the same gesture
+ * (`multi_linear.rs::ends_path_at`) — no fourth click needed.
+ *
+ * The bend picks whichever of its two perpendicular sides ends up farther from both
+ * shapes' centres, never a fixed rotational side: a mind map's branches sit all around
+ * their topic, and a bend rotated the other, *fixed* way happened to curve back in
+ * within orbit range of the branch's own outline for exactly the ones sitting north-west
+ * and south-east of it — close enough that the second click's press already counted as
+ * landing beside it (`ends_path_at`), finishing the path there and leaving the third
+ * click to open (and immediately abandon) a path of its own.
+ */
+export async function connectCurved(
+  board: Board,
+  from: SceneElement,
+  to: SceneElement,
+): Promise<SceneElement> {
+  const { page, box } = board;
+  await pickTool(page, "Arrow");
+  const startWorld = edgeApproach(from, centerOf(to), ARROW_APPROACH_GAP);
+  const endWorld = edgeApproach(to, centerOf(from), ARROW_APPROACH_GAP);
+  const mid = { x: (startWorld.x + endWorld.x) / 2, y: (startWorld.y + endWorld.y) / 2 };
+  const dx = endWorld.x - startWorld.x;
+  const dy = endWorld.y - startWorld.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const perpX = -dy / length;
+  const perpY = dx / length;
+  const fromCenter = centerOf(from);
+  const toCenter = centerOf(to);
+  const minDistance = (p: Pt): number =>
+    Math.min(
+      Math.hypot(p.x - fromCenter.x, p.y - fromCenter.y),
+      Math.hypot(p.x - toCenter.x, p.y - toCenter.y),
+    );
+  const candidates = [1, -1].map((sign) => ({
+    x: mid.x + sign * perpX * ARROW_BEND_OFFSET,
+    y: mid.y + sign * perpY * ARROW_BEND_OFFSET,
+  }));
+  const bendWorld =
+    minDistance(candidates[0]!) >= minDistance(candidates[1]!) ? candidates[0]! : candidates[1]!;
+  const click = async (world: Pt) => {
+    const at = await worldToCanvas(board, world.x, world.y);
+    await page.mouse.move(box.x + at.x, box.y + at.y, { steps: 6 });
+    await page.mouse.click(box.x + at.x, box.y + at.y);
+    await page.waitForTimeout(60);
+  };
+  await click(startWorld);
+  await click(bendWorld);
+  await click(endWorld); // in orbit range of `to`: this click both finishes and binds it
+  await page.waitForTimeout(120);
+  const arrow = (await sceneElements(page))
+    .filter((el) => el.type === "arrow")
+    .find((el) => el.startBinding === from.id && el.endBinding === to.id);
+  if (!arrow) throw new Error(`no curved arrow bound ${from.id} -> ${to.id}`);
   return arrow;
 }
 

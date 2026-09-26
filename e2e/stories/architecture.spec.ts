@@ -19,6 +19,7 @@ import {
   sceneElements,
   waitForAutosave,
   worldToCanvas,
+  writeText,
   type Board,
   type SceneElement,
 } from "./helpers.ts";
@@ -29,11 +30,47 @@ import {
  * preset applied to both services at once. Frame membership is never set by hand — a
  * shape drawn inside an existing frame is judged into it on its own commit
  * (`pointer_end.rs::judge_created_frame_membership`), exactly what this checks.
+ *
+ * Each frame also gets its own heading text ("Clients", "Services", "Data") in the room
+ * `CONTENT_TOP` leaves at its top: the frame's own name badge is whatever
+ * `default_frame_name` assigned it when it was drawn ("Frame 1", …) — nothing in the app
+ * exposes a way to rename it (no double click, no panel field, no engine call; a frame is
+ * not in `is_bindable_element`, so even Enter-to-edit refuses a selected one) — so a real
+ * heading is what actually reads as the section's name on the board and in its preview.
+ *
+ * Three placement rules keep that heading legible rather than merely present:
+ *
+ * - a free text is created centred on the click, not started from it — `text_creation_
+ *   point` lifts it half a line above the pointer (`engine/text.rs`) — so a heading
+ *   clicked within half a line of its frame's top border ends up drawn *above* that
+ *   border, outside the frame it was meant to join, and never gets its `frameId` at all.
+ *   `HEADING_CLICK` sits well clear of that.
+ * - `GAP`, the space *between* frames, is wide enough that an arrow crossing it lands its
+ *   label in the open gap, clear of both frames' own content.
+ * - the heading itself sits at the frame's *right* edge (`HEADING_RIGHT_INSET`), not its
+ *   left, because every shape here is drawn toward the left — an arrow landing on the one
+ *   below bound to the heading instead of its target: a free text is a valid arrow target
+ *   in its own right (`binding.rs::is_target_kind`), and the servicesHeading sat exactly
+ *   where the web→auth arrow's own approach point landed.
  */
 
-const CLIENTS = { x: OPEN_CANVAS.left + 20, y: OPEN_CANVAS.top + 20, w: 680, h: 90 };
-const SERVICES = { x: OPEN_CANVAS.left + 20, y: OPEN_CANVAS.top + 150, w: 680, h: 110 };
-const DATA = { x: OPEN_CANVAS.left + 20, y: OPEN_CANVAS.top + 300, w: 680, h: 90 };
+const HEADING_CLICK = 20;
+const HEADING_RIGHT_INSET = 120;
+const CONTENT_TOP = 40;
+const GAP = 50;
+const CLIENTS = { x: OPEN_CANVAS.left + 20, y: OPEN_CANVAS.top + 10, w: 680, h: 110 };
+const SERVICES = {
+  x: OPEN_CANVAS.left + 20,
+  y: CLIENTS.y + CLIENTS.h + GAP,
+  w: 680,
+  h: 130,
+};
+const DATA = {
+  x: OPEN_CANVAS.left + 20,
+  y: SERVICES.y + SERVICES.h + GAP,
+  w: 680,
+  h: 120,
+};
 
 /** Clicks a shape's outline at the mid-height of its left or right edge — clear of every
  *  arrow bound to it here, which all meet a shape at its top, bottom or the opposite
@@ -73,10 +110,26 @@ test("system architecture: three frames, services, a database, clients, and a sh
   );
   const dataFrame = await placeFrame(board, { x: DATA.x, y: DATA.y }, { w: DATA.w, h: DATA.h });
 
+  const clientsHeading = await writeText(
+    board,
+    { x: CLIENTS.x + CLIENTS.w - HEADING_RIGHT_INSET, y: CLIENTS.y + HEADING_CLICK },
+    "Clients",
+  );
+  const servicesHeading = await writeText(
+    board,
+    { x: SERVICES.x + SERVICES.w - HEADING_RIGHT_INSET, y: SERVICES.y + HEADING_CLICK },
+    "Services",
+  );
+  const dataHeading = await writeText(
+    board,
+    { x: DATA.x + DATA.w - HEADING_RIGHT_INSET, y: DATA.y + HEADING_CLICK },
+    "Data",
+  );
+
   const web = await placeShapeAt(
     board,
     "Ellipse",
-    { x: CLIENTS.x + 20, y: CLIENTS.y + 15 },
+    { x: CLIENTS.x + 20, y: CLIENTS.y + CONTENT_TOP },
     { w: 90, h: 55 },
     "Web",
   );
@@ -85,7 +138,7 @@ test("system architecture: three frames, services, a database, clients, and a sh
   const mobile = await placeShapeAt(
     board,
     "Ellipse",
-    { x: CLIENTS.x + 200, y: CLIENTS.y + 15 },
+    { x: CLIENTS.x + 200, y: CLIENTS.y + CONTENT_TOP },
     { w: 130, h: 55 },
     "Mobile",
   );
@@ -96,14 +149,14 @@ test("system architecture: three frames, services, a database, clients, and a sh
   const auth = await placeFigureAt(
     board,
     "Polygon",
-    { x: SERVICES.x + 20, y: SERVICES.y + 20 },
+    { x: SERVICES.x + 20, y: SERVICES.y + CONTENT_TOP },
     { w: 130, h: 70 },
     "Auth",
   );
   const orders = await placeFigureAt(
     board,
     "Polygon",
-    { x: SERVICES.x + 220, y: SERVICES.y + 20 },
+    { x: SERVICES.x + 220, y: SERVICES.y + CONTENT_TOP },
     { w: 130, h: 70 },
     "Orders",
   );
@@ -115,7 +168,7 @@ test("system architecture: three frames, services, a database, clients, and a sh
   const db = await placeFigureAt(
     board,
     "Cylinder",
-    { x: DATA.x + 20, y: DATA.y + 10 },
+    { x: DATA.x + 20, y: DATA.y + CONTENT_TOP },
     { w: 100, h: 70 },
     "DB",
   );
@@ -153,7 +206,7 @@ test("system architecture: three frames, services, a database, clients, and a sh
   expect(counts["ellipse"]).toBe(2);
   expect(counts["figure"]).toBe(3);
   expect(counts["arrow"]).toBe(4);
-  expect(counts["text"]).toBe(9); // 5 shape labels + 4 arrow labels
+  expect(counts["text"]).toBe(12); // 5 shape labels + 4 arrow labels + 3 frame headings
 
   expectArrowBound(webToAuth, web.id, auth.id);
   expectArrowBound(mobileToOrders, mobile.id, orders.id);
@@ -177,6 +230,13 @@ test("system architecture: three frames, services, a database, clients, and a sh
   expect(byId.get(auth.id)?.frameId).toBe(servicesFrame.id);
   expect(byId.get(orders.id)?.frameId).toBe(servicesFrame.id);
   expect(byId.get(db.id)?.frameId).toBe(dataFrame.id);
+  expect(byId.get(clientsHeading.id)?.frameId, "the Clients heading is in its frame").toBe(
+    clientsFrame.id,
+  );
+  expect(byId.get(servicesHeading.id)?.frameId, "the Services heading is in its frame").toBe(
+    servicesFrame.id,
+  );
+  expect(byId.get(dataHeading.id)?.frameId, "the Data heading is in its frame").toBe(dataFrame.id);
 
   // The preset restyled both services, not just the one clicked last.
   const styledAuth = byId.get(auth.id)!;
