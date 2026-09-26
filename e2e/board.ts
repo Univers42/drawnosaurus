@@ -322,6 +322,35 @@ export function camera(page: Page): Promise<Camera> {
   });
 }
 
+/**
+ * Waits until the camera stops moving, and returns where it settled.
+ *
+ * A flowchart commit eases the camera to the new node when it lands off screen
+ * (`DrawEngine::reveal`, `CAMERA_REVEAL_MS` — 300ms), and nothing else in these specs
+ * starts a camera move of its own. A caller about to convert a world point to a screen
+ * one — `worldToCanvas` — must not read the camera mid-flight: two conversions read a
+ * beat apart, for the same drag's start and end, would land in two different frames and
+ * miss whatever they were aimed at.
+ *
+ * Two back-to-back reads that already agree return at once, so a caller with nothing
+ * animating pays only the second read. A reveal in progress is polled once a frame until
+ * it settles, bounded well past the longest eased move in this chrome (`CAMERA_ZOOM_MS`
+ * and `CAMERA_REVEAL_MS` are both under 400ms) so a genuine engine hang still surfaces
+ * as a failure rather than a silent wait.
+ */
+export async function waitForCameraStable(page: Page): Promise<Camera> {
+  let previous = await camera(page);
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const current = await camera(page);
+    if (current.x === previous.x && current.y === previous.y && current.scale === previous.scale) {
+      return current;
+    }
+    previous = current;
+    await page.waitForTimeout(16);
+  }
+  throw new Error("the camera never settled");
+}
+
 /** The zoom percentage the toolbar shows, read from its accessible name. */
 export async function shownZoomPercent(page: Page): Promise<number> {
   const label = await page

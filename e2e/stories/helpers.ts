@@ -3,10 +3,11 @@ import { expect } from "../fixtures.ts";
 import {
   OPEN_CANVAS,
   focusBoard,
-  openBoard,
+  openBoard as openBoardBare,
   patchedElements,
   pickTool,
   sceneElements,
+  waitForCameraStable,
   type Board,
   type SceneElement,
 } from "../board.ts";
@@ -28,10 +29,46 @@ import { editor, writeText, type BoardElement } from "../textBoard.ts";
  * `multiSelect.spec.ts` and `arrowLabel.spec.ts` already make.
  */
 
-export { OPEN_CANVAS, focusBoard, openBoard, pickTool, sceneElements, writeText };
+export { OPEN_CANVAS, focusBoard, pickTool, sceneElements, writeText };
 export type { Board, SceneElement };
 
 export type Pt = { x: number; y: number };
+
+/**
+ * `openBoard`, with every face the chrome can draw text in loaded and settled before a
+ * story ever types anything.
+ *
+ * A face loads lazily, only once some text first asks for it, and the engine's
+ * `fontsLoaded` re-lays that text in the real face afterwards *without stamping it* —
+ * deliberately, to match the oracle, so that fix is never sent
+ * (`draw-chrome/fonts.ts`). A label committed before its face is ready is measured in
+ * the fallback's metrics, and that is what autosave already sent; the live scene
+ * self-corrects a moment later, unstamped, and the two never converge. Most labels have
+ * room to spare either way; a tight one — a diamond's, say, `checkout.spec.ts`'s
+ * "Paid?" — can have the gap between the two move a line break rather than a pixel.
+ *
+ * Scoped to the stories rather than `board.ts`'s own `openBoard`: a story asserts the
+ * saved scene matches the drawn one byte for byte, where `textLayout.spec.ts` means to
+ * race this exact window (`"a font family change re-wraps the label, and its font
+ * arriving re-lays it unstamped"`) and would never see its own re-lay if every face
+ * were already in by the time it changed one.
+ */
+export async function openBoard(...args: Parameters<typeof openBoardBare>): Promise<Board> {
+  const board = await openBoardBare(...args);
+  await board.page.evaluate(() =>
+    Promise.all(
+      [
+        '16px "Virgil"',
+        '16px "Excalifont"',
+        '16px "Cascadia"',
+        '500 16px "Nunito"',
+        '16px "Lilita One"',
+        '16px "Comic Shanns"',
+      ].map((font) => document.fonts.load(font)),
+    ),
+  );
+  return board;
+}
 
 /** The figure's own params, absent from `SceneElement` itself — `figure.spec.ts`'s own
  *  local type. */
@@ -268,9 +305,13 @@ export async function drawClosedLine(
 }
 
 /** A world point translated to this page's current camera, in canvas-relative pixels
- *  (not screen-absolute — `writeText` and the mouse helpers add `board.box` themselves). */
+ *  (not screen-absolute — `writeText` and the mouse helpers add `board.box` themselves).
+ *  Waits for the camera to stop moving first (`waitForCameraStable`): a flowchart
+ *  commit's reveal can still be easing toward an off-screen node when a caller — `connect`
+ *  converting a drag's two ends, say — reads it, and reading it mid-flight would compute
+ *  those ends in two different frames. */
 export async function worldToCanvas(board: Board, wx: number, wy: number): Promise<Pt> {
-  const { x, y, scale } = await board.page.evaluate(() => window.__drawEngine!.camera);
+  const { x, y, scale } = await waitForCameraStable(board.page);
   return { x: wx * scale + x, y: wy * scale + y };
 }
 
