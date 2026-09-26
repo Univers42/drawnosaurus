@@ -1,6 +1,10 @@
+import { existsSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { osidrawFileSchema } from "@drawnosaurus/contract";
 import { TEMPLATES } from "./index.ts";
+
+const staticDir = fileURLToPath(new URL("../../../static/templates/", import.meta.url));
 
 describe("templates", () => {
   it("offers exactly the five stories, each with a unique id", () => {
@@ -18,6 +22,12 @@ describe("templates", () => {
       expect(template.name.length).toBeGreaterThan(0);
       expect(template.description.length).toBeGreaterThan(0);
       expect(template.description).not.toContain("\n");
+    });
+
+    it(`${template.name} has a preview PNG under static/templates/`, () => {
+      const path = `${staticDir}${template.id}.png`;
+      expect(existsSync(path), path).toBe(true);
+      expect(statSync(path).size).toBeGreaterThan(0);
     });
   }
 });

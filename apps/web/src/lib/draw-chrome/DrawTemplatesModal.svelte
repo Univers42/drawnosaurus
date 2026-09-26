@@ -3,7 +3,6 @@
   import { resolve } from "$app/paths";
   import { ApiClientError, createBoard, replaceBoard } from "$lib/api/client.ts";
   import { TEMPLATES } from "$lib/templates/index.ts";
-  import MainMenuIcon from "./MainMenuIcon.svelte";
 
   /**
    * Lists the five starter boards (`$lib/templates`) and puts the one picked wherever
@@ -70,8 +69,8 @@
             disabled={busyId !== null}
             onclick={() => use(template)}
           >
-            <span class="template-preview" aria-hidden="true">
-              <MainMenuIcon name="diagram" />
+            <span class="template-preview">
+              <img src={`/templates/${template.id}.png`} alt="" loading="lazy" />
             </span>
             <span class="template-text">
               <span class="template-name">{template.name}</span>
@@ -184,13 +183,20 @@
 
   .template-preview {
     flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    width: 32px;
-    height: 32px;
+    display: block;
+    width: 96px;
+    aspect-ratio: 8 / 5;
     border-radius: 8px;
-    background: var(--surface);
-    color: var(--muted);
+    background: #fff;
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+
+  .template-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
   }
 
   .template-text {

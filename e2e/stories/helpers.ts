@@ -419,14 +419,57 @@ export async function exportPngAndSvg(board: Board): Promise<void> {
 }
 
 /**
- * The regeneration step for `apps/web/src/lib/templates/*.osidraw.json`: with
- * `GENERATE_TEMPLATES` set, each story writes its own final scene out as that
- * template's file, through the exact same path `saveToDisk`/reload use
- * (`engine.exportJson()` — already `{type:"osidraw",version,elements}`, tombstones
- * already dropped), so a template is never anything but "what this story built".
+ * Zooms to fit the whole board, waits for the engine's own rAF to paint it, then rasterises
+ * the current view exactly as the Export dialog's PNG button does (`engine.exportPng()` —
+ * `canvas.toBlob`) and downscales it to a ~360px-wide preview on an in-page canvas, over a
+ * white fill so it reads the same in both themes regardless of what the story's own board
+ * happened to be set to. Returns a `data:` URL; `null` if the browser produced no blob.
+ */
+async function captureThumbnail(board: Board): Promise<string | null> {
+  const { page } = board;
+  await focusBoard(board);
+  await page.keyboard.press("Escape"); // clear whatever focusBoard's click may have selected
+  await page.keyboard.press("Shift+Digit1"); // zoom to fit — see shortcuts.spec.ts
+  await page.waitForTimeout(150); // the engine schedules its repaint on the next rAF
+  return page.evaluate(async () => {
+    const blob = await window.__drawEngine!.exportPng();
+    if (!blob) return null;
+    const bitmap = await createImageBitmap(blob);
+    const width = 360;
+    const height = Math.round((bitmap.height / bitmap.width) * width);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    return new Promise<string | null>((resolve) => {
+      canvas.toBlob((out) => {
+        if (!out) {
+          resolve(null);
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(out);
+      }, "image/png");
+    });
+  });
+}
+
+/**
+ * The regeneration step for `apps/web/src/lib/templates/*.osidraw.json` and each
+ * template's `apps/web/static/templates/<name>.png`: with `GENERATE_TEMPLATES` set, each
+ * story writes its own final scene out as that template's `.osidraw.json`, through the
+ * exact same path `saveToDisk`/reload use (`engine.exportJson()` — already
+ * `{type:"osidraw",version,elements}`, tombstones already dropped), and a small preview
+ * PNG of the same board, through the same path the Export dialog's PNG button uses — so
+ * neither is ever anything but "what this story built".
  *
- * A no-op otherwise — this runs inside every story's normal pass, not a separate
- * script, so there is nothing extra to keep working. Regenerate with:
+ * A no-op otherwise — this runs inside every story's normal pass, not a separate script,
+ * so there is nothing extra to keep working. Regenerate with:
  *
  * ```sh
  * docker run --rm --ipc=host -e CI= -e GENERATE_TEMPLATES=1 --user 1000:1000 -e HOME=/tmp \
@@ -437,8 +480,15 @@ export async function exportPngAndSvg(board: Board): Promise<void> {
 export async function maybeWriteTemplate(board: Board, name: string): Promise<void> {
   if (!process.env.GENERATE_TEMPLATES) return;
   const json = await board.page.evaluate(() => window.__drawEngine!.exportJson());
-  const { writeFile } = await import("node:fs/promises");
+  const { writeFile, mkdir } = await import("node:fs/promises");
   const { fileURLToPath } = await import("node:url");
-  const dir = fileURLToPath(new URL("../../apps/web/src/lib/templates/", import.meta.url));
-  await writeFile(`${dir}${name}.osidraw.json`, `${json}\n`, "utf8");
+  const jsonDir = fileURLToPath(new URL("../../apps/web/src/lib/templates/", import.meta.url));
+  await writeFile(`${jsonDir}${name}.osidraw.json`, `${json}\n`, "utf8");
+
+  const dataUrl = await captureThumbnail(board);
+  if (!dataUrl) throw new Error(`no PNG preview produced for template "${name}"`);
+  const pngDir = fileURLToPath(new URL("../../apps/web/static/templates/", import.meta.url));
+  await mkdir(pngDir, { recursive: true });
+  const base64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  await writeFile(`${pngDir}${name}.png`, Buffer.from(base64, "base64"));
 }

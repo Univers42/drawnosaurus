@@ -55,6 +55,8 @@ declare global {
       embedFramesJson(): string;
       /** The selection, serialised as this scene's own clipboard JSON — Ctrl+C's write. */
       copySelection(): string | null;
+      /** Rasterises the current view exactly as the Export dialog's PNG button does. */
+      exportPng(): Promise<Blob | null>;
     };
   }
 }
