@@ -85,6 +85,18 @@ test.describe("the Shapes tool", () => {
     const placed = await placeFigure(board, "Trapezoid");
     expect(placed.figure?.kind).toBe("trapezoid");
   });
+
+  test("the Shape row also restyles an already-selected figure", async ({ page }) => {
+    const board = await openBoard(page);
+    const placed = await placeFigure(board);
+    expect(placed.figure?.kind).toBe("polygon");
+
+    await shapeKind(page, "Star").click();
+
+    await expect
+      .poll(async () => (await figures(page)).find((f) => f.id === placed.id)?.figure?.kind)
+      .toBe("star");
+  });
 });
 
 test.describe("the sides stepper", () => {

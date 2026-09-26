@@ -31,13 +31,21 @@ binds arrows to its real outline, takes a bucket fill, resizes, flips, duplicate
 copy/pastes like a rectangle or a diamond, because nothing in those paths reads a fixed
 primitive — they all go through the same shape geometry a figure now also provides.
 
-A figure's own controls — sides and ratio — reuse the existing style-patch pipeline
-rather than adding dedicated methods: `figure_sides` / `figure_ratio` are two more fields
-on `DrawElementStylePatch` / the web's `StylePatch`, applied by the same `apply_style` /
-`preview_style` every other row goes through, so the inspector's ratio slider previews
-live and commits once on release exactly as opacity does, and the sides stepper is one
-undo step like any other pick. A patch is ignored on a kind with no such control
-(`figure::has_sides` / `has_ratio`).
+A figure's own controls — kind, sides and ratio — reuse the existing style-patch pipeline
+rather than adding dedicated methods: `figure_kind` / `figure_sides` / `figure_ratio` are
+three more fields on `DrawElementStylePatch` / the web's `StylePatch`, applied by the same
+`apply_style` / `preview_style` every other row goes through, so the inspector's ratio
+slider previews live and commits once on release exactly as opacity does, and the sides
+stepper and the kind row are each one undo step like any other pick. A sides/ratio patch
+is ignored on a kind with no such control (`figure::has_sides` / `has_ratio`); a kind
+change (`figure::change_kind`) keeps `sides` only between two kinds that both have one
+(polygon ↔ star) and always resets `ratio` to the new kind's own default, since it means a
+different thing on every kind that has one.
+
+A kind, sides or ratio change relays out a bound label the same way a resize does
+(`figure_text_inset_fraction` reads all three) and re-resolves any arrow bound to the
+figure's outline (`apply_bindings`, `scene/binding.rs::refresh_bindings_in_place`), both as
+part of the same undo step — see `engine/selection_style.rs::apply_style`/`preview_style`.
 
 ## The label's inner box
 
@@ -61,15 +69,16 @@ drafted 0×0 at the press and discarded if the gesture never grows past a couple
 (`engine/pointer_end.rs::end_draft`); a real drag keeps it, selected, tool released back
 to Select.
 
-The kind is engine-owned state, `next_figure` (`FigureParams`), set by
-`setNextFigure`/read by `getNextFigure` — mirroring `next_arrow_type` exactly except for
-one deliberate divergence: **picking a kind never restyles a selection.** Choosing a tool
-and restyling what is selected are different actions here; a figure already on the board
-keeps its kind until it is redrawn or replaced, the same way picking the rectangle tool
-does not turn a selected ellipse into a rectangle. The inspector's kind row
-(`InspectorIconChoice`, `FIGURE_KIND_OPTIONS`) is offered for the tool or a selected
-figure alike (`forToolOrSelection`), but a pick only ever calls `setNextFigure` — visibly
-a no-op on whatever is currently selected, which is the point.
+The kind the tool draws next is engine-owned state, `next_figure` (`FigureParams`), set by
+`setNextFigure`/read by `getNextFigure` — queued by the toolbar and by the command
+palette's insert commands below, never touching whatever is selected, because inserting a
+fresh shape must not restyle one already on the board.
+
+The inspector's kind row (`InspectorIconChoice`, `FIGURE_KIND_OPTIONS`) is offered for the
+tool or a selected figure alike (`forToolOrSelection`), but mirrors `next_arrow_type`'s own
+row exactly: a pick goes through the style patch (`figure_kind`), which restyles the
+selected figures as one undo step **and** writes `next_figure`'s kind too, so choosing a
+kind with figures selected is visible — unlike calling `setNextFigure` directly.
 
 The command palette offers one insert command per kind (`Add polygon`, `Add star`, …),
 queuing that kind and then reusing `insertDefaultShape("figure", …)` at the viewport's

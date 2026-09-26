@@ -383,11 +383,11 @@
     </InspectorRow>
   {/if}
   <!--
-    The Shapes picker's kind row sets which figure the tool draws next — it never
-    restyles a selected one (`engine/style.rs::set_next_figure`), unlike the arrow type
-    row above: picking a tool and restyling a selection are different actions here. Sides
-    and ratio are the opposite: they go through the same style patch as every other row,
-    so they do restyle a selected figure, each pick its own undo step.
+    The Shapes picker's kind row goes through the same style patch as the sides stepper
+    and the ratio slider below, exactly like the arrow-type row above: a pick restyles the
+    selected figures as one undo step (`figureKind` in `apply_style`,
+    `scene::figure::change_kind`) and queues the tool's next figure too
+    (`engine/style.rs::set_next_figure`).
   -->
   {#if can.figureKind}
     <InspectorRow label="Shape">
@@ -395,7 +395,7 @@
         ariaLabel="Shape"
         options={FIGURE_KIND_OPTIONS}
         value={summary.figureKind}
-        onPick={(v) => run((e) => e.setNextFigure({ kind: v }))}
+        onPick={(v) => onApply({ figureKind: v })}
       />
     </InspectorRow>
   {/if}
