@@ -87,6 +87,26 @@ test("Tab opens the switch, then walks the shape round and back, label and arrow
   await expect(panel(page)).toHaveCount(0);
 });
 
+// Reported from real use: after Ctrl+Arrow, Tab went to the header instead of the node.
+test("right after Ctrl+Arrow grows a node, Tab switches that node's shape", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await page.keyboard.press("Control+/");
+  await page.keyboard.type("add rectangle");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Control+ArrowRight");
+  const [grown] = await selection(page);
+
+  await page.keyboard.press("Tab");
+  await expect(panel(page)).toBeVisible();
+  await expect(boardElement(page), "not the header").toBeFocused();
+  await page.keyboard.press("Tab");
+  expect((await byId(page, grown!)).type).toBe("diamond");
+  await page.keyboard.press("Tab");
+  expect((await byId(page, grown!)).type).toBe("ellipse");
+  await expect(boardElement(page)).toBeFocused();
+});
+
 test("a press on the canvas closes the switch", async ({ page }) => {
   const board = await openBoard(page);
   await focusBoard(board);
