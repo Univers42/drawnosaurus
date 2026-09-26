@@ -145,6 +145,10 @@ export interface AppShortcutKey {
  * Ctrl/Cmd+Shift+E and `?` directly: those touch the filesystem or a dialog this registry
  * does not describe. `presenting` suppresses Present's own chord while already showing, so
  * the key does not try to re-enter what it is already in.
+ *
+ * Snap, grid and Present match `code`, the physical key, as the oracle's grid does, not
+ * `key`, the character it types: on AZERTY, QWERTZ or Dvorak the apostrophe is elsewhere
+ * or nowhere, and on a Mac Option+S types "ß" and Option+P "π".
  */
 export function appShortcut(event: AppShortcutKey, presenting: boolean): AppShortcut | null {
   const mod = event.ctrlKey || event.metaKey;
