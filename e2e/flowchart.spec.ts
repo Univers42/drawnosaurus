@@ -12,22 +12,98 @@ import {
 
 /**
  * Ctrl/Cmd+Arrow builds a connected node, Alt+Arrow walks the graph — ported from the
- * oracle's `App.flowchart.ts@1118751f`. `ci_flowchart.rs` pins the geometry and the
- * binding rules structurally; this is the half only a real browser can check: that a
- * genuine keydown/keyup reaches `dispatchKeyDown`/`dispatchKeyUp`
- * (`engine/src/host/keys.ts`) through the DOM, that the pending preview commits as one
- * step, and that the digit-key shape choice — an extra the oracle lacks — actually
- * switches what lands.
+ * oracle's `App.flowchart.ts@1118751f`. `ci_flowchart_oracle.rs` holds every position,
+ * binding and camera to the oracle's own output; this is the half only a real browser can
+ * check: that a genuine keydown/keyup reaches `dispatchKeyDown`/`dispatchKeyUp`
+ * (`engine/src/host/keys.ts`) through the DOM, that the preview is actually painted while
+ * Ctrl is held and commits as one step on release, that the camera brings what a press
+ * reaches into the room the real chrome leaves, and that the digit-key shape choice — an
+ * extra the oracle lacks — actually switches what lands.
  *
  * See `docs/reference/flowchart.md`.
  */
 
 const editor = (page: Page) => page.locator("textarea[aria-label='Text editor']");
 
-/** The debug handle's `select`, which `board.ts`'s own declaration leaves out. */
+/** The debug handle's calls these specs make, which `board.ts`'s declaration leaves out. */
 interface SelectHandle {
   select(ids: string[]): void;
+  pendingFlowchartElements(): SceneElement[];
+  panBy(dx: number, dy: number): void;
 }
+
+/** The cluster previewed while Ctrl/Cmd is held — not in the scene until released. */
+function pendingElements(page: Page): Promise<SceneElement[]> {
+  return page.evaluate(() =>
+    (window.__drawEngine as unknown as SelectHandle).pendingFlowchartElements(),
+  );
+}
+
+/** Past the reveal's 300ms ease (`CAMERA_REVEAL_MS`), so the camera is where it lands. */
+const settle = (page: Page) => page.waitForTimeout(400);
+
+interface ScreenBox {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** Where an element is on the canvas now, canvas-relative. */
+async function onScreen(page: Page, element: SceneElement): Promise<ScreenBox> {
+  const { x, y, scale } = await page.evaluate(() => window.__drawEngine!.camera);
+  return {
+    left: element.x * scale + x,
+    top: element.y * scale + y,
+    right: (element.x + element.width) * scale + x,
+    bottom: (element.y + element.height) * scale + y,
+  };
+}
+
+/**
+ * That `box` is on the canvas and under none of the chrome floating over it — the
+ * toolbar and the inspector, the surfaces the oracle's reveal keeps clear of.
+ */
+async function expectInTheOpen(board: Board, box: ScreenBox, what: string): Promise<void> {
+  expect(box.left, `${what}: left edge on the canvas`).toBeGreaterThanOrEqual(0);
+  expect(box.top, `${what}: top edge on the canvas`).toBeGreaterThanOrEqual(0);
+  expect(box.right, `${what}: right edge on the canvas`).toBeLessThanOrEqual(board.box.width);
+  expect(box.bottom, `${what}: bottom edge on the canvas`).toBeLessThanOrEqual(board.box.height);
+  const chrome = [
+    board.page.getByRole("toolbar", { name: "Drawing tools" }),
+    board.page.getByRole("complementary", { name: "Style inspector" }),
+  ];
+  for (const surface of chrome) {
+    const rect = await surface.boundingBox();
+    if (!rect) continue;
+    const left = rect.x - board.box.x;
+    const top = rect.y - board.box.y;
+    const clear =
+      box.right <= left ||
+      box.left >= left + rect.width ||
+      box.bottom <= top ||
+      box.top >= top + rect.height;
+    expect(clear, `${what}: clear of ${await surface.getAttribute("aria-label")}`).toBe(true);
+  }
+}
+
+/** Canvas-relative colour at a point. */
+async function colourAt(page: Page, x: number, y: number): Promise<[number, number, number]> {
+  return page.evaluate(
+    ({ x, y }) => {
+      const canvas = document.querySelector("canvas")!;
+      const scale = canvas.width / canvas.getBoundingClientRect().width;
+      const d = canvas
+        .getContext("2d")!
+        .getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data;
+      return [d[0]!, d[1]!, d[2]!] as [number, number, number];
+    },
+    { x, y },
+  );
+}
+
+const distance = (a: number[], b: number[]) =>
+  a.reduce((sum, v, i) => sum + Math.abs(v - b[i]!), 0);
 
 /** Places one rectangle, selected, at a canvas point — the start of a flowchart. */
 async function placeStartingRectangle(
@@ -196,6 +272,10 @@ test("a new node lands inside the viewport even off the edge of the screen", asy
   const before = await sceneElements(p);
   await p.keyboard.down("Control");
   await p.keyboard.press("ArrowRight");
+  // The preview is revealed as it is, Ctrl still held — not only once committed.
+  await settle(p);
+  const [previewed] = (await pendingElements(p)).filter((element) => element.type === "rectangle");
+  await expectInTheOpen(board, await onScreen(p, previewed!), "the previewed node");
   await p.keyboard.up("Control");
 
   const after = await sceneElements(p);
@@ -205,9 +285,10 @@ test("a new node lands inside the viewport even off the edge of the screen", asy
   expect(nodes).toHaveLength(1);
   const created = nodes[0]!;
 
-  // The commit's reveal eases the camera over 300ms (`DrawEngine::reveal`); give it time
-  // to finish before reading where it landed.
-  await p.waitForTimeout(400);
+  // The commit's reveal eases the camera over 300ms (`DrawEngine::reveal_if_hidden`);
+  // give it time to finish before reading where it landed.
+  await settle(p);
+  await expectInTheOpen(board, await onScreen(p, created), "the committed node");
 
   // Its screen box should now sit inside the page's own viewport rather than off the
   // edge that placed it.
@@ -247,4 +328,166 @@ test("the shape strip swaps the pending node's shape by click, and letting go of
   const after = await sceneElements(page);
   expect(after, "the node and its arrow committed").toHaveLength(before.length + 2);
   onlyNewOf(before, after, "diamond");
+});
+
+test("the preview is painted faded while Ctrl is held, and at full strength once released", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeStartingRectangle(board, "start", {
+    x: OPEN_CANVAS.left + 150,
+    y: OPEN_CANVAS.top + 150,
+  });
+
+  await page.keyboard.down("Control");
+  await page.keyboard.press("ArrowRight");
+  await settle(page);
+  const [node] = (await pendingElements(page)).filter((element) => element.type === "rectangle");
+  const box = await onScreen(page, node!);
+  const centre = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+  // Below the node nothing is drawn: the board's own background.
+  const background = await colourAt(page, centre.x, box.bottom + 25);
+  const preview = await colourAt(page, centre.x, centre.y);
+  await page.keyboard.up("Control");
+  await settle(page);
+  const committed = await colourAt(page, centre.x, centre.y);
+
+  // Painted at a fifth of its opacity, as the oracle paints `pendingFlowchartNodes`
+  // (`ELEMENT_READY_TO_ERASE_OPACITY`): there, but far lighter than what lands.
+  expect(distance(preview, background), "the preview is painted").toBeGreaterThan(8);
+  expect(distance(committed, background), "the node is painted").toBeGreaterThan(40);
+  expect(distance(preview, background)).toBeLessThan(distance(committed, background) / 2);
+});
+
+test("repeat presses grow the preview by a sibling each, and release commits them all", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeStartingRectangle(board, "start", {
+    x: OPEN_CANVAS.left + 150,
+    y: OPEN_CANVAS.top + 150,
+  });
+  const before = await sceneElements(page);
+  const start = before.find((element) => element.id === "start")!;
+
+  await page.keyboard.down("Control");
+  for (let press = 1; press <= 3; press++) {
+    await page.keyboard.press("ArrowRight");
+    const nodes = (await pendingElements(page)).filter((element) => element.type === "rectangle");
+    expect(nodes, `press ${press}`).toHaveLength(press);
+  }
+  const pending = await pendingElements(page);
+  expect(pending.filter((element) => element.type === "arrow")).toHaveLength(3);
+  const nodes = pending.filter((element) => element.type === "rectangle");
+  // One column to the right of the start, stacked across the direction of growth.
+  expect(new Set(nodes.map((node) => node.x)).size).toBe(1);
+  expect(nodes[0]!.x).toBeGreaterThan(start.x + start.width);
+  expect(new Set(nodes.map((node) => node.y)).size).toBe(3);
+  expect(await sceneElements(page), "nothing lands while Ctrl is held").toHaveLength(before.length);
+  await page.keyboard.up("Control");
+
+  const after = await sceneElements(page);
+  expect(after).toHaveLength(before.length + 6);
+  expect(await selection(page), "the first new node is selected").toEqual([nodes[0]!.id]);
+});
+
+test("a new direction mid-gesture starts the preview over, one node that way", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeStartingRectangle(board, "start", {
+    x: OPEN_CANVAS.left + 150,
+    y: OPEN_CANVAS.top + 100,
+  });
+  const before = await sceneElements(page);
+  const start = before.find((element) => element.id === "start")!;
+
+  await page.keyboard.down("Control");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowDown");
+  const nodes = (await pendingElements(page)).filter((element) => element.type === "rectangle");
+  expect(nodes).toHaveLength(1);
+  expect(nodes[0]!.y, "below the start").toBeGreaterThan(start.y + start.height);
+  await page.keyboard.up("Control");
+
+  const after = await sceneElements(page);
+  expect(after).toHaveLength(before.length + 2);
+  const node = onlyNewOf(before, after, "rectangle");
+  expect(node.y).toBe(nodes[0]!.y);
+});
+
+test("Alt+Arrow cycles the nodes at one level, then walks back up the link", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeStartingRectangle(board, "start", {
+    x: OPEN_CANVAS.left + 150,
+    y: OPEN_CANVAS.top + 150,
+  });
+  const before = await sceneElements(page);
+  await page.keyboard.down("Control");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.up("Control");
+  const children = (await sceneElements(page))
+    .filter((element) => element.type === "rectangle" && !before.some((b) => b.id === element.id))
+    .map((element) => element.id);
+  expect(children).toHaveLength(2);
+  await page.evaluate(() => (window.__drawEngine as unknown as SelectHandle).select(["start"]));
+
+  await page.keyboard.down("Alt");
+  await page.keyboard.press("ArrowRight");
+  const first = (await selection(page))[0]!;
+  expect(children).toContain(first);
+  await page.keyboard.press("ArrowRight");
+  const second = (await selection(page))[0]!;
+  expect(children).toContain(second);
+  expect(second, "a repeat press moves to the sibling").not.toBe(first);
+  await page.keyboard.press("ArrowRight");
+  expect(await selection(page), "and round again").toEqual([first]);
+  await page.keyboard.press("ArrowLeft");
+  expect(await selection(page), "back along the link").toEqual(["start"]);
+  await page.keyboard.up("Alt");
+});
+
+test("Alt+Arrow to a node off screen brings it into the open, zooming back in to 100%", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeStartingRectangle(board, "start", {
+    x: OPEN_CANVAS.left + 150,
+    y: OPEN_CANVAS.top + 150,
+  });
+  const before = await sceneElements(page);
+  await page.keyboard.down("Control");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.up("Control");
+  await settle(page);
+  const next = onlyNewOf(before, await sceneElements(page), "rectangle");
+
+  // Zoomed out to half, and scrolled until the new node hangs off the right edge.
+  await page.evaluate(
+    ({ next, width }) => {
+      const engine = window.__drawEngine as unknown as SelectHandle &
+        NonNullable<Window["__drawEngine"]>;
+      engine.zoomAt(0, 0, 0.5);
+      const { x, scale } = engine.camera;
+      engine.panBy(width - 20 - (next.x * scale + x), 0);
+      engine.select(["start"]);
+    },
+    { next, width: board.box.width },
+  );
+  expect((await onScreen(page, next)).right).toBeGreaterThan(board.box.width);
+
+  await page.keyboard.down("Alt");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.up("Alt");
+  expect(await selection(page)).toEqual([next.id]);
+  await settle(page);
+
+  // A `scale-down` fit: never past 100%, so a small node is shown at 100% — zoomed in.
+  expect((await page.evaluate(() => window.__drawEngine!.camera)).scale).toBe(1);
+  await expectInTheOpen(board, await onScreen(page, next), "the node walked to");
 });
