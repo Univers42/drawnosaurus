@@ -189,6 +189,19 @@ split when adding behaviour.
 Every toolbar entry in `tools.ts` is typed `DrawTool`, the engine's own union — the sticky note
 included, which the engine owns now — so the toolbar cannot offer a tool `setTool` does not accept.
 
+### Mermaid import
+
+`apps/web/src/lib/mermaid/` turns `@excalidraw/mermaid-to-excalidraw`'s skeletons into elements and
+`engine.insertJson` places them, a label shrunk to fit before its shape grows. Mermaid is pinned to
+11.12.2 in `pnpm-workspace.yaml` (11.17 breaks the converter's subgraphs). Divergences from the oracle
+and how each type is tested: `docs/reference/mermaid.md`; `make fuzz-mermaid` runs 1,000 seeds a type.
+
+| Coverage | Types                                                                                                                             |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| native   | flowchart, sequence, class, state, er — shapes, bound arrows, labels, subgraphs as frames                                         |
+| fallback | gantt, pie, mindmap, timeline, gitGraph, journey, quadrant, sankey, xychart, block, architecture, c4, requirement, kanban, packet |
+| broken   | none — a fallback is Mermaid's SVG as one image, badged "not editable"                                                            |
+
 ### The conformance gate
 
 `prompt/design.md` and `prompt/shortkey.md` are the feature checklists this project is built against
@@ -221,19 +234,8 @@ spec stubs `/v1/**` and the websocket in `e2e/board.ts`. Kept out of `make quali
 - Input is real (CDP) everywhere except `dispatchWheelAt`, which synthesises a `WheelEvent` because
   `deltaMode` is set by the platform before the page and Chromium only ever reports pixels. Reach for
   a dispatched event only when the browser genuinely cannot produce the input, and say why in situ.
-- Locally, trace writing can fail with `ENOENT` on `test-results/.playwright-artifacts-*` because this
-  checkout is on a network filesystem — it fails the test it was tracing and looks like a flake. Add
-  `--trace=off` when running by hand; CI runs on a normal disk where `retain-on-failure` is worth it.
-- Browsers do **not** fit in `$HOME` on the lab machines — the quota is 4.7G and a chromium install is
-  ~400M, so `playwright install` dies with `ENOSPC` and, worse, leaves the cache half-deleted, which
-  reads as "Executable doesn't exist" on the next run. Export
-  `PLAYWRIGHT_BROWSERS_PATH=/sgoinfre/students/$USER/.cache/ms-playwright` before installing or
-  running; `/sgoinfre` has terabytes. Keep it set for both, or the suite installs to one place and
-  looks in another.
-- Playwright 1.63 launches `chromium-headless-shell` for `headless: true`, which is **not** the same
-  binary as `chromium`. Forcing the full build with `channel: "chromium"` is a valid workaround for a
-  missing shell, but it is a different renderer: it failed four `bucket`/`eraser` specs that pass on
-  both builds of the shell. Take a control run before believing a failure found that way.
+- Running the suite on the host — traces on a network filesystem, the lab machines' `$HOME` quota,
+  `chromium-headless-shell` versus `chromium`: `docs/reference/e2e-host.md`.
 
 ## Conventions and trip hazards
 
