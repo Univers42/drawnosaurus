@@ -154,11 +154,13 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_linear_anchor.rs`, `${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_pointer.rs`],
   },
+  // Ctrl/Cmd+Shift+L runs the context menu's lock toggle with something selected, as
+  // the oracle's keyTest does (actionElementLock.ts@1118751f:151-160).
   {
     section: /^(🖱️ Selection|🔒 Locking)$/,
     text: /Shift \+ L`/,
-    status: "gap",
-    why: "No Ctrl/Cmd+Shift+L: lock and unlock are the context menu's one toggle (toggleLockSelection, ci_group_locks_frames.rs, menu.test.ts), with no key bound to it.",
+    status: "covered",
+    tests: ["engine/src/host/keys.test.ts", `${ENGINE}/ci_lock.rs`, "e2e/lock.spec.ts"],
   },
   {
     section: "🖱️ Selection",
@@ -307,13 +309,16 @@ export const RULES: readonly Rule[] = [
     ],
   },
   // An element carries `locked` (the contract's schema), the context menu toggles it, and
-  // a locked element is not pressed on, moved, lassoed or erased — only carried by its
-  // group or frame. Select All still takes it, so the menu can unlock it.
+  // a locked element is not pressed on, moved, lassoed, erased or taken by Select All —
+  // only carried by its group or frame. A right-click takes it with its group, so the
+  // menu can unlock it, and the board menu's Unlock all frees them all.
   {
     section: "🗂️ Layers / ordering",
     text: /Lock element|Unlock element/,
     status: "covered",
     tests: [
+      `${ENGINE}/ci_lock.rs`,
+      "e2e/lock.spec.ts",
       `${ENGINE}/ci_group_locks_frames.rs`,
       `${ENGINE}/ci_hover.rs`,
       `${ENGINE}/ci_lasso.rs`,
@@ -341,7 +346,7 @@ export const RULES: readonly Rule[] = [
     section: "🔒 Locking",
     text: /deep-selection/,
     status: "gap",
-    why: "No deep selection reaches a locked element: a click, a marquee and a lasso pass it by, and only Select All takes it — so the context menu can unlock it, where Excalidraw's Select All skips it (actionSelectAll.ts@1118751f:32-38).",
+    why: "No deep selection reaches a locked element: a click, a marquee, a lasso and Select All pass it by, as Excalidraw's do (actionSelectAll.ts@1118751f:32-38). Only a right-click selects one, with its group, so the context menu can unlock it (ci_lock.rs, e2e/lock.spec.ts); Excalidraw's click-to-unlock popup is not built.",
   },
   {
     section: "🔒 Locking",
@@ -854,7 +859,7 @@ export const RULES: readonly Rule[] = [
     section: "1. Core architecture",
     text: /locked state/,
     status: "covered",
-    tests: [`${ENGINE}/ci_group_locks_frames.rs`, `${ENGINE}/ci_hover.rs`],
+    tests: [`${ENGINE}/ci_lock.rs`, `${ENGINE}/ci_group_locks_frames.rs`, `${ENGINE}/ci_hover.rs`],
   },
   // What the next element is drawn with, carved out of the section rule, which claimed the
   // next arrowhead while choosing one with nothing selected did nothing.
@@ -1011,6 +1016,7 @@ export const RULES: readonly Rule[] = [
     text: /Lock/,
     status: "covered",
     tests: [
+      `${ENGINE}/ci_lock.rs`,
       `${ENGINE}/ci_group_locks_frames.rs`,
       `${ENGINE}/ci_hover.rs`,
       `${ENGINE}/ci_lasso.rs`,
@@ -1573,6 +1579,8 @@ export const RULES: readonly Rule[] = [
     text: /Select locked/,
     status: "covered",
     tests: [
+      `${ENGINE}/ci_lock.rs`,
+      "e2e/lock.spec.ts",
       `${ENGINE}/ci_group_locks_frames.rs`,
       `${ENGINE}/ci_hover.rs`,
       `${ENGINE}/ci_lasso.rs`,
@@ -1584,7 +1592,7 @@ export const RULES: readonly Rule[] = [
     section: "14. Selection engine",
     text: /Locked indicators/,
     status: "gap",
-    why: "Nothing on the canvas marks a locked element; only the context menu, which offers Unlock (menu.test.ts).",
+    why: "Nothing on the canvas marks a locked element: Excalidraw's click on one shows an unlock popup and a dashed outline (activeLockedId, UnlockPopup.tsx@1118751f), not built here. Only the context menu offers Unlock (ci_lock.rs, e2e/lock.spec.ts).",
   },
   {
     section: "14. Selection engine",
@@ -2237,13 +2245,20 @@ export const RULES: readonly Rule[] = [
     // shortcut printed beside each command ("Shortcut display").
     tests: [`${WEB}/draw-chrome/commandPalette.test.ts`, "e2e/keyboardDiagram.spec.ts"],
   },
-  // Each action is implemented and tested at the engine/store level (grouping, z-order,
-  // lock, duplicate, delete, copy/paste) but no test clicks the context-menu entry
-  // itself and checks the effect — menu.test.ts covers what the menu *offers*, not what
-  // clicking an item *does*.
+  // Lock and Unlock are clicked in the context menu by e2e/lock.spec.ts, on a group.
   {
     section: "34. Menus",
-    text: /^Cut$|^Copy$|^Duplicate$|^Delete$|^Group$|^Ungroup$|^Lock$|^Unlock$|^Bring forward$|^Send backward$/,
+    text: /^Lock$|^Unlock$/,
+    status: "covered",
+    tests: ["e2e/lock.spec.ts", `${ENGINE}/ci_lock.rs`],
+  },
+  // Each action is implemented and tested at the engine/store level (grouping, z-order,
+  // duplicate, delete, copy/paste) but no test clicks the context-menu entry itself and
+  // checks the effect — menu.test.ts covers what the menu *offers*, not what clicking an
+  // item *does*.
+  {
+    section: "34. Menus",
+    text: /^Cut$|^Copy$|^Duplicate$|^Delete$|^Group$|^Ungroup$|^Bring forward$|^Send backward$/,
     status: "gap",
     why: "Implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically.",
   },
