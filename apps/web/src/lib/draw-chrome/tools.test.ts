@@ -39,6 +39,7 @@ describe("DRAW_TOOLS", () => {
       "laser",
       "lasso",
       "stickynote",
+      "figure",
     ]);
   });
 

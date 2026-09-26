@@ -1,6 +1,7 @@
 import type {
   ArrowType,
   ColorDomain,
+  FigureKind,
   FillStyle,
   SelectionStyle,
   StrokeStyle,
@@ -189,6 +190,22 @@ export const ARROW_TYPES: Array<{ label: string; icon: IconName; value: ArrowTyp
   { label: "Sharp arrow", icon: "arrowSharp", value: "sharp" },
   { label: "Curved arrow", icon: "arrowRound", value: "round" },
 ];
+
+/** The Shapes picker's kind row, mirroring `ARROW_TYPES`. Mirrors the engine's
+ *  `FIGURE_KINDS` (`scene/figure.rs`). */
+export const FIGURE_KIND_OPTIONS: Array<{ label: string; icon: IconName; value: FigureKind }> = [
+  { label: "Polygon", icon: "figurePolygon", value: "polygon" },
+  { label: "Star", icon: "figureStar", value: "star" },
+  { label: "Parallelogram", icon: "figureParallelogram", value: "parallelogram" },
+  { label: "Trapezoid", icon: "figureTrapezoid", value: "trapezoid" },
+  { label: "Cylinder", icon: "figureCylinder", value: "cylinder" },
+  { label: "Document", icon: "figureDocument", value: "document" },
+];
+
+/** Mirrors the engine's `SIDES_RANGE`/`RATIO_RANGE` (`scene/figure.rs`), for the
+ *  inspector's sides stepper and ratio slider. */
+export const FIGURE_SIDES_RANGE = { min: 3, max: 12 } as const;
+export const FIGURE_RATIO_RANGE = { min: 0.05, max: 0.95, step: 0.01 } as const;
 
 /**
  * The wrap row, a divergence addition (`docs/reference/console.md`): a text wraps in a

@@ -103,6 +103,10 @@ describe("controls follow the element", () => {
     expect(actions("select", [el("line")]).roundness).toBe(true);
   });
 
+  it("a figure has no corners to round either: a star's points are never rounded", () => {
+    expect(actions("select", [el("figure")]).roundness).toBe(false);
+  });
+
   it("an arrow has no background to fill", () => {
     expect(actions("select", [el("arrow")]).backgroundColor).toBe(false);
     expect(actions("select", [el("rectangle")]).backgroundColor).toBe(true);
@@ -483,5 +487,63 @@ describe("oracle predicates", () => {
     // `canChangeStrokeColor` (`shapeActionPredicates.ts@1118751f:41-62`).
     expect(actions("rectangle", [el("image")]).strokeColor).toBe(false);
     expect(actions("rectangle").strokeColor).toBe(true);
+  });
+});
+
+describe("the Shapes picker's controls", () => {
+  it("gives a figure the same style controls as a rectangle", () => {
+    const figure = actions("select", [el("figure")]);
+    expect(figure.backgroundColor).toBe(true);
+    expect(figure.strokeColor).toBe(true);
+    expect(figure.strokeWidth).toBe(true);
+    expect(figure.strokeStyle).toBe(true);
+  });
+
+  it("shows the kind row for the figure tool or a selected figure, and nothing else", () => {
+    expect(actions("figure").figureKind).toBe(true);
+    expect(actions("select", [el("figure")]).figureKind).toBe(true);
+    expect(actions("rectangle").figureKind).toBe(false);
+    expect(actions("select", [el("rectangle")]).figureKind).toBe(false);
+  });
+
+  it("shows the sides stepper and ratio slider only when the kind has one", () => {
+    const both = getShapeActions(
+      "figure",
+      { ...factsOf([]), figureHasSides: true, figureHasRatio: true },
+      "transparent",
+    );
+    expect(both.figureSides).toBe(true);
+    expect(both.figureRatio).toBe(true);
+
+    const neither = getShapeActions(
+      "figure",
+      { ...factsOf([]), figureHasSides: false, figureHasRatio: false },
+      "transparent",
+    );
+    expect(neither.figureSides).toBe(false);
+    expect(neither.figureRatio).toBe(false);
+  });
+
+  it("never leaks a stale sides or ratio flag when the figure row itself is not shown", () => {
+    // `next_selection_style()` reads `figureHasSides`/`figureHasRatio` off the pending
+    // figure's kind regardless of the active tool, so the gate also needs `figureKind` —
+    // otherwise a rectangle tool would inherit whatever the figure tool left behind.
+    const stale = getShapeActions(
+      "rectangle",
+      { ...factsOf([]), figureHasSides: true, figureHasRatio: true },
+      "transparent",
+    );
+    expect(stale.figureSides).toBe(false);
+    expect(stale.figureRatio).toBe(false);
+  });
+
+  it("still shows a selected figure's stepper and slider whatever the tool's own flags are", () => {
+    const selected = getShapeActions(
+      "select",
+      { ...factsOf([el("figure")]), figureHasSides: true, figureHasRatio: false },
+      "transparent",
+    );
+    expect(selected.figureSides).toBe(true);
+    expect(selected.figureRatio).toBe(false);
   });
 });

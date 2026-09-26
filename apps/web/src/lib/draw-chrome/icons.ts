@@ -56,7 +56,16 @@ export type IconName =
   | "fontCode"
   | "arrowSharp"
   | "arrowRound"
-  | "polygonClosed";
+  | "polygonClosed"
+  // The Shapes tool (toolbar) and its kind picker (inspector): one glyph per
+  // `FigureKind`, plus the toolbar's own — a hexagon, the default figure.
+  | "figure"
+  | "figurePolygon"
+  | "figureStar"
+  | "figureParallelogram"
+  | "figureTrapezoid"
+  | "figureCylinder"
+  | "figureDocument";
 
 export type SvgNode =
   | { tag: "path"; d: string }
@@ -378,4 +387,23 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
   ],
   // A closed line, filled: the shape the polygon toggle turns a selected line into.
   polygonClosed: [{ tag: "path", d: "M12 2 2 9.5 5.5 21h13L22 9.5Z" }],
+  // The Shapes tool's own badge: a hexagon, the figure default (`FigureParams::default`).
+  figure: [{ tag: "path", d: "M12 2 20 7 20 17 12 22 4 17 4 7Z" }],
+  figurePolygon: [{ tag: "path", d: "M12 2 20 7 20 17 12 22 4 17 4 7Z" }],
+  figureStar: [
+    {
+      tag: "path",
+      d: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2Z",
+    },
+  ],
+  figureParallelogram: [{ tag: "path", d: "M7 4H21L17 20H3Z" }],
+  figureTrapezoid: [{ tag: "path", d: "M8 4H16L22 20H2Z" }],
+  // The oracle's own "database" glyph: a body with a rim, so a cylinder reads as one
+  // even at toolbar size.
+  figureCylinder: [
+    { tag: "path", d: "M3 6c0 1.66 4.03 3 9 3s9-1.34 9-3-4.03-3-9-3-9 1.34-9 3Z" },
+    { tag: "path", d: "M3 6v12c0 1.66 4.03 3 9 3s9-1.34 9-3V6" },
+  ],
+  // A rectangle with a wavy foot, echoing the kind's own wavy-bottom silhouette.
+  figureDocument: [{ tag: "path", d: "M4 3H20V16L18 18L16 16L14 18L12 16L10 18L8 16L6 18L4 16Z" }],
 };

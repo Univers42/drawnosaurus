@@ -71,6 +71,9 @@ export const EXTRA_TOOLS: readonly ToolDef[] = [
   { tool: "lasso", label: "Lasso", hotkey: "S", icon: "lasso" },
   // A letter and no digit, as Excalidraw has it (`Tools.tsx@1118751f:121-124`).
   { tool: "stickynote", label: "Sticky note", hotkey: "N", icon: "sticky" },
+  // Not the oracle's: a polygon/star/parallelogram/trapezoid/cylinder/document, picked
+  // in the inspector's "Figure kind" row (`inspector.ts`'s `FIGURE_KIND_OPTIONS`).
+  { tool: "figure", label: "Shapes", hotkey: "U", icon: "figure" },
 ];
 
 /** Every tool, wherever it lives. */

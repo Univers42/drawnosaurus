@@ -52,6 +52,7 @@ const hasBackground = (kind: Kind): boolean =>
     "line",
     "freedraw",
     "bucketfill",
+    "figure",
   ].includes(asElementKind(kind));
 
 /** A note's paper is always solid: it takes a colour and no fill pattern (`:16-17`). */
@@ -68,16 +69,19 @@ const hasStrokeColor = (kind: Kind): boolean =>
     "line",
     "text",
     "embed",
+    "figure",
   ].includes(asElementKind(kind));
 
 const hasStrokeWidth = (kind: Kind): boolean =>
-  ["rectangle", "ellipse", "diamond", "freedraw", "arrow", "line", "embed"].includes(
+  ["rectangle", "ellipse", "diamond", "freedraw", "arrow", "line", "embed", "figure"].includes(
     asElementKind(kind),
   );
 
 /** Freehand strokes and text have no dash pattern to choose. */
 const hasStrokeStyle = (kind: Kind): boolean =>
-  ["rectangle", "ellipse", "diamond", "arrow", "line", "embed"].includes(asElementKind(kind));
+  ["rectangle", "ellipse", "diamond", "arrow", "line", "embed", "figure"].includes(
+    asElementKind(kind),
+  );
 
 /** A note has no stroke to dash, but its paper's outline is as sloppy as a rectangle's. */
 const hasRoughness = (kind: Kind): boolean => hasStrokeStyle(kind) || kind === "stickynote";
@@ -92,6 +96,8 @@ const canHaveArrowheads = (kind: Kind): boolean => asElementKind(kind) === "arro
 const isArrowKind = canHaveArrowheads;
 
 const isTextKind = (kind: Kind): boolean => asElementKind(kind) === "text";
+
+const isFigureKind = (kind: Kind): boolean => asElementKind(kind) === "figure";
 
 /**
  * Tools that create something, as opposed to selecting, panning or erasing.
@@ -144,6 +150,12 @@ export interface ShapeActions {
    * labels always wrap — so shown only for a selection that holds either.
    */
   wrap: boolean;
+  /** The Shapes picker's kind row: a figure tool or a selected figure. */
+  figureKind: boolean;
+  /** The sides stepper — only for a kind that has one (`figureKind` implied). */
+  figureSides: boolean;
+  /** The ratio slider — only for a kind that has one (`figureKind` implied). */
+  figureRatio: boolean;
   opacity: boolean;
   /** Actions on things that exist: z-order, mirror, group, align. */
   layers: boolean;
@@ -190,6 +202,10 @@ export interface SelectionFacts {
    * carry — read off `SelectionStyle.canTogglePolygon`, the engine's own one-pass answer.
    */
   canTogglePolygon: boolean;
+  /** Whether the figure kind shared by the selection (or the next figure's, with
+   *  nothing selected) has a sides stepper or a ratio slider at all. */
+  figureHasSides: boolean;
+  figureHasRatio: boolean;
 }
 
 export function getShapeActions(
@@ -241,6 +257,9 @@ export function getShapeActions(
     textAlign: activeTool === "text" || selection.textAlignable,
     verticalAlign: selection.verticalAlignable,
     wrap: selection.hasFreeText || selection.hasLabel,
+    figureKind: forToolOrSelection(isFigureKind),
+    figureSides: forToolOrSelection(isFigureKind) && selection.figureHasSides,
+    figureRatio: forToolOrSelection(isFigureKind) && selection.figureHasRatio,
     // `shapeActionPredicates.ts@1118751f:157`: every selection, a frame included, and
     // every tool but the auto-shape one. The panel's own visibility rules out the tools
     // that draw nothing.
