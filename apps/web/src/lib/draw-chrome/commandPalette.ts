@@ -9,6 +9,7 @@
 import type { DrawTool, FigureParams } from "@osionos/draw-engine/types";
 import { ALL_TOOL_DEFS, hotkeyLabel } from "./tools.ts";
 import { shortcutLabel } from "./shortcuts.ts";
+import { SHORTCUT_REGISTRY, shortcutFor } from "./shortcutRegistry.ts";
 import { FIGURE_KIND_OPTIONS } from "./inspector.ts";
 import type { ThemePreference } from "./theme.ts";
 
@@ -134,6 +135,15 @@ export interface PaletteHost {
   applyStylePreset: (id: string) => void;
 }
 
+const REGISTRY_IDS = new Set(SHORTCUT_REGISTRY.map((entry) => entry.id));
+
+/** `shortcutFor(id)` where the registry has the chord, `fallback` otherwise — a tool such
+ *  as the lasso or the shapes picker has no oracle-derived registry entry, so it keeps
+ *  printing its own badge (`hotkeyLabel`) instead of throwing. */
+function registryShortcut(id: string, fallback: string | undefined): string | undefined {
+  return REGISTRY_IDS.has(id) ? shortcutFor(id) : fallback;
+}
+
 /**
  * The registry: tools, keyboard-only shape insertion, view/zoom, theme, export, Present and
  * every saved style preset — real actions this chrome already has a callback for, never a
@@ -144,7 +154,7 @@ export function buildCommands(host: PaletteHost): Command[] {
     id: `tool:${tool.tool}`,
     label: tool.label,
     category: "Tools",
-    shortcut: hotkeyLabel(tool),
+    shortcut: registryShortcut(`tool.${tool.tool}`, hotkeyLabel(tool)),
     keywords: [tool.tool],
     run: () => host.setTool(tool.tool),
   }));
@@ -184,56 +194,56 @@ export function buildCommands(host: PaletteHost): Command[] {
       id: "view:zoomIn",
       label: "Zoom in",
       category: "View",
-      shortcut: shortcutLabel("CtrlOrCmd+="),
+      shortcut: shortcutFor("view.zoomIn"),
       run: host.zoomIn,
     },
     {
       id: "view:zoomOut",
       label: "Zoom out",
       category: "View",
-      shortcut: shortcutLabel("CtrlOrCmd+-"),
+      shortcut: shortcutFor("view.zoomOut"),
       run: host.zoomOut,
     },
     {
       id: "view:zoomReset",
       label: "Reset zoom",
       category: "View",
-      shortcut: shortcutLabel("CtrlOrCmd+0"),
+      shortcut: shortcutFor("view.zoomReset"),
       run: host.zoomReset,
     },
     {
       id: "view:fit",
       label: "Zoom to fit all elements",
       category: "View",
-      shortcut: shortcutLabel("Shift+1"),
+      shortcut: shortcutFor("view.zoomToFit"),
       run: host.zoomToFit,
     },
     {
       id: "view:zoomToFitViewport",
       label: "Zoom to fit in viewport",
       category: "View",
-      shortcut: shortcutLabel("Shift+2"),
+      shortcut: shortcutFor("view.zoomToFitSelectionInViewport"),
       run: host.zoomToFitSelectionInViewport,
     },
     {
       id: "view:zoomToSelection",
       label: "Zoom to selection",
       category: "View",
-      shortcut: shortcutLabel("Shift+3"),
+      shortcut: shortcutFor("view.zoomToFitSelection"),
       run: host.zoomToFitSelection,
     },
     {
       id: "view:grid",
       label: "Toggle grid",
       category: "View",
-      shortcut: shortcutLabel("CtrlOrCmd+'"),
+      shortcut: shortcutFor("view.grid"),
       run: host.toggleGrid,
     },
     {
       id: "view:snap",
       label: "Toggle snap to objects",
       category: "View",
-      shortcut: shortcutLabel("Alt+S"),
+      shortcut: shortcutFor("view.snap"),
       run: host.toggleObjectsSnap,
     },
     {
@@ -246,7 +256,7 @@ export function buildCommands(host: PaletteHost): Command[] {
       id: "view:present",
       label: "Present",
       category: "View",
-      shortcut: shortcutLabel("CtrlOrCmd+Alt+P"),
+      shortcut: shortcutFor("presentation.enter"),
       run: host.enterPresent,
     },
   );

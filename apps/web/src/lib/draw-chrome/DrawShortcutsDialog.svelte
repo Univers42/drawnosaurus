@@ -1,77 +1,10 @@
 <script lang="ts">
-  import { shortcutLabel, zOrderShortcut } from "./shortcuts.ts";
+  import { groupedShortcuts, shortcutFor } from "./shortcutRegistry.ts";
 
   let { onClose }: { onClose: () => void } = $props();
 
-  const SHORTCUTS = [
-    {
-      cat: "Tools",
-      items: [
-        { key: "1 or V", desc: "Selection" },
-        { key: "2 or R", desc: "Rectangle" },
-        { key: "3 or D", desc: "Diamond" },
-        { key: "4 or O", desc: "Ellipse" },
-        { key: "5 or A", desc: "Arrow" },
-        { key: "6 or L", desc: "Line" },
-        { key: "7 or P", desc: "Pencil / Draw" },
-        { key: "8 or T", desc: "Text" },
-        { key: "N", desc: "Sticky note" },
-        { key: "0 or E", desc: "Eraser" },
-        { key: "Q", desc: "Lock tool" },
-        { key: "Space", desc: "Pan / Hand tool" },
-      ],
-    },
-    {
-      cat: "Actions",
-      items: [
-        { key: "⌘ Z", desc: "Undo" },
-        { key: "⌘ ⇧ Z", desc: "Redo" },
-        { key: "⌘ G", desc: "Group selection" },
-        { key: "⌘ ⇧ G", desc: "Ungroup selection" },
-        { key: "⌘ ⇧ L", desc: "Lock / unlock selection" },
-        { key: "⌘ C / ⌘ V", desc: "Copy / Paste" },
-        { key: "Delete / ⌫", desc: "Delete selection" },
-        { key: "⌘ D", desc: "Duplicate selection" },
-        { key: shortcutLabel("CtrlOrCmd+Alt+C"), desc: "Copy styles" },
-        { key: shortcutLabel("CtrlOrCmd+Alt+V"), desc: "Paste styles" },
-        { key: zOrderShortcut("back"), desc: "Send to back" },
-        { key: zOrderShortcut("front"), desc: "Bring to front" },
-        { key: zOrderShortcut("backward"), desc: "Send backward" },
-        { key: zOrderShortcut("forward"), desc: "Bring forward" },
-        { key: "S", desc: "Stroke colour (with a selection)" },
-        { key: "G", desc: "Background colour" },
-      ],
-    },
-    {
-      cat: "View",
-      items: [
-        { key: "⌘ +", desc: "Zoom in" },
-        { key: "⌘ -", desc: "Zoom out" },
-        { key: "⌘ 0", desc: "Reset zoom" },
-        { key: "⇧ 1", desc: "Zoom to fit" },
-        { key: "⌥ S", desc: "Snap to objects" },
-        { key: "Hold ⌘", desc: "Invert snapping while dragging" },
-      ],
-    },
-    {
-      cat: "Presentation",
-      items: [
-        { key: shortcutLabel("CtrlOrCmd+Alt+P"), desc: "Present — the board's frames as slides" },
-        { key: "→ ↓ Space", desc: "Next slide" },
-        { key: "← ↑", desc: "Previous slide" },
-        { key: "Home / End", desc: "First / last slide" },
-        { key: "Esc", desc: "Exit presentation" },
-      ],
-    },
-    {
-      cat: "Flowchart",
-      items: [
-        { key: "⌘ Arrow", desc: "Create a connected node in that direction (release to commit)" },
-        { key: "1 / 2 / 3", desc: "Rectangle / diamond / ellipse — while a node is being created" },
-        { key: "⌥ Arrow", desc: "Navigate to the connected node in that direction" },
-      ],
-    },
-  ];
+  // Static: the registry does not change at runtime, so this needs no reactivity.
+  const GROUPS = groupedShortcuts();
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
@@ -82,14 +15,14 @@
     </div>
 
     <div class="shortcuts-grid">
-      {#each SHORTCUTS as section (section.cat)}
+      {#each GROUPS as group (group.section)}
         <div class="shortcut-section">
-          <h4>{section.cat}</h4>
+          <h4>{group.section}</h4>
           <ul>
-            {#each section.items as item (item.key)}
+            {#each group.entries as entry (entry.id)}
               <li>
-                <span class="desc">{item.desc}</span>
-                <kbd>{item.key}</kbd>
+                <span class="desc">{entry.label}</span>
+                <kbd>{shortcutFor(entry.id)}</kbd>
               </li>
             {/each}
           </ul>

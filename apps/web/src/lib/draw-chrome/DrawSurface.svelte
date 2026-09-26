@@ -121,7 +121,7 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
-  import { isTextField, styleShortcut, type KeyTarget } from "./shortcuts.ts";
+  import { appShortcut, isTextField, styleShortcut, type KeyTarget } from "./shortcuts.ts";
   import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
@@ -1671,6 +1671,10 @@
 
     const mod = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
+    // Snap, grid, Present and the palette's own toggle chord are decided by the pure,
+    // tested `appShortcut` (`shortcuts.ts`) — the registry's proof runs real events
+    // through it, which an inline condition here could not offer.
+    const shortcut = appShortcut(event, presenting);
 
     if (event.key === "Escape") {
       // The engine lets the eraser's marks go on the same key; the trail goes with them.
@@ -1687,30 +1691,25 @@
     } else if (mod && key === "s") {
       event.preventDefault();
       saveAsFile();
-    } else if (!mod && event.altKey && event.code === "KeyS") {
-      // Excalidraw's `Alt+S` (`actionToggleObjectsSnapMode.tsx`), on `code` for the same
-      // reason as the grid below — and because on a Mac, Option+S types "ß".
+    } else if (shortcut === "snap") {
+      // Excalidraw's `Alt+S` (`actionToggleObjectsSnapMode.tsx`).
       event.preventDefault();
       flipObjectsSnap();
-    } else if (mod && event.code === "Quote") {
-      // Excalidraw's grid shortcut, and matched on `code` the way theirs is: `code` is
-      // the physical key, `key` the character it produces. On a layout where that key is
-      // not an apostrophe — AZERTY, QWERTZ, Dvorak — matching the character means the
-      // shortcut is either somewhere else entirely or nowhere at all.
+    } else if (shortcut === "grid") {
+      // Excalidraw's grid shortcut.
       event.preventDefault();
       pickGrid({ enabled: !grid.enabled });
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
-    } else if (mod && event.altKey && event.code === "KeyP" && !presenting) {
+    } else if (shortcut === "present") {
       // Was Ctrl/Cmd+Shift+P; the palette (Track B, Part 1) takes that chord now, matching
       // the oracle (`CommandPalette.tsx@1118751f:145-146`). Ctrl/Cmd+Alt+P is unused in the
       // oracle's own keymap and not reserved by Chrome or Firefox — the same kind of chord
-      // this project already trusts for copy/paste styles (Ctrl/Cmd+Alt+C/V) — and matched
-      // on `code`, not `key`, for the same reason as Alt+S above: on a Mac, Option+P types "π".
+      // this project already trusts for copy/paste styles (Ctrl/Cmd+Alt+C/V).
       event.preventDefault();
       void enterPresent();
-    } else if (mod && (event.key === "/" || (event.shiftKey && key === "p"))) {
+    } else if (shortcut === "palette") {
       // Ctrl/Cmd+/ and Ctrl/Cmd+Shift+P open the command palette — the oracle's own
       // toggle chord (`CommandPalette.tsx@1118751f:145-146`), free for this once Present
       // moved to Ctrl/Cmd+Alt+P above.

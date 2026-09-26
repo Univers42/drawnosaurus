@@ -126,3 +126,33 @@ export function styleShortcut(
   if (event.key === "g" && context.backgroundRow) return "backgroundPicker";
   return null;
 }
+
+export type AppShortcut = "snap" | "grid" | "present" | "palette";
+
+export interface AppShortcutKey {
+  key: string;
+  code: string;
+  altKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+}
+
+/**
+ * The chrome's own global chords that pick a shortcut this app advertises but are neither
+ * a canvas edit (the engine's `keys.ts`) nor a style pick (`styleShortcut` above) — see
+ * `DrawSurface.svelte`'s `onAppShortcut`, which still owns Escape, Ctrl/Cmd+O, Ctrl/Cmd+S,
+ * Ctrl/Cmd+Shift+E and `?` directly: those touch the filesystem or a dialog this registry
+ * does not describe. `presenting` suppresses Present's own chord while already showing, so
+ * the key does not try to re-enter what it is already in.
+ */
+export function appShortcut(event: AppShortcutKey, presenting: boolean): AppShortcut | null {
+  const mod = event.ctrlKey || event.metaKey;
+  if (!mod && event.altKey && event.code === "KeyS") return "snap";
+  if (mod && event.code === "Quote") return "grid";
+  if (mod && event.altKey && event.code === "KeyP" && !presenting) return "present";
+  if (mod && (event.key === "/" || (event.shiftKey && event.key.toLowerCase() === "p"))) {
+    return "palette";
+  }
+  return null;
+}

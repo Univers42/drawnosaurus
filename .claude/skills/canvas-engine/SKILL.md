@@ -90,11 +90,17 @@ world  = (screen - (x, y)) / scale     screen_to_world
   mock: add the method to the mock, then assert the call list.
 - Chrome-level keys live in `DrawSurface.svelte`'s editor keydown capture. That capture runs
   before the engine's listener, which is why offsets are measured there.
-- The command palette (`commandPalette.ts`) is a pure list over a `PaletteHost`. Every
-  entry names its shortcut through `shortcutLabel`. Labels follow the oracle's `en.json`.
+- The command palette (`commandPalette.ts`) is a pure list over a `PaletteHost`. An entry
+  whose chord is in `shortcutRegistry.ts` prints that entry's text via `shortcutFor(id)`;
+  one that is not (a tool with no oracle entry) falls back to `shortcutLabel`/`hotkeyLabel`.
 - The key listener sits on the editor container, not the window. Browser specs call
   `focusBoard()` before pressing keys. It clicks the canvas, which clears the selection, so
   select afterwards with `clickElement()`.
+- `shortcutRegistry.ts` is the one list `DrawShortcutsDialog.svelte` and the command palette
+  both read, so the two cannot drift. Add a chord there and its proof in
+  `shortcutRegistry.test.ts` (parse the chord, run it through the handler that owns it —
+  `dispatchKeyDown`, `styleShortcut`, `presentKeyAction`, `appShortcut`, or `switchKey` —
+  and assert it does what the label says).
 
 ## Arrow bindings
 
