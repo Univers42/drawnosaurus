@@ -86,6 +86,8 @@ export interface SceneElement {
   points?: [number, number][];
   /** A line closed on its first point, painted filled: absent reads as false. */
   polygon?: boolean;
+  /** An arrow routed square between the shapes it binds: absent reads as false. */
+  elbowed?: boolean;
   text?: string;
   /** Absent means nothing chose one, which the engine resolves from the element's role. */
   textAlign?: "left" | "center" | "right";

@@ -393,6 +393,39 @@ test("repeat presses grow the preview by a sibling each, and release commits the
   expect(await selection(page), "the first new node is selected").toEqual([nodes[0]!.id]);
 });
 
+test("each new node is linked by an elbow arrow, square from side to side", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeStartingRectangle(board, "start", {
+    x: OPEN_CANVAS.left + 150,
+    y: OPEN_CANVAS.top + 150,
+  });
+  const before = await sceneElements(page);
+
+  // Three siblings: the middle one straight across, the outer two turning to reach it.
+  await page.keyboard.down("Control");
+  for (let press = 1; press <= 3; press++) await page.keyboard.press("ArrowRight");
+  await page.keyboard.up("Control");
+
+  const arrows = (await sceneElements(page)).filter(
+    (element) => element.type === "arrow" && !before.some((old) => old.id === element.id),
+  );
+  expect(arrows).toHaveLength(3);
+  for (const arrow of arrows) {
+    expect(arrow.elbowed, `${arrow.id} is an elbow arrow`).toBe(true);
+    const points = arrow.points!;
+    for (let i = 1; i < points.length; i++) {
+      const [a, b] = [points[i - 1]!, points[i]!];
+      const square = Math.abs(a[0] - b[0]) < 1e-6 || Math.abs(a[1] - b[1]) < 1e-6;
+      expect(square, `${arrow.id} segment ${i} runs square`).toBe(true);
+    }
+  }
+  expect(
+    arrows.filter((arrow) => arrow.points!.length > 2),
+    "the outer siblings are reached by turning",
+  ).toHaveLength(2);
+});
+
 test("a new direction mid-gesture starts the preview over, one node that way", async ({ page }) => {
   const board = await openBoard(page);
   await focusBoard(board);
