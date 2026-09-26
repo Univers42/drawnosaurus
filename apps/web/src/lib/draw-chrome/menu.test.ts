@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { DrawElement } from "@osionos/draw-engine/types";
-import { clampMenuPosition, menuElementFromSelection, textMenu } from "./menu.ts";
+import {
+  ARROWHEAD_GLYPH,
+  ARROWHEAD_KINDS,
+  ARROWHEAD_LABEL,
+  clampMenuPosition,
+  menuElementFromSelection,
+  textMenu,
+} from "./menu.ts";
 
 const el = (patch: Partial<DrawElement> & Pick<DrawElement, "type" | "id">): DrawElement => ({
   x: 0,
@@ -22,6 +29,37 @@ const el = (patch: Partial<DrawElement> & Pick<DrawElement, "type" | "id">): Dra
   updated: 0,
   isDeleted: false,
   ...patch,
+});
+
+describe("ARROWHEAD_KINDS", () => {
+  it("offers the oracle's own picker order (actionProperties.tsx's getArrowheadOptions)", () => {
+    expect(ARROWHEAD_KINDS).toEqual([
+      "none",
+      "arrow",
+      "triangle",
+      "triangle_outline",
+      "circle",
+      "circle_outline",
+      "diamond",
+      "diamond_outline",
+      "bar",
+      "cardinality_one",
+      "cardinality_many",
+      "cardinality_one_or_many",
+      "cardinality_exactly_one",
+      "cardinality_zero_or_one",
+      "cardinality_zero_or_many",
+    ]);
+  });
+
+  it("has a distinct glyph and a label for every kind, so none renders blank", () => {
+    const glyphs = ARROWHEAD_KINDS.map((kind) => ARROWHEAD_GLYPH[kind]);
+    expect(new Set(glyphs).size).toBe(ARROWHEAD_KINDS.length);
+    for (const kind of ARROWHEAD_KINDS) {
+      expect(ARROWHEAD_GLYPH[kind], kind).toBeTruthy();
+      expect(ARROWHEAD_LABEL[kind], kind).toBeTruthy();
+    }
+  });
 });
 
 describe("clampMenuPosition", () => {
@@ -87,9 +125,9 @@ describe("menuElementFromSelection", () => {
     const locked = el({ id: "a", type: "arrow", locked: true });
     expect(menuElementFromSelection([locked], true, false)?.linear).toBeNull();
     // Beside one that is not locked, the row is that one's.
-    const free = el({ id: "b", type: "arrow", startArrowhead: "dot" });
+    const free = el({ id: "b", type: "arrow", startArrowhead: "circle" });
     expect(menuElementFromSelection([locked, free], false, false)?.linear).toEqual({
-      start: "dot",
+      start: "circle",
       end: "arrow",
     });
   });

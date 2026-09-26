@@ -59,24 +59,64 @@ export function textMenu(style: TextMenuFacts): TextMenu {
   };
 }
 
-export const ARROWHEAD_KINDS: Arrowhead[] = ["none", "arrow", "triangle", "dot", "diamond", "bar"];
+/** The oracle's own picker order (`actions/actionProperties.tsx@1118751f`'s
+ *  `getArrowheadOptions`): visible defaults first, then the plain heads it hides until one
+ *  is already picked, then the cardinality/crow's-foot group ER diagrams use. */
+export const ARROWHEAD_KINDS: Arrowhead[] = [
+  "none",
+  "arrow",
+  "triangle",
+  "triangle_outline",
+  "circle",
+  "circle_outline",
+  "diamond",
+  "diamond_outline",
+  "bar",
+  "cardinality_one",
+  "cardinality_many",
+  "cardinality_one_or_many",
+  "cardinality_exactly_one",
+  "cardinality_zero_or_one",
+  "cardinality_zero_or_many",
+];
 
 export const ARROWHEAD_GLYPH: Record<Arrowhead, string> = {
   none: "—",
   arrow: "▸",
   triangle: "▶",
-  dot: "●",
+  triangle_outline: "▷",
+  circle: "●",
+  circle_outline: "○",
   diamond: "◆",
+  diamond_outline: "◇",
   bar: "|",
+  // Crow's-foot notation: a single tick for "one", a fork for "many", combined or doubled
+  // for the compound markers.
+  cardinality_one: "⊣",
+  cardinality_many: "⋔",
+  cardinality_one_or_many: "⊣⋔",
+  cardinality_exactly_one: "‖",
+  cardinality_zero_or_one: "○⊣",
+  cardinality_zero_or_many: "○⋔",
 };
 
+/** `labels.arrowhead_*` in the oracle's own `locales/en.json`. */
 export const ARROWHEAD_LABEL: Record<Arrowhead, string> = {
   none: "None",
   arrow: "Arrow",
   triangle: "Triangle",
-  dot: "Dot",
+  triangle_outline: "Triangle (outline)",
+  circle: "Circle",
+  circle_outline: "Circle (outline)",
   diamond: "Diamond",
+  diamond_outline: "Diamond (outline)",
   bar: "Bar",
+  cardinality_one: "Cardinality (one)",
+  cardinality_many: "Cardinality (many)",
+  cardinality_one_or_many: "Cardinality (one or many)",
+  cardinality_exactly_one: "Cardinality (exactly one)",
+  cardinality_zero_or_one: "Cardinality (zero or one)",
+  cardinality_zero_or_many: "Cardinality (zero or many)",
 };
 
 export function clampMenuPosition(

@@ -738,6 +738,7 @@
 
   .heads {
     display: flex;
+    flex-wrap: wrap;
     gap: 2px;
     padding: 2px;
     background: var(--bg);
@@ -745,7 +746,8 @@
   }
 
   .heads button {
-    flex: 1;
+    flex: 1 1 22px;
+    min-width: 22px;
     height: 26px;
     padding: 0;
     border: none;
