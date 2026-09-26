@@ -15,47 +15,28 @@ import {
   placeFrame,
   placeShapeAt,
   presetButton,
+  renameFrame,
   reopenWith,
   sceneElements,
   waitForAutosave,
   worldToCanvas,
-  writeText,
   type Board,
   type SceneElement,
 } from "./helpers.ts";
 
 /**
- * Story 2 — system architecture: three frames stacked top to bottom (Clients, Services,
- * Data), the shapes each holds, bound and labelled arrows between them, and one style
- * preset applied to both services at once. Frame membership is never set by hand — a
- * shape drawn inside an existing frame is judged into it on its own commit
- * (`pointer_end.rs::judge_created_frame_membership`), exactly what this checks.
+ * Story 2 — system architecture: three frames stacked top to bottom, each renamed to its
+ * own section (Clients, Services, Data — a real rename, through the double click on the
+ * name label: `renameFrame`, `engine/frame_rename.rs`), the shapes each holds, bound and
+ * labelled arrows between them, and one style preset applied to both services at once.
+ * Frame membership is never set by hand — a shape drawn inside an existing frame is
+ * judged into it on its own commit (`pointer_end.rs::judge_created_frame_membership`),
+ * exactly what this checks.
  *
- * Each frame also gets its own heading text ("Clients", "Services", "Data") in the room
- * `CONTENT_TOP` leaves at its top: the frame's own name badge is whatever
- * `default_frame_name` assigned it when it was drawn ("Frame 1", …) — nothing in the app
- * exposes a way to rename it (no double click, no panel field, no engine call; a frame is
- * not in `is_bindable_element`, so even Enter-to-edit refuses a selected one) — so a real
- * heading is what actually reads as the section's name on the board and in its preview.
- *
- * Three placement rules keep that heading legible rather than merely present:
- *
- * - a free text is created centred on the click, not started from it — `text_creation_
- *   point` lifts it half a line above the pointer (`engine/text.rs`) — so a heading
- *   clicked within half a line of its frame's top border ends up drawn *above* that
- *   border, outside the frame it was meant to join, and never gets its `frameId` at all.
- *   `HEADING_CLICK` sits well clear of that.
- * - `GAP`, the space *between* frames, is wide enough that an arrow crossing it lands its
- *   label in the open gap, clear of both frames' own content.
- * - the heading itself sits at the frame's *right* edge (`HEADING_RIGHT_INSET`), not its
- *   left, because every shape here is drawn toward the left — an arrow landing on the one
- *   below bound to the heading instead of its target: a free text is a valid arrow target
- *   in its own right (`binding.rs::is_target_kind`), and the servicesHeading sat exactly
- *   where the web→auth arrow's own approach point landed.
+ * `GAP`, the space *between* frames, is wide enough that an arrow crossing it lands its
+ * label in the open gap, clear of both frames' own content.
  */
 
-const HEADING_CLICK = 20;
-const HEADING_RIGHT_INSET = 120;
 const CONTENT_TOP = 40;
 const GAP = 50;
 const CLIENTS = { x: OPEN_CANVAS.left + 20, y: OPEN_CANVAS.top + 10, w: 680, h: 110 };
@@ -110,21 +91,9 @@ test("system architecture: three frames, services, a database, clients, and a sh
   );
   const dataFrame = await placeFrame(board, { x: DATA.x, y: DATA.y }, { w: DATA.w, h: DATA.h });
 
-  const clientsHeading = await writeText(
-    board,
-    { x: CLIENTS.x + CLIENTS.w - HEADING_RIGHT_INSET, y: CLIENTS.y + HEADING_CLICK },
-    "Clients",
-  );
-  const servicesHeading = await writeText(
-    board,
-    { x: SERVICES.x + SERVICES.w - HEADING_RIGHT_INSET, y: SERVICES.y + HEADING_CLICK },
-    "Services",
-  );
-  const dataHeading = await writeText(
-    board,
-    { x: DATA.x + DATA.w - HEADING_RIGHT_INSET, y: DATA.y + HEADING_CLICK },
-    "Data",
-  );
+  await renameFrame(board, clientsFrame, "Clients");
+  await renameFrame(board, servicesFrame, "Services");
+  await renameFrame(board, dataFrame, "Data");
 
   const web = await placeShapeAt(
     board,
@@ -206,7 +175,7 @@ test("system architecture: three frames, services, a database, clients, and a sh
   expect(counts["ellipse"]).toBe(2);
   expect(counts["figure"]).toBe(3);
   expect(counts["arrow"]).toBe(4);
-  expect(counts["text"]).toBe(12); // 5 shape labels + 4 arrow labels + 3 frame headings
+  expect(counts["text"]).toBe(9); // 5 shape labels + 4 arrow labels; the sections are the frames' own names
 
   expectArrowBound(webToAuth, web.id, auth.id);
   expectArrowBound(mobileToOrders, mobile.id, orders.id);
@@ -230,13 +199,9 @@ test("system architecture: three frames, services, a database, clients, and a sh
   expect(byId.get(auth.id)?.frameId).toBe(servicesFrame.id);
   expect(byId.get(orders.id)?.frameId).toBe(servicesFrame.id);
   expect(byId.get(db.id)?.frameId).toBe(dataFrame.id);
-  expect(byId.get(clientsHeading.id)?.frameId, "the Clients heading is in its frame").toBe(
-    clientsFrame.id,
-  );
-  expect(byId.get(servicesHeading.id)?.frameId, "the Services heading is in its frame").toBe(
-    servicesFrame.id,
-  );
-  expect(byId.get(dataHeading.id)?.frameId, "the Data heading is in its frame").toBe(dataFrame.id);
+  expect(byId.get(clientsFrame.id)?.name, "the section's own name").toBe("Clients");
+  expect(byId.get(servicesFrame.id)?.name, "the section's own name").toBe("Services");
+  expect(byId.get(dataFrame.id)?.name, "the section's own name").toBe("Data");
 
   // The preset restyled both services, not just the one clicked last.
   const styledAuth = byId.get(auth.id)!;

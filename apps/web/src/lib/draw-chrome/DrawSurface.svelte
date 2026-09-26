@@ -7,6 +7,7 @@
     DrawTheme,
     DrawTool,
     FigureParams,
+    FrameRenameRequest,
     Scene,
     StylePatch,
     TextEditRequest,
@@ -123,6 +124,7 @@
   import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
+  import FrameRenameEditor from "./FrameRenameEditor.svelte";
   import { watchFonts } from "./fonts.ts";
   import "./fonts.css";
   import DrawModals from "./DrawModals.svelte";
@@ -226,6 +228,7 @@
     if (!dragging) panelVisible = want;
   });
   let textEdit = $state<TextEditRequest | null>(null);
+  let frameRename = $state<FrameRenameRequest | null>(null);
   /**
    * Moves when the text being typed may have moved or changed look without a style
    * change — the camera, a face arriving, a peer — so its editor reads it again.
@@ -1797,6 +1800,9 @@
         }
         if (realtime) startPreviews();
       }}
+      onRequestFrameRename={(request) => {
+        frameRename = request;
+      }}
       onContextMenu={(point, kind) => {
         if (!engine) return;
         // "canvas" opens the board menu even when a selection is kept from before this
@@ -2034,6 +2040,12 @@
           refreshStyle();
         }}
       />
+    {/key}
+  {/if}
+
+  {#if frameRename && engine}
+    {#key frameRename.id}
+      <FrameRenameEditor {engine} request={frameRename} onDone={() => (frameRename = null)} />
     {/key}
   {/if}
 

@@ -10,6 +10,7 @@ import {
   placeFigureAt,
   placeFrame,
   placeShapeAt,
+  renameFrame,
   reopenWith,
   sceneElements,
   waitForAutosave,
@@ -18,11 +19,12 @@ import {
 } from "./helpers.ts";
 
 /**
- * Story 4 — pitch deck: four frames as slides (Problem, Solution, Market, Ask), each
- * titled and carrying a couple of short content lines plus a shape where one fits —
- * an ellipse, a star, a pentagon, and the ask itself as a closed polygon; then a real
- * run through Present mode (`presentation.spec.ts`'s own keys) over all four, and out
- * again.
+ * Story 4 — pitch deck: four frames as slides, each renamed to its own title (Problem,
+ * Solution, Market, Ask — a real rename, through the double click on the name label:
+ * `renameFrame`, `engine/frame_rename.rs`) and carrying a couple of short content lines
+ * plus a shape where one fits — an ellipse, a star, a pentagon, and the ask itself as a
+ * closed polygon; then a real run through Present mode (`presentation.spec.ts`'s own
+ * keys) over all four, and out again.
  */
 
 const SLIDE_W = 330;
@@ -52,11 +54,11 @@ test("pitch deck: four titled slides, three figures, and a run through Present",
   const board = await openBoard(page, slug);
 
   const frames = [];
-  const titles = [];
   const contents = [];
   for (const slide of SLIDES) {
-    frames.push(await placeFrame(board, { x: slide.x, y: slide.y }, { w: SLIDE_W, h: SLIDE_H }));
-    titles.push(await writeText(board, { x: slide.x + 20, y: slide.y + 20 }, slide.title));
+    const frame = await placeFrame(board, { x: slide.x, y: slide.y }, { w: SLIDE_W, h: SLIDE_H });
+    await renameFrame(board, frame, slide.title);
+    frames.push(frame);
     contents.push(await writeText(board, { x: slide.x + 20, y: slide.y + 58 }, slide.content));
   }
 
@@ -114,12 +116,12 @@ test("pitch deck: four titled slides, three figures, and a run through Present",
   expect(counts["ellipse"]).toBe(1);
   expect(counts["figure"]).toBe(2);
   expect(counts["line"]).toBe(1);
-  expect(counts["text"]).toBe(8); // 4 titles + 4 content blocks
+  expect(counts["text"]).toBe(4); // the 4 content blocks; the titles are the frames' own names
 
   const byId = new Map(built.map((element) => [element.id, element]));
   for (const [index, frame] of frames.entries()) {
-    expect(byId.get(titles[index]!.id)?.frameId, `${SLIDES[index]!.title} title in its frame`).toBe(
-      frame.id,
+    expect(byId.get(frame.id)?.name, `the ${SLIDES[index]!.title} slide's own name`).toBe(
+      SLIDES[index]!.title,
     );
     expect(
       byId.get(contents[index]!.id)?.frameId,

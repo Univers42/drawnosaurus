@@ -376,11 +376,13 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_image.rs`, `${WEB}/draw-chrome/imageFile.test.ts`, "e2e/image.spec.ts"],
   },
+  // shortkey.md's own Frames line never mentions renaming by name — that is the design
+  // doc's "Rename frame" line, split out below under "12. Frames".
   {
     section: "🧩 Frames",
-    text: /Rename|Export frames/,
+    text: /Export frames/,
     status: "gap",
-    why: "Frames carry a name and render it, but nothing edits it, and export has no per-frame mode.",
+    why: "Export has no per-frame mode.",
   },
   // The chord itself is pinned in the shortcuts oracle, not here — draw_frame in
   // ci_frame.rs activates the tool directly (`set_tool`), never through a keypress.
@@ -1484,11 +1486,18 @@ export const RULES: readonly Rule[] = [
       "apps/api/tests/integration/boards.test.ts",
     ],
   },
+  // Same rename, the design doc's own line for it.
   {
     section: "12. Frames",
-    text: /Rename|Export frame|Frame navigation/,
+    text: /Rename/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_frame.rs`, "e2e/frames.spec.ts"],
+  },
+  {
+    section: "12. Frames",
+    text: /Export frame|Frame navigation/,
     status: "gap",
-    why: "See the Frames rule: naming is stored and drawn but not editable, and export has no frame mode.",
+    why: "See the Frames rule: export has no frame mode, and nothing navigates frame to frame.",
   },
   // Resize handles are not excluded for DrawElementType::Frame, so dragging one works the
   // same as any rectangle-shaped element — but no test drags a frame's own handle and

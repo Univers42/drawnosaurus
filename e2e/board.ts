@@ -89,6 +89,8 @@ export interface SceneElement {
   verticalAlign?: "top" | "middle" | "bottom";
   containerId?: string | null;
   boundTextId?: string | null;
+  /** A frame's label — absent means the generic default (`getFrameLikeTitle`). */
+  name?: string | null;
   /** Arrows only: the shape each end is attached to. */
   startBinding?: string | null;
   endBinding?: string | null;

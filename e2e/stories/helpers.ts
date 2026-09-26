@@ -166,6 +166,25 @@ export async function placeFrame(
   return placed;
 }
 
+/**
+ * Double-clicks a frame's name label and types `name` over it, committing with Enter —
+ * the real rename (`FrameRenameRequest` / `renameFrame`, `engine/frame_rename.rs`), now
+ * that one exists, in place of the separate heading text the stories used to draw for it.
+ * `frame.x + 8, frame.y - 8` lands inside the label's hit box regardless of its own text
+ * (`frame_name_at`): just right of its left edge, and well above the frame's own border
+ * but below the label's top.
+ */
+export async function renameFrame(board: Board, frame: SceneElement, name: string): Promise<void> {
+  const { page } = board;
+  const at = await worldToCanvas(board, frame.x + 8, frame.y - 8);
+  await page.mouse.dblclick(board.box.x + at.x, board.box.y + at.y);
+  const input = page.locator('input[aria-label="Frame name"]');
+  await expect(input).toBeVisible();
+  await page.keyboard.type(name);
+  await page.keyboard.press("Enter");
+  await expect(input).toHaveCount(0);
+}
+
 /** Picks the Shapes tool, chooses `kind` in the panel, drags it out, and labels it — the
  *  drag `figure.spec.ts`'s `placeFigure` uses: a click alone is discarded as too small. */
 export async function placeFigureAt(
