@@ -394,6 +394,27 @@ test.describe("navigation shortcuts", () => {
     expect(await activeTool(page)).toBe("rectangle");
     expect(await sceneElements(page)).toHaveLength(0);
   });
+
+  // Reported from real use: Linux pastes its primary selection on a middle release, so
+  // every middle-button pan pasted the last copied shapes. The oracle drops the paste
+  // once the pan has moved (`App.pan.ts@1118751f:157-197`).
+  test("a middle-button pan pastes nothing", async ({ page }) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await page.keyboard.press("Control+/");
+    await page.keyboard.type("add rectangle");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Control+c");
+    await page.keyboard.press("Escape");
+
+    await page.mouse.move(board.box.x + 700, board.box.y + 400);
+    await page.mouse.down({ button: "middle" });
+    await page.mouse.move(board.box.x + 780, board.box.y + 460, { steps: 6 });
+    await page.mouse.up({ button: "middle" });
+    await page.waitForTimeout(200);
+
+    expect(await sceneElements(page)).toHaveLength(1);
+  });
 });
 
 test.describe("selection and editing shortcuts", () => {
