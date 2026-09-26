@@ -1,0 +1,2176 @@
+<!doctype html>
+<!--
+  The work plan: what is left after wave 14, in the order we would take it. Written from
+  the registry at cd01892 and the code at a5e1271 (2026-09-26). The roadmap bars count each
+  open line of prompt/*.md once; see "Regenerating the numbers" at the bottom.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drawnosaurus Work Plan</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,750&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+    <style>
+      [hidden] {
+        display: none !important;
+      }
+      :root {
+        --ink: #1e1e1e;
+        --muted: #62647a;
+        --line: #e3e4ec;
+        --accent: #6965db;
+        --accent-subtle: #eef0ff;
+        --surface: #ffffff;
+        --canvas: #f8f9fb;
+        --amber: #c77c02;
+        --amber-subtle: #fff4e0;
+        --grey-mark: #8a8ca3;
+        --dot: #d9dbe6;
+        --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+        --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+        --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          color-scheme: dark;
+          --ink: #e8eaed;
+          --muted: #a3a5b8;
+          --line: #34343d;
+          --accent: #8f95ee;
+          --accent-subtle: #2a2b45;
+          --surface: #232329;
+          --canvas: #191919;
+          --amber: #f0b44c;
+          --amber-subtle: #3a2f1c;
+          --grey-mark: #8d8fa6;
+          --dot: #2c2c33;
+        }
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --ink: #e8eaed;
+        --muted: #a3a5b8;
+        --line: #34343d;
+        --accent: #8f95ee;
+        --accent-subtle: #2a2b45;
+        --surface: #232329;
+        --canvas: #191919;
+        --amber: #f0b44c;
+        --amber-subtle: #3a2f1c;
+        --grey-mark: #8d8fa6;
+        --dot: #2c2c33;
+      }
+
+      body {
+        margin: 0;
+        background-color: var(--canvas);
+        background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
+        background-size: 20px 20px;
+        color: var(--ink);
+        font: 400 15px/1.6 var(--body);
+        padding-inline: 20px;
+      }
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+        padding-block: 48px 72px;
+        display: grid;
+        gap: 56px;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--display);
+        text-wrap: balance;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      h1 {
+        font-size: clamp(2.1rem, 5vw, 3.1rem);
+        font-weight: 750;
+        line-height: 1.05;
+      }
+      h2 {
+        font-size: 1.55rem;
+        font-weight: 750;
+        line-height: 1.2;
+      }
+      h3 {
+        font-size: 1.05rem;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+      p {
+        margin: 0;
+        max-width: 66ch;
+      }
+      code,
+      .mono {
+        font-family: var(--mono);
+        font-size: 0.86em;
+      }
+      a {
+        color: var(--accent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 3px;
+      }
+      .eyebrow {
+        font: 500 0.72rem/1 var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      section {
+        display: grid;
+        gap: 20px;
+      }
+      .lede {
+        font-size: 1.08rem;
+        color: var(--ink);
+      }
+      .sub {
+        color: var(--muted);
+      }
+
+      /* header */
+      header {
+        display: grid;
+        gap: 18px;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        font: 400 0.8rem/1.4 var(--mono);
+        color: var(--muted);
+      }
+      .meta b {
+        font-weight: 500;
+        color: var(--ink);
+      }
+
+      /* the coverage bar: fills named after the board's own fill styles */
+      .board {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 24px;
+        display: grid;
+        gap: 18px;
+      }
+      .bar {
+        display: flex;
+        height: 44px;
+        border: 2px solid var(--ink);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .seg {
+        height: 100%;
+      }
+      .seg + .seg {
+        border-left: 2px solid var(--ink);
+      }
+      .solid {
+        background: var(--accent);
+      }
+      .cross {
+        background:
+          repeating-linear-gradient(45deg, var(--amber) 0 1.5px, transparent 1.5px 7px),
+          repeating-linear-gradient(-45deg, var(--amber) 0 1.5px, transparent 1.5px 7px),
+          var(--amber-subtle);
+      }
+      .hachure {
+        background:
+          repeating-linear-gradient(-45deg, var(--grey-mark) 0 1.5px, transparent 1.5px 7px),
+          var(--surface);
+      }
+      .legend {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 14px 24px;
+      }
+      .key {
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        gap: 2px 10px;
+        align-items: start;
+      }
+      .swatch {
+        width: 22px;
+        height: 22px;
+        border: 2px solid var(--ink);
+        border-radius: 4px;
+        margin-top: 3px;
+      }
+      .num {
+        font: 750 1.9rem/1.1 var(--display);
+        font-variant-numeric: tabular-nums;
+      }
+      .num small {
+        font: 500 0.85rem var(--mono);
+        color: var(--muted);
+        margin-left: 6px;
+      }
+      .klabel {
+        grid-column: 2;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+      .fillname {
+        grid-column: 2;
+        font: 400 0.72rem var(--mono);
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+      .note {
+        font-size: 0.86rem;
+        color: var(--muted);
+      }
+
+      /* ranked next steps */
+      ol.next {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 14px;
+        counter-reset: n;
+      }
+      ol.next > li {
+        counter-increment: n;
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: 4px 14px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px 20px;
+      }
+      ol.next > li::before {
+        content: counter(n);
+        grid-row: span 3;
+        font: 750 1.6rem/1 var(--display);
+        color: var(--accent);
+        width: 40px;
+        height: 40px;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+      }
+      ol.next p {
+        font-size: 0.93rem;
+      }
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .tag {
+        font: 500 0.72rem/1 var(--mono);
+        padding: 5px 8px;
+        border-radius: 99px;
+        background: var(--accent-subtle);
+        color: var(--accent);
+      }
+      .tag.amber {
+        background: var(--amber-subtle);
+        color: var(--amber);
+      }
+
+      /* area table */
+      .areas {
+        display: grid;
+        border-top: 2px solid var(--ink);
+      }
+      .area {
+        display: grid;
+        grid-template-columns: minmax(150px, 210px) 1fr 64px;
+        gap: 6px 22px;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--line);
+        align-items: baseline;
+      }
+      .area h3 {
+        font-size: 1rem;
+      }
+      .area p {
+        font-size: 0.92rem;
+        max-width: none;
+      }
+      .area .count {
+        font: 500 0.95rem var(--mono);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+      }
+      .area .count b {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .colhead {
+        display: grid;
+        grid-template-columns: minmax(150px, 210px) 1fr 64px;
+        gap: 22px;
+        font: 500 0.7rem var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding-bottom: 8px;
+      }
+      .colhead span:last-child {
+        text-align: right;
+      }
+
+      /* two-column lists */
+      .cols {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px 20px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+      .card ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 7px;
+        font-size: 0.92rem;
+      }
+      .card li::marker {
+        color: var(--muted);
+      }
+
+      /* timeline */
+      .timeline {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+      }
+      .timeline li {
+        display: grid;
+        grid-template-columns: 76px 1fr auto;
+        gap: 4px 18px;
+        padding: 11px 0;
+        border-bottom: 1px dashed var(--line);
+        align-items: baseline;
+        font-size: 0.93rem;
+      }
+      .timeline .w {
+        font: 500 0.78rem var(--mono);
+        color: var(--accent);
+      }
+      .timeline .sha {
+        font: 400 0.78rem var(--mono);
+        color: var(--muted);
+      }
+
+      /* full ledger */
+      .filter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .filter input {
+        flex: 1 1 260px;
+        font: 400 0.95rem var(--body);
+        color: var(--ink);
+        background: var(--surface);
+        border: 1.5px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 12px;
+      }
+      .filter input:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 0 3px var(--accent-subtle);
+      }
+      #shown {
+        font: 400 0.8rem var(--mono);
+        color: var(--muted);
+      }
+      .ledger {
+        display: grid;
+        border-top: 1px solid var(--line);
+      }
+      .lsec {
+        border-bottom: 1px solid var(--line);
+      }
+      .lsec summary {
+        cursor: pointer;
+        display: grid;
+        grid-template-columns: 14px 1fr auto auto;
+        gap: 12px;
+        padding: 11px 4px;
+        align-items: baseline;
+        list-style: none;
+      }
+      .lsec summary::-webkit-details-marker {
+        display: none;
+      }
+      .lsec summary::before {
+        content: "+";
+        font: 500 0.9rem var(--mono);
+        color: var(--muted);
+      }
+      .lsec[open] summary::before {
+        content: "−";
+      }
+      .lsec summary:hover .lname {
+        color: var(--accent);
+      }
+      .lname {
+        font-weight: 500;
+      }
+      .lsrc,
+      .lcount {
+        font: 400 0.76rem var(--mono);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .lcount {
+        min-width: 12ch;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .lrow {
+        padding: 4px 4px 14px 30px;
+        display: grid;
+        gap: 4px;
+      }
+      .litems {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 2px;
+        font-size: 0.9rem;
+      }
+      .ln {
+        font: 400 0.72rem var(--mono);
+        color: var(--muted);
+        margin-right: 6px;
+      }
+      .lwhy {
+        font-size: 0.85rem;
+        color: var(--muted);
+        max-width: 72ch;
+      }
+
+      footer {
+        font-size: 0.84rem;
+        color: var(--muted);
+        display: grid;
+        gap: 8px;
+        border-top: 1px solid var(--line);
+        padding-top: 20px;
+      }
+
+      @media (max-width: 640px) {
+        .wrap {
+          gap: 44px;
+          padding-block: 28px 48px;
+        }
+        .area,
+        .colhead {
+          grid-template-columns: 1fr auto;
+        }
+        .area p {
+          grid-column: 1 / -1;
+          grid-row: 2;
+        }
+        .colhead span:nth-child(2) {
+          display: none;
+        }
+        .timeline li {
+          grid-template-columns: 64px 1fr;
+        }
+        .timeline .sha {
+          grid-column: 2;
+        }
+        .lsec summary {
+          grid-template-columns: 14px 1fr auto;
+        }
+        .lrow {
+          padding-left: 4px;
+        }
+        .lsrc {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .seg {
+          transition: filter 0.15s;
+        }
+        .seg:hover {
+          filter: brightness(1.08);
+        }
+      }
+
+      /* ---- work plan additions ---- */
+      nav.pages {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      nav.pages a {
+        font: 500 0.78rem/1 var(--mono);
+        text-decoration: none;
+        color: var(--muted);
+        padding: 7px 11px;
+        border: 1px solid var(--line);
+        border-radius: 99px;
+        background: var(--surface);
+      }
+      nav.pages a[aria-current="page"] {
+        color: var(--accent);
+        border-color: var(--accent);
+        background: var(--accent-subtle);
+      }
+      nav.pages a:hover {
+        color: var(--accent);
+      }
+      .state {
+        display: grid;
+        gap: 10px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 4px 16px;
+        font-size: 0.93rem;
+      }
+      .kv .k {
+        font: 500 0.75rem/1.9 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      ol.steps {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: s;
+        display: grid;
+        gap: 10px;
+      }
+      ol.steps > li {
+        counter-increment: s;
+        position: relative;
+        padding-left: 40px;
+        min-height: 26px;
+        font-size: 0.94rem;
+        max-width: 76ch;
+      }
+      ol.steps > li::before {
+        content: counter(s);
+        position: absolute;
+        left: 0;
+        top: 0;
+        font: 500 0.8rem/1 var(--mono);
+        color: var(--accent);
+        width: 26px;
+        height: 26px;
+        border: 1.5px solid var(--accent);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        box-sizing: border-box;
+      }
+      pre {
+        margin: 0;
+        overflow-x: auto;
+        background: var(--canvas);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px 16px;
+      }
+      pre code {
+        font: 400 0.82rem/1.6 var(--mono);
+        color: var(--ink);
+        white-space: pre;
+      }
+      kbd {
+        font: 500 0.8em var(--mono);
+        padding: 1px 5px;
+        border: 1px solid var(--line);
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        background: var(--surface);
+      }
+
+      .road {
+        display: grid;
+        border-top: 2px solid var(--ink);
+      }
+      .rrow {
+        display: grid;
+        grid-template-columns: 28px minmax(140px, 220px) 44px 1fr 44px;
+        gap: 14px;
+        align-items: center;
+        padding: 9px 4px;
+        border-bottom: 1px solid var(--line);
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .rrow:hover .rname {
+        color: var(--accent);
+      }
+      .rnum {
+        font: 750 1.05rem/1 var(--display);
+        color: var(--accent);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .rname {
+        font-weight: 500;
+        font-size: 0.95rem;
+      }
+      .rsize {
+        font: 500 0.72rem var(--mono);
+        color: var(--muted);
+        text-align: center;
+      }
+      .rbar {
+        display: flex;
+        height: 16px;
+      }
+      .rseg {
+        height: 100%;
+        border: 1.5px solid var(--ink);
+      }
+      .rseg + .rseg {
+        border-left: 0;
+      }
+      .rseg:first-child {
+        border-radius: 3px 0 0 3px;
+      }
+      .rseg:last-child {
+        border-radius: 0 3px 3px 0;
+      }
+      .rseg:only-child {
+        border-radius: 3px;
+      }
+      .rcount {
+        font: 500 0.9rem var(--mono);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .rlegend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 22px;
+        padding-top: 12px;
+        font-size: 0.84rem;
+        color: var(--muted);
+      }
+      .rlegend > span {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .rlegend .swatch {
+        width: 18px;
+        height: 14px;
+        margin: 0;
+        border-width: 1.5px;
+      }
+
+      .ms {
+        scroll-margin-top: 16px;
+        padding-top: 8px;
+        border-top: 1px solid var(--line);
+      }
+      .mshead {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 14px;
+      }
+      .msnum {
+        font: 750 1.2rem/1 var(--display);
+        color: var(--accent);
+        width: 40px;
+        height: 40px;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        flex: none;
+        font-variant-numeric: tabular-nums;
+      }
+      .chips,
+      .inline-chips {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        vertical-align: middle;
+      }
+      .inline-chips {
+        margin-left: 8px;
+      }
+      .chip {
+        font: 500 0.72rem/1 var(--mono);
+        padding: 5px 8px;
+        border-radius: 99px;
+        background: var(--accent-subtle);
+        color: var(--accent);
+        white-space: nowrap;
+      }
+      .chip.size {
+        background: transparent;
+        border: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .chip.amber {
+        background: var(--amber-subtle);
+        color: var(--amber);
+      }
+      .ms h3 {
+        font-size: 1.02rem;
+      }
+      .rows {
+        display: grid;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: 14px;
+        padding: 14px 0;
+        border-bottom: 1px dashed var(--line);
+      }
+      .row:first-child {
+        padding-top: 4px;
+      }
+      .row > div {
+        display: grid;
+        gap: 6px;
+      }
+      .rid {
+        font: 500 0.82rem/1.5 var(--mono);
+        color: var(--accent);
+      }
+      .row p {
+        font-size: 0.93rem;
+        max-width: 74ch;
+      }
+      .where {
+        font-size: 0.82rem !important;
+        color: var(--muted);
+      }
+      ul.plain {
+        margin: 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 9px;
+        font-size: 0.94rem;
+        max-width: 80ch;
+      }
+      ul.plain li::marker {
+        color: var(--muted);
+      }
+      .tbl {
+        display: grid;
+        border-top: 2px solid var(--ink);
+        overflow-x: auto;
+      }
+      .trow {
+        display: grid;
+        grid-template-columns: minmax(130px, 190px) 1fr 52px;
+        gap: 18px;
+        padding: 10px 2px;
+        border-bottom: 1px solid var(--line);
+        font-size: 0.92rem;
+        align-items: baseline;
+      }
+      .tbl.two .trow {
+        grid-template-columns: minmax(150px, 240px) 1fr;
+      }
+      .trow > span:first-child {
+        font-weight: 500;
+      }
+      .trow > span:nth-child(3) {
+        font: 500 0.9rem var(--mono);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+      }
+      .thead {
+        font: 500 0.7rem var(--mono) !important;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .thead > span:first-child {
+        font-weight: 500;
+      }
+      dl.facts {
+        margin: 0;
+        display: grid;
+        grid-template-columns: 110px 1fr;
+        gap: 8px 18px;
+        font-size: 0.93rem;
+      }
+      dl.facts dt {
+        font: 500 0.72rem/1.9 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      dl.facts dd {
+        margin: 0;
+        max-width: 76ch;
+      }
+      .done {
+        font-size: 0.92rem;
+      }
+      .card p {
+        font-size: 0.92rem;
+      }
+
+      @media (max-width: 640px) {
+        .kv,
+        dl.facts {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+        .kv .v,
+        dl.facts dd {
+          margin-bottom: 8px;
+        }
+        .rrow {
+          grid-template-columns: 24px 1fr 36px;
+          gap: 4px 10px;
+        }
+        .rsize {
+          display: none;
+        }
+        .rbar {
+          grid-column: 2 / 3;
+          grid-row: 2;
+        }
+        .rcount {
+          grid-row: 1 / 3;
+          grid-column: 3;
+        }
+        .trow,
+        .tbl.two .trow {
+          grid-template-columns: 1fr auto;
+        }
+        .trow > span:nth-child(2) {
+          grid-column: 1 / -1;
+          grid-row: 2;
+        }
+        .tbl.two .trow > span:nth-child(2) {
+          grid-row: auto;
+        }
+        .row {
+          grid-template-columns: 1fr;
+          gap: 4px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav class="pages" aria-label="Wiki pages">
+        <a href="parity-report.html">Parity report</a>
+        <a href="#top" aria-current="page">Remaining work</a>
+      </nav>
+
+      <header id="top">
+        <span class="eyebrow">Drawnosaurus · work plan · 26 September 2026</span>
+        <h1>Where the work picks back up</h1>
+        <p class="lede">
+          The parity report says what is missing. This page turns it into work: four known bugs,
+          then fourteen milestones in the order we would take them, each with the files to start
+          from, the Excalidraw code to port, and the checklist lines it closes.
+        </p>
+        <div class="meta">
+          <span>main <b>a5e1271</b></span>
+          <span>engine <b>4c41948</b></span>
+          <span>covered <b>617 / 930</b></span>
+          <span>oracle <b>Excalidraw 1118751f</b></span>
+        </div>
+      </header>
+
+      <section aria-labelledby="h-resume">
+        <h2 id="h-resume">Resume here</h2>
+        <div class="board">
+          <div class="state">
+            <div class="kv">
+              <span class="k">drawnosaurus</span
+              ><span class="v"
+                ><code>develop</code> = <code>main</code> = <code>a5e1271</code>; CI green on both
+                (main run 36239287534)</span
+              >
+            </div>
+            <div class="kv">
+              <span class="k">draw-engine</span
+              ><span class="v"
+                ><code>develop</code> = <code>main</code> = <code>4c41948</code>; CI green on both
+                (shellcheck, quality, WASM build)</span
+              >
+            </div>
+            <div class="kv">
+              <span class="k">coverage</span
+              ><span class="v"
+                >617 of 930 in-scope checklist lines covered by a named test (66.3%); 74 built but
+                untested; 239 not built</span
+              >
+            </div>
+            <div class="kv">
+              <span class="k">in flight</span
+              ><span class="v"
+                >Nothing. Every branch from the last plan is merged and deleted.</span
+              >
+            </div>
+          </div>
+          <h3>Next, in order</h3>
+          <ol class="steps">
+            <li>
+              <a href="#m-0">Fix the four known bugs</a>. The export dialog's dead controls first,
+              since anyone exporting meets them.
+            </li>
+            <li>
+              <a href="#m-1">Quick wins</a>: the 52 test-only lines, plain-text paste, Mermaid on
+              paste, and the small keys.
+            </li>
+            <li>
+              <a href="#m-2">Export and files</a>: whole-scene PNG at a chosen scale, then the
+              options that depend on it.
+            </li>
+          </ol>
+          <h3>Start a session</h3>
+          <pre><code>git switch develop &amp;&amp; git pull --ff-only
+git submodule update --init engine   # not --recursive: the engine's own submodule is SSH-only
+make up &amp;&amp; make stale                # stale must print "current"
+make conformance                     # 617/930 when this page was written
+git switch -c fix/export-dialog-controls</code></pre>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-road">
+        <h2 id="h-road">Roadmap</h2>
+        <p class="sub">
+          The bar is the number of open checklist lines each milestone closes, drawn to one scale.
+          Together they are all 313 open lines except the three that match Excalidraw already (see
+          Not planned).
+        </p>
+        <div class="road">
+          <a class="rrow" href="#m-0" aria-label="Milestone 0, Known bugs, S, four known bugs"
+            ><span class="rnum">0</span><span class="rname">Known bugs</span
+            ><span class="rsize">S</span><span class="rbar"></span
+            ><span class="rcount">4 bugs</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-1"
+            aria-label="Milestone 1, Quick wins, S, 63 lines: 52 built but untested, 11 not built"
+            ><span class="rnum">1</span><span class="rname">Quick wins</span
+            ><span class="rsize">S</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg cross" style="width: 82.54%"></span
+              ><span class="rseg hachure" style="width: 17.46%"></span></span
+            ><span class="rcount">63</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-2"
+            aria-label="Milestone 2, Export and files, L, 35 lines: 0 built but untested, 35 not built"
+            ><span class="rnum">2</span><span class="rname">Export and files</span
+            ><span class="rsize">L</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 55.56%"></span></span
+            ><span class="rcount">35</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-3"
+            aria-label="Milestone 3, Arrows and lines, L, 8 lines: 0 built but untested, 8 not built"
+            ><span class="rnum">3</span><span class="rname">Arrows and lines</span
+            ><span class="rsize">L</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 12.7%"></span></span
+            ><span class="rcount">8</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-4"
+            aria-label="Milestone 4, Library, L, 19 lines: 0 built but untested, 19 not built"
+            ><span class="rnum">4</span><span class="rname">Library</span
+            ><span class="rsize">L</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 30.16%"></span></span
+            ><span class="rcount">19</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-5"
+            aria-label="Milestone 5, Find and inspect, M, 39 lines: 0 built but untested, 39 not built"
+            ><span class="rnum">5</span><span class="rname">Find and inspect</span
+            ><span class="rsize">M</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 61.9%"></span></span
+            ><span class="rcount">39</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-6"
+            aria-label="Milestone 6, Drawing precision, M, 20 lines: 0 built but untested, 20 not built"
+            ><span class="rnum">6</span><span class="rname">Drawing precision</span
+            ><span class="rsize">M</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 31.75%"></span></span
+            ><span class="rcount">20</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-7"
+            aria-label="Milestone 7, Selection and frames, M, 11 lines: 0 built but untested, 11 not built"
+            ><span class="rnum">7</span><span class="rname">Selection and frames</span
+            ><span class="rsize">M</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 17.46%"></span></span
+            ><span class="rcount">11</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-8"
+            aria-label="Milestone 8, Images, M–L, 10 lines: 0 built but untested, 10 not built"
+            ><span class="rnum">8</span><span class="rname">Images</span
+            ><span class="rsize">M–L</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 15.87%"></span></span
+            ><span class="rcount">10</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-9"
+            aria-label="Milestone 9, Freehand and eraser, M, 9 lines: 0 built but untested, 9 not built"
+            ><span class="rnum">9</span><span class="rname">Freehand and eraser</span
+            ><span class="rsize">M</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 14.29%"></span></span
+            ><span class="rcount">9</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-10"
+            aria-label="Milestone 10, Touch and mobile, L, 13 lines: 0 built but untested, 13 not built"
+            ><span class="rnum">10</span><span class="rname">Touch and mobile</span
+            ><span class="rsize">L</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 20.63%"></span></span
+            ><span class="rcount">13</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-11"
+            aria-label="Milestone 11, Collaboration and modes, M, 6 lines: 0 built but untested, 6 not built"
+            ><span class="rnum">11</span><span class="rname">Collaboration and modes</span
+            ><span class="rsize">M</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 9.52%"></span></span
+            ><span class="rcount">6</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-12"
+            aria-label="Milestone 12, Notes, embeds and Mermaid, S–M, 8 lines: 0 built but untested, 8 not built"
+            ><span class="rnum">12</span><span class="rname">Notes, embeds and Mermaid</span
+            ><span class="rsize">S–M</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 12.7%"></span></span
+            ><span class="rcount">8</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-13"
+            aria-label="Milestone 13, Engine architecture, L, 47 lines: 0 built but untested, 47 not built"
+            ><span class="rnum">13</span><span class="rname">Engine architecture</span
+            ><span class="rsize">L</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg hachure" style="width: 74.6%"></span></span
+            ><span class="rcount">47</span></a
+          >
+          <a
+            class="rrow"
+            href="#m-14"
+            aria-label="Milestone 14, Test harness work, M, 22 lines: 22 built but untested, 0 not built"
+            ><span class="rnum">14</span><span class="rname">Test harness work</span
+            ><span class="rsize">M</span
+            ><span class="rbar" aria-hidden="true"
+              ><span class="rseg cross" style="width: 34.92%"></span></span
+            ><span class="rcount">22</span></a
+          >
+          <div class="rlegend">
+            <span><span class="swatch cross"></span>built, untested</span
+            ><span><span class="swatch hachure"></span>not built</span>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-how">
+        <h2 id="h-how">How to work an item</h2>
+        <ol class="steps">
+          <li>
+            <b>Branch</b> from <code>develop</code> as <code>feature/&lt;topic&gt;</code> or
+            <code>fix/&lt;topic&gt;</code>. Engine work gets a branch of the same name in
+            <code>engine/</code> and a submodule bump in the root.
+          </li>
+          <li>
+            <b>Read the oracle first.</b> <code>make oracle</code> checks Excalidraw out at the pin
+            into <code>third_party/excalidraw</code>. Cite what you port as
+            <code>path@1118751f:lines</code>.
+          </li>
+          <li>
+            <b>Red first.</b> Write the failing test, then the code. Unit tests target the
+            <code>.ts</code> modules beside <code>DrawSurface.svelte</code>; engine behaviour gets a
+            <code>tests/ci_*.rs</code>; anything a person does with a mouse or keyboard gets an
+            <code>e2e/*.spec.ts</code>.
+          </li>
+          <li>
+            <b>Update the registry.</b> In <code>packages/conformance/src/registry.ts</code>, turn
+            the matching rules from <code>gap</code> to <code>covered</code> and name the new test
+            files. Split a half-done rule; never overclaim.
+          </li>
+          <li>
+            <b>Run the gates yourself.</b> Engine <code>make quality</code> (set
+            <code>COMPOSE_PROJECT_NAME</code> per worktree), then <code>make wasm</code>,
+            <code>make quality</code>, <code>make conformance</code>,
+            <code>make test-integration</code> and the full Playwright suite. Warnings are errors.
+          </li>
+          <li>
+            <b>Release.</b> Engine branch, engine <code>develop</code>, engine <code>main</code>,
+            each with the engine CI green. Then root <code>develop</code> with CI green, then root
+            <code>main</code> with <em>main's own</em> CI run green. Rebuild the main checkout:
+            <code>make wasm</code>, <code>make up</code>, and <code>make stale</code> must say
+            current.
+          </li>
+        </ol>
+        <p class="note">
+          Sizes: <b>S</b> is under a day, <b>M</b> a few days, <b>L</b> a week or more.
+        </p>
+      </section>
+
+      <section id="m-0" class="ms" aria-labelledby="h-m0">
+        <div class="mshead">
+          <span class="msnum">0</span>
+          <h2 id="h-m0">Known bugs</h2>
+          <span class="chips"
+            ><span class="chip">4 bugs</span><span class="chip size">S each</span></span
+          >
+        </div>
+        <p class="sub">
+          Each one is something a person can hit today. Fix them before new features.
+        </p>
+        <div class="rows">
+          <div class="row">
+            <span class="rid">0.1</span>
+            <div>
+              <h3>The export dialog's Transparent background toggle and Scale chips do nothing</h3>
+              <p>
+                They are <code>$state</code> in the dialog and never reach
+                <code>engine.exportPng()</code>, which takes no arguments. Hide them until 2.1
+                lands, or land 2.1.
+              </p>
+              <p class="where">
+                <code>apps/web/src/lib/draw-chrome/DrawExportModal.svelte:13-27</code> ·
+                <code>engine/src/engine.ts:801-803</code>
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">0.2</span>
+            <div>
+              <h3>Vectorizing an image leaves its arrows bound to a deleted id</h3>
+              <p>
+                The trace gets new ids and the image is tombstoned, but no arrow's binding is moved
+                to the trace or released.
+              </p>
+              <p class="where">
+                <code>engine/crates/draw-engine/src/engine/vectorize.rs:205-278</code>,
+                <code>commit_trace</code> at :365
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">0.3</span>
+            <div>
+              <h3>Board shortcuts fire while the vectorize dialog has focus</h3>
+              <p>
+                <code>onAppShortcut</code> only skips text fields, and the modal layer only handles
+                Escape. <code>isOwnedElsewhere</code> already solves the same problem for paste and
+                drop.
+              </p>
+              <p class="where">
+                <code>DrawSurface.svelte:1614</code> · <code>DrawModals.svelte:63-78</code> ·
+                <code>DrawSurface.svelte:643-648</code>
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">0.4</span>
+            <div>
+              <h3>
+                A turned element in a flipped group keeps its angle when dragged through the anchor
+              </h3>
+              <p>Excalidraw negates the angle.</p>
+              <p class="where">
+                <code>docs/reference/resize.md:131</code> · oracle
+                <code>resizeElements.ts@1118751f:1417-1420</code>
+              </p>
+            </div>
+          </div>
+        </div>
+        <h3>To confirm, then fix or close</h3>
+        <ul class="plain">
+          <li>
+            <b>A brand-new label taken by a peer while typed.</b> The generic path in
+            <code>engine/peers.rs:88-104</code> should revert it like an existing label, but every
+            test in <code>ci_text_edit.rs</code> uses an existing one. Write the test.
+          </li>
+          <li>
+            <b>Redo after a peer's order patch.</b> Does the shape come back at the bottom? Nothing
+            in <code>ci_zorder.rs</code> covers redo after a remote reorder. Write the test.
+          </li>
+          <li>
+            <b>A loose multi-selection's frame leaves an arrow's label outside it.</b>
+            <code>element_outline_bounds</code> (<code>scene/geometry.rs:259-293</code>) measures a
+            line by its points only, which <code>text-model.md:285</code> records as deliberate.
+            Check the oracle's <code>getCommonBounds</code> before deciding.
+          </li>
+          <li>
+            <b><code>e2e/zoom.spec.ts</code> near line 146</b> once timed out in
+            <code>openBoard</code> under load. Not seen since; watch for it.
+          </li>
+        </ul>
+      </section>
+
+      <section id="m-1" class="ms" aria-labelledby="h-m1">
+        <div class="mshead">
+          <span class="msnum">1</span>
+          <h2 id="h-m1">Quick wins</h2>
+          <span class="chips"
+            ><span class="chip">63 lines</span><span class="chip size">S each</span></span
+          >
+        </div>
+        <p class="sub">Small, independent and visible. Any order.</p>
+
+        <h3>
+          1.1 Tests for what is already built
+          <span class="inline-chips"
+            ><span class="chip amber">52 lines</span><span class="chip size">tests only</span></span
+          >
+        </h3>
+        <p>
+          These work in the app today, and the registry will not count them until a test drives
+          them. No product code should be needed; a test that finds a bug moves it to section 0.
+        </p>
+        <div class="tbl">
+          <div class="trow thead">
+            <span>Area</span><span>What to drive</span><span>Lines</span>
+          </div>
+          <div class="trow">
+            <span>Clipboard keys</span
+            ><span
+              >Ctrl/Cmd+C, X and V end to end in a browser: copy, cut, paste, then check the
+              scene</span
+            ><span>8</span>
+          </div>
+          <div class="trow">
+            <span>Context menu</span
+            ><span
+              >Cut, Copy, Duplicate, Delete, Group, Ungroup, Lock, Unlock, Bring forward, Send
+              backward from the element menu; Export from the main menu</span
+            ><span>11</span>
+          </div>
+          <div class="trow">
+            <span>Middle mouse</span
+            ><span
+              >Dragging with the middle button pans (<code>pointerInput.ts</code>,
+              <code>button === 1</code>)</span
+            ><span>3</span>
+          </div>
+          <div class="trow">
+            <span>Keys</span><span>Backspace deletes; Ctrl/Cmd+O opens the file picker</span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Menus</span
+            ><span>Arrow keys move through both menus; each item prints its shortcut</span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Rotate and resize</span
+            ><span
+              >Rotate a sticky note, an image and a line; move a whole line; resize a frame and
+              check what it contains</span
+            ><span>5</span>
+          </div>
+          <div class="trow">
+            <span>Selection and transform</span
+            ><span
+              >The selection outline; the selection survives its own transform; vertical 45° snap;
+              z-order stays stable after a deletion</span
+            ><span>4</span>
+          </div>
+          <div class="trow">
+            <span>Text</span
+            ><span>Clicking away (blur) commits an edit; caret and selection inside the editor</span
+            ><span>3</span>
+          </div>
+          <div class="trow">
+            <span>Hit testing</span><span>Hit a sticky note and an embed on their interiors</span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Geometry</span
+            ><span>Projection and closest point asserted directly, not through bucket fill</span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Style</span
+            ><span
+              ><code>stroke_style</code> and <code>fill_style</code> through
+              <code>apply_style</code> and <code>set_next_style</code></span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Collaboration</span><span>The Share dialog's people list and avatars</span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Embeds and Mermaid</span
+            ><span>Paste an embed URL through the modal; open the Mermaid dialog from the menu</span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Images</span><span>A picture survives copy/paste and duplicate</span
+            ><span>1</span>
+          </div>
+          <div class="trow">
+            <span>Align</span><span>Align top (<code>AlignMode::Top</code>)</span><span>1</span>
+          </div>
+          <div class="trow">
+            <span>Freehand</span><span>The rough look is applied to a freehand stroke</span
+            ><span>1</span>
+          </div>
+          <div class="trow"><span>Grid</span><span>What the grid paints</span><span>1</span></div>
+        </div>
+
+        <h3>
+          1.2 Paste plain text as text
+          <span class="inline-chips"><span class="chip">3 lines</span></span>
+        </h3>
+        <dl class="facts">
+          <dt>Today</dt>
+          <dd>
+            Pasting text from another app does nothing. <code>paste_json</code> accepts only this
+            app's JSON, and the chrome's paste handler takes only images and sticky JSON.
+          </dd>
+          <dt>Build</dt>
+          <dd>
+            One text element per line at the pointer, wrapping any line wider than
+            <code>max(min(visible width / 2, 800), 200)</code>, as Excalidraw does.
+          </dd>
+          <dt>Start in</dt>
+          <dd>
+            <code>engine/crates/draw-engine/src/engine/clipboard.rs:359-392</code> · the paste
+            handler in <code>DrawSurface.svelte</code> ·
+            <code>engine/src/host/keyboardInput.ts</code>
+          </dd>
+          <dt>Oracle</dt>
+          <dd>
+            <code>packages/excalidraw/clipboard.ts</code> and the paste path in
+            <code>components/App.tsx</code>
+          </dd>
+          <dt>Done when</dt>
+          <dd>
+            An e2e pastes two lines of plain text and finds two text elements; the “Text paste” and
+            “Paste text” rules flip.
+          </dd>
+        </dl>
+
+        <h3>
+          1.3 Recognise pasted Mermaid
+          <span class="inline-chips"><span class="chip">2 lines</span></span>
+        </h3>
+        <dl class="facts">
+          <dt>Build</dt>
+          <dd>
+            A canvas paste that starts with Mermaid syntax opens the Mermaid dialog filled in.
+          </dd>
+          <dt>Start in</dt>
+          <dd>
+            <code>apps/web/src/lib/mermaid/mermaidParser.ts:38</code> (the
+            <code>graph|flowchart</code> test) · <code>DrawMermaidModal.svelte</code>
+          </dd>
+          <dt>Oracle</dt>
+          <dd><code>packages/excalidraw/mermaid.ts</code></dd>
+        </dl>
+
+        <h3>
+          1.4 Small keys and modes
+          <span class="inline-chips"><span class="chip">6 lines</span></span>
+        </h3>
+        <div class="tbl">
+          <div class="trow thead"><span>Item</span><span>Notes</span><span>Lines</span></div>
+          <div class="trow">
+            <span>Ctrl/Cmd+Shift+L</span
+            ><span
+              >Bind the existing <code>toggleLockSelection</code> (<code>menu.ts:18</code>) in
+              <code>engine/src/host/keys.ts</code>, and list it in the help dialog</span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Zen mode, Alt+Z</span
+            ><span
+              >Hide the chrome, keep the canvas; host only. Oracle
+              <code>actions/actionToggleZenMode.tsx</code>. <code>focusModeEnabled</code> in
+              <code>DrawSurface.svelte</code> is a different feature.</span
+            ><span>2</span>
+          </div>
+          <div class="trow">
+            <span>Shift+3</span><span>Excalidraw's viewport-relative fit</span><span>1</span>
+          </div>
+          <div class="trow">
+            <span>Recent commands</span
+            ><span>Rank recently run commands first in <code>commandPalette.ts</code></span
+            ><span>1</span>
+          </div>
+          <div class="trow">
+            <span>Vectorize from the palette</span
+            ><span
+              >Only the context menu reaches it today
+              (<code>DrawContextMenu.svelte:97-100</code>)</span
+            ><span>–</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="m-2" class="ms" aria-labelledby="h-m2">
+        <div class="mshead">
+          <span class="msnum">2</span>
+          <h2 id="h-m2">Export and files</h2>
+          <span class="chips"
+            ><span class="chip">35 lines</span><span class="chip size">L</span></span
+          >
+        </div>
+        <p class="sub">The most visible gap for anyone who shares a board.</p>
+        <div class="rows">
+          <div class="row">
+            <span class="rid">2.1</span>
+            <div>
+              <h3>Whole-scene PNG</h3>
+              <p>
+                <code>engine.exportPng()</code> (<code>engine/src/engine.ts:801-803</code>) is
+                <code>canvas.toBlob()</code> of the visible canvas, so whatever is scrolled out of
+                view is cut off. Render into an offscreen canvas framed by the scene's bounds (the
+                contract's <code>bounds.ts</code> already mirrors the engine), at 1×, 2× or 3×, with
+                or without the background. This fixes bug 0.1.
+              </p>
+              <p class="where">
+                oracle
+                <code>packages/excalidraw/scene/export.ts:180-460</code>
+                (<code>exportToCanvas</code>, <code>exportToSvg</code>)
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">2.2</span>
+            <div>
+              <h3>Export the selection, or one frame</h3>
+              <p>For PNG and SVG. Nothing threads the selection into either path today.</p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">2.3</span>
+            <div>
+              <h3>Copy as PNG and as SVG</h3>
+              <p>
+                SVG export exists (<code>export/svg.rs</code>, <code>ci_export.rs</code>); it only
+                needs the clipboard plumbing. Rich external paste (from Google Docs, paste as one
+                element) belongs here too.
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">2.4</span>
+            <div>
+              <h3>Round trip</h3>
+              <p>
+                Embed the scene JSON in the PNG (a <code>tEXt</code> chunk) and in the SVG's
+                metadata, so dropping the file back on the board restores it.
+              </p>
+              <p class="where">oracle <code>packages/excalidraw/data/image.ts</code></p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">2.5</span>
+            <div>
+              <h3>Background and theme</h3>
+              <p>
+                SVG always paints a background rect (<code>scene_to_svg</code>). Add the option to
+                leave it out, a background colour, and a dark-theme export. Collaborator colours are
+                not themed either.
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">2.6</span>
+            <div>
+              <h3>Fonts in SVG</h3>
+              <p>
+                <code>export/svg.rs:416,423</code> names the font family but embeds no
+                <code>@font-face</code>, so an SVG opened elsewhere falls back to a system font.
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">2.7</span>
+            <div>
+              <h3><code>.excalidraw</code> import and export</h3>
+              <p>
+                <code>elements_from_json</code> (<code>export/json.rs:27-29</code>) refuses anything
+                whose <code>type</code> is not <code>"osidraw"</code>. Map Excalidraw's schema both
+                ways; a figure exports as a closed line.
+              </p>
+              <p class="where">
+                oracle <code>packages/excalidraw/data/json.ts</code>, <code>data/restore.ts</code>
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">2.8</span>
+            <div>
+              <h3>Crash recovery</h3>
+              <p>
+                Autosave falls back to a <code>localStorage</code> draft only. Add an IndexedDB
+                store and a recovery prompt.
+              </p>
+            </div>
+          </div>
+        </div>
+        <p class="done">
+          <b>Done when</b> the export specs cover each option, and the §31, §32, §39, “Export
+          tricks”, “Files” and “Clipboard tricks” rules flip.
+        </p>
+      </section>
+
+      <section id="m-3" class="ms" aria-labelledby="h-m3">
+        <div class="mshead">
+          <span class="msnum">3</span>
+          <h2 id="h-m3">Arrows and lines</h2>
+          <span class="chips"
+            ><span class="chip">8 lines</span><span class="chip size">L</span></span
+          >
+        </div>
+        <div class="rows">
+          <div class="row">
+            <span class="rid">3.1</span>
+            <div>
+              <h3>Elbow arrows</h3>
+              <p>
+                <code>ArrowType</code> has only <code>Sharp</code> and
+                <code>Round</code> (<code>engine/selection_style.rs:76-80</code>), and the contract
+                has no elbow either. Route orthogonally over the fixed-point bindings arrows already
+                have. The flowchart templates are the first users;
+                <code>docs/reference/flowchart.md</code> records the straight-connector compromise.
+              </p>
+              <p class="where">oracle <code>packages/element/src/elbowArrow.ts</code></p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">3.2</span>
+            <div>
+              <h3>Press the arrow key again to cycle the type</h3>
+              <p>Needs 3.1 for the third type.</p>
+              <p class="where">oracle <code>App.tsx@1118751f:5695-5714</code></p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">3.3</span>
+            <div><h3>Cardinality arrowheads for ER diagrams</h3></div>
+          </div>
+          <div class="row">
+            <span class="rid">3.4</span>
+            <div>
+              <h3>Drag a label along its arrow</h3>
+              <p>
+                Labels sit at the middle of the path (<code>linear_label_center</code>);
+                Excalidraw's <code>labelPosition</code> lets them slide.
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">3.5</span>
+            <div>
+              <h3>Backspace removes the last point while placing a line</h3>
+              <p>
+                Backspace calls <code>deleteSelection()</code> unconditionally
+                (<code>engine/src/host/keys.ts:155-158</code>).
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">3.6</span>
+            <div>
+              <h3>Endpoint snapping</h3>
+              <p>For a line's own endpoints, while drawing or dragging them.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="m-4" class="ms" aria-labelledby="h-m4">
+        <div class="mshead">
+          <span class="msnum">4</span>
+          <h2 id="h-m4">Library</h2>
+          <span class="chips"
+            ><span class="chip">19 lines</span><span class="chip size">L</span></span
+          >
+        </div>
+        <dl class="facts">
+          <dt>Today</dt>
+          <dd>
+            Nothing. The five templates in <code>apps/web/src/lib/templates</code> are a catalogue
+            to start a board from, not a library.
+          </dd>
+          <dt>Build</dt>
+          <dd>
+            Save a selection as an item; a sidebar with previews; drag or click to insert with ids
+            regenerated and groups kept; “Add to library” in the context menu.
+          </dd>
+          <dt>Decide first</dt>
+          <dd>
+            Where items live. Per browser (IndexedDB) is what Excalidraw does; per owner on the API
+            needs a new collection and routes in <code>apps/api</code>.
+          </dd>
+          <dt>Oracle</dt>
+          <dd>
+            <code>packages/excalidraw/data/library.ts</code> ·
+            <code>actions/actionAddToLibrary.ts</code> · <code>components/LibraryMenu.tsx</code>
+          </dd>
+        </dl>
+      </section>
+
+      <section id="m-5" class="ms" aria-labelledby="h-m5">
+        <div class="mshead">
+          <span class="msnum">5</span>
+          <h2 id="h-m5">Find and inspect</h2>
+          <span class="chips"
+            ><span class="chip">39 lines</span><span class="chip size">M each</span></span
+          >
+        </div>
+        <div class="rows">
+          <div class="row">
+            <span class="rid">5.1</span>
+            <div>
+              <h3>Scene search</h3>
+              <p>Search text, labels and frame names; step through the matches; highlight them.</p>
+              <p class="where">
+                oracle <code>components/SearchMenu.tsx</code>,
+                <code>actions/actionToggleSearchMenu.ts</code>
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">5.2</span>
+            <div>
+              <h3>Links on elements</h3>
+              <p>
+                The contract has no <code>link</code> field
+                (<code>packages/contract/src/element.ts</code>), and “Edit link…” in the context
+                menu is for embeds only (<code>menu.ts:21</code>). In order: schema field, inspector
+                row, link popup, click to open, keep it in export.
+              </p>
+              <p class="where">
+                oracle <code>packages/element/src/elementLink.ts</code>,
+                <code>actions/actionElementLink.ts</code>,
+                <code>components/hyperlink/Hyperlink.tsx</code>
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">5.3</span>
+            <div>
+              <h3>Stats panel and numeric inputs</h3>
+              <p>
+                <code>DrawInspector.svelte</code> has no x, y, width, height or angle fields, and
+                the selection summary carries style only.
+              </p>
+              <p class="where">
+                oracle <code>components/Stats/</code>, <code>actions/actionToggleStats.tsx</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="m-6" class="ms" aria-labelledby="h-m6">
+        <div class="mshead">
+          <span class="msnum">6</span>
+          <h2 id="h-m6">Drawing precision</h2>
+          <span class="chips"
+            ><span class="chip">20 lines</span><span class="chip size">M</span></span
+          >
+        </div>
+        <div class="tbl two">
+          <div class="trow thead"><span>Item</span><span>Today</span></div>
+          <div class="trow">
+            <span>Alt draws from the centre</span
+            ><span
+              >Resize has it (<code>from_center</code>); the <code>Draft</code> branch of
+              <code>pointer_move.rs:44-69</code> never reads Alt</span
+            >
+          </div>
+          <div class="trow">
+            <span>Shift snaps rotation to 15°</span
+            ><span
+              ><code>rotate_element</code> (<code>selection/transform.rs:292-295</code>) takes the
+              pointer only</span
+            >
+          </div>
+          <div class="trow">
+            <span>Snap to shapes while drawing and resizing</span
+            ><span>Object snap (<code>pointer_move.rs:619-647</code>) runs for moves only</span>
+          </div>
+          <div class="trow">
+            <span>Ctrl releases the grid</span
+            ><span
+              ><code>invert_snap</code> (<code>pointer_move.rs:628</code>) flips object snap, never
+              the grid</span
+            >
+          </div>
+          <div class="trow"><span>Equal-spacing guides</span><span>Not built</span></div>
+          <div class="trow">
+            <span>Connection points, snap increments</span
+            ><span>Not built; edge, centre, midpoint and 45° snapping are done</span>
+          </div>
+          <div class="trow">
+            <span>Grid size</span
+            ><span
+              >Modelled but not exposed; the menu offers fixed sizes; rendering does not thin with
+              zoom; export does not explicitly leave the grid out</span
+            >
+          </div>
+          <div class="trow">
+            <span>Finer nudge</span
+            ><span>Alt+Arrow is taken by flowchart navigation, so pick another modifier</span>
+          </div>
+          <div class="trow">
+            <span>Tab on the canvas</span
+            ><span>Unclaimed; the oracle's Tab opens shape conversion</span>
+          </div>
+          <div class="trow">
+            <span>A “none” fill</span
+            ><span><code>FillStyle</code> has Hachure, CrossHatch, Solid and Zigzag only</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="m-7" class="ms" aria-labelledby="h-m7">
+        <div class="mshead">
+          <span class="msnum">7</span>
+          <h2 id="h-m7">Selection and frames</h2>
+          <span class="chips"
+            ><span class="chip">11 lines</span><span class="chip size">M</span></span
+          >
+        </div>
+        <ul class="plain">
+          <li>
+            <b>Alt+click deep select</b> reaches an element underneath another, and Alt while
+            box-selecting does the same. Hit testing returns the topmost hit only.
+          </li>
+          <li>
+            <b>Subtractive lasso.</b> <code>LassoMode</code> is <code>Contain</code> or
+            <code>Intersect</code> (<code>selection/lasso.rs:29-35</code>); add a remove modifier.
+          </li>
+          <li>
+            <b>On-canvas marks</b> for a locked element and for a group. Today only the context menu
+            shows either.
+          </li>
+          <li><b>Frame “select contents”.</b> Selecting a frame selects only the frame.</li>
+          <li><b>Turn any shape into a flowchart node</b> before Ctrl+Arrow works on it.</li>
+          <li>The marquee's single containment mode is deliberate; see Not planned.</li>
+        </ul>
+      </section>
+
+      <section id="m-8" class="ms" aria-labelledby="h-m8">
+        <div class="mshead">
+          <span class="msnum">8</span>
+          <h2 id="h-m8">Images</h2>
+          <span class="chips"
+            ><span class="chip">10 lines</span><span class="chip size">M–L</span></span
+          >
+        </div>
+        <ul class="plain">
+          <li>
+            <b>Crop mode.</b> Double-click to enter, drag the crop handles, Escape to leave. Needs a
+            second rect on the element and a mode in the interaction state machine. Oracle
+            <code>packages/element/src/cropElement.ts</code>,
+            <code>actions/actionCropEditor.tsx</code>.
+          </li>
+          <li><b>Replace image</b>, and a <b>broken-image</b> state.</li>
+          <li>
+            <b>A file store.</b> Pictures ride inline as data URLs
+            (<code>packages/contract/src/element.ts:202</code>), so a board reaches MongoDB's 16 MB
+            document ceiling at two or three large pictures (<code>limits.ts:61-65</code>). Move
+            them to a store keyed by file id, as Excalidraw does. It touches the contract, the API,
+            persistence and a migration, so write the design into
+            <code>docs/reference/images.md</code> first.
+          </li>
+        </ul>
+      </section>
+
+      <section id="m-9" class="ms" aria-labelledby="h-m9">
+        <div class="mshead">
+          <span class="msnum">9</span>
+          <h2 id="h-m9">Freehand and eraser</h2>
+          <span class="chips"
+            ><span class="chip">9 lines</span><span class="chip size">M</span></span
+          >
+        </div>
+        <p>
+          Streamline and speed thinning are done
+          (<code>engine/crates/draw-engine/src/freehand.rs</code>, pinned by
+          <code>ci_freehand_stroke.rs</code>). Left to do:
+        </p>
+        <ul class="plain">
+          <li>
+            <b>Pen pressure.</b> Read <code>PointerEvent.pressure</code> into the width for pens;
+            keep speed thinning for mice.
+          </li>
+          <li>
+            <b>Point simplification</b> when a stroke is committed.
+            <code>render/path_data.rs::simplify</code> already exists for the lasso.
+          </li>
+          <li>
+            <b>The eraser splits a stroke</b> instead of removing all of it
+            (<code>engine/eraser.rs</code>).
+          </li>
+          <li><b>Pen, touch and palm</b> handling is shared with milestone 10.</li>
+        </ul>
+      </section>
+
+      <section id="m-10" class="ms" aria-labelledby="h-m10">
+        <div class="mshead">
+          <span class="msnum">10</span>
+          <h2 id="h-m10">Touch and mobile</h2>
+          <span class="chips"
+            ><span class="chip">13 lines</span><span class="chip size">L</span></span
+          >
+        </div>
+        <p>
+          Pointer events are used everywhere, but there is no multi-touch: pinch zoom exists only as
+          a trackpad pinch arriving through the wheel event
+          (<code>engine/src/host/wheel.ts:11</code>). Needed: two-finger pan and pinch, long press,
+          telling pen, touch and mouse apart, palm rejection, larger touch handles, and a mobile
+          layout for the toolbar and menus.
+        </p>
+      </section>
+
+      <section id="m-11" class="ms" aria-labelledby="h-m11">
+        <div class="mshead">
+          <span class="msnum">11</span>
+          <h2 id="h-m11">Collaboration and modes</h2>
+          <span class="chips"
+            ><span class="chip">6 lines</span><span class="chip size">M</span></span
+          >
+        </div>
+        <ul class="plain">
+          <li>
+            <b>Follow any collaborator</b>, outside presentation mode too.
+            <code>DrawFollowNotice</code> renders only for a presenting peer, and following tracks
+            slides, not the presenter's live camera
+            (<code>docs/reference/presentation.md:93-94</code>).
+          </li>
+          <li><b>Show each person's active tool</b> in presence.</li>
+          <li>
+            <b>Read-only link.</b> Nothing in the contract or API knows a read-only viewer. The
+            gateway already assigns roles by entrance (<code>docker/gateway/Caddyfile</code>,
+            <code>X-Drawnosaurus-Role</code>), so a view-only role fits there.
+          </li>
+          <li>
+            <b>Per-property undo.</b> Undo restores a whole element, so undoing your colour change
+            to an element a peer has since moved also moves it back. Excalidraw's deltas restore
+            only what you changed. <b>Branching history</b> needs the same operation model.
+          </li>
+        </ul>
+      </section>
+
+      <section id="m-12" class="ms" aria-labelledby="h-m12">
+        <div class="mshead">
+          <span class="msnum">12</span>
+          <h2 id="h-m12">Notes, embeds and Mermaid</h2>
+          <span class="chips"
+            ><span class="chip">8 lines</span><span class="chip size">S–M</span></span
+          >
+        </div>
+        <ul class="plain">
+          <li>
+            <b>Sticky-note border colour.</b> The stroke row is repurposed as the text colour for
+            notes (<code>docs/reference/sticky.md:38-41</code>), and nothing draws an outline.
+          </li>
+          <li>
+            <b>Embeds</b>: drag out a region to create one; loading and error states on the element
+            (today only the modal shows an error, <code>DrawEmbedModal.svelte:70</code>); an export
+            fallback; view-only behaviour.
+          </li>
+          <li>
+            <b>Mermaid</b>: a preview before inserting, and diagram types beyond flowcharts
+            (sequence, class, ER, state). Oracle <code>components/TTDDialog/</code>.
+          </li>
+        </ul>
+      </section>
+
+      <section id="m-13" class="ms" aria-labelledby="h-m13">
+        <div class="mshead">
+          <span class="msnum">13</span>
+          <h2 id="h-m13">Engine architecture</h2>
+          <span class="chips"
+            ><span class="chip">47 lines</span><span class="chip size">L</span></span
+          >
+        </div>
+        <p class="sub">
+          None of this is visible to a user by itself, but the named-action layer makes every later
+          shortcut, menu entry and palette command cheaper.
+        </p>
+        <div class="rows">
+          <div class="row">
+            <span class="rid">13.1</span>
+            <div>
+              <h3>
+                Named actions
+                <span class="inline-chips"><span class="chip">§28 · 25 lines</span></span>
+              </h3>
+              <p>
+                <code>commandPalette.ts</code> is a tested <code>Command[]</code> registry, but
+                <code>onAppShortcut</code> (<code>DrawSurface.svelte:1614</code>) and the menus call
+                the engine on their own. Make one action table that shortcuts, menus, the palette
+                and buttons all dispatch through.
+              </p>
+              <p class="where">
+                oracle <code>packages/excalidraw/actions/register.ts</code>,
+                <code>actions/types.ts</code>
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">13.2</span>
+            <div>
+              <h3>
+                Performance budgets
+                <span class="inline-chips"><span class="chip">§49 · 10 lines</span></span>
+              </h3>
+              <p>
+                Criterion benches exist
+                (<code>engine/crates/draw-engine/benches/{editing,render,text}.rs</code>,
+                <code>make bench</code>) but only report. A gate would read
+                <code>target/criterion/*/estimates.json</code> against checked-in thresholds, in its
+                own CI job. Also: the drag-into-frame history step still keeps two id lists
+                (<code>docs/reference/zorder.md:99-101</code>).
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">13.3</span>
+            <div>
+              <h3>
+                Transactions
+                <span class="inline-chips"><span class="chip">§29 · 4 lines</span></span>
+              </h3>
+              <p>
+                A commit is one stamp at the end of a gesture (<code>push_history</code>). There is
+                no start, update, commit or cancel API.
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">13.4</span>
+            <div>
+              <h3>Geometry and element model</h3>
+              <p>
+                No vector, matrix or circle types and no convexity test (§44). The element has no
+                <code>customData</code>, library membership or explicit visibility, and nothing
+                models a view-only state (§1).
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">13.5</span>
+            <div>
+              <h3>Vectorize's production build</h3>
+              <p>
+                CI builds the web image but never runs it, and the browser suite runs
+                <code>vite dev</code>, so nothing checks the production worker bundle. No checklist
+                line; it is a blind spot.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="m-14" class="ms" aria-labelledby="h-m14">
+        <div class="mshead">
+          <span class="msnum">14</span>
+          <h2 id="h-m14">Test harness work</h2>
+          <span class="chips"
+            ><span class="chip amber">22 lines</span><span class="chip size">M</span></span
+          >
+        </div>
+        <p class="sub">Built, but these tests need a harness before they are cheap.</p>
+        <ul class="plain">
+          <li>
+            <b>What gets painted</b> (§42, 6 lines). Snap guides, binding highlights, frame clips,
+            peer cursors and hover are drawn (<code>wasm/paint.rs</code>), but only the state they
+            read is asserted. Needs a way to read back the paint, such as recording the canvas
+            calls.
+          </li>
+          <li>
+            <b>An accessibility audit</b> (§48, 5 lines): focus management, dialog focus traps,
+            screen-reader labels, high contrast, reduced motion. An automated audit (axe-core in
+            Playwright, for example) is a new dev dependency; agree on it first.
+          </li>
+          <li>
+            <b>The modifier matrix</b> (§51, 8 lines): each tool against Shift, Alt, Ctrl and their
+            pairs, as one table-driven spec.
+          </li>
+          <li>
+            <b>Host state</b> (§1, 3 lines): modal, sidebar and collaboration state held in Svelte.
+          </li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="h-np">
+        <h2 id="h-np">Not planned</h2>
+        <div class="cols">
+          <div class="card">
+            <h3>Different on purpose</h3>
+            <ul>
+              <li>
+                The board lives on the server and merges per element; <code>.osidraw</code> files
+                are an export, not the source of truth. <code>appState</code> is not persisted, and
+                pictures live on the element until milestone 8 moves them.
+              </li>
+              <li>
+                A marquee selects what it contains, never what it only clips, so a small drag across
+                a large background shape leaves it alone.
+              </li>
+              <li>
+                Select All includes locked elements so the context menu can unlock them; Excalidraw
+                skips them.
+              </li>
+              <li>Alt+Arrow moves between flowchart nodes.</li>
+              <li>
+                Font preloading loads the Latin shard only; other scripts are laid out again when
+                their shard arrives (<code>fonts.ts:178-179</code>). Revisit only if a non-Latin
+                board visibly flickers.
+              </li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Not ours to build</h3>
+            <ul>
+              <li>
+                Bold, italic and letter spacing: Excalidraw has none either (the three open lines
+                left out of the roadmap).
+              </li>
+              <li>
+                The cheat sheet's <kbd>I</kbd> for images and its Ctrl+Shift+]/[ are wrong; the
+                oracle's own bindings are used.
+              </li>
+              <li>Hosted AI (text to diagram, wireframe to code).</li>
+              <li>A File/Edit/View menu bar, which Excalidraw does not have either.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-ci">
+        <h2 id="h-ci">CI</h2>
+        <div class="cols">
+          <div class="card">
+            <h3>drawnosaurus</h3>
+            <p>
+              <code>.github/workflows/ci.yml</code>: shellcheck, the stale-WASM guard, the WASM
+              build, typecheck/lint/format, unit and integration tests, browser tests, and the image
+              build with a smoke test.
+            </p>
+            <p>
+              Every image pulls from Docker Hub. <code>public.ecr.aws</code> meters anonymous pulls
+              per source IP, GitHub's shared runners run out of it, and that is what failed main's
+              run 36230407015.
+            </p>
+          </div>
+          <div class="card">
+            <h3>draw-engine</h3>
+            <p>
+              <code>engine/.github/workflows/ci.yml</code>: shellcheck, <code>quality</code>, and
+              the release WASM build at the crate's wasm-bindgen pin.
+            </p>
+            <p>
+              Until 26 September no push had ever started it; it runs on every push now. If a push
+              shows no run, start one with
+              <code>gh workflow run CI --repo Univers42/draw-engine --ref &lt;branch&gt;</code> and
+              find out why.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-regen">
+        <h2 id="h-regen">Regenerating the numbers</h2>
+        <p>
+          <code>make conformance</code> prints the headline. The report's per-line ledger and this
+          page's roadmap bars come from running every checklist line through the registry. In the
+          tooling container (<code>make shell</code>):
+        </p>
+        <pre><code>cat &gt; /tmp/dump.mts &lt;&lt;'EOF'
+import { readChecklists } from "/app/packages/conformance/src/checklist.ts";
+import { ruleFor } from "/app/packages/conformance/src/registry.ts";
+const out = readChecklists("/app/prompt").map((i) =&gt; {
+  const r = ruleFor(i)!;
+  return { src: i.source, section: i.section, line: i.line, text: i.text,
+           status: r.status, why: r.why ?? "" };
+});
+process.stdout.write(JSON.stringify(out));
+EOF
+node --experimental-strip-types /tmp/dump.mts &gt; items.json</code></pre>
+        <p>
+          Then update the figures in <a href="parity-report.html">the parity report</a> and here.
+        </p>
+      </section>
+
+      <footer>
+        <p>
+          Written from the registry at <code>cd01892</code> and a read-only check of the code at
+          <code>a5e1271</code>. File and line references were verified at that commit; they drift as
+          the code moves, so trust the function names over the line numbers.
+        </p>
+      </footer>
+    </div>
+  </body>
+</html>
