@@ -258,6 +258,61 @@ describe("a line's polygon flag", () => {
   });
 });
 
+describe("an elbow arrow's fields", () => {
+  const routed = element({
+    type: "arrow",
+    points: [
+      [0, 0],
+      [60, 0],
+      [60, 80],
+      [120, 80],
+    ],
+  });
+  const kept = { index: 2, start: [60, 0], end: [60, 80] };
+
+  it("keeps the route's type, its kept segments and its special ends", () => {
+    const parsed = drawElementSchema.parse({
+      ...routed,
+      elbowed: true,
+      fixedSegments: [kept],
+      startIsSpecial: false,
+      endIsSpecial: null,
+    });
+    expect(parsed.elbowed).toBe(true);
+    expect(parsed.fixedSegments).toEqual([kept]);
+    expect(parsed.startIsSpecial).toBe(false);
+    expect(parsed.endIsSpecial).toBeNull();
+  });
+
+  it("takes the oracle's null and its fresh empty list", () => {
+    expect(drawElementSchema.parse({ ...routed, fixedSegments: null }).fixedSegments).toBeNull();
+    expect(drawElementSchema.parse({ ...routed, fixedSegments: [] }).fixedSegments).toEqual([]);
+  });
+
+  it("adds nothing to an arrow saved before them: it stays sharp or curved", () => {
+    const parsed = drawElementSchema.parse(routed);
+    for (const key of ["elbowed", "fixedSegments", "startIsSpecial", "endIsSpecial"]) {
+      expect(parsed).not.toHaveProperty(key);
+    }
+    expect(parsed).toEqual(routed);
+  });
+
+  it("refuses a malformed segment", () => {
+    for (const segment of [
+      { ...kept, index: 0 },
+      { ...kept, index: 1.5 },
+      { ...kept, start: [Number.NaN, 0] },
+      { index: 2, start: [60, 0] },
+    ]) {
+      expect(
+        drawElementSchema.safeParse({ ...routed, elbowed: true, fixedSegments: [segment] }).success,
+        JSON.stringify(segment),
+      ).toBe(false);
+    }
+    expect(drawElementSchema.safeParse({ ...routed, elbowed: "yes" }).success).toBe(false);
+  });
+});
+
 describe("a figure's fields", () => {
   const triangle = element({ id: "fig", type: "figure", figure: { kind: "polygon", sides: 3 } });
 

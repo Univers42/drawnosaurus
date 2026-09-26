@@ -87,6 +87,17 @@ const anchorRatio = finite.min(-10).max(10);
 const fixedPoint = z.tuple([anchorRatio, anchorRatio]);
 
 /**
+ * A segment of an elbow arrow the person moved, which its route keeps (Excalidraw's
+ * `FixedSegment`): the one ending at point `index`, so the first is 1, with its two ends
+ * relative to the arrow's `x`/`y` like its points.
+ */
+const fixedSegment = z.object({
+  index: finiteInt.min(1).max(MAX_POINTS_PER_ELEMENT),
+  start: point,
+  end: point,
+});
+
+/**
  * An image's picture: a base64 `data:image/…` URL and nothing else.
  *
  * Only ever decoded by an `<img>` and drawn into a canvas, where an SVG's scripts do not
@@ -155,6 +166,15 @@ export const drawElementSchema = z.object({
   endBindMode: z.enum(BIND_MODES).optional(),
   startArrowhead: z.enum(ARROWHEADS).optional(),
   endArrowhead: z.enum(ARROWHEADS).optional(),
+  // An elbow arrow, routed round its shapes in horizontal and vertical runs (Excalidraw's
+  // `elbowed`, `packages/element/src/types.ts@1118751f:394-408`). Optional and
+  // undefaulted: an arrow saved before these existed is a sharp or curved one, and stays
+  // one. `fixedSegments` are the segments its route keeps, `null` the oracle's none;
+  // `startIsSpecial`/`endIsSpecial` mark the extra corner a kept route puts beside an end.
+  elbowed: z.boolean().optional(),
+  fixedSegments: z.array(fixedSegment).max(MAX_POINTS_PER_ELEMENT).nullable().optional(),
+  startIsSpecial: z.boolean().nullable().optional(),
+  endIsSpecial: z.boolean().nullable().optional(),
 
   text: z.string().max(MAX_TEXT_LENGTH).optional(),
   // The text model, all optional and undefaulted like the alignments below: a text saved
