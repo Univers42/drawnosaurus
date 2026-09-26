@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   MAX_COLOR_LENGTH,
+  MAX_ELEMENTS_PER_BOARD,
   MAX_FONT_FAMILY,
   MAX_GROUP_DEPTH,
   MAX_ID_LENGTH,
@@ -254,6 +255,10 @@ export const drawElementSchema = z.object({
   // frame left its contents behind, and every frame had lost its name.
   frameId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   name: z.string().max(MAX_TEXT_LENGTH).nullable().optional(),
+  // A frame's place on the presentation path (`docs/reference/presentation.md`). Optional
+  // and undefaulted: a frame nobody placed carries none, and is presented after the placed
+  // ones in the order it was made — how every frame was presented before the path existed.
+  pathStep: finiteInt.min(0).max(MAX_ELEMENTS_PER_BOARD).optional(),
   // The picture an image element shows. Without it here zod stripped it on the way in,
   // so every image saved as an empty frame and came back after a reload as the grey
   // placeholder.

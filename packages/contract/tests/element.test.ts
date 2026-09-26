@@ -258,6 +258,29 @@ describe("a line's polygon flag", () => {
   });
 });
 
+describe("a frame's step on the presentation path", () => {
+  const frame = element({ type: "frame", name: "Intro" });
+
+  it("accepts a whole step from 0", () => {
+    expect(drawElementSchema.parse({ ...frame, pathStep: 0 }).pathStep).toBe(0);
+    expect(drawElementSchema.parse({ ...frame, pathStep: 9 }).pathStep).toBe(9);
+  });
+
+  it("adds nothing to a frame nobody placed", () => {
+    const parsed = drawElementSchema.parse(frame);
+    expect(parsed).not.toHaveProperty("pathStep");
+    expect(parsed).toEqual(frame);
+  });
+
+  it("refuses a negative, fractional or non-numeric step", () => {
+    for (const pathStep of [-1, 1.5, "1", null]) {
+      expect(drawElementSchema.safeParse({ ...frame, pathStep }).success, String(pathStep)).toBe(
+        false,
+      );
+    }
+  });
+});
+
 describe("an elbow arrow's fields", () => {
   const routed = element({
     type: "arrow",

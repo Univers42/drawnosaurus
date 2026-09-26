@@ -108,6 +108,8 @@ export interface SceneElement {
   boundTextId?: string | null;
   /** A frame's label — absent means the generic default (`getFrameLikeTitle`). */
   name?: string | null;
+  /** A frame's place on the presentation path; absent on a frame nobody placed. */
+  pathStep?: number;
   /** Arrows only: the shape each end is attached to. */
   startBinding?: string | null;
   endBinding?: string | null;
