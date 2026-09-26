@@ -91,6 +91,8 @@ export interface SceneElement {
   /** An arrow routed square between the shapes it binds: absent reads as false. */
   elbowed?: boolean;
   text?: string;
+  /** What was typed, before wrapping put line breaks in `text`. */
+  originalText?: string;
   /** Absent means nothing chose one, which the engine resolves from the element's role. */
   textAlign?: "left" | "center" | "right";
   verticalAlign?: "top" | "middle" | "bottom";
