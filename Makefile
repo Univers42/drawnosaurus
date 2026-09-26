@@ -327,10 +327,12 @@ oracle: ## Fetch the Excalidraw parity reference at the pinned SHA
 
 # Regenerating fixtures is deliberate: it re-derives what we are held to. Run it when
 # the pin moves, never to make a red test go green.
-oracle-fixtures: oracle ## Regenerate the rough.js, text-wrap and flowchart conformance fixtures
+oracle-fixtures: oracle ## Regenerate the rough.js, text-wrap, flowchart and elbow-route conformance fixtures
 	cd engine/tools/rough-oracle && npm install && npm run generate
 	docker run --rm $(RUN_AS_HOST) -v "$(CURDIR)/engine:/engine" -v "$(CURDIR)/third_party/excalidraw:/excalidraw:ro" -e EXCALIDRAW_DIR=/excalidraw -e ORACLE_SHA=$(ORACLE_SHA) -w /engine/tools/text-oracle mcr.microsoft.com/playwright:v1.63.0-noble node --import ./register.mjs generate.mjs
 	docker run --rm $(RUN_AS_HOST) -e HOME=/tmp -v "$(CURDIR)/engine:/engine" -v "$(CURDIR)/third_party/excalidraw:/excalidraw:ro" -e EXCALIDRAW_DIR=/excalidraw -e ORACLE_SHA=$(ORACLE_SHA) -w /engine/tools/flowchart-oracle mcr.microsoft.com/playwright:v1.63.0-noble \
+		sh -c 'npm ci --ignore-scripts --no-audit --no-fund && node --no-warnings --experimental-transform-types --import ./register.mjs generate.mjs'
+	docker run --rm $(RUN_AS_HOST) -e HOME=/tmp -v "$(CURDIR)/engine:/engine" -v "$(CURDIR)/third_party/excalidraw:/excalidraw:ro" -e EXCALIDRAW_DIR=/excalidraw -e ORACLE_SHA=$(ORACLE_SHA) -w /engine/tools/elbow-oracle mcr.microsoft.com/playwright:v1.63.0-noble \
 		sh -c 'npm ci --ignore-scripts --no-audit --no-fund && node --no-warnings --experimental-transform-types --import ./register.mjs generate.mjs'
 	@echo -e "$(GREEN)✔ fixtures regenerated — review the diff before committing$(RESET)"
 
