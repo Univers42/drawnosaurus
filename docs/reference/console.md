@@ -132,9 +132,11 @@ caches the editing text when it opens (`actionProperties.tsx@1118751f:1484-1499`
 
 ## Arrows
 
-**VERIFIED** — the Arrow type row sets sharp or curved on the selected arrows and on the
-next one (`actionChangeArrowType`, `actionProperties.tsx@1118751f:2062-2251`; the next is
-`currentItemArrowType`, round until chosen). A new arrow takes its curve from it alone, so
+**VERIFIED** — the Arrow type row sets sharp, curved or elbow on the selected arrows and on
+the next one (`actionChangeArrowType`, `actionProperties.tsx@1118751f:2062-2251`; the next is
+`currentItemArrowType`, round until chosen), and the arrow tool's key pressed again moves
+the next one on, sharp → curved → elbow (`App.tsx@1118751f:5706-5714`; `ci_elbow.rs`,
+`e2e/elbowArrow.spec.ts`). A new arrow takes its curve from it alone, so
 the Edges row is not shown for arrows, as the oracle's `canChangeRoundness` leaves them
 out. The arrowhead rows with nothing selected set the next arrow's heads
 (`currentItemStartArrowhead` / `currentItemEndArrowhead`, `:1944-1982`), which a line
@@ -231,9 +233,6 @@ are (the engine's `hit_test`; `ci_bound_text_actions.rs` › context_menu,
 
 - **No number fields** for position, size or rotation. Those rows are not built;
   geometry is edited on the canvas.
-- **No elbow arrows.** The Arrow type row offers sharp and curved; elbow routing is a
-  milestone of its own. Pressing the arrow tool's key again does not cycle the type
-  (`App.tsx@1118751f:5696-5715`).
 - **No Liberation Sans.** The file Excalidraw ships is Liberation 1.05, under a licence
   this project has not cleared (`apps/web/static/fonts/LICENSES.md`); the oracle's picker
   never lists it either, and a text in it is drawn in the fallback.

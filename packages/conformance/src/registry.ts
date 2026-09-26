@@ -135,11 +135,12 @@ export const RULES: readonly Rule[] = [
       "e2e/arrow-dense.spec.ts",
     ],
   },
+  // The arrow tool's key again: sharp → curved → elbow (App.tsx@1118751f:5706-5714).
   {
     section: "Lines & arrows",
     text: /Cycle\/change arrow type/,
-    status: "gap",
-    why: "The arrow type is changed from the panel's Arrow type row, sharp or curved (ci_next_style.rs, e2e/arrowType.spec.ts), but pressing the arrow tool's key again does not cycle it (App.tsx@1118751f:5695-5714), and the elbow type it cycles through needs the elbow-arrow work.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_elbow.rs`, "e2e/elbowArrow.spec.ts"],
   },
   {
     section: "Lines & arrows",
@@ -431,11 +432,19 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_next_style.rs`, `${ENGINE}/ci_style.rs`, "e2e/arrowType.spec.ts"],
   },
+  // Routed square between the shapes they bind (elbowArrow.ts@1118751f), held to the
+  // oracle's own router on a recorded sweep (engine/tools/elbow-oracle).
   {
     section: "➡️ Advanced arrows",
-    text: /[Ee]lbow|cardinality/,
+    text: /[Ee]lbow/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_elbow.rs`, `${ENGINE}/ci_elbow_oracle.rs`, "e2e/elbowArrow.spec.ts"],
+  },
+  {
+    section: "➡️ Advanced arrows",
+    text: /cardinality/,
     status: "gap",
-    why: "Elbow arrows are a milestone of their own: orthogonal routing over the fixed-point bindings arrows already have. Cardinality arrowheads wait on it.",
+    why: "Cardinality arrowheads (the crow's-foot heads of Excalidraw's ER diagrams) are not among the heads this engine draws.",
   },
   // An arrow's label: typed on the arrow, wrapped at Excalidraw's width, centred on the
   // path's middle, the stroke cut under it, and re-wrapped/re-centred whenever the arrow's
@@ -535,8 +544,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "🔄 Flowcharts",
     text: /elbow arrows/,
-    status: "out-of-scope",
-    why: "This engine draws no elbow-routed arrows at all (engine.ts's own doc comment) — a flowchart binding is a straight line, same as every other bound arrow here. See docs/reference/flowchart.md.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_elbow.rs`, `${ENGINE}/ci_elbow_oracle.rs`, "e2e/elbowArrow.spec.ts"],
   },
   {
     section: "🧠 Autoshape / Smart drawing",
@@ -1207,9 +1216,15 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "7. Arrow",
-    text: /[Ee]lbow|label positioning/,
+    text: /[Ee]lbow/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_elbow.rs`, `${ENGINE}/ci_elbow_oracle.rs`, "e2e/elbowArrow.spec.ts"],
+  },
+  {
+    section: "7. Arrow",
+    text: /label positioning/,
     status: "gap",
-    why: "Elbow arrows: see the Advanced arrows rules. Label positioning: a label sits on the middle of its arrow's path (linear_label_center, getBoundTextElementCenter), but cannot be dragged along it — Excalidraw's labelPosition (linearElementEditor.ts@1118751f:1962-2030) is not ported.",
+    why: "A label sits on the middle of its arrow's path (linear_label_center, getBoundTextElementCenter), but cannot be dragged along it — Excalidraw's labelPosition (linearElementEditor.ts@1118751f:1962-2030) is not ported.",
   },
   {
     section: "7. Arrow",
