@@ -74,6 +74,12 @@ world  = (screen - (x, y)) / scale     screen_to_world
   - `redraws` / `scrolls` / `reuses`: the plan counts, read these first;
   - `elementsRendered`: what culling kept.
 - The window is the last 120 frames, so a measured gesture must ask for more than that.
+- p95 is the 6th-worst of those 120 frames. If more than 5 of them repaint everything, it
+  measures a full repaint, which costs 7ms here and 15-20ms on the CI runner. So cut how
+  many frames repaint rather than raise the budget. In motion the layer is blitted, moved
+  or scaled (`render/scroll.rs` › `plan_motion`). Zooming out, a repaint is drawn 1.2×
+  further out (`motion_repaint_camera`), and a frame in motion culls with that margin
+  (`motion_cull`).
 - The gate is `e2e/cameraBudget.spec.ts`: 2,000 shapes, pan and zoom, `p95CpuMs < 16.7`.
   It logs both phases. `make parity` compares the same gestures against Excalidraw and is a
   measurement, not a gate.

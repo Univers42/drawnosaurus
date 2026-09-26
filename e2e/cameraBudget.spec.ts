@@ -21,6 +21,7 @@ interface Rendering {
   medianBuildMs: number;
   p95FrameMs: number;
   elementsRendered: number;
+  redraws: number;
 }
 
 test("2,000 elements pan and zoom inside a 60Hz frame", async ({ page }) => {
@@ -40,17 +41,17 @@ test("2,000 elements pan and zoom inside a 60Hz frame", async ({ page }) => {
   // The engine keeps the last 120 frames. Each phase asks for more than that, so the
   // window it is judged on holds its own frames only — never the first paint's.
   const phase = async (name: string, gesture: () => Promise<void>) => {
-    const before = (await rendering()).frames;
+    const before = await rendering();
     await gesture();
     await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => done(null))));
     const after = await rendering();
     console.log(
       `  2,000 elements, ${name}: p95 cpu ${after.p95CpuMs.toFixed(2)}ms` +
         ` (p95 paint ${after.p95PaintMs.toFixed(2)}ms, median build ${after.medianBuildMs.toFixed(2)}ms)` +
-        ` over ${after.frames - before} frames, ${after.elementsRendered} drawn;` +
-        ` p95 interval ${after.p95FrameMs.toFixed(1)}ms`,
+        ` over ${after.frames - before.frames} frames, ${after.elementsRendered} drawn;` +
+        ` p95 interval ${after.p95FrameMs.toFixed(1)}ms, ${after.redraws - before.redraws} repainted in full`,
     );
-    expect(after.frames - before).toBeGreaterThanOrEqual(120);
+    expect(after.frames - before.frames).toBeGreaterThanOrEqual(120);
     return after;
   };
 
