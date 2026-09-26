@@ -4,6 +4,9 @@ import {
   DARK_FILL_SWATCHES,
   DARK_STROKE_SWATCHES,
   EDGES,
+  FIGURE_KIND_OPTIONS,
+  FIGURE_RATIO_RANGE,
+  FIGURE_SIDES_RANGE,
   roundnessFor,
   GRID_SIZES,
   LIGHT_FILL_SWATCHES,
@@ -14,6 +17,7 @@ import {
   getStrokeSwatches,
   textWrap,
 } from "./inspector.ts";
+import { ICONS } from "./icons.ts";
 
 describe("quick colour picks", () => {
   const rows = {
@@ -144,6 +148,29 @@ describe("the other option rows", () => {
       const [r, g, b] = [(value >> 16) & 255, (value >> 8) & 255, value & 255];
       expect((r + g + b) / 3, color).toBeGreaterThan(200);
     }
+  });
+});
+
+describe("the Shapes picker's kind row", () => {
+  it("offers all six kinds, each with an icon that exists", () => {
+    expect(FIGURE_KIND_OPTIONS.map((k) => k.value)).toEqual([
+      "polygon",
+      "star",
+      "parallelogram",
+      "trapezoid",
+      "cylinder",
+      "document",
+    ]);
+    for (const option of FIGURE_KIND_OPTIONS) {
+      expect(ICONS[option.icon], option.label).toBeDefined();
+      expect(ICONS[option.icon].length, option.label).toBeGreaterThan(0);
+    }
+  });
+
+  it("mirrors the engine's SIDES_RANGE/RATIO_RANGE", () => {
+    expect(FIGURE_SIDES_RANGE).toEqual({ min: 3, max: 12 });
+    expect(FIGURE_RATIO_RANGE.min).toBe(0.05);
+    expect(FIGURE_RATIO_RANGE.max).toBe(0.95);
   });
 });
 

@@ -6,9 +6,10 @@
  * each entry).
  */
 
-import type { DrawTool } from "@osionos/draw-engine/types";
+import type { DrawTool, FigureParams } from "@osionos/draw-engine/types";
 import { ALL_TOOL_DEFS, hotkeyLabel } from "./tools.ts";
 import { shortcutLabel } from "./shortcuts.ts";
+import { FIGURE_KIND_OPTIONS } from "./inspector.ts";
 import type { ThemePreference } from "./theme.ts";
 
 export interface Command {
@@ -115,6 +116,7 @@ export interface PresetSummary {
 export interface PaletteHost {
   setTool: (tool: DrawTool) => void;
   insertShape: (kind: "rectangle" | "diamond" | "ellipse") => void;
+  insertFigure: (figure: FigureParams) => void;
   zoomIn: () => void;
   zoomOut: () => void;
   zoomReset: () => void;
@@ -165,6 +167,15 @@ export function buildCommands(host: PaletteHost): Command[] {
       run: () => host.insertShape("ellipse"),
     },
   );
+
+  for (const kind of FIGURE_KIND_OPTIONS) {
+    commands.push({
+      id: `insert:figure:${kind.value}`,
+      label: `Add ${kind.label.toLowerCase()}`,
+      category: "Insert",
+      run: () => host.insertFigure({ kind: kind.value }),
+    });
+  }
 
   commands.push(
     {

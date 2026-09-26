@@ -1,5 +1,10 @@
 <script lang="ts">
-  import type { Arrowhead, DrawElementStyle, SelectionStyle } from "@osionos/draw-engine/types";
+  import type {
+    Arrowhead,
+    DrawElementStyle,
+    SelectionStyle,
+    StylePatch,
+  } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import type { StylePreset } from "./stylePresets.ts";
   import Icon from "./Icon.svelte";
@@ -12,6 +17,9 @@
   import {
     ARROW_TYPES,
     EDGES,
+    FIGURE_KIND_OPTIONS,
+    FIGURE_RATIO_RANGE,
+    FIGURE_SIDES_RANGE,
     FILL_STYLES,
     FONT_SIZES,
     SLOPPINESS,
@@ -79,9 +87,9 @@
     onDeletePreset?: (id: string) => void;
     onOpenPicker: (kind: ColorKind | "font" | null) => void;
     /** Applies a style to the selection, or to the next element with nothing selected. */
-    onApply: (patch: Partial<DrawElementStyle>) => void;
+    onApply: (patch: StylePatch) => void;
     /** Shows a style without committing it — a slider in motion. */
-    onPreview: (patch: Partial<DrawElementStyle>) => void;
+    onPreview: (patch: StylePatch) => void;
     /** Runs an engine action and reads the panel back. */
     run: (action: (engine: DrawEngine) => void) => void;
   } = $props();
@@ -143,6 +151,22 @@
   /** What the slider shows for a mixed selection: the next element's, as the oracle's does. */
   const opacity = $derived(summary.opacity ?? engine?.getNextStyle().opacity ?? 100);
   const opacityText = $derived(summary.opacity === null ? "mixed" : `${summary.opacity}%`);
+
+  /** Same preview-then-commit-once shape as the opacity slider, for the ratio slider. */
+  let previewingFigureRatio = false;
+
+  function commitFigureRatio(value: string): void {
+    if (!previewingFigureRatio) return;
+    previewingFigureRatio = false;
+    onApply({ figureRatio: Number(value) });
+  }
+
+  const figureRatio = $derived(
+    summary.figureRatio ?? (FIGURE_RATIO_RANGE.min + FIGURE_RATIO_RANGE.max) / 2,
+  );
+  const figureRatioText = $derived(
+    summary.figureRatio === null ? "mixed" : summary.figureRatio.toFixed(2),
+  );
 
   const arrowheadSides = $derived([
     { end: "start" as const, value: summary.startArrowhead },
@@ -355,6 +379,59 @@
         options={ARROW_TYPES}
         value={summary.arrowType}
         onPick={(v) => run((e) => e.setArrowType(v))}
+      />
+    </InspectorRow>
+  {/if}
+  <!--
+    The Shapes picker's kind row sets which figure the tool draws next — it never
+    restyles a selected one (`engine/style.rs::set_next_figure`), unlike the arrow type
+    row above: picking a tool and restyling a selection are different actions here. Sides
+    and ratio are the opposite: they go through the same style patch as every other row,
+    so they do restyle a selected figure, each pick its own undo step.
+  -->
+  {#if can.figureKind}
+    <InspectorRow label="Shape">
+      <InspectorIconChoice
+        ariaLabel="Shape"
+        options={FIGURE_KIND_OPTIONS}
+        value={summary.figureKind}
+        onPick={(v) => run((e) => e.setNextFigure({ kind: v }))}
+      />
+    </InspectorRow>
+  {/if}
+  {#if can.figureSides}
+    <InspectorRow label="Sides">
+      <input
+        type="number"
+        min={FIGURE_SIDES_RANGE.min}
+        max={FIGURE_SIDES_RANGE.max}
+        step={1}
+        aria-label="Sides"
+        placeholder="mixed"
+        value={summary.figureSides ?? ""}
+        onchange={(e) => {
+          const sides = Number(e.currentTarget.value);
+          if (Number.isFinite(sides)) onApply({ figureSides: sides });
+        }}
+      />
+    </InspectorRow>
+  {/if}
+  {#if can.figureRatio}
+    <InspectorRow label={`Ratio — ${figureRatioText}`}>
+      <input
+        type="range"
+        min={FIGURE_RATIO_RANGE.min}
+        max={FIGURE_RATIO_RANGE.max}
+        step={FIGURE_RATIO_RANGE.step}
+        value={figureRatio}
+        aria-label="Ratio"
+        aria-valuetext={figureRatioText}
+        oninput={(e) => {
+          previewingFigureRatio = true;
+          onPreview({ figureRatio: Number(e.currentTarget.value) });
+        }}
+        onchange={(e) => commitFigureRatio(e.currentTarget.value)}
+        onpointerup={(e) => commitFigureRatio(e.currentTarget.value)}
       />
     </InspectorRow>
   {/if}

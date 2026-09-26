@@ -258,6 +258,67 @@ describe("a line's polygon flag", () => {
   });
 });
 
+describe("a figure's fields", () => {
+  const triangle = element({ id: "fig", type: "figure", figure: { kind: "polygon", sides: 3 } });
+
+  it("is an element type, so a figure is not refused at the boundary", () => {
+    expect(drawElementSchema.safeParse(triangle).success).toBe(true);
+  });
+
+  it("accepts every kind, with sides/ratio absent", () => {
+    for (const kind of [
+      "polygon",
+      "star",
+      "parallelogram",
+      "trapezoid",
+      "cylinder",
+      "document",
+    ] as const) {
+      expect(
+        drawElementSchema.safeParse(element({ type: "figure", figure: { kind } })).success,
+        kind,
+      ).toBe(true);
+    }
+  });
+
+  it("adds nothing to an element that carries none: absent falls back to the kind's own default", () => {
+    const parsed = drawElementSchema.parse(element());
+    expect(parsed).not.toHaveProperty("figure");
+    expect(parsed).toEqual(element());
+  });
+
+  it("accepts each bound's edges", () => {
+    for (const figure of [
+      { kind: "polygon", sides: 3 },
+      { kind: "polygon", sides: 12 },
+      { kind: "cylinder", ratio: 0.05 },
+      { kind: "cylinder", ratio: 0.95 },
+    ] as const) {
+      expect(
+        drawElementSchema.safeParse({ ...triangle, figure }).success,
+        JSON.stringify(figure),
+      ).toBe(true);
+    }
+  });
+
+  it("refuses what is out of range or of the wrong kind", () => {
+    for (const figure of [
+      { kind: "hologram" },
+      { kind: "polygon", sides: 2 },
+      { kind: "polygon", sides: 13 },
+      { kind: "polygon", sides: 3.5 },
+      { kind: "cylinder", ratio: 0.04 },
+      { kind: "cylinder", ratio: 0.96 },
+      { kind: "cylinder", ratio: Number.NaN },
+    ]) {
+      expect(
+        drawElementSchema.safeParse({ ...triangle, figure }).success,
+        JSON.stringify(figure),
+      ).toBe(false);
+    }
+  });
+});
+
 describe("osidrawFileSchema", () => {
   it("accepts the envelope the engine emits", () => {
     const parsed = osidrawFileSchema.safeParse({

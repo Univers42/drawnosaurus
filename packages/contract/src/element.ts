@@ -36,6 +36,7 @@ export const DRAW_ELEMENT_TYPES = [
   "frame",
   "embed",
   "stickynote",
+  "figure",
 ] as const;
 
 export const FILL_STYLES = ["hachure", "cross-hatch", "solid", "zigzag"] as const;
@@ -45,6 +46,15 @@ export const TEXT_ALIGNS = ["left", "center", "right"] as const;
 export const VERTICAL_ALIGNS = ["top", "middle", "bottom"] as const;
 /** How an arrow end sits on its shape: exactly on its anchor, or a gap clear of the outline. */
 export const BIND_MODES = ["inside", "orbit"] as const;
+/** A figure's shape. Mirrors the engine's `FigureKind` (`scene/figure.rs`). */
+export const FIGURE_KINDS = [
+  "polygon",
+  "star",
+  "parallelogram",
+  "trapezoid",
+  "cylinder",
+  "document",
+] as const;
 
 /**
  * Rejects NaN and both infinities. Written as a refine rather than `.finite()`
@@ -89,6 +99,18 @@ const imageDataUrl = z
   .regex(/^data:image\/[a-z0-9.+-]+;base64,[A-Za-z0-9+/]*={0,2}$/, {
     message: "must be a base64 data:image URL",
   });
+
+/**
+ * A figure's own two controls — the inspector's sides stepper and ratio slider.
+ * Mirrors the engine's `SIDES_RANGE`/`RATIO_RANGE` (`scene/figure.rs`); both are
+ * optional here exactly as there, so an absent value keeps falling back to the
+ * kind's own default rather than this schema stamping one on.
+ */
+const figureSchema = z.object({
+  kind: z.enum(FIGURE_KINDS),
+  sides: finiteInt.min(3).max(12).optional(),
+  ratio: finite.min(0.05).max(0.95).optional(),
+});
 
 export const drawElementSchema = z.object({
   id: z.string().min(1).max(MAX_ID_LENGTH),
@@ -194,6 +216,12 @@ export const drawElementSchema = z.object({
   baseHeight: finite.min(0).max(1_000_000).optional(),
   created: finite.nullable().optional(),
   baseFontSize: finite.min(1).max(1000).nullable().optional(),
+
+  // A figure's parameters — its kind, and the sides/ratio that shape it. Optional and
+  // undefaulted like the type-specific models above: absent on every element that is not
+  // a figure, and the engine's own resolved_sides/resolved_ratio give a kind-specific
+  // default to a figure whose sides/ratio is absent too.
+  figure: figureSchema.optional(),
 
   // The reconciliation stamp. `version` counts edits, `versionNonce` is random
   // per edit and breaks ties between concurrent writers.

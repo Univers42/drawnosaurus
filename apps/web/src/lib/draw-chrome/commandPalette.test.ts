@@ -9,6 +9,7 @@ import {
   type PaletteHost,
 } from "./commandPalette.ts";
 import { ALL_TOOL_DEFS } from "./tools.ts";
+import { FIGURE_KIND_OPTIONS } from "./inspector.ts";
 
 function cmd(id: string, label: string, category: string, shortcut?: string): Command {
   return { id, label, category, shortcut, run: () => {} };
@@ -120,6 +121,7 @@ describe("buildCommands", () => {
     return {
       setTool: vi.fn(),
       insertShape: vi.fn(),
+      insertFigure: vi.fn(),
       zoomIn: vi.fn(),
       zoomOut: vi.fn(),
       zoomReset: vi.fn(),
@@ -159,6 +161,15 @@ describe("buildCommands", () => {
     for (const kind of ["rectangle", "diamond", "ellipse"] as const) {
       commands.find((c) => c.id === `insert:${kind}`)!.run();
       expect(h.insertShape).toHaveBeenCalledWith(kind);
+    }
+  });
+
+  it("adds an insert command for every figure kind, wired with that kind alone", () => {
+    const h = host();
+    const commands = buildCommands(h);
+    for (const kind of FIGURE_KIND_OPTIONS) {
+      commands.find((c) => c.id === `insert:figure:${kind.value}`)!.run();
+      expect(h.insertFigure).toHaveBeenCalledWith({ kind: kind.value });
     }
   });
 

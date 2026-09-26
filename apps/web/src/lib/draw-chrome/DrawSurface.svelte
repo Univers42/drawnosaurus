@@ -6,6 +6,7 @@
     Camera,
     DrawTheme,
     DrawTool,
+    FigureParams,
     Scene,
     StylePatch,
     TextEditRequest,
@@ -853,6 +854,17 @@
     refreshStyle();
   }
 
+  /** The command palette's "Add <figure kind>": queues the figure, then inserts it at the
+   *  viewport's centre exactly as `insertShapeAtViewportCentre` does. */
+  function insertFigure(figure: FigureParams): void {
+    if (!engine) return;
+    const at = viewportCentre();
+    engine.setNextFigure(figure);
+    const id = engine.insertDefaultShape("figure", at.x, at.y);
+    if (id) handleToolSelect("select");
+    refreshStyle();
+  }
+
   function handleToolSelect(next: DrawTool): void {
     tool = next;
     engine?.setTool(next);
@@ -1651,6 +1663,7 @@
   const paletteHost = $derived.by((): PaletteHost => ({
     setTool: handleToolSelect,
     insertShape: insertShapeAtViewportCentre,
+    insertFigure,
     zoomIn: () => engine?.zoomIn(),
     zoomOut: () => engine?.zoomOut(),
     zoomReset: () => engine?.zoomReset(),

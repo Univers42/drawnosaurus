@@ -10,6 +10,7 @@
 export {
   ARROWHEADS,
   DRAW_ELEMENT_TYPES,
+  FIGURE_KINDS,
   FILL_STYLES,
   STROKE_STYLES,
   drawElementSchema,
