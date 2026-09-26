@@ -111,8 +111,8 @@
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
     </div>
     <p class="description">
-      Flowchart, sequence, class, entity relationship and state diagrams become shapes you can
-      edit. Every other type is placed as a picture.
+      Flowchart, sequence, class, entity relationship and state diagrams become shapes you can edit.
+      Every other type is placed as a picture.
     </p>
 
     <div class="panels">

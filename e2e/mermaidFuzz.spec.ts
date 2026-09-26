@@ -1,3 +1,4 @@
+import type { Page } from "@playwright/test";
 import { test, expect } from "./fixtures.ts";
 import { openBoard } from "./board.ts";
 import type { Case } from "./mermaid/generators.ts";
@@ -22,7 +23,7 @@ const BATCH = 20;
 type Outcome = { converted: Placed[]; placed: Placed[] } | { error: string };
 
 /** Converts and places each definition on an emptied board; what came out, pictures reduced. */
-function convertAll(page: import("@playwright/test").Page, sources: string[]): Promise<Outcome[]> {
+function convertAll(page: Page, sources: string[]): Promise<Outcome[]> {
   return page.evaluate(async (sources) => {
     const engine = window.__drawEngine!;
     const convert = window.__mermaidToElements!;
@@ -56,7 +57,9 @@ function convertAll(page: import("@playwright/test").Page, sources: string[]): P
 
 for (const [type, { conversion, generate }] of Object.entries(TYPES)) {
   test(`mermaid ${type}: ${CASES} seeded definitions come out whole`, async ({ page }) => {
-    const seeds = [...new Set([...(REGRESSIONS[type] ?? []), ...Array.from({ length: CASES }, (_, i) => i + 1)])];
+    const seeds = [
+      ...new Set([...(REGRESSIONS[type] ?? []), ...Array.from({ length: CASES }, (_, i) => i + 1)]),
+    ];
     test.setTimeout(60_000 + seeds.length * 3_000);
     await openBoard(page);
 

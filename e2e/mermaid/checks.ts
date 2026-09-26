@@ -94,7 +94,9 @@ export function coverage(kase: Case, elements: Placed[]): string[] {
   const labels = arrowLabels(elements);
   const unlabelled = kase.messages.filter((message) => !labels.has(normalise(message)));
   if (unlabelled.length > 0) {
-    failures.push(`${unlabelled.length} arrow label(s) missing: ${unlabelled.slice(0, 3).join(" | ")}`);
+    failures.push(
+      `${unlabelled.length} arrow label(s) missing: ${unlabelled.slice(0, 3).join(" | ")}`,
+    );
   }
   return failures;
 }
@@ -161,7 +163,10 @@ export function positionsKept(kase: Case, converted: Placed[], placed: Placed[])
   const failures: string[] = [];
   for (const [from, to] of pairs) {
     const centreX = (shape: Placed) => shape.x + shape.width / 2;
-    if (Math.abs(centreX(to) - centreX(from) - dx) > EPSILON || Math.abs(to.y - from.y - dy) > EPSILON) {
+    if (
+      Math.abs(centreX(to) - centreX(from) - dx) > EPSILON ||
+      Math.abs(to.y - from.y - dy) > EPSILON
+    ) {
       failures.push(`node ${to.id} moved from Mermaid's layout`);
     }
   }
@@ -174,7 +179,10 @@ export function picture(elements: Placed[]): string[] {
   const badges = elements.filter((element) => element.type === "text");
   if (images.length !== 1 || !images[0]!.hasPicture) return ["expected exactly one picture"];
   if (badges.length !== 1) return ["expected exactly one badge"];
-  if (images[0]!.groupIds?.[0] === undefined || images[0]!.groupIds[0] !== badges[0]!.groupIds?.[0]) {
+  if (
+    images[0]!.groupIds?.[0] === undefined ||
+    images[0]!.groupIds[0] !== badges[0]!.groupIds?.[0]
+  ) {
     return ["the badge is not grouped with its picture"];
   }
   return [];

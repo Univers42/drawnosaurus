@@ -54,7 +54,8 @@ const FLOWCHART_SHAPES: ((text: string) => string)[] = [
   (t) => `[/"${t}"\\]`,
   (t) => `[\\"${t}"/]`,
   (t) => `((("${t}")))`,
-  (t) => `@{ shape: ${["rect", "rounded", "stadium", "diamond", "circle", "hex", "cyl", "doc"][t.length % 8]}, label: "${t}" }`,
+  (t) =>
+    `@{ shape: ${["rect", "rounded", "stadium", "diamond", "circle", "hex", "cyl", "doc"][t.length % 8]}, label: "${t}" }`,
 ];
 
 const FLOWCHART_LINKS = ["-->", "---", "-.->", "==>", "--o", "--x", "<-->", "-.-", "===", "~~~"];
@@ -70,12 +71,17 @@ export const flowchart: Generator = (seed) => {
   let subgraphs = 0;
   for (let i = 0; i < count; i += 1) {
     if (depth < 3 && random.chance(0.06)) {
-      lines.push(`${"  ".repeat(depth)}subgraph ${ident("S", subgraphs)} ["${written(label(random))}"]`);
+      lines.push(
+        `${"  ".repeat(depth)}subgraph ${ident("S", subgraphs)} ["${written(label(random))}"]`,
+      );
       subgraphs += 1;
       depth += 1;
-      if (random.chance(0.3)) lines.push(`${"  ".repeat(depth)}direction ${random.pick(["TB", "LR"])}`);
+      if (random.chance(0.3))
+        lines.push(`${"  ".repeat(depth)}direction ${random.pick(["TB", "LR"])}`);
     }
-    lines.push(`${"  ".repeat(depth)}${ident("n", i)}${random.pick(FLOWCHART_SHAPES)(written(nodes[i]!))}`);
+    lines.push(
+      `${"  ".repeat(depth)}${ident("n", i)}${random.pick(FLOWCHART_SHAPES)(written(nodes[i]!))}`,
+    );
     if (depth > 0 && random.chance(0.15)) {
       depth -= 1;
       lines.push(`${"  ".repeat(depth)}end`);
@@ -96,7 +102,9 @@ export const flowchart: Generator = (seed) => {
   for (const [from, to] of edges) {
     const link = random.pick(FLOWCHART_LINKS);
     const text = random.chance(0.25) && link !== "~~~" ? label(random) : "";
-    lines.push(`${ident("n", from)} ${link}${text ? `|"${written(text)}"|` : ""} ${ident("n", to)}`);
+    lines.push(
+      `${ident("n", from)} ${link}${text ? `|"${written(text)}"|` : ""} ${ident("n", to)}`,
+    );
     if (link === "~~~" || from === to) continue;
     drawn.push([from, to]);
     if (text) messages.push(text);
@@ -128,7 +136,15 @@ function randomEdges(random: Random, count: number): [number, number][] {
 
 /** Every message arrow the converter draws (`SEQUENCE_ARROW_TYPES`). */
 const SEQUENCE_ARROWS = ["->", "-->", "->>", "-->>", "-x", "--x", "-)", "--)"];
-const SEQUENCE_BLOCKS = ["loop", "opt", "alt", "par", "critical", "break", "rect rgb(233, 236, 239)"];
+const SEQUENCE_BLOCKS = [
+  "loop",
+  "opt",
+  "alt",
+  "par",
+  "critical",
+  "break",
+  "rect rgb(233, 236, 239)",
+];
 
 /**
  * Participants and actors, messages of every drawn kind between them, notes, boxes,
@@ -169,7 +185,9 @@ export const sequence: Generator = (seed) => {
   const active: string[] = [];
   const message = (m: number) => {
     const text = `${label(random)} m${m}`;
-    lines.push(`${random.pick(ids)}${random.pick(SEQUENCE_ARROWS)}${random.pick(ids)}: ${written(text)}`);
+    lines.push(
+      `${random.pick(ids)}${random.pick(SEQUENCE_ARROWS)}${random.pick(ids)}: ${written(text)}`,
+    );
     messages.push(text);
     for (const block of open) block.filled = true;
   };
@@ -193,7 +211,12 @@ export const sequence: Generator = (seed) => {
     } else if (roll < 0.12) {
       const text = `${label(random)} note${m}`;
       const at = random.pick(ids);
-      const where = random.pick([`right of ${at}`, `left of ${at}`, `over ${at}`, `over ${at},${random.pick(ids)}`]);
+      const where = random.pick([
+        `right of ${at}`,
+        `left of ${at}`,
+        `over ${at}`,
+        `over ${at},${random.pick(ids)}`,
+      ]);
       lines.push(`Note ${where}: ${written(text)}`);
       nodes.push(text);
     } else if (roll < 0.15) {
@@ -215,7 +238,15 @@ export const sequence: Generator = (seed) => {
 };
 
 const CLASS_RELATIONS = ["<|--", "*--", "o--", "-->", "--", "..>", "..|>", ".."];
-const CLASS_MEMBERS = ["+String name", "-int count", "#List~int~ items", "~bool ready$", "+run(int x) bool", "-reset()*", "+size() int"];
+const CLASS_MEMBERS = [
+  "+String name",
+  "-int count",
+  "#List~int~ items",
+  "~bool ready$",
+  "+run(int x) bool",
+  "-reset()*",
+  "+size() int",
+];
 
 /**
  * Classes with labels, members and annotations, some in namespaces; relations of every
@@ -247,7 +278,9 @@ export const classDiagram: Generator = (seed) => {
   if (spaced) lines.push("}");
   for (let i = 0; i < count; i += 1) {
     if (random.chance(0.08)) {
-      lines.push(`<<${random.pick(["interface", "abstract", "service", "enumeration"])}>> ${ident("C", i)}`);
+      lines.push(
+        `<<${random.pick(["interface", "abstract", "service", "enumeration"])}>> ${ident("C", i)}`,
+      );
     }
   }
   const messages: string[] = [];
@@ -260,7 +293,8 @@ export const classDiagram: Generator = (seed) => {
     );
     if (text) messages.push(text);
   }
-  if (random.chance(0.3)) lines.push(`style ${ident("C", random.int(0, count - 1))} fill:#a5d8ff,stroke:#1971c2`);
+  if (random.chance(0.3))
+    lines.push(`style ${ident("C", random.int(0, count - 1))} fill:#a5d8ff,stroke:#1971c2`);
   return { source: lines.join("\n"), nodes, edges, messages };
 };
 
@@ -293,7 +327,9 @@ export const state: Generator = (seed) => {
     for (const [a, b] of randomEdges(random, inside.length)) {
       const [from, to] = [inside[a]!, inside[b]!];
       const text = random.chance(0.3) ? label(random) : "";
-      lines.push(`${pad}${ident("s", from)} --> ${ident("s", to)}${text ? ` : ${written(text)}` : ""}`);
+      lines.push(
+        `${pad}${ident("s", from)} --> ${ident("s", to)}${text ? ` : ${written(text)}` : ""}`,
+      );
       if (from === to) continue;
       edges.push([from, to]);
       if (text) messages.push(text);
@@ -303,7 +339,10 @@ export const state: Generator = (seed) => {
       const id = ident("x", pseudo);
       pseudo += 1;
       lines.push(`${pad}state ${id} <<${kind}>>`);
-      lines.push(`${pad}${ident("s", inside[0]!)} --> ${id}`, `${pad}${id} --> ${ident("s", inside[1]!)}`);
+      lines.push(
+        `${pad}${ident("s", inside[0]!)} --> ${id}`,
+        `${pad}${id} --> ${ident("s", inside[1]!)}`,
+      );
       lines.push(`${pad}${id} --> ${ident("s", inside[2]!)}`);
     }
     if (random.chance(0.5)) lines.push(`${pad}${ident("s", inside.at(-1)!)} --> [*]`);
@@ -343,7 +382,14 @@ export const state: Generator = (seed) => {
 
 const ER_ENDS_LEFT = ["|o", "||", "}o", "}|"];
 const ER_ENDS_RIGHT = ["o|", "||", "o{", "|{"];
-const ER_ATTRIBUTES = ["string name", "int id PK", "int owner FK", "string email UK", 'float total "in euros"', "date created"];
+const ER_ATTRIBUTES = [
+  "string name",
+  "int id PK",
+  "int owner FK",
+  "string email UK",
+  'float total "in euros"',
+  "date created",
+];
 
 /** Entities with aliases and attributes; relationships of every cardinality, each labelled. */
 export const er: Generator = (seed) => {
@@ -353,7 +399,11 @@ export const er: Generator = (seed) => {
   const lines = ["erDiagram"];
   for (let i = 0; i < count; i += 1) {
     const attributes = Array.from({ length: random.int(0, 4) }, () => random.pick(ER_ATTRIBUTES));
-    lines.push(`${ident("E", i)}["${written(nodes[i]!)}"] {`, ...attributes.map((a) => `  ${a}`), "}");
+    lines.push(
+      `${ident("E", i)}["${written(nodes[i]!)}"] {`,
+      ...attributes.map((a) => `  ${a}`),
+      "}",
+    );
   }
   const messages: string[] = [];
   const edges = randomEdges(random, count);

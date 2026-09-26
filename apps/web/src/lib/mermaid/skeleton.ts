@@ -295,7 +295,10 @@ export function skeletonToElements(result: SkeletonResult): DrawElementDto[] {
           ...extent(pts),
           points: pts,
           startArrowhead: arrowhead(skeleton.startArrowhead, "none"),
-          endArrowhead: arrowhead(skeleton.endArrowhead, skeleton.type === "arrow" ? "arrow" : "none"),
+          endArrowhead: arrowhead(
+            skeleton.endArrowhead,
+            skeleton.type === "arrow" ? "arrow" : "none",
+          ),
         };
         if (skeleton.type === "line") return [linear];
         // Bound only where it reaches the shape: the engine routes a bound end onto its
@@ -353,7 +356,13 @@ export function skeletonToElements(result: SkeletonResult): DrawElementDto[] {
     const maxX = Math.max(...children.map((c) => c.x + c.width)) + FRAME_PADDING;
     const maxY = Math.max(...children.map((c) => c.y + c.height)) + FRAME_PADDING;
     const frame: DrawElementDto = {
-      ...base("frame", { type: "frame", x: minX, y: minY, width: maxX - minX, height: maxY - minY }),
+      ...base("frame", {
+        type: "frame",
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+      }),
       name: skeleton.name ?? null,
     };
     const inside = new Set(children.map((child) => child.id));

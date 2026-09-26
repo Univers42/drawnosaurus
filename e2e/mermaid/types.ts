@@ -3,7 +3,15 @@
  * (`@excalidraw/mermaid-to-excalidraw@2.2.2`'s `graphToExcalidraw`): `native` as shapes
  * and arrows, `fallback` as one picture of Mermaid's own SVG.
  */
-import { classDiagram, er, flowchart, sequence, state, type Conversion, type Generator } from "./generators.ts";
+import {
+  classDiagram,
+  er,
+  flowchart,
+  sequence,
+  state,
+  type Conversion,
+  type Generator,
+} from "./generators.ts";
 import * as pictures from "./pictures.ts";
 
 export const TYPES: Record<string, { conversion: Conversion; generate: Generator }> = {

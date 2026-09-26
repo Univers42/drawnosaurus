@@ -41,7 +41,12 @@ for (const { type, name, source } of CORPUS) {
       engine.clearSelection();
       for (let frame = 0; frame < 120; frame += 1) {
         const { camera, cameraTarget } = engine;
-        if (camera.x === cameraTarget.x && camera.y === cameraTarget.y && camera.scale === cameraTarget.scale) break;
+        if (
+          camera.x === cameraTarget.x &&
+          camera.y === cameraTarget.y &&
+          camera.scale === cameraTarget.scale
+        )
+          break;
         await new Promise(requestAnimationFrame);
       }
       await new Promise(requestAnimationFrame);
@@ -85,7 +90,9 @@ for (const { type, name, source } of CORPUS) {
       document.body.append(sheet);
     }, result);
     await page.waitForFunction(() =>
-      [...document.querySelectorAll<HTMLImageElement>("#side-by-side img")].every((i) => i.complete),
+      [...document.querySelectorAll<HTMLImageElement>("#side-by-side img")].every(
+        (i) => i.complete,
+      ),
     );
     const sheet = testInfo.outputPath("side-by-side.png");
     await page.locator("#side-by-side").screenshot({ path: sheet });
@@ -96,7 +103,10 @@ for (const { type, name, source } of CORPUS) {
     const failures = [...finiteNumbers(placed), ...labelsFit(placed)];
     if (TYPES[type]!.conversion === "fallback") failures.push(...picture(placed));
     else {
-      expect(placed.some((e) => e.type === "image"), "native, not a picture").toBe(false);
+      expect(
+        placed.some((e) => e.type === "image"),
+        "native, not a picture",
+      ).toBe(false);
       expect(placed.filter((e) => e.type === "text").length).toBeGreaterThan(0);
     }
     expect(failures).toEqual([]);

@@ -58,7 +58,18 @@ const WORDS = [
 ];
 
 /** ASCII words, for the grammars that take nothing else unquoted. */
-const PLAIN = ["start", "end", "retry", "payment", "user", "cache", "build", "deploy", "review", "ship"];
+const PLAIN = [
+  "start",
+  "end",
+  "retry",
+  "payment",
+  "user",
+  "cache",
+  "build",
+  "deploy",
+  "review",
+  "ship",
+];
 
 /** A label from ASCII words only: one to three of them. */
 export function plain(random: Random): string {

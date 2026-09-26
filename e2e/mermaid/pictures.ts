@@ -51,7 +51,14 @@ export const pie: Generator = (seed) => {
   return picture(lines);
 };
 
-const MINDMAP_SHAPES = [(t: string) => `[${t}]`, (t: string) => `(${t})`, (t: string) => `((${t}))`, (t: string) => `))${t}((`, (t: string) => `)${t}(`, (t: string) => `{{${t}}}`];
+const MINDMAP_SHAPES = [
+  (t: string) => `[${t}]`,
+  (t: string) => `(${t})`,
+  (t: string) => `((${t}))`,
+  (t: string) => `))${t}((`,
+  (t: string) => `)${t}(`,
+  (t: string) => `{{${t}}}`,
+];
 
 export const mindmap: Generator = (seed) => {
   const random = seeded(seed);
@@ -83,7 +90,9 @@ export const timeline: Generator = (seed) => {
 export const gitGraph: Generator = (seed) => {
   const random = seeded(seed);
   const count = nodeCount(random);
-  const lines = [random.chance(0.3) ? `gitGraph ${random.pick(["LR:", "TB:", "BT:"])}` : "gitGraph"];
+  const lines = [
+    random.chance(0.3) ? `gitGraph ${random.pick(["LR:", "TB:", "BT:"])}` : "gitGraph",
+  ];
   // Commits each branch has of its own. Mermaid refuses to branch from nothing, and to merge
   // into a branch still sitting on its parent's head ("cannot merge main into itself").
   const own = new Map([["main", 1]]);
@@ -127,7 +136,9 @@ export const journey: Generator = (seed) => {
   const lines = ["journey", `  title ${plain(random)}`];
   for (let i = 0; i < count; i += 1) {
     if (i === 0 || random.chance(0.2)) lines.push(`  section ${plain(random)} ${i}`);
-    const people = Array.from({ length: random.int(1, 3) }, () => random.pick(["Me", "Cat", "Ops"]));
+    const people = Array.from({ length: random.int(1, 3) }, () =>
+      random.pick(["Me", "Cat", "Ops"]),
+    );
     lines.push(`    ${plain(random)} ${i}: ${random.int(1, 5)}: ${people.join(", ")}`);
   }
   return picture(lines);
@@ -184,11 +195,17 @@ export const block: Generator = (seed) => {
   const count = nodeCount(random);
   const lines = ["block-beta", `  columns ${random.int(1, 6)}`];
   for (let i = 0; i < count; i += 1) {
-    const shape = random.pick([`["${quoted(random)}"]`, `("${quoted(random)}")`, `{"${quoted(random)}"}`, ""]);
+    const shape = random.pick([
+      `["${quoted(random)}"]`,
+      `("${quoted(random)}")`,
+      `{"${quoted(random)}"}`,
+      "",
+    ]);
     lines.push(`  ${ident("b", i)}${shape}`);
   }
   for (let i = 1; i < count; i += 1) {
-    if (random.chance(0.3)) lines.push(`  ${ident("b", random.int(0, i - 1))} --> ${ident("b", i)}`);
+    if (random.chance(0.3))
+      lines.push(`  ${ident("b", random.int(0, i - 1))} --> ${ident("b", i)}`);
   }
   return picture(lines);
 };
@@ -200,15 +217,19 @@ export const architecture: Generator = (seed) => {
   const count = nodeCount(random);
   const lines = ["architecture-beta"];
   const groups = random.int(0, 3);
-  for (let g = 0; g < groups; g += 1) lines.push(`  group ${ident("g", g)}(${random.pick(ICONS)})[${plain(random)}]`);
+  for (let g = 0; g < groups; g += 1)
+    lines.push(`  group ${ident("g", g)}(${random.pick(ICONS)})[${plain(random)}]`);
   for (let i = 0; i < count; i += 1) {
-    const inside = groups > 0 && random.chance(0.5) ? ` in ${ident("g", random.int(0, groups - 1))}` : "";
+    const inside =
+      groups > 0 && random.chance(0.5) ? ` in ${ident("g", random.int(0, groups - 1))}` : "";
     lines.push(`  service ${ident("s", i)}(${random.pick(ICONS)})[${plain(random)} ${i}]${inside}`);
   }
   const sides = ["L", "R", "T", "B"];
   for (let i = 1; i < count; i += 1) {
     if (random.chance(0.6)) {
-      lines.push(`  ${ident("s", random.int(0, i - 1))}:${random.pick(sides)} -- ${random.pick(sides)}:${ident("s", i)}`);
+      lines.push(
+        `  ${ident("s", random.int(0, i - 1))}:${random.pick(sides)} -- ${random.pick(sides)}:${ident("s", i)}`,
+      );
     }
   }
   return picture(lines);
@@ -225,7 +246,9 @@ export const c4: Generator = (seed) => {
       lines.push(`  Enterprise_Boundary(${ident("eb", i)}, "${quoted(random)}") {`);
       bounded = true;
     }
-    lines.push(`  ${random.pick(kinds)}(${ident("e", i)}, "${quoted(random)} ${i}", "${quoted(random)}")`);
+    lines.push(
+      `  ${random.pick(kinds)}(${ident("e", i)}, "${quoted(random)} ${i}", "${quoted(random)}")`,
+    );
     if (bounded && random.chance(0.2)) {
       lines.push("  }");
       bounded = false;
@@ -234,7 +257,9 @@ export const c4: Generator = (seed) => {
   if (bounded) lines.push("  }");
   for (let i = 1; i < count; i += 1) {
     if (random.chance(0.5)) {
-      lines.push(`  ${random.pick(["Rel", "BiRel"])}(${ident("e", random.int(0, i - 1))}, ${ident("e", i)}, "${quoted(random)}")`);
+      lines.push(
+        `  ${random.pick(["Rel", "BiRel"])}(${ident("e", random.int(0, i - 1))}, ${ident("e", i)}, "${quoted(random)}")`,
+      );
     }
   }
   return picture(lines);
@@ -244,7 +269,12 @@ export const requirement: Generator = (seed) => {
   const random = seeded(seed);
   const count = nodeCount(random);
   const lines = ["requirementDiagram"];
-  const kinds = ["requirement", "functionalRequirement", "performanceRequirement", "designConstraint"];
+  const kinds = [
+    "requirement",
+    "functionalRequirement",
+    "performanceRequirement",
+    "designConstraint",
+  ];
   for (let i = 0; i < count; i += 1) {
     if (random.chance(0.7)) {
       lines.push(
@@ -262,7 +292,9 @@ export const requirement: Generator = (seed) => {
   const relations = ["contains", "copies", "derives", "satisfies", "verifies", "refines", "traces"];
   for (let i = 1; i < count; i += 1) {
     if (random.chance(0.6)) {
-      lines.push(`  ${ident("r", random.int(0, i - 1))} - ${random.pick(relations)} -> ${ident("r", i)}`);
+      lines.push(
+        `  ${ident("r", random.int(0, i - 1))} - ${random.pick(relations)} -> ${ident("r", i)}`,
+      );
     }
   }
   return picture(lines);
@@ -274,7 +306,9 @@ export const kanban: Generator = (seed) => {
   const lines = ["kanban"];
   for (let i = 0; i < count; i += 1) {
     if (i === 0 || random.chance(0.2)) lines.push(`  ${ident("col", i)}[${plain(random)}]`);
-    const meta = random.chance(0.3) ? `@{ priority: '${random.pick(["High", "Low", "Very High"])}' }` : "";
+    const meta = random.chance(0.3)
+      ? `@{ priority: '${random.pick(["High", "Low", "Very High"])}' }`
+      : "";
     lines.push(`    ${ident("k", i)}[${plain(random)} ${i}]${meta}`);
   }
   return picture(lines);

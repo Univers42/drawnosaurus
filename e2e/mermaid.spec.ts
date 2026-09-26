@@ -23,7 +23,9 @@ const dialog = (page: Page) => page.getByRole("dialog", { name: "Mermaid to diag
 /** Pixels the preview has drawn, against its own corner. */
 function previewInk(page: Page): Promise<number> {
   return page.evaluate(() => {
-    const canvas = document.querySelector<HTMLCanvasElement>('[aria-label="Mermaid preview"] canvas');
+    const canvas = document.querySelector<HTMLCanvasElement>(
+      '[aria-label="Mermaid preview"] canvas',
+    );
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx || canvas.width === 0) return 0;
     const corner = ctx.getImageData(0, 0, 1, 1).data;
@@ -112,7 +114,9 @@ test("a type with no shapes of its own comes in as a picture, badged as one", as
   await openDialog(page, board);
   await dialog(page).getByRole("textbox").fill('pie title Pets\n "Dogs" : 386\n "Cats" : 85');
   await expect(dialog(page).getByRole("button", { name: /Insert/ })).toBeEnabled();
-  await dialog(page).getByRole("button", { name: /Insert/ }).click();
+  await dialog(page)
+    .getByRole("button", { name: /Insert/ })
+    .click();
 
   const elements = await sceneElements(page);
   expect(elements.map((e) => e.type).sort()).toEqual(["image", "text"]);
@@ -146,7 +150,11 @@ test("a pasted definition lands at the pointer as its diagram, the camera left a
   await expect.poll(async () => (await sceneElements(page)).length).toBe(8);
   const elements = await sceneElements(page);
   const shapes = elements.filter((e) => e.boundTextId && e.type !== "arrow");
-  expect(shapes.map((shape) => labelOf(elements, shape)).sort()).toEqual(["Here", "Paste", "There"]);
+  expect(shapes.map((shape) => labelOf(elements, shape)).sort()).toEqual([
+    "Here",
+    "Paste",
+    "There",
+  ]);
   expect(await camera(page)).toEqual(before);
 
   // Its bounding box centred on the pointer, as a paste of elements is.

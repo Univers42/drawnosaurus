@@ -170,7 +170,14 @@ describe("skeletonToElements", () => {
       elements: [
         node("A", 0),
         node("B", 200),
-        { type: "arrow", x: 0, y: 0, width: 10, height: 0, label: { text: "xﬂ°lt¶ßy ﬂ°°9829¶ß ﬂ°zz¶ß" } },
+        {
+          type: "arrow",
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 0,
+          label: { text: "xﬂ°lt¶ßy ﬂ°°9829¶ß ﬂ°zz¶ß" },
+        },
       ],
     });
     expect(arrow!.type).toBe("arrow");
