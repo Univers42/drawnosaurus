@@ -59,6 +59,10 @@ async function drawArrowEndingAt(
   await page.mouse.up();
   await expect.poll(async () => (await sceneElements(page)).length).toBe(before + 1);
   const element = (await sceneElements(page)).at(-1) as BoardElement;
+  // The model updates as soon as the gesture commits; the canvas repaint that
+  // `regionInk` reads pixels from is a frame behind it (`cornerRadius.spec.ts`'s own
+  // wait, for the same reason).
+  await page.waitForTimeout(120);
   return { element, tipX, tipY: y };
 }
 
@@ -86,6 +90,11 @@ test("every new head reaches the panel, lands on the element, and leaves ink at 
 
   for (const [index, label] of NEW_HEADS.entries()) {
     const row = index + 1;
+    // Drawing auto-selects the new shape and reverts to the Select tool, so the picker
+    // that is still showing belongs to the *previous* arrow, not "the next one drawn" —
+    // the tool has to be re-picked, with nothing selected, before each click below sets
+    // that default (`ci_next_style.rs`'s own distinction between the two).
+    await pickTool(page, "Arrow");
     await panel(page)
       .getByRole("radio", { name: `End ${label}` })
       .click();

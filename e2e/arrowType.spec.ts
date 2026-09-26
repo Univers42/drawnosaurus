@@ -51,8 +51,10 @@ test("heads chosen with nothing selected are the next arrows', and never a line'
 }) => {
   const board = await openBoard(page);
   await pickTool(page, "Arrow");
-  await panel(page).getByRole("radio", { name: "Start Triangle" }).click();
-  await panel(page).getByRole("radio", { name: "End Circle" }).click();
+  // exact: true — "Triangle"/"Circle" would otherwise also match "Triangle (outline)" /
+  // "Circle (outline)", Playwright's name filter being a substring match by default.
+  await panel(page).getByRole("radio", { name: "Start Triangle", exact: true }).click();
+  await panel(page).getByRole("radio", { name: "End Circle", exact: true }).click();
 
   for (const row of [0, 1]) {
     const arrow = await drawArrow(board, "Arrow", row);
