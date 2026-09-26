@@ -36,7 +36,7 @@
     slug?: string;
     peers?: PeerCursor[];
     connectionStatus?: ConnectionStatus;
-    menu: { x: number; y: number; element: MenuElementInfo | null } | null;
+    menu: { x: number; y: number; element: MenuElementInfo | null; unlockAll: boolean } | null;
     showMainMenu: boolean;
     showExport: boolean;
     showMermaid: boolean;
@@ -113,6 +113,7 @@
     x={menu.x}
     y={menu.y}
     element={menu.element}
+    unlockAll={menu.unlockAll}
     onPickArrowhead={(patch) => {
       engine?.setArrowheads(patch);
       menu = menu?.element?.linear

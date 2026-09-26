@@ -10,6 +10,7 @@
     x,
     y,
     element,
+    unlockAll = false,
     onPickArrowhead,
     onRun,
     onCopyStyles,
@@ -20,6 +21,8 @@
     x: number;
     y: number;
     element: MenuElementInfo | null;
+    /** The board menu offers "Unlock all": nothing selected and something locked. */
+    unlockAll?: boolean;
     onPickArrowhead: (patch: { start?: Arrowhead; end?: Arrowhead }) => void;
     onRun: (action: (engine: DrawEngine, at: { x: number; y: number }) => void) => void;
     /** The keyboard's copy, so both say "Copied styles." (`actionStyles.ts@1118751f:73`). */
@@ -218,6 +221,7 @@
       onclick={() => onRun((engine) => engine.toggleLockSelection())}
     >
       <span>{element.locked ? "Unlock" : "Lock"}</span>
+      <span class="hint">{shortcutLabel("CtrlOrCmd+Shift+L")}</span>
     </button>
     <div class="rule" aria-hidden="true"></div>
     <button
@@ -239,6 +243,13 @@
     <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.selectAll())}>
       <span>Select all</span><span class="hint">{shortcutLabel("CtrlOrCmd+A")}</span>
     </button>
+    <!-- Beside Select all, which passes locked elements by, as the oracle lists it
+         (`App.tsx@1118751f:13724-13726`). -->
+    {#if unlockAll}
+      <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.unlockAll())}>
+        <span>Unlock all</span>
+      </button>
+    {/if}
     <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.fit())}>
       <span>Zoom to fit</span><span class="hint">⇧1</span>
     </button>

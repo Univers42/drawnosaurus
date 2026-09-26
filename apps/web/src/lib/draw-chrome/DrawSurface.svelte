@@ -261,7 +261,12 @@
   let zoom = $state(100);
   let contentVisible = $state(true);
   let currentCamera = $state<Camera | undefined>(undefined);
-  let menu = $state<{ x: number; y: number; element: MenuElementInfo | null } | null>(null);
+  let menu = $state<{
+    x: number;
+    y: number;
+    element: MenuElementInfo | null;
+    unlockAll: boolean;
+  } | null>(null);
   let eraserTrailSvgPath = $state("");
   const eraserTrail = new EraserTrail({
     decayTime: 220,
@@ -1820,6 +1825,9 @@
                   engine.selectionIsGroup(),
                   engine.selectionStyle(),
                 ),
+          // The board menu's "Unlock all", on its oracle's predicate: nothing selected and
+          // something locked (`actionElementLock.ts@1118751f:166-171`).
+          unlockAll: kind === "canvas" && engine.canUnlockAll(),
         };
       }}
       onToolLockChange={(locked) => {

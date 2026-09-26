@@ -28,6 +28,7 @@
         { key: "⌘ ⇧ Z", desc: "Redo" },
         { key: "⌘ G", desc: "Group selection" },
         { key: "⌘ ⇧ G", desc: "Ungroup selection" },
+        { key: "⌘ ⇧ L", desc: "Lock / unlock selection" },
         { key: "⌘ C / ⌘ V", desc: "Copy / Paste" },
         { key: "Delete / ⌫", desc: "Delete selection" },
         { key: "⌘ D", desc: "Duplicate selection" },
