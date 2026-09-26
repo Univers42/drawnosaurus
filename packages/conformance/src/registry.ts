@@ -745,7 +745,7 @@ export const RULES: readonly Rule[] = [
     section: "💾 Files",
     text: /PNG|read-only link/,
     status: "gap",
-    why: "No PNG export and no read-only share link. SVG and JSON are done.",
+    why: "PNG export is the visible canvas as it stands (engine.ts exportPng, canvas.toBlob()), not the whole scene, and nothing copies it to the clipboard. No read-only share link. SVG and JSON are done.",
   },
   // The binding is real; only the shortcut itself is unexercised — Save/export and
   // Import are covered through their underlying JSON pipeline below.
@@ -770,7 +770,7 @@ export const RULES: readonly Rule[] = [
     section: "🔍 Export tricks",
     text: /PNG/,
     status: "gap",
-    why: "No PNG export path. Planned as a server-side raster so it does not depend on a browser canvas.",
+    why: "PNG export is the visible canvas as it stands (engine.ts exportPng, canvas.toBlob()): not the whole scene or the selection, and never on the clipboard.",
   },
   {
     section: "🔍 Export tricks",
@@ -1493,11 +1493,19 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_frame.rs`, "e2e/frames.spec.ts"],
   },
+  // Presentation mode is the frame-to-frame navigation: each frame is a slide, stepped
+  // with the arrow keys and fitted to the screen.
   {
     section: "12. Frames",
-    text: /Export frame|Frame navigation/,
+    text: /Frame navigation/,
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/presentation.test.ts`, "e2e/presentation.spec.ts"],
+  },
+  {
+    section: "12. Frames",
+    text: /Export frame/,
     status: "gap",
-    why: "See the Frames rule: export has no frame mode, and nothing navigates frame to frame.",
+    why: "See the Frames rule: export has no frame mode.",
   },
   // Resize handles are not excluded for DrawElementType::Frame, so dragging one works the
   // same as any rectangle-shaped element — but no test drags a frame's own handle and
@@ -2022,7 +2030,7 @@ export const RULES: readonly Rule[] = [
   {
     section: "28. Command/action architecture",
     status: "gap",
-    why: "The engine exposes methods, not named actions. Nothing addressable by name means no command palette and no single place a shortcut, a menu item and a button agree on — design.md is right that this is the load-bearing one.",
+    why: "The engine exposes methods, not named actions. The host's command palette keeps a registry of named commands (commandPalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one.",
   },
   // A typing session is one step, stamped once, at its commit — styles written while it
   // is typed included; undo waits for it.
@@ -2186,7 +2194,7 @@ export const RULES: readonly Rule[] = [
     section: "32. Export",
     text: /PNG|Clipboard image|Selection → image|Whole canvas → image|Scale|[Ff]rame export|Frame export|Fonts/,
     status: "gap",
-    why: "No raster export path at all — see the Export tricks rule.",
+    why: "PNG export (engine.ts exportPng) is the visible canvas as it stands, canvas.toBlob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the Export tricks rule.",
   },
   { section: "32. Export", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
   {
@@ -2387,7 +2395,7 @@ export const RULES: readonly Rule[] = [
     section: "42. Rendering engine",
     text: /Draw cursors|Draw snap guides|Clip frames|Optimize redraws|Draw bindings/,
     status: "gap",
-    why: "Snap guides, binding highlights and frame clipping are computed but not drawn, and there is no dirty-rect or tile cache yet.",
+    why: "Painted, not asserted: snap guides, binding highlights, frame clips and peer cursors are all drawn (wasm/paint.rs), but no test checks the paint itself, only the state it reads. Redraws are saved by a scroll blit (render/scroll.rs), not dirty rectangles or a tile cache.",
   },
   {
     section: "42. Rendering engine",
