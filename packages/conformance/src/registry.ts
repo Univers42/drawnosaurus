@@ -183,7 +183,12 @@ export const RULES: readonly Rule[] = [
     section: "🖱️ Selection",
     text: /Ctrl\/Cmd \+ Arrow/,
     status: "covered",
-    tests: [`${ENGINE}/ci_flowchart.rs`, "engine/src/host/keys.test.ts", "e2e/flowchart.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_flowchart.rs`,
+      `${ENGINE}/ci_flowchart_oracle.rs`,
+      "engine/src/host/keys.test.ts",
+      "e2e/flowchart.spec.ts",
+    ],
   },
   // A plain click selecting an element is real but absent from every file the section
   // rule below names: ci_pointer.rs drives it directly through the engine, and
@@ -463,11 +468,18 @@ export const RULES: readonly Rule[] = [
   {
     // Ctrl/Cmd+Arrow: previews a cluster off the selected node, held outside the scene
     // until the modifier is released, which commits it as one step
-    // (`flowchart.rs` › `flowchart_create`/`flowchart_commit`, `keys.ts`).
+    // (`flowchart.rs` › `flowchart_create`/`flowchart_commit`, `keys.ts`). Every node,
+    // arrow binding and camera move is replayed against the oracle's own output
+    // (`ci_flowchart_oracle.rs`, `engine/tools/flowchart-oracle`).
     section: "🔄 Flowcharts",
     text: /create connected nodes/,
     status: "covered",
-    tests: [`${ENGINE}/ci_flowchart.rs`, "engine/src/host/keys.test.ts", "e2e/flowchart.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_flowchart.rs`,
+      `${ENGINE}/ci_flowchart_oracle.rs`,
+      "engine/src/host/keys.test.ts",
+      "e2e/flowchart.spec.ts",
+    ],
   },
   {
     // Turning an arbitrary element (a line, a frame, an image) into something flowchart
@@ -484,7 +496,12 @@ export const RULES: readonly Rule[] = [
     section: "🔄 Flowcharts",
     text: /keyboard navigation to move between flowchart/,
     status: "covered",
-    tests: [`${ENGINE}/ci_flowchart.rs`, "e2e/flowchart.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_flowchart.rs`,
+      `${ENGINE}/ci_flowchart_oracle.rs`,
+      "engine/src/host/keys.test.ts",
+      "e2e/flowchart.spec.ts",
+    ],
   },
   {
     // The commit's own arrow, bound at both ends (`binding_arrow`) — not the general
@@ -492,7 +509,11 @@ export const RULES: readonly Rule[] = [
     section: "🔄 Flowcharts",
     text: /Connect nodes with bound arrows/,
     status: "covered",
-    tests: [`${ENGINE}/ci_flowchart.rs`, "e2e/flowchart.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_flowchart.rs`,
+      `${ENGINE}/ci_flowchart_oracle.rs`,
+      "e2e/flowchart.spec.ts",
+    ],
   },
   {
     // Ctrl+D duplicates whatever is selected by kind alone; a flowchart node is a
@@ -1687,7 +1708,7 @@ export const RULES: readonly Rule[] = [
     section: "15. Transform engine",
     text: /^Fine movement$/,
     status: "gap",
-    why: "No modifier gives a smaller nudge than the plain 1px arrow-key step. Alt+Arrow is taken for flowchart navigation instead (engine/src/host/keys.test.ts).",
+    why: "No modifier gives a smaller nudge than the plain 1px arrow-key step. Alt+Arrow walks the flowchart with one element selected and is that same 1px nudge otherwise, as in the oracle (engine/src/host/keys.test.ts).",
   },
   {
     section: "15. Transform engine",
@@ -2015,7 +2036,11 @@ export const RULES: readonly Rule[] = [
     section: "26. Autoshape / flowchart logic",
     text: /[Ff]lowchart|connection points|Automatic arrow/,
     status: "covered",
-    tests: [`${ENGINE}/ci_flowchart.rs`, "e2e/flowchart.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_flowchart.rs`,
+      `${ENGINE}/ci_flowchart_oracle.rs`,
+      "e2e/flowchart.spec.ts",
+    ],
   },
   {
     section: "26. Autoshape / flowchart logic",
