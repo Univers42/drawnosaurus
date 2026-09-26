@@ -1,0 +1,3093 @@
+<!doctype html>
+<!--
+  The parity report, frozen at registry cd01892 (2026-09-26). Numbers come from running every
+  line of prompt/*.md through ruleFor() in packages/conformance/src/registry.ts. The live
+  figure is whatever `make conformance` prints; regenerate this page when a wave moves it
+  (remaining-work.md › Regenerating the report).
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Drawnosaurus Parity Ledger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,750&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    />
+    <style>
+      [hidden] {
+        display: none !important;
+      }
+      :root {
+        --ink: #1e1e1e;
+        --muted: #62647a;
+        --line: #e3e4ec;
+        --accent: #6965db;
+        --accent-subtle: #eef0ff;
+        --surface: #ffffff;
+        --canvas: #f8f9fb;
+        --amber: #c77c02;
+        --amber-subtle: #fff4e0;
+        --grey-mark: #8a8ca3;
+        --dot: #d9dbe6;
+        --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+        --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+        --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          color-scheme: dark;
+          --ink: #e8eaed;
+          --muted: #a3a5b8;
+          --line: #34343d;
+          --accent: #8f95ee;
+          --accent-subtle: #2a2b45;
+          --surface: #232329;
+          --canvas: #191919;
+          --amber: #f0b44c;
+          --amber-subtle: #3a2f1c;
+          --grey-mark: #8d8fa6;
+          --dot: #2c2c33;
+        }
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --ink: #e8eaed;
+        --muted: #a3a5b8;
+        --line: #34343d;
+        --accent: #8f95ee;
+        --accent-subtle: #2a2b45;
+        --surface: #232329;
+        --canvas: #191919;
+        --amber: #f0b44c;
+        --amber-subtle: #3a2f1c;
+        --grey-mark: #8d8fa6;
+        --dot: #2c2c33;
+      }
+
+      body {
+        margin: 0;
+        background-color: var(--canvas);
+        background-image: radial-gradient(var(--dot) 1px, transparent 1.2px);
+        background-size: 20px 20px;
+        color: var(--ink);
+        font: 400 15px/1.6 var(--body);
+        padding-inline: 20px;
+      }
+      .wrap {
+        max-width: 880px;
+        margin: 0 auto;
+        padding-block: 48px 72px;
+        display: grid;
+        gap: 56px;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--display);
+        text-wrap: balance;
+        margin: 0;
+        letter-spacing: -0.01em;
+      }
+      h1 {
+        font-size: clamp(2.1rem, 5vw, 3.1rem);
+        font-weight: 750;
+        line-height: 1.05;
+      }
+      h2 {
+        font-size: 1.55rem;
+        font-weight: 750;
+        line-height: 1.2;
+      }
+      h3 {
+        font-size: 1.05rem;
+        font-weight: 600;
+        line-height: 1.3;
+      }
+      p {
+        margin: 0;
+        max-width: 66ch;
+      }
+      code,
+      .mono {
+        font-family: var(--mono);
+        font-size: 0.86em;
+      }
+      a {
+        color: var(--accent);
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 3px;
+      }
+      .eyebrow {
+        font: 500 0.72rem/1 var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      section {
+        display: grid;
+        gap: 20px;
+      }
+      .lede {
+        font-size: 1.08rem;
+        color: var(--ink);
+      }
+      .sub {
+        color: var(--muted);
+      }
+
+      /* header */
+      header {
+        display: grid;
+        gap: 18px;
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 18px;
+        font: 400 0.8rem/1.4 var(--mono);
+        color: var(--muted);
+      }
+      .meta b {
+        font-weight: 500;
+        color: var(--ink);
+      }
+
+      /* the coverage bar: fills named after the board's own fill styles */
+      .board {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 24px;
+        display: grid;
+        gap: 18px;
+      }
+      .bar {
+        display: flex;
+        height: 44px;
+        border: 2px solid var(--ink);
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .seg {
+        height: 100%;
+      }
+      .seg + .seg {
+        border-left: 2px solid var(--ink);
+      }
+      .solid {
+        background: var(--accent);
+      }
+      .cross {
+        background:
+          repeating-linear-gradient(45deg, var(--amber) 0 1.5px, transparent 1.5px 7px),
+          repeating-linear-gradient(-45deg, var(--amber) 0 1.5px, transparent 1.5px 7px),
+          var(--amber-subtle);
+      }
+      .hachure {
+        background:
+          repeating-linear-gradient(-45deg, var(--grey-mark) 0 1.5px, transparent 1.5px 7px),
+          var(--surface);
+      }
+      .legend {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 14px 24px;
+      }
+      .key {
+        display: grid;
+        grid-template-columns: 22px 1fr;
+        gap: 2px 10px;
+        align-items: start;
+      }
+      .swatch {
+        width: 22px;
+        height: 22px;
+        border: 2px solid var(--ink);
+        border-radius: 4px;
+        margin-top: 3px;
+      }
+      .num {
+        font: 750 1.9rem/1.1 var(--display);
+        font-variant-numeric: tabular-nums;
+      }
+      .num small {
+        font: 500 0.85rem var(--mono);
+        color: var(--muted);
+        margin-left: 6px;
+      }
+      .klabel {
+        grid-column: 2;
+        font-size: 0.88rem;
+        color: var(--muted);
+      }
+      .fillname {
+        grid-column: 2;
+        font: 400 0.72rem var(--mono);
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+      .note {
+        font-size: 0.86rem;
+        color: var(--muted);
+      }
+
+      /* ranked next steps */
+      ol.next {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 14px;
+        counter-reset: n;
+      }
+      ol.next > li {
+        counter-increment: n;
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: 4px 14px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px 20px;
+      }
+      ol.next > li::before {
+        content: counter(n);
+        grid-row: span 3;
+        font: 750 1.6rem/1 var(--display);
+        color: var(--accent);
+        width: 40px;
+        height: 40px;
+        border: 2px solid var(--accent);
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+      }
+      ol.next p {
+        font-size: 0.93rem;
+      }
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .tag {
+        font: 500 0.72rem/1 var(--mono);
+        padding: 5px 8px;
+        border-radius: 99px;
+        background: var(--accent-subtle);
+        color: var(--accent);
+      }
+      .tag.amber {
+        background: var(--amber-subtle);
+        color: var(--amber);
+      }
+
+      /* area table */
+      .areas {
+        display: grid;
+        border-top: 2px solid var(--ink);
+      }
+      .area {
+        display: grid;
+        grid-template-columns: minmax(150px, 210px) 1fr 64px;
+        gap: 6px 22px;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--line);
+        align-items: baseline;
+      }
+      .area h3 {
+        font-size: 1rem;
+      }
+      .area p {
+        font-size: 0.92rem;
+        max-width: none;
+      }
+      .area .count {
+        font: 500 0.95rem var(--mono);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: var(--muted);
+      }
+      .area .count b {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .colhead {
+        display: grid;
+        grid-template-columns: minmax(150px, 210px) 1fr 64px;
+        gap: 22px;
+        font: 500 0.7rem var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding-bottom: 8px;
+      }
+      .colhead span:last-child {
+        text-align: right;
+      }
+
+      /* two-column lists */
+      .cols {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 18px 20px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+      .card ul {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 7px;
+        font-size: 0.92rem;
+      }
+      .card li::marker {
+        color: var(--muted);
+      }
+
+      /* timeline */
+      .timeline {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+      }
+      .timeline li {
+        display: grid;
+        grid-template-columns: 76px 1fr auto;
+        gap: 4px 18px;
+        padding: 11px 0;
+        border-bottom: 1px dashed var(--line);
+        align-items: baseline;
+        font-size: 0.93rem;
+      }
+      .timeline .w {
+        font: 500 0.78rem var(--mono);
+        color: var(--accent);
+      }
+      .timeline .sha {
+        font: 400 0.78rem var(--mono);
+        color: var(--muted);
+      }
+
+      /* full ledger */
+      .filter {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+      .filter input {
+        flex: 1 1 260px;
+        font: 400 0.95rem var(--body);
+        color: var(--ink);
+        background: var(--surface);
+        border: 1.5px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 12px;
+      }
+      .filter input:focus {
+        border-color: var(--accent);
+        outline: none;
+        box-shadow: 0 0 0 3px var(--accent-subtle);
+      }
+      #shown {
+        font: 400 0.8rem var(--mono);
+        color: var(--muted);
+      }
+      .ledger {
+        display: grid;
+        border-top: 1px solid var(--line);
+      }
+      .lsec {
+        border-bottom: 1px solid var(--line);
+      }
+      .lsec summary {
+        cursor: pointer;
+        display: grid;
+        grid-template-columns: 14px 1fr auto auto;
+        gap: 12px;
+        padding: 11px 4px;
+        align-items: baseline;
+        list-style: none;
+      }
+      .lsec summary::-webkit-details-marker {
+        display: none;
+      }
+      .lsec summary::before {
+        content: "+";
+        font: 500 0.9rem var(--mono);
+        color: var(--muted);
+      }
+      .lsec[open] summary::before {
+        content: "−";
+      }
+      .lsec summary:hover .lname {
+        color: var(--accent);
+      }
+      .lname {
+        font-weight: 500;
+      }
+      .lsrc,
+      .lcount {
+        font: 400 0.76rem var(--mono);
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .lcount {
+        min-width: 12ch;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .lrow {
+        padding: 4px 4px 14px 30px;
+        display: grid;
+        gap: 4px;
+      }
+      .litems {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 2px;
+        font-size: 0.9rem;
+      }
+      .ln {
+        font: 400 0.72rem var(--mono);
+        color: var(--muted);
+        margin-right: 6px;
+      }
+      .lwhy {
+        font-size: 0.85rem;
+        color: var(--muted);
+        max-width: 72ch;
+      }
+
+      footer {
+        font-size: 0.84rem;
+        color: var(--muted);
+        display: grid;
+        gap: 8px;
+        border-top: 1px solid var(--line);
+        padding-top: 20px;
+      }
+
+      @media (max-width: 640px) {
+        .wrap {
+          gap: 44px;
+          padding-block: 28px 48px;
+        }
+        .area,
+        .colhead {
+          grid-template-columns: 1fr auto;
+        }
+        .area p {
+          grid-column: 1 / -1;
+          grid-row: 2;
+        }
+        .colhead span:nth-child(2) {
+          display: none;
+        }
+        .timeline li {
+          grid-template-columns: 64px 1fr;
+        }
+        .timeline .sha {
+          grid-column: 2;
+        }
+        .lsec summary {
+          grid-template-columns: 14px 1fr auto;
+        }
+        .lrow {
+          padding-left: 4px;
+        }
+        .lsrc {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .seg {
+          transition: filter 0.15s;
+        }
+        .seg:hover {
+          filter: brightness(1.08);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <span class="eyebrow">Drawnosaurus · parity report · 26 September 2026</span>
+        <h1>What still separates the board from Excalidraw</h1>
+        <p class="lede">
+          Every line of the two feature checklists in <code>prompt/</code> is matched to a rule in
+          the coverage registry: covered by named tests, an open gap with a reason, or out of scope.
+          This page reads that registry as it stands after wave 14 and says what is left.
+        </p>
+        <div class="meta">
+          <span>oracle <b>Excalidraw 1118751f</b></span>
+          <span>registry <b>cd01892</b></span>
+          <span>engine <b>4c41948</b></span>
+          <span>checklist lines <b>1,112</b></span>
+        </div>
+      </header>
+
+      <section aria-labelledby="h-cov">
+        <h2 id="h-cov">Coverage</h2>
+        <div class="board">
+          <div
+            class="bar"
+            role="img"
+            aria-label="930 in-scope items: 617 covered, 74 built but untested, 239 missing"
+          >
+            <div class="seg solid" style="width: 66.34%" title="Covered: 617"></div>
+            <div class="seg cross" style="width: 7.96%" title="Built, untested: 74"></div>
+            <div class="seg hachure" style="width: 25.7%" title="Missing: 239"></div>
+          </div>
+          <div class="legend">
+            <div class="key">
+              <span class="swatch solid"></span><span class="num">617<small>66.3%</small></span
+              ><span class="klabel">Covered by a named test</span
+              ><span class="fillname">fill: solid</span>
+            </div>
+            <div class="key">
+              <span class="swatch cross"></span><span class="num">74<small>8.0%</small></span
+              ><span class="klabel">Built, but no test proves it</span
+              ><span class="fillname">fill: cross-hatch</span>
+            </div>
+            <div class="key">
+              <span class="swatch hachure"></span><span class="num">239<small>25.7%</small></span
+              ><span class="klabel">Not built yet</span><span class="fillname">fill: hachure</span>
+            </div>
+          </div>
+          <p class="note">
+            The bar is the 930 in-scope items, drawn to scale. Another 182 lines are out of scope
+            and not counted: 151 are recaps or the implementation-order plan, which point back at
+            features classified where they are first named; 14 describe hosted AI; the other 17 are
+            cheat-sheet errors, workflows built from other items, or format choices this project
+            made differently.
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-next">
+        <h2 id="h-next">What to build next</h2>
+        <p class="sub">
+          Ranked by how often someone would notice, against how much each one costs.
+        </p>
+        <ol class="next">
+          <li>
+            <h3>Export the whole drawing as PNG, at a chosen scale, and copy it</h3>
+            <p>
+              PNG export today saves the canvas as it is on screen: whatever is scrolled out of view
+              is cut off, and the dialog's Scale and Transparent background controls are ignored.
+              Rendering the scene to an offscreen canvas fixes that and opens the rest of the export
+              gaps: transparent background, a selection or a single frame, and copy as PNG or SVG.
+            </p>
+            <div class="tags">
+              <span class="tag">≈ 20 items</span><span class="tag">engine export + dialog</span>
+            </div>
+          </li>
+          <li>
+            <h3>Paste plain text as text, and recognise pasted Mermaid</h3>
+            <p>
+              Pasting text from anywhere else does nothing today. Excalidraw makes one text element
+              per line, and hands Mermaid syntax to the Mermaid dialog. Both are small changes in
+              the paste handler.
+            </p>
+            <div class="tags">
+              <span class="tag">4 items</span><span class="tag">host paste path</span>
+            </div>
+          </li>
+          <li>
+            <h3>Write the tests for what is already built</h3>
+            <p>
+              Copy, cut and paste by keyboard, Backspace, middle-mouse pan, Ctrl+O, menu arrow keys
+              and the context-menu entries all work but no test drives them. About 25 items turn
+              green without a line of product code.
+            </p>
+            <div class="tags">
+              <span class="tag amber">≈ 25 items</span><span class="tag amber">tests only</span>
+            </div>
+          </li>
+          <li>
+            <h3>Elbow arrows</h3>
+            <p>
+              The flowchart and architecture stories are what the templates show off, and straight
+              connectors are the one visible compromise in them. Orthogonal routing over the
+              existing fixed-point bindings, then cardinality arrowheads for ER diagrams.
+            </p>
+            <div class="tags">
+              <span class="tag">8 items</span><span class="tag">engine routing</span>
+            </div>
+          </li>
+          <li>
+            <h3>A library of reusable pieces</h3>
+            <p>
+              The largest single missing feature. The five templates are a catalogue to start from;
+              a library lets people save their own selection and drop it back in, with ids
+              regenerated and groups kept.
+            </p>
+            <div class="tags">
+              <span class="tag">18 items</span><span class="tag">storage + sidebar</span>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section aria-labelledby="h-missing">
+        <h2 id="h-missing">Not built yet, by area</h2>
+        <p class="sub">
+          239 checklist items. The count is how many checklist lines each area accounts for.
+        </p>
+        <div>
+          <div class="colhead"><span>Area</span><span>What is missing</span><span>Items</span></div>
+          <div class="areas">
+            <div class="area">
+              <h3>Engine architecture</h3>
+              <p>
+                No named-action layer shared by shortcuts, menus and buttons (the palette has its
+                own registry). No transaction API or branching history. Performance is benchmarked
+                but nothing fails on a regression. No vector, matrix or circle primitives.
+              </p>
+              <span class="count"><b>49</b></span>
+            </div>
+            <div class="area">
+              <h3>Export, clipboard, files</h3>
+              <p>
+                PNG is the on-screen canvas only, and the dialog's scale and transparent-background
+                controls do nothing. No selection or frame export, no transparent background, no
+                copy as PNG or SVG, no scene data inside an exported image. No
+                <code>.excalidraw</code> import or export, no read-only link, export is always
+                light-themed, and there is no crash-recovery store beyond the localStorage draft.
+              </p>
+              <span class="count"><b>36</b></span>
+            </div>
+            <div class="area">
+              <h3>Drawing, snapping, grid</h3>
+              <p>
+                Alt does not draw or resize from the centre. Shift does not snap rotation. Drawing
+                and resizing snap to the grid but not to other shapes. No equal-spacing guides,
+                custom grid size, or finer arrow-key nudge.
+              </p>
+              <span class="count"><b>19</b></span>
+            </div>
+            <div class="area">
+              <h3>Library</h3>
+              <p>None: no saved items, previews, drag to insert, or menu entry.</p>
+              <span class="count"><b>18</b></span>
+            </div>
+            <div class="area">
+              <h3>Touch and mobile</h3>
+              <p>
+                Pointer events everywhere, but no pinch zoom, no two-finger pan, no long press, no
+                pen-versus-finger handling and no mobile layout for the chrome.
+              </p>
+              <span class="count"><b>13</b></span>
+            </div>
+            <div class="area">
+              <h3>Links on elements</h3>
+              <p>No URL on a shape or text, no link popup, no clickable diagrams.</p>
+              <span class="count"><b>15</b></span>
+            </div>
+            <div class="area">
+              <h3>Scene search</h3>
+              <p>No search over text, labels or frame names, and no jump between matches.</p>
+              <span class="count"><b>13</b></span>
+            </div>
+            <div class="area">
+              <h3>Freehand and eraser</h3>
+              <p>
+                Strokes are smoothed and thin with speed, but a pen's own pressure is never read,
+                pen, touch and palm are not told apart, and there is no point simplification. The
+                eraser removes a whole stroke and never splits one.
+              </p>
+              <span class="count"><b>9</b></span>
+            </div>
+            <div class="area">
+              <h3>Selection and locking</h3>
+              <p>
+                No Alt+click to reach a shape underneath another, no subtractive lasso, no on-canvas
+                mark for a locked element or a group, and no Ctrl+Shift+L. The marquee has one mode,
+                containment, which is deliberate.
+              </p>
+              <span class="count"><b>11</b></span>
+            </div>
+            <div class="area">
+              <h3>Images</h3>
+              <p>
+                No crop, no replace, no broken-image state. Pictures live inside the board document,
+                so two or three large ones reach MongoDB's 16 MB limit.
+              </p>
+              <span class="count"><b>10</b></span>
+            </div>
+            <div class="area">
+              <h3>Frames, notes, embeds</h3>
+              <p>
+                Selecting a frame does not select its contents. A sticky note has no border colour.
+                Embeds cannot be drawn as a region and have no loading or error state. An arbitrary
+                shape cannot be turned into a flowchart node.
+              </p>
+              <span class="count"><b>10</b></span>
+            </div>
+            <div class="area">
+              <h3>Stats and numbers</h3>
+              <p>No stats panel, and position, size and angle cannot be typed as numbers.</p>
+              <span class="count"><b>9</b></span>
+            </div>
+            <div class="area">
+              <h3>Arrows and lines</h3>
+              <p>
+                No elbow arrows or ER arrowheads. Pressing the arrow key again does not cycle the
+                arrow type. A label cannot be dragged along its arrow. A point cannot be removed
+                while a line is being placed.
+              </p>
+              <span class="count"><b>8</b></span>
+            </div>
+            <div class="area">
+              <h3>Collaboration and modes</h3>
+              <p>
+                No zen mode. Following someone works only inside presentation mode. Nobody can join
+                read-only. Undo restores a whole element rather than only the properties you
+                changed.
+              </p>
+              <span class="count"><b>6</b></span>
+            </div>
+            <div class="area">
+              <h3>Text and Mermaid</h3>
+              <p>
+                Plain-text paste makes nothing. Mermaid reads flowcharts only, with no preview
+                before insert and no detection on paste.
+              </p>
+              <span class="count"><b>4</b></span>
+            </div>
+            <div class="area">
+              <h3>Everything else</h3>
+              <p>
+                Menu entries waiting on the features above, no recently-used ranking in the command
+                palette, Tab unclaimed on the canvas, and Shift+3.
+              </p>
+              <span class="count"><b>6</b></span>
+            </div>
+          </div>
+        </div>
+        <p class="note">
+          Three text items (bold, italic, letter spacing) are open in the registry, but Excalidraw
+          has none of them either, so they are listed under “Different on purpose” below and left
+          out of this table.
+        </p>
+      </section>
+
+      <section aria-labelledby="h-untested">
+        <h2 id="h-untested">Built, but no test proves it</h2>
+        <p class="sub">
+          74 items. These work in the app today; the registry refuses to count them until a test
+          names them.
+        </p>
+        <div class="cols">
+          <div class="card">
+            <h3>Cheap to close</h3>
+            <ul>
+              <li>
+                Ctrl+C, Ctrl+X, Ctrl+V by keyboard, end to end (8 lines across both checklists)
+              </li>
+              <li>The ten context-menu entries, and Export from the main menu</li>
+              <li>Backspace deletes, middle-mouse drag pans, Ctrl+O opens a file</li>
+              <li>Menu arrow-key navigation, and the shortcut shown beside each menu item</li>
+              <li>Align top, rotating a note, an image or a line, resizing a frame</li>
+              <li>The collaborator list and avatars in the Share dialog</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Needs a harness first</h3>
+            <ul>
+              <li>
+                What gets painted: snap guides, binding highlights, frame clips, peer cursors, the
+                grid (the state is tested, the pixels are not)
+              </li>
+              <li>
+                An accessibility audit: focus traps, screen-reader labels, high contrast, reduced
+                motion
+              </li>
+              <li>The modifier matrix: every tool against Shift, Alt, Ctrl and their pairs</li>
+              <li>
+                Host state kept in Svelte (menus, sidebar, collaboration) rather than in the engine
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-diff">
+        <h2 id="h-diff">Different on purpose, and beyond Excalidraw</h2>
+        <div class="cols">
+          <div class="card">
+            <h3>Different on purpose</h3>
+            <ul>
+              <li>
+                The board lives on the server and merges per element; <code>.osidraw</code> files
+                are an export, not the source of truth.
+              </li>
+              <li>
+                A marquee selects what it contains, never what it merely clips, so a small drag
+                across a large background shape leaves it alone.
+              </li>
+              <li>
+                Select All includes locked elements so the context menu can unlock them; Excalidraw
+                skips them.
+              </li>
+              <li>Alt+Arrow moves between flowchart nodes, so it is not a fine nudge.</li>
+              <li>
+                The cheat sheet's <kbd>I</kbd> for images and its Ctrl+Shift+]/[ are wrong; the
+                oracle's own bindings are used.
+              </li>
+              <li>No bold, italic or letter spacing, as in Excalidraw.</li>
+              <li>Hosted AI (text to diagram, wireframe to code) is not part of this project.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Not in Excalidraw at all</h3>
+            <ul>
+              <li>
+                Figures: regular polygons, parallelogram, trapezoid, cylinder and document shapes,
+                each with a label that follows the outline.
+              </li>
+              <li>
+                Presentation mode: frames as slides, a laser everyone can see, and late joiners
+                landing on the current slide.
+              </li>
+              <li>Five starter boards drawn with the real editor, with preview thumbnails.</li>
+              <li>
+                Style presets that keep fonts, and a command palette covering every tool and figure.
+              </li>
+              <li>
+                Live gesture previews, per-element holds between editors, and encrypted live frames
+                even on plain <code>http://</code>.
+              </li>
+              <li>Sharing over the local network or the internet from one Share dialog.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-done">
+        <h2 id="h-done">Delivered in this plan</h2>
+        <ol class="timeline">
+          <li>
+            <span class="w">4b–7</span
+            ><span
+              >Text management, sticky notes, flip and mirror, Ctrl+D on arrows, data structures and
+              performance, parity fixes against the oracle</span
+            ><span class="sha"></span>
+          </li>
+          <li>
+            <span class="w">wave 8</span><span>Closed polygons</span
+            ><span class="sha">770c846</span>
+          </li>
+          <li>
+            <span class="w">wave 9</span
+            ><span>Presentation mode; the laser reaches peers from touch and pen</span
+            ><span class="sha">2aa08fd</span>
+          </li>
+          <li>
+            <span class="w">wave 10</span><span>Flowchart keys and the shape strip</span
+            ><span class="sha">ab04376</span>
+          </li>
+          <li>
+            <span class="w">audit</span
+            ><span>Registry honesty: 63 section-wide rules narrowed to what their tests prove</span
+            ><span class="sha">208313a</span>
+          </li>
+          <li>
+            <span class="w">wave 11</span
+            ><span>Command palette, style presets, focus mode, smooth zoom</span
+            ><span class="sha">404340c</span>
+          </li>
+          <li>
+            <span class="w">wave 12</span
+            ><span>Figure element, flowchart shape variants, fonts in presets</span
+            ><span class="sha">07c4517</span>
+          </li>
+          <li>
+            <span class="w">wave 13</span
+            ><span>Five stories built through the real UI, shipped as templates</span
+            ><span class="sha">5eca32f</span>
+          </li>
+          <li>
+            <span class="w">wave 14</span
+            ><span
+              >Rename a frame by double-clicking its name; templates carry real frame names</span
+            ><span class="sha">b059984</span>
+          </li>
+          <li>
+            <span class="w">refresh</span
+            ><span>Five stale gap reasons corrected; frame navigation counted as covered</span
+            ><span class="sha">b824c17</span>
+          </li>
+          <li>
+            <span class="w">ci + wiki</span
+            ><span
+              >Realtime image off the rate-limited registry, engine CI builds the WASM, freehand
+              smoothing counted, this report and the plan committed to <code>wiki/</code></span
+            ><span class="sha">cd01892</span>
+          </li>
+        </ol>
+        <p class="note">
+          Last full gate before release: engine quality, WASM, typecheck, lint, format, 678 unit
+          tests, conformance, API integration against a real mongod, and 358 of 358 browser specs,
+          then CI green on every job.
+        </p>
+      </section>
+
+      <section aria-labelledby="h-ledger">
+        <h2 id="h-ledger">Full ledger of open items</h2>
+        <p class="sub">
+          Every open line, grouped by checklist section, with the registry's reason. Line numbers
+          point into <code>prompt/design.md</code> and <code>prompt/shortkey.md</code>.
+        </p>
+        <div class="filter">
+          <input
+            id="q"
+            type="search"
+            placeholder="Filter, e.g. export, arrow, touch"
+            aria-label="Filter the open items"
+          />
+          <span id="shown"></span>
+        </div>
+        <div class="ledger" id="ledger">
+          <details
+            class="lsec"
+            data-q="1. core architecture library three fields the element schema does not carry yet: customdata, library membership, explicit visibility. element custom data three fields the element schema does not carry yet: customdata, library membership, explicit visibility. element visibility three fields the element schema does not carry yet: customdata, library membership, explicit visibility. current stroke style implemented, untested — drawelementstylepatch carries stroke_style and fill_style, but no test patches either field through apply_style or set_next_style. current fill style implemented, untested — drawelementstylepatch carries stroke_style and fill_style, but no test patches either field through apply_style or set_next_style. view-only state no read-only/view-only mode exists in the engine or the host ui — every peer who can open a board can edit it. modal/menu state host-side editor state that lives in svelte rather than in the engine, and is not covered by a test. sidebar state host-side editor state that lives in svelte rather than in the engine, and is not covered by a test. collaboration state host-side editor state that lives in svelte rather than in the engine, and is not covered by a test."
+          >
+            <summary>
+              <span class="lname">1. Core architecture</span><span class="lsrc">design.md</span
+              ><span class="lcount">9 of 43 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:24</span> library</li>
+                <li><span class="ln">design.md:42</span> Element custom data</li>
+                <li><span class="ln">design.md:48</span> Element visibility</li>
+              </ul>
+              <p class="lwhy">
+                Three fields the element schema does not carry yet: customData, library membership,
+                explicit visibility.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:67</span> Current stroke style</li>
+                <li><span class="ln">design.md:69</span> Current fill style</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — DrawElementStylePatch carries stroke_style and fill_style,
+                but no test patches either field through apply_style or set_next_style.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:103</span> View-only state</li>
+              </ul>
+              <p class="lwhy">
+                No read-only/view-only mode exists in the engine or the host UI — every peer who can
+                open a board can edit it.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:107</span> Modal/menu state</li>
+                <li><span class="ln">design.md:109</span> Sidebar state</li>
+                <li><span class="ln">design.md:111</span> Collaboration state</li>
+              </ul>
+              <p class="lwhy">
+                Host-side editor state that lives in Svelte rather than in the engine, and is not
+                covered by a test.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q='3. rectangle click + drag from center a new shape always grows from where the drag began, never from its centre. alt is read during a resize (ci_selection.rs) but not while drawing (docs/reference/resize.md › divergences; pointer_move.rs&#x27;s draft branch never reads alt_held). alt/option centered creation a new shape always grows from where the drag began, never from its centre. alt is read during a resize (ci_selection.rs) but not while drawing (docs/reference/resize.md › divergences; pointer_move.rs&#x27;s draft branch never reads alt_held). snap to nearby objects snapping to objects, and its ctrl/cmd inversion, applies to moving a selection only (ci_objects_snap.rs). drawing and resizing snap to the grid but not to other elements, where excalidraw&#x27;s snapnewelement and snapresizingelements (app.tsx:13375, :13499) do. selection outline implemented, untested: no test asserts the selection highlight&#x27;s own outline geometry as distinct from the bounding-box tests already covering this section — ci_hit_fill.rs&#x27;s "outline band" is hit-testing a hollow shape, a different claim.'
+          >
+            <summary>
+              <span class="lname">3. Rectangle</span><span class="lsrc">design.md</span
+              ><span class="lcount">4 of 28 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:155</span> Click + drag from center</li>
+                <li><span class="ln">design.md:159</span> Alt/Option centered creation</li>
+              </ul>
+              <p class="lwhy">
+                A new shape always grows from where the drag began, never from its centre. Alt is
+                read during a resize (ci_selection.rs) but not while drawing
+                (docs/reference/resize.md › Divergences; pointer_move.rs&#x27;s Draft branch never
+                reads alt_held).
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:163</span> Snap to nearby objects</li>
+              </ul>
+              <p class="lwhy">
+                Snapping to objects, and its Ctrl/Cmd inversion, applies to moving a selection only
+                (ci_objects_snap.rs). Drawing and resizing snap to the grid but not to other
+                elements, where Excalidraw&#x27;s snapNewElement and snapResizingElements
+                (App.tsx:13375, :13499) do.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:209</span> Selection outline</li>
+              </ul>
+              <p class="lwhy">
+                Implemented, untested: no test asserts the selection highlight&#x27;s own outline
+                geometry as distinct from the bounding-box tests already covering this section —
+                ci_hit_fill.rs&#x27;s &quot;outline band&quot; is hit-testing a hollow shape, a
+                different claim.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="6. line remove point not implemented — no backspace/undo-last-point exists while placing a multi-point line (multi_linear.rs). move entire line implemented, untested: no test moves or rotates a line-kind (multi-point) element specifically and checks its points. rotate implemented, untested: no test moves or rotates a line-kind (multi-point) element specifically and checks its points. endpoint snapping no snap-to-object exists for a line&#x27;s own endpoint while drawing or dragging it; only the move-selection alignment guides (ci_snapping.rs) and the 45° draw constraint (draw_binding.rs) exist."
+          >
+            <summary>
+              <span class="lname">6. Line</span><span class="lsrc">design.md</span
+              ><span class="lcount">4 of 16 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:274</span> Remove point</li>
+              </ul>
+              <p class="lwhy">
+                Not implemented — no backspace/undo-last-point exists while placing a multi-point
+                line (multi_linear.rs).
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:278</span> Move entire line</li>
+                <li><span class="ln">design.md:280</span> Rotate</li>
+              </ul>
+              <p class="lwhy">
+                Implemented, untested: no test moves or rotates a Line-kind (multi-point) element
+                specifically and checks its points.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:288</span> Endpoint snapping</li>
+              </ul>
+              <p class="lwhy">
+                No snap-to-object exists for a line&#x27;s own endpoint while drawing or dragging
+                it; only the move-selection alignment guides (ci_snapping.rs) and the 45° draw
+                constraint (draw_binding.rs) exist.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="7. arrow elbow arrows elbow arrows: see the advanced arrows rules. label positioning: a label sits on the middle of its arrow&#x27;s path (linear_label_center, getboundtextelementcenter), but cannot be dragged along it — excalidraw&#x27;s labelposition (linearelementeditor.ts@1118751f:1962-2030) is not ported. arrow label positioning elbow arrows: see the advanced arrows rules. label positioning: a label sits on the middle of its arrow&#x27;s path (linear_label_center, getboundtextelementcenter), but cannot be dragged along it — excalidraw&#x27;s labelposition (linearelementeditor.ts@1118751f:1962-2030) is not ported."
+          >
+            <summary>
+              <span class="lname">7. Arrow</span><span class="lsrc">design.md</span
+              ><span class="lcount">2 of 14 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:319</span> Elbow arrows</li>
+                <li><span class="ln">design.md:331</span> Arrow label positioning</li>
+              </ul>
+              <p class="lwhy">
+                Elbow arrows: see the Advanced arrows rules. Label positioning: a label sits on the
+                middle of its arrow&#x27;s path (linear_label_center, getBoundTextElementCenter),
+                but cannot be dragged along it — Excalidraw&#x27;s labelPosition
+                (linearElementEditor.ts@1118751f:1962-2030) is not ported.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="8. freedraw / pencil pressure support width comes from speed, as perfect-freehand simulates for a mouse (freehand.rs thinning, ci_freehand_stroke.rs); a pen&#x27;s own pressure is never read. pressure → width if desired width comes from speed, as perfect-freehand simulates for a mouse (freehand.rs thinning, ci_freehand_stroke.rs); a pen&#x27;s own pressure is never read. point simplification not implemented — points are only streamlined (jitter-smoothed via freehand::streamline, engine/src/engine/pointer_move.rs) as they arrive; there is no point-count reduction pass. stroke interpolation not claimed: the samples are streamlined (ci_freehand_stroke.rs), but nothing pins whether points are added between them. rough rendering no test asserts a hand-drawn look for freedraw specifically — ci_render_drawable.rs (not named by the section rule) only checks that element_drawable does not panic for every kind including freedraw, never that the result looks rough. touch support pen, touch and mouse are not told apart and a palm is not rejected — see §23. pen/stylus support pen, touch and mouse are not told apart and a palm is not rejected — see §23. detect mouse vs pen vs touch pen, touch and mouse are not told apart and a palm is not rejected — see §23. palm rejection pen, touch and mouse are not told apart and a palm is not rejected — see §23."
+          >
+            <summary>
+              <span class="lname">8. Freedraw / pencil</span><span class="lsrc">design.md</span
+              ><span class="lcount">9 of 18 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:343</span> Pressure support</li>
+                <li><span class="ln">design.md:373</span> Pressure → width if desired</li>
+              </ul>
+              <p class="lwhy">
+                Width comes from speed, as perfect-freehand simulates for a mouse (freehand.rs
+                thinning, ci_freehand_stroke.rs); a pen&#x27;s own pressure is never read.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:347</span> Point simplification</li>
+              </ul>
+              <p class="lwhy">
+                not implemented — points are only streamlined (jitter-smoothed via
+                freehand::streamline, engine/src/engine/pointer_move.rs) as they arrive; there is no
+                point-count reduction pass.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:349</span> Stroke interpolation</li>
+              </ul>
+              <p class="lwhy">
+                Not claimed: the samples are streamlined (ci_freehand_stroke.rs), but nothing pins
+                whether points are added between them.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:351</span> Rough rendering</li>
+              </ul>
+              <p class="lwhy">
+                No test asserts a hand-drawn look for freedraw specifically — ci_render_drawable.rs
+                (not named by the section rule) only checks that element_drawable does not panic for
+                every kind including Freedraw, never that the result looks rough.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:363</span> Touch support</li>
+                <li><span class="ln">design.md:365</span> Pen/stylus support</li>
+                <li><span class="ln">design.md:369</span> Detect mouse vs pen vs touch</li>
+                <li><span class="ln">design.md:371</span> Palm rejection</li>
+              </ul>
+              <p class="lwhy">
+                Pen, touch and mouse are not told apart and a palm is not rejected — see §23.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="9. text cursor implemented, untested — the editor is a native textarea, so caret and selection behaviour comes from the browser; no test asserts either directly. selection implemented, untested — the editor is a native textarea, so caret and selection behaviour comes from the browser; no test asserts either directly. bold excalidraw has none of them either. italic if supported excalidraw has none of them either. letter spacing if supported excalidraw has none of them either. blur implemented, untested — commit_text_edit takes a via_keyboard flag and the false (blur) branch is real, but no test ever calls it that way; every test that ends an edit does so via escape, enter or a direct api call."
+          >
+            <summary>
+              <span class="lname">9. Text</span><span class="lsrc">design.md</span
+              ><span class="lcount">6 of 34 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:389</span> Cursor</li>
+                <li><span class="ln">design.md:391</span> Selection</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — the editor is a native textarea, so caret and selection
+                behaviour comes from the browser; no test asserts either directly.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:412</span> Bold</li>
+                <li><span class="ln">design.md:414</span> Italic if supported</li>
+                <li><span class="ln">design.md:426</span> Letter spacing if supported</li>
+              </ul>
+              <p class="lwhy">Excalidraw has none of them either.</p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:435</span> Blur</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — commit_text_edit takes a via_keyboard flag and the false
+                (blur) branch is real, but no test ever calls it that way; every test that ends an
+                edit does so via Escape, Enter or a direct API call.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="10. images image ids the picture rides on the element as a data: url rather than in a file store keyed by id. everything works through it, but a board is one mongo document, so two or three large pictures reach the 16mb ceiling — now refused with a 413 (apps/api/tests/integration/images.test.ts) rather than a 500. see docs/reference/images.md. image file store the picture rides on the element as a data: url rather than in a file store keyed by id. everything works through it, but a board is one mongo document, so two or three large pictures reach the 16mb ceiling — now refused with a 413 (apps/api/tests/integration/images.test.ts) rather than a 500. see docs/reference/images.md. png/jpeg/webp/etc. cropping, replacement and a broken-image state. decode currently accepts what the browser accepts, which is not asserted per format. crop cropping, replacement and a broken-image state. decode currently accepts what the browser accepts, which is not asserted per format. replace image cropping, replacement and a broken-image state. decode currently accepts what the browser accepts, which is not asserted per format. broken-image handling cropping, replacement and a broken-image state. decode currently accepts what the browser accepts, which is not asserted per format. rotate rotation is a generic transform-engine feature (ci_handles.rs), but no test rotates an inserted image specifically to confirm it behaves the same way. copy/paste implemented, untested — duplicating or copying an existing image element is never exercised with an image; ci_duplicate.rs and ci_persistence.rs&#x27;s copy/paste tests use rectangles only, so the data url is never checked to survive."
+          >
+            <summary>
+              <span class="lname">10. Images</span><span class="lsrc">design.md</span
+              ><span class="lcount">8 of 17 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:468</span> Image IDs</li>
+                <li><span class="ln">design.md:470</span> Image file store</li>
+              </ul>
+              <p class="lwhy">
+                The picture rides on the element as a data: URL rather than in a file store keyed by
+                id. Everything works through it, but a board is one Mongo document, so two or three
+                large pictures reach the 16MB ceiling — now refused with a 413
+                (apps/api/tests/integration/images.test.ts) rather than a 500. See
+                docs/reference/images.md.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:472</span> PNG/JPEG/WebP/etc.</li>
+                <li><span class="ln">design.md:476</span> Crop</li>
+                <li><span class="ln">design.md:484</span> Replace image</li>
+                <li><span class="ln">design.md:486</span> Broken-image handling</li>
+              </ul>
+              <p class="lwhy">
+                Cropping, replacement and a broken-image state. Decode currently accepts what the
+                browser accepts, which is not asserted per format.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:478</span> Rotate</li>
+              </ul>
+              <p class="lwhy">
+                Rotation is a generic transform-engine feature (ci_handles.rs), but no test rotates
+                an inserted image specifically to confirm it behaves the same way.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:490</span> Copy/paste</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — duplicating or copying an existing image element is never
+                exercised with an image; ci_duplicate.rs and ci_persistence.rs&#x27;s copy/paste
+                tests use rectangles only, so the data URL is never checked to survive.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="11. sticky notes border color not implemented — a note&#x27;s stroke_color is the date footer&#x27;s ink, not a border; nothing renders an outline in it. rotate implemented, untested — a note rotates like any element (angle field, resize math accounts for it), but no test drags its rotation handle."
+          >
+            <summary>
+              <span class="lname">11. Sticky notes</span><span class="lsrc">design.md</span
+              ><span class="lcount">2 of 13 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:505</span> Border color</li>
+              </ul>
+              <p class="lwhy">
+                not implemented — a note&#x27;s stroke_color is the date footer&#x27;s ink, not a
+                border; nothing renders an outline in it.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:515</span> Rotate</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — a note rotates like any element (angle field, resize math
+                accounts for it), but no test drags its rotation handle.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="12. frames resize frame implemented, untested — a frame resizes through the generic handle path, but no test drags one and checks membership re-clips. select contents not implemented — selecting a frame selects the frame itself; nothing selects what is inside it as a set. export frame see the frames rule: export has no frame mode."
+          >
+            <summary>
+              <span class="lname">12. Frames</span><span class="lsrc">design.md</span
+              ><span class="lcount">3 of 15 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:532</span> Resize frame</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — a frame resizes through the generic handle path, but no test
+                drags one and checks membership re-clips.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:540</span> Select contents</li>
+              </ul>
+              <p class="lwhy">
+                not implemented — selecting a frame selects the frame itself; nothing selects what
+                is inside it as a set.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:556</span> Export frame</li>
+              </ul>
+              <p class="lwhy">See the Frames rule: export has no frame mode.</p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="13. embeds loading state embed lifecycle states. url recognition, the allow-list and geometry are done. error state embed lifecycle states. url recognition, the allow-list and geometry are done. export fallback embed lifecycle states. url recognition, the allow-list and geometry are done. view-only behavior embed lifecycle states. url recognition, the allow-list and geometry are done."
+          >
+            <summary>
+              <span class="lname">13. Embeds</span><span class="lsrc">design.md</span
+              ><span class="lcount">4 of 12 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:579</span> Loading state</li>
+                <li><span class="ln">design.md:581</span> Error state</li>
+                <li><span class="ln">design.md:585</span> Export fallback</li>
+                <li><span class="ln">design.md:587</span> View-only behavior</li>
+              </ul>
+              <p class="lwhy">
+                Embed lifecycle states. URL recognition, the allow-list and geometry are done.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="14. selection engine drag right → left a marquee has no direction: dragging it either way tests the same containment (ci_multi_select.rs). there is no separate right-to-left gesture. intersection mode deliberately not ported — excalidraw&#x27;s getelementswithinselection is containment-only here so a small marquee across a big background shape does not sweep it up too (ci_multi_select.rs comment on a_marquee_that_merely_clips_a_shape_leaves_it). add/remove modifiers add is real (ci_lasso.rs&#x27;s an_additive_loop_keeps_what_was_already_selected); there is no remove/subtractive modifier for the lasso at all. group indicators no visual marker distinguishes a selected group from a selected single element; same gap as locked indicators above. locked indicators nothing on the canvas marks a locked element; only the context menu, which offers unlock (menu.test.ts)."
+          >
+            <summary>
+              <span class="lname">14. Selection engine</span><span class="lsrc">design.md</span
+              ><span class="lcount">5 of 20 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:606</span> Drag right → left</li>
+              </ul>
+              <p class="lwhy">
+                A marquee has no direction: dragging it either way tests the same containment
+                (ci_multi_select.rs). There is no separate right-to-left gesture.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:610</span> Intersection mode</li>
+              </ul>
+              <p class="lwhy">
+                Deliberately not ported — Excalidraw&#x27;s getElementsWithinSelection is
+                containment-only here so a small marquee across a big background shape does not
+                sweep it up too (ci_multi_select.rs comment on
+                a_marquee_that_merely_clips_a_shape_leaves_it).
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:621</span> Add/remove modifiers</li>
+              </ul>
+              <p class="lwhy">
+                Add is real (ci_lasso.rs&#x27;s an_additive_loop_keeps_what_was_already_selected);
+                there is no remove/subtractive modifier for the lasso at all.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:632</span> Group indicators</li>
+              </ul>
+              <p class="lwhy">
+                No visual marker distinguishes a selected group from a selected single element; same
+                gap as Locked indicators above.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:634</span> Locked indicators</li>
+              </ul>
+              <p class="lwhy">
+                Nothing on the canvas marks a locked element; only the context menu, which offers
+                Unlock (menu.test.ts).
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="15. transform engine fine movement no modifier gives a smaller nudge than the plain 1px arrow-key step. alt+arrow is taken for flowchart navigation instead (engine/src/host/keys.test.ts). angle snapping rotate_element (selection/transform.rs) takes only the pointer position — no modifier or snap increment reaches it, so a rotation is never quantised. shift angle locking rotate_element (selection/transform.rs) takes only the pointer position — no modifier or snap increment reaches it, so a rotation is never quantised. selection implemented, untested — nothing asserts a selection survives its own transform rather than merely appearing to, since every resize/rotate test re-reads the element by id rather than checking selection state afterward."
+          >
+            <summary>
+              <span class="lname">15. Transform engine</span><span class="lsrc">design.md</span
+              ><span class="lcount">4 of 24 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:646</span> Fine movement</li>
+              </ul>
+              <p class="lwhy">
+                No modifier gives a smaller nudge than the plain 1px arrow-key step. Alt+Arrow is
+                taken for flowchart navigation instead (engine/src/host/keys.test.ts).
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:666</span> Angle snapping</li>
+                <li><span class="ln">design.md:668</span> Shift angle locking</li>
+              </ul>
+              <p class="lwhy">
+                rotate_element (selection/transform.rs) takes only the pointer position — no
+                modifier or snap increment reaches it, so a rotation is never quantised.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:689</span> Selection</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — nothing asserts a selection survives its own transform
+                rather than merely appearing to, since every resize/rotate test re-reads the element
+                by id rather than checking selection state afterward.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="17. z-order stable ordering after deletion implemented, untested — deletion tombstones in place rather than reindexing, so order should be stable by construction, but no test asserts it."
+          >
+            <summary>
+              <span class="lname">17. Z-order</span><span class="lsrc">design.md</span
+              ><span class="lcount">1 of 9 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:747</span> Stable ordering after deletion</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — deletion tombstones in place rather than reindexing, so
+                order should be stable by construction, but no test asserts it.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="19. snapping configurable grid equal-spacing guides and configurable increments. edge, centre, midpoint and 45° snapping are done. equal spacing equal-spacing guides and configurable increments. edge, centre, midpoint and 45° snapping are done. configurable increments equal-spacing guides and configurable increments. edge, centre, midpoint and 45° snapping are done. connection points equal-spacing guides and configurable increments. edge, centre, midpoint and 45° snapping are done. vertical implemented (constrain_to_angle snaps to any 45° multiple, 90° included), but no test feeds it a near-vertical drag — draw_binding.rs&#x27;s shift_snaps_to_45 only exercises the horizontal and 45° cases."
+          >
+            <summary>
+              <span class="lname">19. Snapping</span><span class="lsrc">design.md</span
+              ><span class="lcount">5 of 20 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:802</span> Configurable grid</li>
+                <li><span class="ln">design.md:821</span> Equal spacing</li>
+                <li><span class="ln">design.md:832</span> Configurable increments</li>
+                <li><span class="ln">design.md:839</span> Connection points</li>
+              </ul>
+              <p class="lwhy">
+                Equal-spacing guides and configurable increments. Edge, centre, midpoint and 45°
+                snapping are done.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:828</span> Vertical</li>
+              </ul>
+              <p class="lwhy">
+                Implemented (constrain_to_angle snaps to any 45° multiple, 90° included), but no
+                test feeds it a near-vertical drag — draw_binding.rs&#x27;s shift_snaps_to_45 only
+                exercises the horizontal and 45° cases.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="20. fill and stroke system none fillstyle has no none/no-pattern variant — only hachure, crosshatch, solid and zigzag (scene/element.rs); the inspector&#x27;s fill_styles picker only offers hachure/cross/solid."
+          >
+            <summary>
+              <span class="lname">20. Fill and stroke system</span
+              ><span class="lsrc">design.md</span><span class="lcount">1 of 15 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:872</span> None</li>
+              </ul>
+              <p class="lwhy">
+                FillStyle has no None/no-pattern variant — only Hachure, CrossHatch, Solid and
+                Zigzag (scene/element.rs); the inspector&#x27;s FILL_STYLES picker only offers
+                Hachure/Cross/Solid.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="22. canvas navigation middle mouse same gap as shortkey.md&#x27;s navigation &amp; canvas rule: pointerinput.ts&#x27;s button===1 branch has no test, unit or e2e. touch pan pinch and touch pan need the gesture work in §23. pinch zoom pinch and touch pan need the gesture work in §23."
+          >
+            <summary>
+              <span class="lname">22. Canvas navigation</span><span class="lsrc">design.md</span
+              ><span class="lcount">3 of 13 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:921</span> Middle mouse</li>
+              </ul>
+              <p class="lwhy">
+                Same gap as shortkey.md&#x27;s Navigation &amp; canvas rule: pointerInput.ts&#x27;s
+                button===1 branch has no test, unit or e2e.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:927</span> Touch pan</li>
+                <li><span class="ln">design.md:934</span> Pinch zoom</li>
+              </ul>
+              <p class="lwhy">Pinch and touch pan need the gesture work in §23.</p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="23. touch / mobile pointer events pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. touch detection pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. pen detection pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. gesture recognition pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. pinch zoom pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. two-finger pan pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. long press pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. touch selection pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. touch handles pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. mobile toolbar pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout. mobile menus pointer events are used throughout, but nothing distinguishes touch or pen, there is no gesture recognition, and the chrome has no mobile layout."
+          >
+            <summary>
+              <span class="lname">23. Touch / mobile</span><span class="lsrc">design.md</span
+              ><span class="lcount">11 of 11 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:962</span> Pointer events</li>
+                <li><span class="ln">design.md:964</span> Touch detection</li>
+                <li><span class="ln">design.md:966</span> Pen detection</li>
+                <li><span class="ln">design.md:968</span> Gesture recognition</li>
+                <li><span class="ln">design.md:970</span> Pinch zoom</li>
+                <li><span class="ln">design.md:972</span> Two-finger pan</li>
+                <li><span class="ln">design.md:974</span> Long press</li>
+                <li><span class="ln">design.md:976</span> Touch selection</li>
+                <li><span class="ln">design.md:978</span> Touch handles</li>
+                <li><span class="ln">design.md:980</span> Mobile toolbar</li>
+                <li><span class="ln">design.md:982</span> Mobile menus</li>
+              </ul>
+              <p class="lwhy">
+                Pointer events are used throughout, but nothing distinguishes touch or pen, there is
+                no gesture recognition, and the chrome has no mobile layout.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="24. eraser delete partially intersected freehand paths not implemented — a swept freehand stroke is deleted whole; nothing splits it into the parts the eraser missed."
+          >
+            <summary>
+              <span class="lname">24. Eraser</span><span class="lsrc">design.md</span
+              ><span class="lcount">1 of 7 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">design.md:997</span> Delete partially intersected freehand paths
+                </li>
+              </ul>
+              <p class="lwhy">
+                not implemented — a swept freehand stroke is deleted whole; nothing splits it into
+                the parts the eraser missed.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q='27. keyboard system backspace implemented, untested: handleplainkeys treats backspace exactly like delete (`event.key === "delete" || event.key === "backspace"`, keys.ts), but keys.test.ts only ever dispatches "delete". tab tab does nothing on the canvas. the oracle&#x27;s own tab opens the shape-conversion popup (app.tsx), not flowchart navigation — that is alt+arrow, covered under flowcharts. this one is still unclaimed. cmd/ctrl+c implemented, untested — copyselection/cutselection are wired to ctrl+c/ctrl+x and paste rides the native clipboard event, but no test dispatches ctrl+c/ctrl+x or completes a paste to confirm any of the three actually round-trips. cmd/ctrl+x implemented, untested — copyselection/cutselection are wired to ctrl+c/ctrl+x and paste rides the native clipboard event, but no test dispatches ctrl+c/ctrl+x or completes a paste to confirm any of the three actually round-trips. cmd/ctrl+v implemented, untested — copyselection/cutselection are wired to ctrl+c/ctrl+x and paste rides the native clipboard event, but no test dispatches ctrl+c/ctrl+x or completes a paste to confirm any of the three actually round-trips.'
+          >
+            <summary>
+              <span class="lname">27. Keyboard system</span><span class="lsrc">design.md</span
+              ><span class="lcount">5 of 32 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1061</span> Backspace</li>
+              </ul>
+              <p class="lwhy">
+                Implemented, untested: handlePlainKeys treats Backspace exactly like Delete
+                (`event.key === &quot;Delete&quot; || event.key === &quot;Backspace&quot;`,
+                keys.ts), but keys.test.ts only ever dispatches &quot;Delete&quot;.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1067</span> Tab</li>
+              </ul>
+              <p class="lwhy">
+                Tab does nothing on the canvas. The oracle&#x27;s own Tab opens the shape-conversion
+                popup (App.tsx), not flowchart navigation — that is Alt+Arrow, covered under
+                Flowcharts. This one is still unclaimed.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1079</span> Cmd/Ctrl+C</li>
+                <li><span class="ln">design.md:1081</span> Cmd/Ctrl+X</li>
+                <li><span class="ln">design.md:1083</span> Cmd/Ctrl+V</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — copySelection/cutSelection are wired to Ctrl+C/Ctrl+X and
+                paste rides the native clipboard event, but no test dispatches Ctrl+C/Ctrl+X or
+                completes a paste to confirm any of the three actually round-trips.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="28. command/action architecture // random scene modifications the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. delete the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. duplicate the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. group the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. ungroup the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. bring forward the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. send backward the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. lock the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. unlock the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. change color the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. change stroke the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. change fill the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. change opacity the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. change font the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. change size the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. rotate the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. flip the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. align the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. distribute the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. copy the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. paste the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. undo the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. redo the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. zoom the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one. export the engine exposes methods, not named actions. the host&#x27;s command palette keeps a registry of named commands (commandpalette.ts), but shortcuts, menus and buttons still call the engine directly, so there is no single place all four agree on — design.md is right that this is the load-bearing one."
+          >
+            <summary>
+              <span class="lname">28. Command/action architecture</span
+              ><span class="lsrc">design.md</span><span class="lcount">25 of 25 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1146</span> // random scene modifications</li>
+                <li><span class="ln">design.md:1151</span> Delete</li>
+                <li><span class="ln">design.md:1153</span> Duplicate</li>
+                <li><span class="ln">design.md:1155</span> Group</li>
+                <li><span class="ln">design.md:1157</span> Ungroup</li>
+                <li><span class="ln">design.md:1159</span> Bring forward</li>
+                <li><span class="ln">design.md:1161</span> Send backward</li>
+                <li><span class="ln">design.md:1163</span> Lock</li>
+                <li><span class="ln">design.md:1165</span> Unlock</li>
+                <li><span class="ln">design.md:1167</span> Change color</li>
+                <li><span class="ln">design.md:1169</span> Change stroke</li>
+                <li><span class="ln">design.md:1171</span> Change fill</li>
+                <li><span class="ln">design.md:1173</span> Change opacity</li>
+                <li><span class="ln">design.md:1175</span> Change font</li>
+                <li><span class="ln">design.md:1177</span> Change size</li>
+                <li><span class="ln">design.md:1179</span> Rotate</li>
+                <li><span class="ln">design.md:1181</span> Flip</li>
+                <li><span class="ln">design.md:1183</span> Align</li>
+                <li><span class="ln">design.md:1185</span> Distribute</li>
+                <li><span class="ln">design.md:1187</span> Copy</li>
+                <li><span class="ln">design.md:1189</span> Paste</li>
+                <li><span class="ln">design.md:1191</span> Undo</li>
+                <li><span class="ln">design.md:1193</span> Redo</li>
+                <li><span class="ln">design.md:1195</span> Zoom</li>
+                <li><span class="ln">design.md:1197</span> Export</li>
+              </ul>
+              <p class="lwhy">
+                The engine exposes methods, not named actions. The host&#x27;s command palette keeps
+                a registry of named commands (commandPalette.ts), but shortcuts, menus and buttons
+                still call the engine directly, so there is no single place all four agree on —
+                design.md is right that this is the load-bearing one.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="29. undo / redo transaction start not implemented as an explicit api — a commit is one stamp at the end of a gesture (push_history), not a transaction object with separate start/update/commit/cancel calls. transaction update not implemented as an explicit api — a commit is one stamp at the end of a gesture (push_history), not a transaction object with separate start/update/commit/cancel calls. transaction commit not implemented as an explicit api — a commit is one stamp at the end of a gesture (push_history), not a transaction object with separate start/update/commit/cancel calls. transaction cancel not implemented as an explicit api — a commit is one stamp at the end of a gesture (push_history), not a transaction object with separate start/update/commit/cancel calls. branch handling history is a linear snapshot stack; branching needs the operation model from §41. undo is partly collaboration-aware: it restores only the elements its own step changed and goes out as a new edit, so it no longer reverts a peer&#x27;s work elsewhere (ci_version_stamps.rs). it is whole-element, though — undoing your change to an element a peer has since edited restores all of it, where excalidraw&#x27;s deltas restore only the properties you changed. collaboration-aware history history is a linear snapshot stack; branching needs the operation model from §41. undo is partly collaboration-aware: it restores only the elements its own step changed and goes out as a new edit, so it no longer reverts a peer&#x27;s work elsewhere (ci_version_stamps.rs). it is whole-element, though — undoing your change to an element a peer has since edited restores all of it, where excalidraw&#x27;s deltas restore only the properties you changed."
+          >
+            <summary>
+              <span class="lname">29. Undo / redo</span><span class="lsrc">design.md</span
+              ><span class="lcount">6 of 10 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1226</span> Transaction start</li>
+                <li><span class="ln">design.md:1228</span> Transaction update</li>
+                <li><span class="ln">design.md:1230</span> Transaction commit</li>
+                <li><span class="ln">design.md:1232</span> Transaction cancel</li>
+              </ul>
+              <p class="lwhy">
+                not implemented as an explicit API — a commit is one stamp at the end of a gesture
+                (push_history), not a transaction object with separate start/update/commit/cancel
+                calls.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1238</span> Branch handling</li>
+                <li><span class="ln">design.md:1244</span> Collaboration-aware history</li>
+              </ul>
+              <p class="lwhy">
+                History is a linear snapshot stack; branching needs the operation model from §41.
+                Undo is partly collaboration-aware: it restores only the elements its own step
+                changed and goes out as a new edit, so it no longer reverts a peer&#x27;s work
+                elsewhere (ci_version_stamps.rs). It is whole-element, though — undoing your change
+                to an element a peer has since edited restores all of it, where Excalidraw&#x27;s
+                deltas restore only the properties you changed.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="30. clipboard external paste internal copy/paste round-trips with id regeneration, and a pasted image file is placed; other rich external formats are not read. text paste not implemented — paste_json (engine/crates/draw-engine/src/engine/clipboard.rs) only accepts this app&#x27;s own osidraw json; arbitrary clipboard text fails to parse and falls back to re-pasting the last internal copy (or nothing), never becoming a text element the way excalidraw&#x27;s paste does."
+          >
+            <summary>
+              <span class="lname">30. Clipboard</span><span class="lsrc">design.md</span
+              ><span class="lcount">2 of 10 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1279</span> External paste</li>
+              </ul>
+              <p class="lwhy">
+                Internal copy/paste round-trips with id regeneration, and a pasted image file is
+                placed; other rich external formats are not read.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1283</span> Text paste</li>
+              </ul>
+              <p class="lwhy">
+                not implemented — paste_json (engine/crates/draw-engine/src/engine/clipboard.rs)
+                only accepts this app&#x27;s own osidraw JSON; arbitrary clipboard text fails to
+                parse and falls back to re-pasting the last internal copy (or nothing), never
+                becoming a text element the way Excalidraw&#x27;s paste does.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q='31. persistence localstorage preferences autosave goes to the api and a localstorage draft is the fallback; there is no indexeddb store and no crash-recovery prompt. indexeddb scene storage autosave goes to the api and a localstorage draft is the fallback; there is no indexeddb store and no crash-recovery prompt. crash recovery autosave goes to the api and a localstorage draft is the fallback; there is no indexeddb store and no crash-recovery prompt. .excalidraw import not implemented — elements_from_json refuses anything whose type is not "osidraw"; a .excalidraw file does not load, and nothing writes one. .excalidraw export not implemented — elements_from_json refuses anything whose type is not "osidraw"; a .excalidraw file does not load, and nothing writes one.'
+          >
+            <summary>
+              <span class="lname">31. Persistence</span><span class="lsrc">design.md</span
+              ><span class="lcount">5 of 10 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1293</span> localStorage preferences</li>
+                <li><span class="ln">design.md:1295</span> IndexedDB scene storage</li>
+                <li><span class="ln">design.md:1301</span> crash recovery</li>
+              </ul>
+              <p class="lwhy">
+                Autosave goes to the API and a localStorage draft is the fallback; there is no
+                IndexedDB store and no crash-recovery prompt.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1304</span> .excalidraw import</li>
+                <li><span class="ln">design.md:1306</span> .excalidraw export</li>
+              </ul>
+              <p class="lwhy">
+                not implemented — elements_from_json refuses anything whose type is not
+                &quot;osidraw&quot;; a .excalidraw file does not load, and nothing writes one.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="32. export canvas → png png export (engine.ts exportpng) is the visible canvas as it stands, canvas.toblob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the export tricks rule. scale png export (engine.ts exportpng) is the visible canvas as it stands, canvas.toblob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the export tricks rule. frame export png export (engine.ts exportpng) is the visible canvas as it stands, canvas.toblob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the export tricks rule. fonts png export (engine.ts exportpng) is the visible canvas as it stands, canvas.toblob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the export tricks rule. selection → image png export (engine.ts exportpng) is the visible canvas as it stands, canvas.toblob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the export tricks rule. whole canvas → image png export (engine.ts exportpng) is the visible canvas as it stands, canvas.toblob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the export tricks rule. transparent background the export dialog shows a transparent-background toggle and a scale picker (drawexportmodal.svelte), but neither reaches engine.exportpng(), which is canvas.toblob() of the visible canvas. there is no background-colour option. background color the export dialog shows a transparent-background toggle and a scale picker (drawexportmodal.svelte), but neither reaches engine.exportpng(), which is canvas.toblob() of the visible canvas. there is no background-colour option. selection export the export dialog and both engine.exportsvg/exportpng always export the whole scene; nothing threads the current selection through to either path. embedded scene data if desired neither exportsvg nor exportpng embeds the .osidraw json into the file for round-trip re-import; osidrawfile (export/json.rs) has no such provision. files the exported .osidraw json (osidrawfile in export/json.rs) carries only type, version and elements — no files map and no appstate, so neither round-trips. exportable app state the exported .osidraw json (osidrawfile in export/json.rs) carries only type, version and elements — no files map and no appstate, so neither round-trips."
+          >
+            <summary>
+              <span class="lname">32. Export</span><span class="lsrc">design.md</span
+              ><span class="lcount">12 of 18 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1329</span> Canvas → PNG</li>
+                <li><span class="ln">design.md:1335</span> Scale</li>
+                <li><span class="ln">design.md:1339</span> Frame export</li>
+                <li><span class="ln">design.md:1348</span> Fonts</li>
+                <li><span class="ln">design.md:1364</span> Selection → image</li>
+                <li><span class="ln">design.md:1366</span> Whole canvas → image</li>
+              </ul>
+              <p class="lwhy">
+                PNG export (engine.ts exportPng) is the visible canvas as it stands,
+                canvas.toBlob(): not the whole scene, a selection or a frame, with no scale and
+                nothing on the clipboard — see the Export tricks rule.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1331</span> Transparent background</li>
+                <li><span class="ln">design.md:1333</span> Background color</li>
+              </ul>
+              <p class="lwhy">
+                The export dialog shows a transparent-background toggle and a scale picker
+                (DrawExportModal.svelte), but neither reaches engine.exportPng(), which is
+                canvas.toBlob() of the visible canvas. There is no background-colour option.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1337</span> Selection export</li>
+              </ul>
+              <p class="lwhy">
+                The export dialog and both engine.exportSvg/exportPng always export the whole scene;
+                nothing threads the current selection through to either path.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1352</span> Embedded scene data if desired</li>
+              </ul>
+              <p class="lwhy">
+                Neither exportSvg nor exportPng embeds the .osidraw JSON into the file for
+                round-trip re-import; OsidrawFile (export/json.rs) has no such provision.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1359</span> Files</li>
+                <li><span class="ln">design.md:1361</span> Exportable app state</li>
+              </ul>
+              <p class="lwhy">
+                The exported .osidraw JSON (OsidrawFile in export/json.rs) carries only type,
+                version and elements — no files map and no appState, so neither round-trips.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="33. libraries add selection to library no library — see the library rule. remove library item no library — see the library rule. insert item no library — see the library rule. preview no library — see the library rule. search no library — see the library rule. categories no library — see the library rule. favorites no library — see the library rule. import library no library — see the library rule. export library no library — see the library rule. library persistence no library — see the library rule. id regeneration no library — see the library rule. group preservation no library — see the library rule."
+          >
+            <summary>
+              <span class="lname">33. Libraries</span><span class="lsrc">design.md</span
+              ><span class="lcount">12 of 12 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1380</span> Add selection to library</li>
+                <li><span class="ln">design.md:1382</span> Remove library item</li>
+                <li><span class="ln">design.md:1384</span> Insert item</li>
+                <li><span class="ln">design.md:1386</span> Preview</li>
+                <li><span class="ln">design.md:1388</span> Search</li>
+                <li><span class="ln">design.md:1390</span> Categories</li>
+                <li><span class="ln">design.md:1392</span> Favorites</li>
+                <li><span class="ln">design.md:1394</span> Import library</li>
+                <li><span class="ln">design.md:1396</span> Export library</li>
+                <li><span class="ln">design.md:1398</span> Library persistence</li>
+                <li><span class="ln">design.md:1400</span> ID regeneration</li>
+                <li><span class="ln">design.md:1402</span> Group preservation</li>
+              </ul>
+              <p class="lwhy">No library — see the Library rule.</p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q='34. menus cut implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. copy implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. duplicate implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. delete implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. group implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. ungroup implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. lock implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. unlock implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. bring forward implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. send backward implemented and tested as engine actions elsewhere; no test drives them through this context menu specifically. properties the menu entries that depend on features not built yet (links, library, a stats panel). link the menu entries that depend on features not built yet (links, library, a stats panel). add to library the menu entries that depend on features not built yet (links, library, a stats panel). export "export image…" is in the dropdown (drawmainmenu.svelte) but no test opens it from the main menu specifically; the export flow itself is covered under section 32.'
+          >
+            <summary>
+              <span class="lname">34. Menus</span><span class="lsrc">design.md</span
+              ><span class="lcount">14 of 18 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1412</span> Cut</li>
+                <li><span class="ln">design.md:1414</span> Copy</li>
+                <li><span class="ln">design.md:1416</span> Duplicate</li>
+                <li><span class="ln">design.md:1418</span> Delete</li>
+                <li><span class="ln">design.md:1420</span> Group</li>
+                <li><span class="ln">design.md:1422</span> Ungroup</li>
+                <li><span class="ln">design.md:1424</span> Lock</li>
+                <li><span class="ln">design.md:1426</span> Unlock</li>
+                <li><span class="ln">design.md:1428</span> Bring forward</li>
+                <li><span class="ln">design.md:1430</span> Send backward</li>
+              </ul>
+              <p class="lwhy">
+                Implemented and tested as engine actions elsewhere; no test drives them through this
+                context menu specifically.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1432</span> Properties</li>
+                <li><span class="ln">design.md:1434</span> Link</li>
+                <li><span class="ln">design.md:1436</span> Add to library</li>
+              </ul>
+              <p class="lwhy">
+                The menu entries that depend on features not built yet (links, library, a stats
+                panel).
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1447</span> Export</li>
+              </ul>
+              <p class="lwhy">
+                &quot;Export image…&quot; is in the dropdown (DrawMainMenu.svelte) but no test opens
+                it from the main menu specifically; the export flow itself is covered under section
+                32.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="35. properties panel numeric inputs no number fields: position, size and rotation are edited on the canvas only, and the panel has no rows for them. see docs/reference/console.md › gaps."
+          >
+            <summary>
+              <span class="lname">35. Properties panel</span><span class="lsrc">design.md</span
+              ><span class="lcount">1 of 8 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1488</span> Numeric inputs</li>
+              </ul>
+              <p class="lwhy">
+                No number fields: position, size and rotation are edited on the canvas only, and the
+                panel has no rows for them. See docs/reference/console.md › Gaps.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="36. links element → url no link on an element — see the element linking rule. text → url no link on an element — see the element linking rule. link popup no link on an element — see the element linking rule. edit link no link on an element — see the element linking rule. remove link no link on an element — see the element linking rule. click link no link on an element — see the element linking rule. external url no link on an element — see the element linking rule. internal element link no link on an element — see the element linking rule. link preservation on export no link on an element — see the element linking rule."
+          >
+            <summary>
+              <span class="lname">36. Links</span><span class="lsrc">design.md</span
+              ><span class="lcount">9 of 9 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1499</span> Element → URL</li>
+                <li><span class="ln">design.md:1501</span> Text → URL</li>
+                <li><span class="ln">design.md:1503</span> Link popup</li>
+                <li><span class="ln">design.md:1505</span> Edit link</li>
+                <li><span class="ln">design.md:1507</span> Remove link</li>
+                <li><span class="ln">design.md:1509</span> Click link</li>
+                <li><span class="ln">design.md:1511</span> External URL</li>
+                <li><span class="ln">design.md:1513</span> Internal element link</li>
+                <li><span class="ln">design.md:1515</span> Link preservation on export</li>
+              </ul>
+              <p class="lwhy">No link on an element — see the Element linking rule.</p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="37. search search text no scene search — see the search rule. search element labels no scene search — see the search rule. search frames no scene search — see the search rule. search results no scene search — see the search rule. navigate result no scene search — see the search rule. highlight result no scene search — see the search rule. escape no scene search — see the search rule. search shortcuts no scene search — see the search rule."
+          >
+            <summary>
+              <span class="lname">37. Search</span><span class="lsrc">design.md</span
+              ><span class="lcount">8 of 8 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1524</span> Search text</li>
+                <li><span class="ln">design.md:1526</span> Search element labels</li>
+                <li><span class="ln">design.md:1528</span> Search frames</li>
+                <li><span class="ln">design.md:1530</span> Search results</li>
+                <li><span class="ln">design.md:1532</span> Navigate result</li>
+                <li><span class="ln">design.md:1534</span> Highlight result</li>
+                <li><span class="ln">design.md:1536</span> Escape</li>
+                <li><span class="ln">design.md:1538</span> Search shortcuts</li>
+              </ul>
+              <p class="lwhy">No scene search — see the Search rule.</p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="38. grid grid rendering implemented, untested — the grid is painted from view.theme.grid, but nothing checks what gets drawn. grid step grid step is modelled but not exposed, rendering does not thin with zoom, and export does not explicitly exclude the grid. zoom-dependent rendering grid step is modelled but not exposed, rendering does not thin with zoom, and export does not explicitly exclude the grid. export exclusion grid step is modelled but not exposed, rendering does not thin with zoom, and export does not explicitly exclude the grid."
+          >
+            <summary>
+              <span class="lname">38. Grid</span><span class="lsrc">design.md</span
+              ><span class="lcount">4 of 8 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1545</span> Grid rendering</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — the grid is painted from view.theme.grid, but nothing checks
+                what gets drawn.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1551</span> Grid step</li>
+                <li><span class="ln">design.md:1555</span> Zoom-dependent rendering</li>
+                <li><span class="ln">design.md:1559</span> Export exclusion</li>
+              </ul>
+              <p class="lwhy">
+                Grid step is modelled but not exposed, rendering does not thin with zoom, and export
+                does not explicitly exclude the grid.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="39. dark mode / themes export theme export always uses the light palette, and collaborator colours are assigned but not themed. collaboration colors export always uses the light palette, and collaborator colours are assigned but not themed."
+          >
+            <summary>
+              <span class="lname">39. Dark mode / themes</span><span class="lsrc">design.md</span
+              ><span class="lcount">2 of 9 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1576</span> Export theme</li>
+                <li><span class="ln">design.md:1578</span> Collaboration colors</li>
+              </ul>
+              <p class="lwhy">
+                Export always uses the light palette, and collaborator colours are assigned but not
+                themed.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="40. collaboration active tool presence beyond cursors. element sync, last-write-wins, reconnection with catch-up, the offline queue and the connection state are done. follow user presence beyond cursors. element sync, last-write-wins, reconnection with catch-up, the offline queue and the connection state are done. collaborator avatars implemented, untested — rendered by drawsharemodal.svelte; no test asserts it. user list implemented, untested — drawsharemodal.svelte renders a peers-list with a live count; no test asserts it."
+          >
+            <summary>
+              <span class="lname">40. Collaboration</span><span class="lsrc">design.md</span
+              ><span class="lcount">4 of 22 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1594</span> Active tool</li>
+                <li><span class="ln">design.md:1624</span> Follow user</li>
+              </ul>
+              <p class="lwhy">
+                Presence beyond cursors. Element sync, last-write-wins, reconnection with catch-up,
+                the offline queue and the connection state are done.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1618</span> Collaborator avatars</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — rendered by DrawShareModal.svelte; no test asserts it.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1626</span> User list</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — DrawShareModal.svelte renders a peers-list with a live
+                count; no test asserts it.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="42. rendering engine draw bindings painted, not asserted: snap guides, binding highlights, frame clips and peer cursors are all drawn (wasm/paint.rs), but no test checks the paint itself, only the state it reads. redraws are saved by a scroll blit (render/scroll.rs), not dirty rectangles or a tile cache. draw snap guides painted, not asserted: snap guides, binding highlights, frame clips and peer cursors are all drawn (wasm/paint.rs), but no test checks the paint itself, only the state it reads. redraws are saved by a scroll blit (render/scroll.rs), not dirty rectangles or a tile cache. draw cursors painted, not asserted: snap guides, binding highlights, frame clips and peer cursors are all drawn (wasm/paint.rs), but no test checks the paint itself, only the state it reads. redraws are saved by a scroll blit (render/scroll.rs), not dirty rectangles or a tile cache. clip frames painted, not asserted: snap guides, binding highlights, frame clips and peer cursors are all drawn (wasm/paint.rs), but no test checks the paint itself, only the state it reads. redraws are saved by a scroll blit (render/scroll.rs), not dirty rectangles or a tile cache. optimize redraws painted, not asserted: snap guides, binding highlights, frame clips and peer cursors are all drawn (wasm/paint.rs), but no test checks the paint itself, only the state it reads. redraws are saved by a scroll blit (render/scroll.rs), not dirty rectangles or a tile cache. draw hover no test paints a hover highlight — only a connector endpoint&#x27;s binding-highlight-while-hovering is verified (paint.rs), which is the gap above&#x27;s &#x27;draw bindings&#x27;, not a general hover outline."
+          >
+            <summary>
+              <span class="lname">42. Rendering engine</span><span class="lsrc">design.md</span
+              ><span class="lcount">6 of 14 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1679</span> Draw bindings</li>
+                <li><span class="ln">design.md:1687</span> Draw snap guides</li>
+                <li><span class="ln">design.md:1691</span> Draw cursors</li>
+                <li><span class="ln">design.md:1695</span> Clip frames</li>
+                <li><span class="ln">design.md:1697</span> Optimize redraws</li>
+              </ul>
+              <p class="lwhy">
+                Painted, not asserted: snap guides, binding highlights, frame clips and peer cursors
+                are all drawn (wasm/paint.rs), but no test checks the paint itself, only the state
+                it reads. Redraws are saved by a scroll blit (render/scroll.rs), not dirty
+                rectangles or a tile cache.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1685</span> Draw hover</li>
+              </ul>
+              <p class="lwhy">
+                No test paints a hover highlight — only a connector endpoint&#x27;s
+                binding-highlight-while-hovering is verified (paint.rs), which is the gap
+                above&#x27;s &#x27;Draw bindings&#x27;, not a general hover outline.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="43. hit-testing engine sticky implemented (same has_solid_interior branch as image/text/freedraw), untested: no test hit-tests a stickynote or embeddable element specifically. embeds implemented (same has_solid_interior branch as image/text/freedraw), untested: no test hit-tests a stickynote or embeddable element specifically."
+          >
+            <summary>
+              <span class="lname">43. Hit-testing engine</span><span class="lsrc">design.md</span
+              ><span class="lcount">2 of 12 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1728</span> Sticky</li>
+                <li><span class="ln">design.md:1730</span> Embeds</li>
+              </ul>
+              <p class="lwhy">
+                Implemented (same has_solid_interior branch as Image/Text/Freedraw), untested: no
+                test hit-tests a StickyNote or Embeddable element specifically.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="44. geometry engine vector no vector primitive or vector algebra module — offsets are plain x/y deltas on point pairs. circle no distinct circle primitive — a circle is an ellipse element with equal width and height (ci_recognize.rs::a_circle_is_an_ellipse_too is about shape recognition, not a circle geometry type). matrix no composable transform matrix — rotation and translation are direct x/y/angle field updates, not matrix multiplication. projection project_param (bucket_fill.rs) and the binding anchor&#x27;s projection helpers are implemented but exercised only indirectly through bucket-fill and binding behaviour — no test asserts a projected or closest-point value directly. closest point project_param (bucket_fill.rs) and the binding anchor&#x27;s projection helpers are implemented but exercised only indirectly through bucket-fill and binding behaviour — no test asserts a projected or closest-point value directly. convex polygon tests is_valid_polygon and can_become_polygon (geometry.rs) check point count and closedness, not convexity — no convexity or convex-hull test exists."
+          >
+            <summary>
+              <span class="lname">44. Geometry engine</span><span class="lsrc">design.md</span
+              ><span class="lcount">6 of 16 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1749</span> Vector</li>
+              </ul>
+              <p class="lwhy">
+                No vector primitive or vector algebra module — offsets are plain x/y deltas on Point
+                pairs.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1757</span> Circle</li>
+              </ul>
+              <p class="lwhy">
+                No distinct Circle primitive — a circle is an Ellipse element with equal width and
+                height (ci_recognize.rs::a_circle_is_an_ellipse_too is about shape recognition, not
+                a Circle geometry type).
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1761</span> Matrix</li>
+              </ul>
+              <p class="lwhy">
+                No composable transform matrix — rotation and translation are direct x/y/angle field
+                updates, not matrix multiplication.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1773</span> Projection</li>
+                <li><span class="ln">design.md:1775</span> Closest point</li>
+              </ul>
+              <p class="lwhy">
+                project_param (bucket_fill.rs) and the binding anchor&#x27;s projection helpers are
+                implemented but exercised only indirectly through bucket-fill and binding behaviour
+                — no test asserts a projected or closest-point value directly.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1777</span> Convex polygon tests</li>
+              </ul>
+              <p class="lwhy">
+                is_valid_polygon and can_become_polygon (geometry.rs) check point count and
+                closedness, not convexity — no convexity or convex-hull test exists.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="48. accessibility focus management toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited. dialog focus traps toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited. screen-reader labels toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited. high contrast toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited. reduced motion toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited. menu keyboard navigation implemented, untested — both menus answer arrowdown/arrowup, but no test opens one and presses an arrow key. shortcut discoverability implemented, untested — menu items render their shortcut inline and `?` opens the help dialog, but no test checks either."
+          >
+            <summary>
+              <span class="lname">48. Accessibility</span><span class="lsrc">design.md</span
+              ><span class="lcount">7 of 9 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1870</span> Focus management</li>
+                <li><span class="ln">design.md:1876</span> Dialog focus traps</li>
+                <li><span class="ln">design.md:1878</span> Screen-reader labels</li>
+                <li><span class="ln">design.md:1882</span> High contrast</li>
+                <li><span class="ln">design.md:1884</span> Reduced motion</li>
+              </ul>
+              <p class="lwhy">
+                Toolbar and menu roles and labels are in place and asserted by the browser specs;
+                the rest is unaudited.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1874</span> Menu keyboard navigation</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — both menus answer ArrowDown/ArrowUp, but no test opens one
+                and presses an arrow key.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1880</span> Shortcut discoverability</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — menu items render their shortcut inline and `?` opens the
+                help dialog, but no test checks either.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="49. performance spatial index still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. dirty rectangles still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. render caching still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. element memoization still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. offscreen rendering still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. image caching still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. text measurement caching still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. visible-element filtering still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. batched updates still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches. pointer-event throttling still a gap, deliberately, even though the editing loop and the render path are now benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and reports, it does not fail. nothing here is *guarded* until a regression breaks a build, which needs thresholds in ci. missing outright: a spatial index, dirty rectangles, and offscreen and image caches."
+          >
+            <summary>
+              <span class="lname">49. Performance</span><span class="lsrc">design.md</span
+              ><span class="lcount">10 of 10 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1891</span> Spatial index</li>
+                <li><span class="ln">design.md:1893</span> Dirty rectangles</li>
+                <li><span class="ln">design.md:1895</span> Render caching</li>
+                <li><span class="ln">design.md:1897</span> Element memoization</li>
+                <li><span class="ln">design.md:1899</span> Offscreen rendering</li>
+                <li><span class="ln">design.md:1901</span> Image caching</li>
+                <li><span class="ln">design.md:1903</span> Text measurement caching</li>
+                <li><span class="ln">design.md:1905</span> Visible-element filtering</li>
+                <li><span class="ln">design.md:1907</span> Batched updates</li>
+                <li><span class="ln">design.md:1909</span> Pointer-event throttling</li>
+              </ul>
+              <p class="lwhy">
+                Still a gap, deliberately, even though the editing loop and the render path are now
+                benchmarked (benches/editing.rs, benches/render.rs): a criterion bench measures and
+                reports, it does not fail. Nothing here is *guarded* until a regression breaks a
+                build, which needs thresholds in CI. Missing outright: a spatial index, dirty
+                rectangles, and offscreen and image caches.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="51. testing matrix none no systematic modifier sweep. individual modifiers are tested where they matter; the cross-product is not. shift no systematic modifier sweep. individual modifiers are tested where they matter; the cross-product is not. alt no systematic modifier sweep. individual modifiers are tested where they matter; the cross-product is not. cmd/ctrl no systematic modifier sweep. individual modifiers are tested where they matter; the cross-product is not. shift + alt no systematic modifier sweep. individual modifiers are tested where they matter; the cross-product is not. shift + cmd/ctrl no systematic modifier sweep. individual modifiers are tested where they matter; the cross-product is not. alt + cmd/ctrl no systematic modifier sweep. individual modifiers are tested where they matter; the cross-product is not. all three no systematic modifier sweep. individual modifiers are tested where they matter; the cross-product is not."
+          >
+            <summary>
+              <span class="lname">51. Testing matrix</span><span class="lsrc">design.md</span
+              ><span class="lcount">8 of 20 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1962</span> None</li>
+                <li><span class="ln">design.md:1964</span> Shift</li>
+                <li><span class="ln">design.md:1966</span> Alt</li>
+                <li><span class="ln">design.md:1968</span> Cmd/Ctrl</li>
+                <li><span class="ln">design.md:1970</span> Shift + Alt</li>
+                <li><span class="ln">design.md:1972</span> Shift + Cmd/Ctrl</li>
+                <li><span class="ln">design.md:1974</span> Alt + Cmd/Ctrl</li>
+              </ul>
+              <p class="lwhy">
+                No systematic modifier sweep. Individual modifiers are tested where they matter; the
+                cross-product is not.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">design.md:1976</span> All three</li>
+              </ul>
+              <p class="lwhy">
+                No systematic modifier sweep. Individual modifiers are tested where they matter; the
+                cross-product is not.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🧭 navigation &amp; canvas `middle mouse + drag` — pan the canvas pointerinput.ts treats a middle-button press the same as space (event.button === 1 || session.spaceheld), but nothing dispatches a middle-button pointer event: no unit test for that branch, and no e2e drag with button: &#x27;middle&#x27; anywhere in the suite. `shift + 3` — zoom to fit / viewport mode shift+3. excalidraw uses it for a viewport-relative fit; ours has no separate mode to fit to."
+          >
+            <summary>
+              <span class="lname">🧭 Navigation &amp; canvas</span
+              ><span class="lsrc">shortkey.md</span><span class="lcount">2 of 14 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:39</span> Middle mouse + drag — Pan the canvas</li>
+              </ul>
+              <p class="lwhy">
+                pointerInput.ts treats a middle-button press the same as space (event.button === 1
+                || session.spaceHeld), but nothing dispatches a middle-button pointer event: no unit
+                test for that branch, and no e2e drag with button: &#x27;middle&#x27; anywhere in
+                the suite.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:47</span> Shift + 3 — Zoom to fit / viewport mode
+                </li>
+              </ul>
+              <p class="lwhy">
+                Shift+3. Excalidraw uses it for a viewport-relative fit; ours has no separate mode
+                to fit to.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="shapes `alt/option + drag` — draw/resize from the center alt does not draw or resize from the centre: a new shape grows from where the drag began and a handle holds the opposite side (docs/reference/resize.md › divergences). excalidraw&#x27;s shouldresizefromcenter (resizeelements.ts@1118751f:621-727) and its drawing counterpart are not ported. `shift + alt/option + drag` — center + constrained proportions alt does not draw or resize from the centre: a new shape grows from where the drag began and a handle holds the opposite side (docs/reference/resize.md › divergences). excalidraw&#x27;s shouldresizefromcenter (resizeelements.ts@1118751f:621-727) and its drawing counterpart are not ported. `ctrl/cmd` while snapping — temporarily disable snapping half done. ctrl/cmd now inverts snapping to objects for a move (ci_objects_snap.rs, e2e/objectssnap.spec.ts). it does not yet release the grid: excalidraw passes a null grid size to getgridpoint while it is held, so drawing and resizing on a snapping grid go free, and ours stay on the grid."
+          >
+            <summary>
+              <span class="lname">Shapes</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">3 of 5 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:60</span> Alt/Option + drag — Draw/resize from the
+                  center
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:61</span> Shift + Alt/Option + drag — Center +
+                  constrained proportions
+                </li>
+              </ul>
+              <p class="lwhy">
+                Alt does not draw or resize from the centre: a new shape grows from where the drag
+                began and a handle holds the opposite side (docs/reference/resize.md › Divergences).
+                Excalidraw&#x27;s shouldResizeFromCenter (resizeElements.ts@1118751f:621-727) and
+                its drawing counterpart are not ported.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:63</span> Ctrl/Cmd while snapping — Temporarily
+                  disable snapping
+                </li>
+              </ul>
+              <p class="lwhy">
+                Half done. Ctrl/Cmd now inverts snapping to objects for a move (ci_objects_snap.rs,
+                e2e/objectsSnap.spec.ts). It does not yet release the grid: Excalidraw passes a null
+                grid size to getGridPoint while it is held, so drawing and resizing on a snapping
+                grid go free, and ours stay on the grid.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="lines &amp; arrows `press arrow shortcut again` — cycle/change arrow type the arrow type is changed from the panel&#x27;s arrow type row, sharp or curved (ci_next_style.rs, e2e/arrowtype.spec.ts), but pressing the arrow tool&#x27;s key again does not cycle it (app.tsx@1118751f:5695-5714), and the elbow type it cycles through needs the elbow-arrow work."
+          >
+            <summary>
+              <span class="lname">Lines &amp; arrows</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">1 of 10 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:70</span> Press arrow shortcut again — Cycle/change
+                  arrow type
+                </li>
+              </ul>
+              <p class="lwhy">
+                The arrow type is changed from the panel&#x27;s Arrow type row, sharp or curved
+                (ci_next_style.rs, e2e/arrowType.spec.ts), but pressing the arrow tool&#x27;s key
+                again does not cycle it (App.tsx@1118751f:5695-5714), and the elbow type it cycles
+                through needs the elbow-arrow work.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🖱️ selection `ctrl/cmd + c` — copy implemented, untested — copyselection/cutselection answer ctrl+c/ctrl+x and paste rides the native clipboard event, but no test dispatches ctrl+c/ctrl+x or completes a paste to confirm any of the three actually round-trips. `ctrl/cmd + x` — cut implemented, untested — copyselection/cutselection answer ctrl+c/ctrl+x and paste rides the native clipboard event, but no test dispatches ctrl+c/ctrl+x or completes a paste to confirm any of the three actually round-trips. `ctrl/cmd + v` — paste implemented, untested — copyselection/cutselection answer ctrl+c/ctrl+x and paste rides the native clipboard event, but no test dispatches ctrl+c/ctrl+x or completes a paste to confirm any of the three actually round-trips. `ctrl/cmd + shift + l` — lock/unlock selection no ctrl/cmd+shift+l: lock and unlock are the context menu&#x27;s one toggle (togglelockselection, ci_group_locks_frames.rs, menu.test.ts), with no key bound to it."
+          >
+            <summary>
+              <span class="lname">🖱️ Selection</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">4 of 20 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:93</span> Ctrl/Cmd + C — Copy</li>
+                <li><span class="ln">shortkey.md:94</span> Ctrl/Cmd + X — Cut</li>
+                <li><span class="ln">shortkey.md:95</span> Ctrl/Cmd + V — Paste</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — copySelection/cutSelection answer Ctrl+C/Ctrl+X and paste
+                rides the native clipboard event, but no test dispatches Ctrl+C/Ctrl+X or completes
+                a paste to confirm any of the three actually round-trips.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:99</span> Ctrl/Cmd + Shift + L — Lock/unlock
+                  selection
+                </li>
+              </ul>
+              <p class="lwhy">
+                No Ctrl/Cmd+Shift+L: lock and unlock are the context menu&#x27;s one toggle
+                (toggleLockSelection, ci_group_locks_frames.rs, menu.test.ts), with no key bound to
+                it.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🎯 advanced selection tricks `alt/option + click` — deep-select an element underneath another element alt+click to reach an element underneath another. hit-testing returns the topmost hit only; there is no depth cursor. `alt/option + drag` — deep-select / prevent accidental dragging in alt+click to reach an element underneath another. hit-testing returns the topmost hit only; there is no depth cursor. hold the deep-select modifier while box-selecting — select elements alt+click to reach an element underneath another. hit-testing returns the topmost hit only; there is no depth cursor."
+          >
+            <summary>
+              <span class="lname">🎯 Advanced selection tricks</span
+              ><span class="lsrc">shortkey.md</span><span class="lcount">3 of 7 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:109</span> Alt/Option + click — Deep-select an
+                  element underneath another element
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:110</span> Alt/Option + drag — Deep-select / prevent
+                  accidental dragging in
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:112</span> Hold the deep-select modifier while
+                  box-selecting — Select elements
+                </li>
+              </ul>
+              <p class="lwhy">
+                Alt+click to reach an element underneath another. Hit-testing returns the topmost
+                hit only; there is no depth cursor.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🔤 text paste text — automatically create/wrap text where appropriate pasting plain text makes no text element: the host hands it to pastejson, which takes only element json (engine/src/host/keyboardinput.ts). excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (app.tsx:4978-5030). the wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not."
+          >
+            <summary>
+              <span class="lname">🔤 Text</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">1 of 8 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:129</span> Paste text — Automatically create/wrap
+                  text where appropriate
+                </li>
+              </ul>
+              <p class="lwhy">
+                Pasting plain text makes no text element: the host hands it to pasteJson, which
+                takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per
+                line and wraps any wider than max(min(visible width / 2, 800), 200)
+                (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the
+                paste is not.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="📐 alignment &amp; distribution align selected elements top alignmode::top exists and is wired up, but no test — unit or e2e — ever selects it; every align test uses left, right, centerx, centery or bottom."
+          >
+            <summary>
+              <span class="lname">📐 Alignment &amp; distribution</span
+              ><span class="lsrc">shortkey.md</span><span class="lcount">1 of 10 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:140</span> Align selected elements top</li>
+              </ul>
+              <p class="lwhy">
+                AlignMode::Top exists and is wired up, but no test — unit or e2e — ever selects it;
+                every align test uses Left, Right, CenterX, CenterY or Bottom.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🔒 locking `ctrl/cmd + shift + l` — lock/unlock selected elements no ctrl/cmd+shift+l: lock and unlock are the context menu&#x27;s one toggle (togglelockselection, ci_group_locks_frames.rs, menu.test.ts), with no key bound to it. select locked elements through deep-selection mechanisms when needed no deep selection reaches a locked element: a click, a marquee and a lasso pass it by, and only select all takes it — so the context menu can unlock it, where excalidraw&#x27;s select all skips it (actionselectall.ts@1118751f:32-38)."
+          >
+            <summary>
+              <span class="lname">🔒 Locking</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">2 of 2 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:166</span> Ctrl/Cmd + Shift + L — Lock/unlock
+                  selected elements
+                </li>
+              </ul>
+              <p class="lwhy">
+                No Ctrl/Cmd+Shift+L: lock and unlock are the context menu&#x27;s one toggle
+                (toggleLockSelection, ci_group_locks_frames.rs, menu.test.ts), with no key bound to
+                it.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:170</span> Select locked elements through
+                  deep-selection mechanisms when needed
+                </li>
+              </ul>
+              <p class="lwhy">
+                No deep selection reaches a locked element: a click, a marquee and a lasso pass it
+                by, and only Select All takes it — so the context menu can unlock it, where
+                Excalidraw&#x27;s Select All skips it (actionSelectAll.ts@1118751f:32-38).
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🖼️ images `double-click image` — enter crop mode no crop mode. images resize and move; cropping needs a second rect on the element and a mode in the interaction state machine. crop mode shortcut — enter/finish image cropping no crop mode. images resize and move; cropping needs a second rect on the element and a mode in the interaction state machine. drag crop handles — crop image no crop mode. images resize and move; cropping needs a second rect on the element and a mode in the interaction state machine. `escape` — exit crop mode no crop mode. images resize and move; cropping needs a second rect on the element and a mode in the interaction state machine."
+          >
+            <summary>
+              <span class="lname">🖼️ Images</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">4 of 9 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:179</span> Double-click image — Enter crop mode
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:180</span> Crop mode shortcut — Enter/finish image
+                  cropping
+                </li>
+                <li><span class="ln">shortkey.md:181</span> Drag crop handles — Crop image</li>
+                <li><span class="ln">shortkey.md:182</span> Escape — Exit crop mode</li>
+              </ul>
+              <p class="lwhy">
+                No crop mode. Images resize and move; cropping needs a second rect on the element
+                and a mode in the interaction state machine.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🧩 frames export frames — frames can participate in exports export has no per-frame mode."
+          >
+            <summary>
+              <span class="lname">🧩 Frames</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">1 of 7 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:197</span> Export frames — Frames can participate in
+                  exports
+                </li>
+              </ul>
+              <p class="lwhy">Export has no per-frame mode.</p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🔗 element linking select an element → add/update link no link on an element. schema field, inspector row, click handling and export preservation, in that order. attach a url to a shape/text element no link on an element. schema field, inspector row, click handling and export preservation, in that order. use linked elements to create clickable diagrams no link on an element. schema field, inspector row, click handling and export preservation, in that order. create visual navigation between parts of a large canvas no link on an element. schema field, inspector row, click handling and export preservation, in that order. copy element link where supported no link on an element. schema field, inspector row, click handling and export preservation, in that order. use links for architecture diagrams, documentation maps and workflows no link on an element. schema field, inspector row, click handling and export preservation, in that order."
+          >
+            <summary>
+              <span class="lname">🔗 Element linking</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">6 of 6 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:203</span> Select an element → Add/update link</li>
+                <li>
+                  <span class="ln">shortkey.md:204</span> Attach a URL to a shape/text element
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:205</span> Use linked elements to create clickable
+                  diagrams
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:206</span> Create visual navigation between parts of
+                  a large canvas
+                </li>
+                <li><span class="ln">shortkey.md:207</span> Copy element link where supported</li>
+                <li>
+                  <span class="ln">shortkey.md:208</span> Use links for architecture diagrams,
+                  documentation maps and workflows
+                </li>
+              </ul>
+              <p class="lwhy">
+                No link on an element. Schema field, inspector row, click handling and export
+                preservation, in that order.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="➡️ advanced arrows create elbow arrows elbow arrows are a milestone of their own: orthogonal routing over the fixed-point bindings arrows already have. cardinality arrowheads wait on it. use cardinality-style arrowheads for er diagrams elbow arrows are a milestone of their own: orthogonal routing over the fixed-point bindings arrows already have. cardinality arrowheads wait on it. use elbow arrows for flowcharts / architecture diagrams elbow arrows are a milestone of their own: orthogonal routing over the fixed-point bindings arrows already have. cardinality arrowheads wait on it."
+          >
+            <summary>
+              <span class="lname">➡️ Advanced arrows</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">3 of 10 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:216</span> Create elbow arrows</li>
+                <li>
+                  <span class="ln">shortkey.md:222</span> Use cardinality-style arrowheads for ER
+                  diagrams
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:223</span> Use elbow arrows for flowcharts /
+                  architecture diagrams
+                </li>
+              </ul>
+              <p class="lwhy">
+                Elbow arrows are a milestone of their own: orthogonal routing over the fixed-point
+                bindings arrows already have. Cardinality arrowheads wait on it.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🔄 flowcharts convert a generic shape into a flowchart element flowchart mode works from a rectangle, diamond, ellipse or sticky note as the oracle&#x27;s own is_flowchart_node does; there is no conversion of an arbitrary element into one of those first."
+          >
+            <summary>
+              <span class="lname">🔄 Flowcharts</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">1 of 6 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:230</span> Convert a generic shape into a flowchart
+                  element
+                </li>
+              </ul>
+              <p class="lwhy">
+                Flowchart mode works from a rectangle, diamond, ellipse or sticky note as the
+                oracle&#x27;s own is_flowchart_node does; there is no conversion of an arbitrary
+                element into one of those first.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="✋ hand / panning middle mouse drag — pan implemented, untested — pointerinput.ts treats a middle-button press the same as space, but no test dispatches one."
+          >
+            <summary>
+              <span class="lname">✋ Hand / panning</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">1 of 4 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:285</span> Middle mouse drag — Pan</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — pointerInput.ts treats a middle-button press the same as
+                space, but no test dispatches one.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🧱 web embeds drag to create an embed region not implemented — embeds are placed through a url-entry modal (drawembedmodal.svelte) at a fixed point; every test inserts via window.__drawengine.insertembed directly, and there is no drag-to-create-a-region gesture anywhere. paste supported embed urls implemented, untested — the host allow-list and url resolution are thoroughly tested (ci_embed.rs), but nothing pastes a url through the modal or onto the canvas to trigger creation; every test calls insertembed directly."
+          >
+            <summary>
+              <span class="lname">🧱 Web embeds</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">2 of 5 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:293</span> Drag to create an embed region</li>
+              </ul>
+              <p class="lwhy">
+                not implemented — embeds are placed through a URL-entry modal
+                (DrawEmbedModal.svelte) at a fixed point; every test inserts via
+                window.__drawEngine.insertEmbed directly, and there is no drag-to-create-a-region
+                gesture anywhere.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:294</span> Paste supported embed URLs</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — the host allow-list and URL resolution are thoroughly tested
+                (ci_embed.rs), but nothing pastes a URL through the modal or onto the canvas to
+                trigger creation; every test calls insertEmbed directly.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🧜 mermaid open mermaid → excalidraw implemented, untested — drawmainmenu opens drawmermaidmodal.svelte, but no test exercises the menu action or the modal opening. preview the generated diagram not implemented — drawmermaidmodal.svelte parses and inserts directly on its insert button; there is no preview step shown before committing to the board. supported diagram types include: overclaimed — only flowchart syntax is parsed (mermaidparser.ts&#x27;s parsemermaidflowchart); sequence, class, entity-relationship and state diagrams are not supported. paste mermaid directly — excalidraw can detect mermaid syntax not implemented as auto-detection — mermaid syntax must be typed or pasted inside the manually-opened modal; a canvas-level paste does not detect or trigger it."
+          >
+            <summary>
+              <span class="lname">🧜 Mermaid</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">4 of 8 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:311</span> Open Mermaid → Excalidraw</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — DrawMainMenu opens DrawMermaidModal.svelte, but no test
+                exercises the menu action or the modal opening.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:313</span> Preview the generated diagram</li>
+              </ul>
+              <p class="lwhy">
+                not implemented — DrawMermaidModal.svelte parses and inserts directly on its Insert
+                button; there is no preview step shown before committing to the board.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:315</span> Supported diagram types include:</li>
+              </ul>
+              <p class="lwhy">
+                overclaimed — only flowchart syntax is parsed (mermaidParser.ts&#x27;s
+                parseMermaidFlowchart); sequence, class, entity-relationship and state diagrams are
+                not supported.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:321</span> Paste Mermaid directly — Excalidraw can
+                  detect Mermaid syntax
+                </li>
+              </ul>
+              <p class="lwhy">
+                not implemented as auto-detection — Mermaid syntax must be typed or pasted inside
+                the manually-opened modal; a canvas-level paste does not detect or trigger it.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🔎 search open scene search no scene search. needs a text index over elements, result navigation and a highlight pass in the interactive layer. search text/content on the canvas no scene search. needs a text index over elements, result navigation and a highlight pass in the interactive layer. jump between matching elements no scene search. needs a text index over elements, result navigation and a highlight pass in the interactive layer. use search instead of manually navigating large diagrams no scene search. needs a text index over elements, result navigation and a highlight pass in the interactive layer. search is especially useful on large architecture/documentation canvases no scene search. needs a text index over elements, result navigation and a highlight pass in the interactive layer."
+          >
+            <summary>
+              <span class="lname">🔎 Search</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">5 of 5 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:344</span> Open Scene Search</li>
+                <li><span class="ln">shortkey.md:345</span> Search text/content on the canvas</li>
+                <li><span class="ln">shortkey.md:346</span> Jump between matching elements</li>
+                <li>
+                  <span class="ln">shortkey.md:347</span> Use search instead of manually navigating
+                  large diagrams
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:348</span> Search is especially useful on large
+                  architecture/documentation canvases
+                </li>
+              </ul>
+              <p class="lwhy">
+                No scene search. Needs a text index over elements, result navigation and a highlight
+                pass in the interactive layer.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="⚡ command palette search recently used commands the registry ranks by fuzzy match alone; there is no usage history to give a recently-run command a boost the way the oracle&#x27;s own palette does."
+          >
+            <summary>
+              <span class="lname">⚡ Command Palette</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">1 of 9 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:361</span> Search recently used commands</li>
+              </ul>
+              <p class="lwhy">
+                The registry ranks by fuzzy match alone; there is no usage history to give a
+                recently-run command a boost the way the oracle&#x27;s own palette does.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🔲 grid hold `ctrl/cmd` while dragging — temporarily disable snapping spacing is offered as a fixed set of sizes in the menu, not a custom value. ctrl/cmd inverts snapping to objects but does not yet release the grid — see the shapes rule above. use custom grid spacing where supported spacing is offered as a fixed set of sizes in the menu, not a custom value. ctrl/cmd inverts snapping to objects but does not yet release the grid — see the shapes rule above."
+          >
+            <summary>
+              <span class="lname">🔲 Grid</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">2 of 5 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:374</span> Hold Ctrl/Cmd while dragging — Temporarily
+                  disable snapping
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:375</span> Use custom grid spacing where supported
+                </li>
+              </ul>
+              <p class="lwhy">
+                Spacing is offered as a fixed set of sizes in the menu, not a custom value. Ctrl/Cmd
+                inverts snapping to objects but does not yet release the grid — see the Shapes rule
+                above.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🌙 interface modes `alt + z` — toggle zen mode no zen mode. it is a host concern — hide the chrome — and needs nothing from the engine. use zen mode to hide interface chrome and focus on the canvas no zen mode. it is a host concern — hide the chrome — and needs nothing from the engine."
+          >
+            <summary>
+              <span class="lname">🌙 Interface modes</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">2 of 4 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:382</span> Alt + Z — Toggle Zen mode</li>
+                <li>
+                  <span class="ln">shortkey.md:384</span> Use Zen mode to hide interface chrome and
+                  focus on the canvas
+                </li>
+              </ul>
+              <p class="lwhy">
+                No zen mode. It is a host concern — hide the chrome — and needs nothing from the
+                engine.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="📊 stats / element information open element statistics/properties no stats panel. the numbers all exist on the element; this is an inspector surface and an edit path for them. inspect selected element dimensions no stats panel. the numbers all exist on the element; this is an inspector surface and an edit path for them. inspect width/height no stats panel. the numbers all exist on the element; this is an inspector surface and an edit path for them. inspect angle no stats panel. the numbers all exist on the element; this is an inspector surface and an edit path for them. inspect number of shapes/elements no stats panel. the numbers all exist on the element; this is an inspector surface and an edit path for them. inspect scene statistics no stats panel. the numbers all exist on the element; this is an inspector surface and an edit path for them. edit supported element statistics/properties directly no stats panel. the numbers all exist on the element; this is an inspector surface and an edit path for them. use stats when precise diagram geometry matters no stats panel. the numbers all exist on the element; this is an inspector surface and an edit path for them."
+          >
+            <summary>
+              <span class="lname">📊 Stats / element information</span
+              ><span class="lsrc">shortkey.md</span><span class="lcount">8 of 8 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:391</span> Open element statistics/properties</li>
+                <li><span class="ln">shortkey.md:392</span> Inspect selected element dimensions</li>
+                <li><span class="ln">shortkey.md:393</span> Inspect width/height</li>
+                <li><span class="ln">shortkey.md:394</span> Inspect angle</li>
+                <li><span class="ln">shortkey.md:395</span> Inspect number of shapes/elements</li>
+                <li><span class="ln">shortkey.md:396</span> Inspect scene statistics</li>
+                <li>
+                  <span class="ln">shortkey.md:397</span> Edit supported element
+                  statistics/properties directly
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:398</span> Use stats when precise diagram geometry
+                  matters
+                </li>
+              </ul>
+              <p class="lwhy">
+                No stats panel. The numbers all exist on the element; this is an inspector surface
+                and an edit path for them.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="📚 library open library no library. needs item storage, preview rendering, id regeneration on insert and group preservation. save frequently reused elements no library. needs item storage, preview rendering, id regeneration on insert and group preservation. drag library items onto canvas no library. needs item storage, preview rendering, id regeneration on insert and group preservation. build your own personal component system no library. needs item storage, preview rendering, id regeneration on insert and group preservation. use libraries for architecture icons, ui components, flowchart nodes, no library. needs item storage, preview rendering, id regeneration on insert and group preservation. reuse diagrams/components/templates five fixed starter boards exist now (`apps/web/src/lib/templates`, `drawtemplatesmodal.svelte`, `docs/reference/templates.md`, `e2e/templates.spec.ts`) — a catalog to start a board from, not a library: nothing lets a viewer save their own diagram or component and reuse it later."
+          >
+            <summary>
+              <span class="lname">📚 Library</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">6 of 6 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:404</span> Open Library</li>
+                <li><span class="ln">shortkey.md:405</span> Save frequently reused elements</li>
+                <li><span class="ln">shortkey.md:407</span> Drag library items onto canvas</li>
+                <li>
+                  <span class="ln">shortkey.md:408</span> Build your own personal component system
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:409</span> Use libraries for architecture icons, UI
+                  components, flowchart nodes,
+                </li>
+              </ul>
+              <p class="lwhy">
+                No library. Needs item storage, preview rendering, id regeneration on insert and
+                group preservation.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:406</span> Reuse diagrams/components/templates</li>
+              </ul>
+              <p class="lwhy">
+                Five fixed starter boards exist now (`apps/web/src/lib/templates`,
+                `DrawTemplatesModal.svelte`, `docs/reference/templates.md`, `e2e/templates.spec.ts`)
+                — a catalog to start a board from, not a library: nothing lets a viewer save their
+                own diagram or component and reuse it later.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q='📋 clipboard tricks `ctrl/cmd + c` — copy implemented, untested — the c/x keys call copyselection/cutselection and write to the clipboard (engine/src/host/keys.ts:139-148), but keys.test.ts only stubs copyselection/cutselection in its mock session and never dispatches ctrl+c or ctrl+x to assert either is called; ci_edit.rs has no clipboard tests. `ctrl/cmd + x` — cut implemented, untested — the c/x keys call copyselection/cutselection and write to the clipboard (engine/src/host/keys.ts:139-148), but keys.test.ts only stubs copyselection/cutselection in its mock session and never dispatches ctrl+c or ctrl+x to assert either is called; ci_edit.rs has no clipboard tests. paste text directly not implemented — same gap as design.md&#x27;s text paste: arbitrary clipboard text never becomes a text element (engine/src/host/keyboardinput.ts falls back to re-pasting the internal clipboard, which fails to parse plain text). paste from google docs where supported copy-as-image and rich external paste. svg export exists (ci_export.rs) but is not wired to the clipboard. use "paste as single element" where supported copy-as-image and rich external paste. svg export exists (ci_export.rs) but is not wired to the clipboard. copy selected content as png copy-as-image and rich external paste. svg export exists (ci_export.rs) but is not wired to the clipboard. copy selected content as svg copy-as-image and rich external paste. svg export exists (ci_export.rs) but is not wired to the clipboard. paste mermaid syntax to trigger mermaid handling not implemented as an auto-trigger — mermaid syntax must be typed or pasted inside the manually-opened drawmermaidmodal; a canvas-level paste never detects or opens it (same gap as prompt/shortkey.md:321).'
+          >
+            <summary>
+              <span class="lname">📋 Clipboard tricks</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">8 of 10 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:416</span> Ctrl/Cmd + C — Copy</li>
+                <li><span class="ln">shortkey.md:417</span> Ctrl/Cmd + X — Cut</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — the C/X keys call copySelection/cutSelection and write to
+                the clipboard (engine/src/host/keys.ts:139-148), but keys.test.ts only stubs
+                copySelection/cutSelection in its mock session and never dispatches Ctrl+C or Ctrl+X
+                to assert either is called; ci_edit.rs has no clipboard tests.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:420</span> Paste text directly</li>
+              </ul>
+              <p class="lwhy">
+                not implemented — same gap as design.md&#x27;s Text paste: arbitrary clipboard text
+                never becomes a text element (engine/src/host/keyboardInput.ts falls back to
+                re-pasting the internal clipboard, which fails to parse plain text).
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:421</span> Paste from Google Docs where supported
+                </li>
+                <li>
+                  <span class="ln">shortkey.md:423</span> Use &quot;paste as single element&quot;
+                  where supported
+                </li>
+                <li><span class="ln">shortkey.md:424</span> Copy selected content as PNG</li>
+                <li><span class="ln">shortkey.md:425</span> Copy selected content as SVG</li>
+              </ul>
+              <p class="lwhy">
+                Copy-as-image and rich external paste. SVG export exists (ci_export.rs) but is not
+                wired to the clipboard.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:422</span> Paste Mermaid syntax to trigger Mermaid
+                  handling
+                </li>
+              </ul>
+              <p class="lwhy">
+                not implemented as an auto-trigger — Mermaid syntax must be typed or pasted inside
+                the manually-opened DrawMermaidModal; a canvas-level paste never detects or opens it
+                (same gap as prompt/shortkey.md:321).
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="💾 files `ctrl/cmd + o` — open/load a scene implemented, untested — drawsurface.svelte&#x27;s onappshortcut binds mod+o to open the file picker (mainmenu.openfile()), but no test presses ctrl/cmd+o or drives the open flow. export png png export is the visible canvas as it stands (engine.ts exportpng, canvas.toblob()), not the whole scene, and nothing copies it to the clipboard. no read-only share link. svg and json are done. copy png to clipboard png export is the visible canvas as it stands (engine.ts exportpng, canvas.toblob()), not the whole scene, and nothing copies it to the clipboard. no read-only share link. svg and json are done. export/share read-only link png export is the visible canvas as it stands (engine.ts exportpng, canvas.toblob()), not the whole scene, and nothing copies it to the clipboard. no read-only share link. svg and json are done."
+          >
+            <summary>
+              <span class="lname">💾 Files</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">4 of 7 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:431</span> Ctrl/Cmd + O — Open/load a scene</li>
+              </ul>
+              <p class="lwhy">
+                implemented, untested — DrawSurface.svelte&#x27;s onAppShortcut binds mod+O to open
+                the file picker (mainMenu.openFile()), but no test presses Ctrl/Cmd+O or drives the
+                open flow.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:434</span> Export PNG</li>
+                <li><span class="ln">shortkey.md:436</span> Copy PNG to clipboard</li>
+                <li><span class="ln">shortkey.md:437</span> Export/share read-only link</li>
+              </ul>
+              <p class="lwhy">
+                PNG export is the visible canvas as it stands (engine.ts exportPng,
+                canvas.toBlob()), not the whole scene, and nothing copies it to the clipboard. No
+                read-only share link. SVG and JSON are done.
+              </p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="🔍 export tricks export selection no selection-scoped export anywhere: the export dialog and both engine.exportsvg/exportpng always export the whole scene. export png png export is the visible canvas as it stands (engine.ts exportpng, canvas.toblob()): not the whole scene or the selection, and never on the clipboard. copy selection as png png export is the visible canvas as it stands (engine.ts exportpng, canvas.toblob()): not the whole scene or the selection, and never on the clipboard. copy selection as svg svg export exists (ci_export.rs) but nothing wires it to the clipboard — same missing plumbing as the clipboard tricks section&#x27;s &#x27;copy as image&#x27; gap. include/exclude background depending on export settings scene_to_svg always renders a background rect; no option anywhere omits it. export frames where appropriate no per-frame export mode."
+          >
+            <summary>
+              <span class="lname">🔍 Export tricks</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">6 of 9 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:445</span> Export selection</li>
+              </ul>
+              <p class="lwhy">
+                No selection-scoped export anywhere: the export dialog and both
+                engine.exportSvg/exportPng always export the whole scene.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:446</span> Export PNG</li>
+                <li><span class="ln">shortkey.md:448</span> Copy selection as PNG</li>
+              </ul>
+              <p class="lwhy">
+                PNG export is the visible canvas as it stands (engine.ts exportPng,
+                canvas.toBlob()): not the whole scene or the selection, and never on the clipboard.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:449</span> Copy selection as SVG</li>
+              </ul>
+              <p class="lwhy">
+                SVG export exists (ci_export.rs) but nothing wires it to the clipboard — same
+                missing plumbing as the Clipboard tricks section&#x27;s &#x27;copy as image&#x27;
+                gap.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li>
+                  <span class="ln">shortkey.md:450</span> Include/exclude background depending on
+                  export settings
+                </li>
+              </ul>
+              <p class="lwhy">
+                scene_to_svg always renders a background rect; no option anywhere omits it.
+              </p>
+            </div>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:451</span> Export frames where appropriate</li>
+              </ul>
+              <p class="lwhy">No per-frame export mode.</p>
+            </div>
+          </details>
+          <details
+            class="lsec"
+            data-q="👥 collaboration follow another collaborator follow-mode and multiplayer-aware history. presence, cursors and last-write-wins element sync are done. presentation mode added a narrower follow — a peer&#x27;s camera trailing a presenter&#x27;s slide, in `presentation.ts` / `realtimeclient.ts`&#x27;s `present` message — but not the general case this line names: following anyone&#x27;s view at any time. collaboratively undo/redo where supported follow-mode and multiplayer-aware history. presence, cursors and last-write-wins element sync are done. presentation mode added a narrower follow — a peer&#x27;s camera trailing a presenter&#x27;s slide, in `presentation.ts` / `realtimeclient.ts`&#x27;s `present` message — but not the general case this line names: following anyone&#x27;s view at any time."
+          >
+            <summary>
+              <span class="lname">👥 Collaboration</span><span class="lsrc">shortkey.md</span
+              ><span class="lcount">2 of 6 open</span>
+            </summary>
+            <div class="lrow">
+              <ul class="litems">
+                <li><span class="ln">shortkey.md:460</span> Follow another collaborator</li>
+                <li>
+                  <span class="ln">shortkey.md:462</span> Collaboratively undo/redo where supported
+                </li>
+              </ul>
+              <p class="lwhy">
+                Follow-mode and multiplayer-aware history. Presence, cursors and last-write-wins
+                element sync are done. Presentation mode added a narrower follow — a peer&#x27;s
+                camera trailing a presenter&#x27;s slide, in `presentation.ts` /
+                `realtimeClient.ts`&#x27;s `present` message — but not the general case this line
+                names: following anyone&#x27;s view at any time.
+              </p>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <footer>
+        <p>
+          Numbers come from <code>packages/conformance/src/registry.ts</code> at cd01892, run
+          through the same matcher <code>make conformance</code> uses. “Built, untested” is every
+          open rule whose reason says the behaviour exists and names the missing test.
+        </p>
+        <p>
+          The work these gaps turn into, with entry points and acceptance checks, is in
+          <a href="remaining-work.md">remaining-work.md</a> beside this page.
+        </p>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        var q = document.getElementById("q");
+        var shown = document.getElementById("shown");
+        var secs = Array.prototype.slice.call(document.querySelectorAll(".lsec"));
+        function apply() {
+          var term = q.value.trim().toLowerCase();
+          var n = 0;
+          secs.forEach(function (s) {
+            var hit = !term || s.getAttribute("data-q").indexOf(term) !== -1;
+            s.hidden = !hit;
+            if (hit) n++;
+            if (term && hit) s.open = true;
+            if (!term) s.open = false;
+          });
+          shown.textContent = n + " of " + secs.length + " sections";
+        }
+        q.addEventListener("input", apply);
+        apply();
+      })();
+    </script>
+  </body>
+</html>
