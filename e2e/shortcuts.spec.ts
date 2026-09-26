@@ -259,12 +259,17 @@ test.describe("navigation shortcuts", () => {
     // needs the tool picked again — without that it is a marquee drag, the board holds
     // one element, and fit and zoom-to-selection agree exactly.
     await drawRectangle(page, board, { x: 460, y: 190 }, { x: 560, y: 260 });
+    // Two screens further down, so holding both takes well under 100%.
+    await focusBoard(board);
+    await page.keyboard.press("PageDown");
+    await page.keyboard.press("PageDown");
     await drawRectangle(page, board, { x: 1000, y: 540 }, { x: 1140, y: 640 });
     expect(await sceneElements(page)).toHaveLength(2);
     await focusBoard(board);
 
     await page.keyboard.press("Shift+Digit1");
     const fitted = (await camera(page)).scale;
+    expect(fitted).toBeLessThan(1);
 
     await page.getByRole("button", { name: /^Select \(/ }).click();
     await clickElement(board, 0);
@@ -275,16 +280,47 @@ test.describe("navigation shortcuts", () => {
     expect((await camera(page)).scale).toBeGreaterThan(fitted);
   });
 
-  test("Shift+2 with nothing selected leaves the camera alone", async ({ page }) => {
+  test("Shift+2 with nothing selected fits the whole board, as Shift+1 does", async ({ page }) => {
+    // With no selection the oracle fits every element (`actionCanvas.tsx@1118751f:306-311`).
     const board = await openBoard(page);
     await drawRectangle(page, board);
     await focusBoard(board);
     await page.keyboard.press("Escape");
-    const before = await camera(page);
+    await page.keyboard.press("Shift+Digit1");
+    const fitted = await camera(page);
+    await page.keyboard.press("Control+Equal");
+    await page.keyboard.press("Control+Equal");
 
     await page.keyboard.press("Shift+Digit2");
 
-    expect(await camera(page)).toEqual(before);
+    expect(await camera(page)).toEqual(fitted);
+  });
+
+  test("Shift+3 fills the room with the selection, where Shift+2 stops at 100%", async ({
+    page,
+  }) => {
+    // `zoomToFitSelection` fits "contain", `zoomToFitSelectionInViewport` "scale-down"
+    // (`actionCanvas.tsx@1118751f:312-317, 355-360`), both clear of the chrome plus 24px.
+    const board = await openBoard(page);
+    await drawRectangle(page, board);
+    await clickElement(board, 0);
+    expect(await selection(page)).toHaveLength(1);
+
+    await page.keyboard.press("Shift+Digit2");
+    expect((await camera(page)).scale).toBeCloseTo(1, 5);
+
+    await page.keyboard.press("Shift+Digit3");
+    const after = await camera(page);
+    expect(after.scale).toBeGreaterThan(1);
+    const shape = await page.evaluate(() => {
+      const [element] = JSON.parse(window.__drawEngine!.exportJson()).elements;
+      return { top: element.y, bottom: element.y + element.height };
+    });
+    const toolbar = await page.locator('[data-viewport-ui="top"]').boundingBox();
+    const top = board.box.y + shape.top * after.scale + after.y;
+    const bottom = board.box.y + shape.bottom * after.scale + after.y;
+    expect(top).toBeGreaterThanOrEqual(toolbar!.y + toolbar!.height + 24 - 1);
+    expect(bottom).toBeLessThanOrEqual(board.box.y + board.box.height - 24 + 1);
   });
 
   test("Page Down moves a screenful, Page Up brings it back", async ({ page }) => {
@@ -331,6 +367,26 @@ test.describe("navigation shortcuts", () => {
     await page.mouse.move(board.box.x + 780, board.box.y + 460, { steps: 6 });
     await page.mouse.up();
     await page.keyboard.up("Space");
+
+    const after = await camera(page);
+    expect(after.x).toBeCloseTo(before.x + 80, 0);
+    expect(after.y).toBeCloseTo(before.y + 60, 0);
+    expect(await activeTool(page)).toBe("rectangle");
+    expect(await sceneElements(page)).toHaveLength(0);
+  });
+
+  test("a middle-button drag pans without changing the tool", async ({ page }) => {
+    // The oracle pans on `button === POINTER_BUTTON.WHEEL` whatever the tool
+    // (`App.pan.ts@1118751f:96`).
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await page.keyboard.press("r");
+    const before = await camera(page);
+
+    await page.mouse.move(board.box.x + 700, board.box.y + 400);
+    await page.mouse.down({ button: "middle" });
+    await page.mouse.move(board.box.x + 780, board.box.y + 460, { steps: 6 });
+    await page.mouse.up({ button: "middle" });
 
     const after = await camera(page);
     expect(after.x).toBeCloseTo(before.x + 80, 0);
