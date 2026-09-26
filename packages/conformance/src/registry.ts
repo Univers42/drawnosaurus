@@ -70,14 +70,14 @@ export const RULES: readonly Rule[] = [
   {
     section: "🧭 Navigation & canvas",
     text: /viewport mode/,
-    status: "gap",
-    why: "Shift+3. Excalidraw uses it for a viewport-relative fit; ours has no separate mode to fit to.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_zoom_fit.rs`, "e2e/shortcuts.spec.ts"],
   },
   {
     section: "🧭 Navigation & canvas",
     text: /Middle mouse \+ drag/,
-    status: "gap",
-    why: "pointerInput.ts treats a middle-button press the same as space (event.button === 1 || session.spaceHeld), but nothing dispatches a middle-button pointer event: no unit test for that branch, and no e2e drag with button: 'middle' anywhere in the suite.",
+    status: "covered",
+    tests: ["e2e/shortcuts.spec.ts"],
   },
   {
     section: "🧭 Navigation & canvas",
@@ -621,13 +621,11 @@ export const RULES: readonly Rule[] = [
     tests: [`${WEB}/draw-chrome/presentation.test.ts`, "e2e/presentation.spec.ts"],
   },
   { section: "🔴 Laser pointer", status: "covered", tests: [`${ENGINE}/ci_laser.rs`] },
-  // Same gap as "🧭 Navigation & canvas"'s: pointerInput.ts treats a middle-button press
-  // like space, but nothing dispatches a middle-button pointer event to exercise it.
   {
     section: "✋ Hand / panning",
     text: /^Middle mouse drag/,
-    status: "gap",
-    why: "implemented, untested — pointerInput.ts treats a middle-button press the same as space, but no test dispatches one.",
+    status: "covered",
+    tests: ["e2e/shortcuts.spec.ts"],
   },
   {
     section: "✋ Hand / panning",
@@ -1996,8 +1994,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "22. Canvas navigation",
     text: /^Middle mouse$/,
-    status: "gap",
-    why: "Same gap as shortkey.md's Navigation & canvas rule: pointerInput.ts's button===1 branch has no test, unit or e2e.",
+    status: "covered",
+    tests: ["e2e/shortcuts.spec.ts"],
   },
   // Real drag, real camera assertion — just not named by this rule.
   {
