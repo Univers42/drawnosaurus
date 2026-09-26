@@ -19,7 +19,13 @@ are not drawn while presenting.
 
 ## Entering and moving around
 
-**Present**, from the main menu or `Ctrl/Cmd + Shift + P`, an unused chord. Entering:
+**Present**, from the main menu, the command palette, or `Ctrl/Cmd + Alt + P`. Track B's
+command palette (`docs/reference/palette.md`) took the oracle's own toggle chord,
+Ctrl/Cmd+Shift+P (`CommandPalette.tsx@1118751f:145-146`), so Present moved to Ctrl/Cmd+Alt+P —
+unused in the oracle's own keymap, not Ctrl+Shift+P (Firefox's private-window chord) or an
+Alt+Shift combo (an OS layout switcher on Windows/Linux), and matched on `code` rather than
+`key` since Option+P types "π" on a Mac — the same reasoning already applied to the copy/paste
+style shortcuts (Ctrl/Cmd+Alt+C/V). Entering:
 
 - fits the camera to the first slide, eased in and out over ~400ms
   (`prefers-reduced-motion` skips straight to the target);

@@ -235,7 +235,7 @@
     >
       <MainMenuIcon name="play" />
       <span class="dropdown-menu-item__text">Present</span>
-      <span class="dropdown-menu-item__shortcut">Ctrl+Shift+P</span>
+      <span class="dropdown-menu-item__shortcut">Ctrl+Alt+P</span>
     </button>
 
     <button
