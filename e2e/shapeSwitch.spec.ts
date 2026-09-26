@@ -67,7 +67,9 @@ test("Tab opens the switch, then walks the shape round and back, label and arrow
 
   const shape = await byId(page, first);
   const label = await byId(page, shape.boundTextId!);
-  expect(label.text).toBe("hello world");
+  // What was typed; `text` is its layout, and a diamond's narrower middle may wrap it — as
+  // the oracle's switch re-lays a label out in its new shape, by the font's own metrics.
+  expect(label.originalText).toBe("hello world");
   expect(label.containerId).toBe(first);
   expect((await byId(page, arrow)).startBinding).toBe(first);
 
