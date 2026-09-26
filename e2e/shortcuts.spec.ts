@@ -468,7 +468,8 @@ test.describe("selection and editing shortcuts", () => {
     expect(after.y).toBeCloseTo(before.y, 5);
   });
 
-  test("Shift+arrow nudges by a larger step", async ({ page }) => {
+  test("Shift+arrow nudges by five, as the oracle's does", async ({ page }) => {
+    // `ELEMENT_SHIFT_TRANSLATE_AMOUNT` (`App.tsx@1118751f:5801-5810`), with no grid.
     const board = await openBoard(page);
     await drawRectangle(page, board);
     await focusBoard(board);
@@ -478,7 +479,7 @@ test.describe("selection and editing shortcuts", () => {
     await page.keyboard.press("Shift+ArrowRight");
 
     const after = (await sceneElements(page))[0] as unknown as { x: number };
-    expect(after.x).toBeGreaterThan(before.x + 1);
+    expect(after.x).toBeCloseTo(before.x + 5, 6);
   });
 });
 
