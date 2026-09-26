@@ -67,6 +67,7 @@ export interface SceneElement {
   strokeColor?: string;
   backgroundColor?: string;
   strokeWidth?: number;
+  roughness?: number;
   opacity?: number;
   x: number;
   y: number;

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Arrowhead, DrawElementStyle, SelectionStyle } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
+  import type { StylePreset } from "./stylePresets.ts";
   import Icon from "./Icon.svelte";
   import InspectorRow from "./InspectorRow.svelte";
   import InspectorColorPicker from "./InspectorColorPicker.svelte";
@@ -46,6 +47,12 @@
     themeMode = "light",
     engine,
     openPicker,
+    builtinPresets = [],
+    userPresets = [],
+    onApplyPreset,
+    onSavePreset,
+    onRenamePreset,
+    onDeletePreset,
     onOpenPicker,
     onApply,
     onPreview,
@@ -63,6 +70,13 @@
     themeMode?: ThemeMode;
     /** Which picker is open — the S, G and Shift+F keys open them from outside. */
     openPicker: ColorKind | "font" | null;
+    /** Style presets — Track B, Part 3. Built-ins first, then whatever the viewer saved. */
+    builtinPresets?: readonly StylePreset[];
+    userPresets?: readonly StylePreset[];
+    onApplyPreset?: (preset: StylePreset) => void;
+    onSavePreset?: () => void;
+    onRenamePreset?: (id: string, name: string) => void;
+    onDeletePreset?: (id: string) => void;
     onOpenPicker: (kind: ColorKind | "font" | null) => void;
     /** Applies a style to the selection, or to the next element with nothing selected. */
     onApply: (patch: Partial<DrawElementStyle>) => void;
@@ -71,6 +85,21 @@
     /** Runs an engine action and reads the panel back. */
     run: (action: (engine: DrawEngine) => void) => void;
   } = $props();
+
+  let renamingPresetId = $state<string | null>(null);
+  let renameValue = $state("");
+
+  function startRenamePreset(preset: StylePreset): void {
+    renamingPresetId = preset.id;
+    renameValue = preset.name;
+  }
+
+  function commitRenamePreset(): void {
+    if (!renamingPresetId) return;
+    const trimmed = renameValue.trim();
+    if (trimmed) onRenamePreset?.(renamingPresetId, trimmed);
+    renamingPresetId = null;
+  }
 
   const strokeRow = $derived(colorRow("stroke", summary.strokeDomain, themeMode));
   const fillRow = $derived(colorRow("background", summary.backgroundDomain, themeMode));
@@ -159,6 +188,68 @@
 
 <aside class="draw-panel panel" aria-label="Style inspector">
   <div class="title">{title}</div>
+
+  <InspectorRow label="Presets">
+    <div class="preset-row">
+      {#each builtinPresets as preset (preset.id)}
+        <button
+          type="button"
+          class="preset-chip"
+          title={preset.name}
+          onclick={() => onApplyPreset?.(preset)}
+        >
+          {preset.name}
+        </button>
+      {/each}
+      {#each userPresets as preset (preset.id)}
+        {#if renamingPresetId === preset.id}
+          <!-- svelte-ignore a11y_autofocus -->
+          <input
+            type="text"
+            class="preset-rename"
+            bind:value={renameValue}
+            onblur={commitRenamePreset}
+            onkeydown={(e) => {
+              if (e.key === "Enter") commitRenamePreset();
+              else if (e.key === "Escape") renamingPresetId = null;
+            }}
+            aria-label={`Rename ${preset.name}`}
+            autofocus
+          />
+        {:else}
+          <span class="preset-chip preset-chip--user">
+            <button type="button" title={preset.name} onclick={() => onApplyPreset?.(preset)}>
+              {preset.name}
+            </button>
+            <button
+              type="button"
+              class="preset-chip__action"
+              aria-label={`Rename ${preset.name}`}
+              onclick={() => startRenamePreset(preset)}
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              class="preset-chip__action"
+              aria-label={`Delete ${preset.name}`}
+              onclick={() => onDeletePreset?.(preset.id)}
+            >
+              ✕
+            </button>
+          </span>
+        {/if}
+      {/each}
+      <button
+        type="button"
+        class="preset-chip preset-chip--add"
+        aria-label="Save current style as a preset"
+        onclick={() => onSavePreset?.()}
+      >
+        +
+      </button>
+    </div>
+  </InspectorRow>
 
   <!-- In the oracle's order (`components/Actions.tsx@1118751f:168-200`). -->
   {#if can.strokeColor}
@@ -620,5 +711,81 @@
   .flip {
     display: inline-block;
     transform: scaleX(-1);
+  }
+
+  .preset-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .preset-chip {
+    display: flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: 13px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--fg-strong);
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+    max-width: 120px;
+  }
+
+  .preset-chip:hover {
+    background: var(--bg);
+  }
+
+  .preset-chip > button {
+    background: none;
+    border: none;
+    color: inherit;
+    font: inherit;
+    padding: 0;
+    cursor: pointer;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    max-width: 70px;
+  }
+
+  .preset-chip--user {
+    padding-inline-end: 2px;
+    gap: 2px;
+  }
+
+  .preset-chip__action {
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1;
+    padding: 2px 3px;
+    border-radius: 8px;
+  }
+
+  .preset-chip__action:hover {
+    background: var(--bg);
+    color: var(--fg-strong);
+  }
+
+  .preset-chip--add {
+    font-weight: 700;
+    color: var(--accent);
+    justify-content: center;
+    width: 26px;
+    padding: 0;
+  }
+
+  .preset-rename {
+    height: 26px;
+    width: 90px;
+    padding: 0 6px;
+    border-radius: 13px;
+    border: 1px solid var(--accent);
+    font-size: 11px;
+    font-family: inherit;
+    color: var(--ink);
+    background: var(--surface);
   }
 </style>
