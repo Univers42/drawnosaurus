@@ -71,7 +71,7 @@ function scene(frames: Frame[]) {
   ];
 }
 
-const panel = (page: Page) => page.getByRole("complementary", { name: "Presentation path" });
+const panel = (page: Page) => page.getByRole("dialog", { name: "Presentation path" });
 
 async function openPathEditor(board: Board): Promise<void> {
   await focusBoard(board);

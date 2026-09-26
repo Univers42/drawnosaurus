@@ -1619,6 +1619,7 @@
     if (previewRaf) cancelAnimationFrame(previewRaf);
     presentAnim?.cancel();
     followAnim?.cancel();
+    pathAnim?.cancel();
     eraserTrail.clear();
     realtime?.disconnect();
   });

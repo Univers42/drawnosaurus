@@ -63,10 +63,15 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<aside
+<!--
+  A non-modal dialog: the board stays usable beside it, and — being a dialog — its keys stay
+  its own. The chrome's shortcuts (a style picker on G, a paste) skip what a dialog holds.
+-->
+<div
   bind:this={root}
   class="path-panel"
+  role="dialog"
+  aria-modal="false"
   aria-label="Presentation path"
   tabindex="-1"
   onkeydown={onPanelKeydown}
@@ -137,7 +142,7 @@
     </ol>
     <button type="button" class="present" onclick={onPresent}>Present</button>
   {/if}
-</aside>
+</div>
 
 <style>
   .path-panel {
