@@ -430,7 +430,12 @@ export const RULES: readonly Rule[] = [
     section: "➡️ Advanced arrows",
     text: /sharp arrows|curved arrows|Change arrowhead type/,
     status: "covered",
-    tests: [`${ENGINE}/ci_next_style.rs`, `${ENGINE}/ci_style.rs`, "e2e/arrowType.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_next_style.rs`,
+      `${ENGINE}/ci_style.rs`,
+      `${WEB}/draw-chrome/menu.test.ts`,
+      "e2e/arrowType.spec.ts",
+    ],
   },
   // Routed square between the shapes they bind (elbowArrow.ts@1118751f), held to the
   // oracle's own router on a recorded sweep (engine/tools/elbow-oracle).
@@ -440,11 +445,20 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_elbow.rs`, `${ENGINE}/ci_elbow_oracle.rs`, "e2e/elbowArrow.spec.ts"],
   },
+  // The six cardinality/crow's-foot markers ER diagrams use, plus the plain heads
+  // (circle, circle_outline, triangle_outline, diamond_outline, bar) the oracle's picker
+  // hides by default beside them — geometry and painting transcribed from
+  // getArrowheadPoints/getArrowheadShapes (bounds.ts, shape.ts), replayed against the
+  // oracle's own output by ci_arrowhead_oracle.rs.
   {
     section: "➡️ Advanced arrows",
     text: /cardinality/,
-    status: "gap",
-    why: "Cardinality arrowheads (the crow's-foot heads of Excalidraw's ER diagrams) are not among the heads this engine draws.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_arrowhead_oracle.rs`,
+      `${WEB}/draw-chrome/menu.test.ts`,
+      "e2e/arrowheads.spec.ts",
+    ],
   },
   // An arrow's label: typed on the arrow, wrapped at Excalidraw's width, centred on the
   // path's middle, the stroke cut under it, and re-wrapped/re-centred whenever the arrow's
@@ -1236,7 +1250,12 @@ export const RULES: readonly Rule[] = [
     section: "7. Arrow",
     text: /Arrowhead|Straight arrows|Curved arrows/,
     status: "covered",
-    tests: [`${ENGINE}/ci_next_style.rs`, `${ENGINE}/ci_style.rs`, "e2e/arrowType.spec.ts"],
+    tests: [
+      `${ENGINE}/ci_next_style.rs`,
+      `${ENGINE}/ci_style.rs`,
+      `${ENGINE}/ci_arrowhead_oracle.rs`,
+      "e2e/arrowType.spec.ts",
+    ],
   },
   {
     section: "7. Arrow",
