@@ -4,6 +4,7 @@ import {
   boundsOf,
   easeInOutCubic,
   fitCamera,
+  flight,
   focusCamera,
   lerpCamera,
   persistFocusModePreference,
@@ -265,6 +266,109 @@ describe("animateCamera", () => {
     );
     animation.cancel();
     expect(clock.pending).toBe(false);
+  });
+});
+
+describe("flight", () => {
+  const viewport = { width: 1280, height: 800 };
+  /** Where a camera's view is centred, in world units. */
+  const centre = (c: { x: number; y: number; scale: number }) => ({
+    x: (viewport.width / 2 - c.x) / c.scale,
+    y: (viewport.height / 2 - c.y) / c.scale,
+  });
+  const frame = (x: number, y: number, w: number, h: number) =>
+    fitCamera({ minX: x, minY: y, maxX: x + w, maxY: y + h }, viewport, 24);
+
+  it("starts exactly where it is and lands exactly on the target", () => {
+    const from = frame(0, 0, 300, 200);
+    const to = frame(5000, 3000, 300, 200);
+    const path = flight(from, to, viewport);
+    expect(path.at(0)).toEqual(from);
+    expect(path.at(1)).toEqual(to);
+    // And from inside, it closes on the target rather than jumping to it at the end:
+    // the centre within a world unit, the zoom within 1%. (Not `x`, which is the centre
+    // times the scale — thousands of units out, a 1% zoom is a hundred pixels of it.)
+    const near = path.at(0.999);
+    const [got, want] = [centre(near), centre(to)];
+    expect(Math.hypot(got.x - want.x, got.y - want.y)).toBeLessThan(1);
+    expect(Math.abs(near.scale - to.scale) / to.scale).toBeLessThan(0.01);
+  });
+
+  it("zooms out on the way between two frames far apart, and back in to land", () => {
+    const from = frame(0, 0, 300, 200);
+    const to = frame(5000, 0, 300, 200);
+    const path = flight(from, to, viewport);
+    const scales = [0, 0.25, 0.5, 0.75, 1].map((t) => path.at(t).scale);
+    expect(scales[2]!).toBeLessThan(from.scale / 4);
+    expect(scales[1]!).toBeLessThan(scales[0]!);
+    expect(scales[3]!).toBeGreaterThan(scales[2]!);
+    // The centre travels the straight line between the two, one way only.
+    const xs = [0, 0.25, 0.5, 0.75, 1].map((t) => centre(path.at(t)).x);
+    for (let i = 1; i < xs.length; i += 1) expect(xs[i]!).toBeGreaterThan(xs[i - 1]!);
+    for (const t of [0.25, 0.5, 0.75]) expect(centre(path.at(t)).y).toBeCloseTo(100, 6);
+  });
+
+  it("is a zoom about the shared centre into a frame nested in the one on screen", () => {
+    const outer = frame(0, 0, 3000, 2000);
+    const inner = frame(1350, 900, 300, 200);
+    const path = flight(outer, inner, viewport);
+    const scales = [0, 0.25, 0.5, 0.75, 1].map((t) => path.at(t).scale);
+    for (let i = 1; i < scales.length; i += 1) expect(scales[i]!).toBeGreaterThan(scales[i - 1]!);
+    for (const t of [0.25, 0.5, 0.75]) {
+      expect(centre(path.at(t)).x).toBeCloseTo(1500, 6);
+      expect(centre(path.at(t)).y).toBeCloseTo(1000, 6);
+    }
+  });
+
+  it("takes longer the farther it goes, within 400 to 1800ms", () => {
+    const from = frame(0, 0, 300, 200);
+    const next = flight(from, frame(400, 0, 300, 200), viewport).durationMs;
+    const far = flight(from, frame(8000, 0, 300, 200), viewport).durationMs;
+    const nowhere = flight(from, from, viewport).durationMs;
+    expect(far).toBeGreaterThan(next);
+    for (const ms of [next, far, nowhere]) {
+      expect(ms).toBeGreaterThanOrEqual(400);
+      expect(ms).toBeLessThanOrEqual(1800);
+    }
+  });
+
+  it("stays finite where the formula's terms grow huge: a hair's offset, a vast zoom", () => {
+    const at = (x: number, y: number, scale: number) => ({
+      scale,
+      x: viewport.width / 2 - x * scale,
+      y: viewport.height / 2 - y * scale,
+    });
+    const from = at(20, 10, 30);
+    for (const to of [at(20 + 1e-6, 10, 0.1), at(20 + 1e6, 10, 0.1), at(20.1, 9.9, 29.9)]) {
+      const path = flight(from, to, viewport);
+      expect(Number.isFinite(path.durationMs)).toBe(true);
+      for (const t of [0.1, 0.5, 0.9]) {
+        const c = path.at(t);
+        expect([c.x, c.y, c.scale].every(Number.isFinite), JSON.stringify({ to, t, c })).toBe(true);
+      }
+    }
+  });
+
+  it("drives animateCamera along its way rather than the straight line", () => {
+    const from = frame(0, 0, 300, 200);
+    const to = frame(5000, 0, 300, 200);
+    const path = flight(from, to, viewport);
+    let ms = 0;
+    let queued: (() => void) | null = null;
+    const applied: { scale: number }[] = [];
+    animateCamera(from, to, (c) => applied.push(c), {
+      durationMs: path.durationMs,
+      path: path.at,
+      now: () => ms,
+      raf: (cb) => ((queued = () => cb(ms)), 1),
+      caf: () => {},
+    });
+    ms = path.durationMs / 2;
+    queued!();
+    expect(applied.at(-1)!.scale).toBeLessThan(Math.min(from.scale, to.scale) / 4);
+    ms = path.durationMs;
+    queued!();
+    expect(applied.at(-1)).toEqual(to);
   });
 });
 

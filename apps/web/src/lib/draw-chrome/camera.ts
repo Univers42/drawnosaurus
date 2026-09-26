@@ -145,6 +145,9 @@ export interface CameraAnimation {
 export interface AnimateCameraOptions {
   /** Default 400ms — the spec's "ease-in-out, ~400ms". */
   durationMs?: number;
+  /** The way from `from` to `to`, `t` in [0, 1] and eased; a straight lerp by default.
+   *  `flight(…).at` is the zoom-out-and-in a presentation travels by. */
+  path?: (t: number) => CameraLike;
   /** `prefers-reduced-motion`: jump straight to `to` in one step. */
   reducedMotion?: boolean;
   /** Called once when it stops: after the last frame (at once, for `reducedMotion`), or
@@ -185,6 +188,7 @@ export function animateCamera(
   const caf = options.caf ?? ((id: number) => cancelAnimationFrame(id));
   const start = now();
   const source = options.source;
+  const path = options.path ?? ((t: number) => lerpCamera(from, to, t));
   let id = 0;
   let applied: CameraLike | null = null;
   const tick = (): void => {
@@ -196,7 +200,7 @@ export function animateCamera(
       }
     }
     const t = clamp((now() - start) / duration, 0, 1);
-    apply(lerpCamera(from, to, easeInOutCubic(t)));
+    apply(path(easeInOutCubic(t)));
     applied = source?.camera ?? null;
     if (t < 1) {
       id = raf(tick);
@@ -208,6 +212,74 @@ export function animateCamera(
   // moving the instant it is called rather than sitting still for one frame first.
   tick();
   return { cancel: () => caf(id) };
+}
+
+/** How much a flight zooms out to travel: van Wijk & Nuij's ρ, √2 as they and d3 advise. */
+const RHO = Math.SQRT2;
+/** A flight's duration: milliseconds per unit of its length, within these bounds. */
+const FLIGHT_MS_PER_UNIT = 700;
+const FLIGHT_MIN_MS = 400;
+const FLIGHT_MAX_MS = 1800;
+
+export interface Flight {
+  /** The camera `t` of the way along, `t` in [0, 1]: exactly `from` at 0 and `to` at 1. */
+  at(t: number): CameraLike;
+  /** How long the flight takes, from its length (see `flight`). */
+  durationMs: number;
+}
+
+/**
+ * The smooth zoom and pan from `from` to `to` (van Wijk & Nuij, "Smooth and efficient
+ * zooming and panning", InfoVis 2003) — Prezi's transition. Between two places far apart
+ * it zooms out on the way, so the destination comes into view while the camera travels,
+ * and in again as it lands; between a frame and one nested in it, it is a zoom.
+ *
+ * The math is d3-interpolate's `interpolateZoom`, in camera terms: a view is its centre in
+ * world units and its width, the viewport's longer side over the scale. A flight's length
+ * `S` measures how much the view changes on the way, zoom counted in e-folds; it takes
+ * `S` × 700ms, between 400 and 1800.
+ */
+export function flight(from: CameraLike, to: CameraLike, viewport: Viewport): Flight {
+  const side = Math.max(viewport.width, viewport.height, 1);
+  const view = (c: CameraLike) => ({
+    x: (viewport.width / 2 - c.x) / c.scale,
+    y: (viewport.height / 2 - c.y) / c.scale,
+    w: side / c.scale,
+  });
+  const camera = (x: number, y: number, w: number): CameraLike => {
+    const scale = side / w;
+    return { scale, x: viewport.width / 2 - x * scale, y: viewport.height / 2 - y * scale };
+  };
+  const a = view(from);
+  const b = view(to);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const d = Math.hypot(dx, dy);
+  let length: number;
+  let along: (t: number) => CameraLike;
+  if (d < 1e-9 * Math.min(a.w, b.w)) {
+    // The same centre: a zoom, at a steady rate in e-folds.
+    const folds = Math.log(b.w / a.w);
+    length = Math.abs(folds) / RHO;
+    along = (t) => camera(a.x + t * dx, a.y + t * dy, a.w * Math.exp(folds * t));
+  } else {
+    const rho2 = RHO * RHO;
+    const b0 = (b.w * b.w - a.w * a.w + rho2 * rho2 * d * d) / (2 * a.w * rho2 * d);
+    const b1 = (b.w * b.w - a.w * a.w - rho2 * rho2 * d * d) / (2 * b.w * rho2 * d);
+    // `ln(√(b² + 1) − b)`, written so a large `b` cannot cancel to `ln(0)`.
+    const r0 = -Math.asinh(b0);
+    const r1 = -Math.asinh(b1);
+    length = (r1 - r0) / RHO;
+    along = (t) => {
+      const s = t * length;
+      const u = (a.w / (rho2 * d)) * (Math.cosh(r0) * Math.tanh(RHO * s + r0) - Math.sinh(r0));
+      return camera(a.x + u * dx, a.y + u * dy, (a.w * Math.cosh(r0)) / Math.cosh(RHO * s + r0));
+    };
+  }
+  return {
+    at: (t) => (t <= 0 ? from : t >= 1 ? to : along(t)),
+    durationMs: clamp(length * FLIGHT_MS_PER_UNIT, FLIGHT_MIN_MS, FLIGHT_MAX_MS),
+  };
 }
 
 /**
