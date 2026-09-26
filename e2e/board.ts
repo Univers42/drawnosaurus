@@ -239,6 +239,11 @@ export async function openBoard(
     live?: (socket: WebSocketRoute) => void;
     /** A fragment to open the board with — `#room=…`, to join another page's room. */
     hash?: string;
+    /** Elements the `GET /v1/boards/:slug` stub serves instead of an empty scene — for
+     *  reload checks: reopening a board with what a previous page's autosave sent, to
+     *  prove the real load path reconstructs the same scene through the app's own code,
+     *  not a test-side `loadScene`. */
+    scene?: SceneElement[];
   } = {},
 ): Promise<Board> {
   // The realtime channel. Left unhandled it fails to connect and reconnects on a timer
@@ -268,7 +273,7 @@ export async function openBoard(
         body: JSON.stringify({
           slug,
           title: "E2E",
-          scene: { type: "osidraw", version: 1, source: "e2e", elements: [] },
+          scene: { type: "osidraw", version: 1, source: "e2e", elements: options.scene ?? [] },
         }),
       });
       return;
