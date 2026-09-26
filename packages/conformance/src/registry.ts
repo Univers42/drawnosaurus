@@ -1199,11 +1199,31 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_binding.rs`, `${ENGINE}/ci_linear_anchor.rs`, `${ENGINE}/ci_style.rs`],
   },
+  // freehand.rs ports perfect-freehand's streamline and speed thinning; the stroke tests
+  // pin both.
   {
     section: "8. Freedraw / pencil",
-    text: /[Pp]ressure|stylus|[Pp]alm|[Tt]ouch|[Ss]tabiliz|[Ss]moothing|interpolation|pen vs/,
+    text: /^(Point smoothing|Stabilization|Smoothing)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_freehand_stroke.rs`],
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /[Pp]ressure/,
     status: "gap",
-    why: "No perfect-freehand pipeline: pressure, stabilisation and variable width all come with it, and so does pen/touch discrimination.",
+    why: "Width comes from speed, as perfect-freehand simulates for a mouse (freehand.rs thinning, ci_freehand_stroke.rs); a pen's own pressure is never read.",
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /stylus|[Pp]alm|[Tt]ouch|pen vs/,
+    status: "gap",
+    why: "Pen, touch and mouse are not told apart and a palm is not rejected — see §23.",
+  },
+  {
+    section: "8. Freedraw / pencil",
+    text: /interpolation/,
+    status: "gap",
+    why: "Not claimed: the samples are streamlined (ci_freehand_stroke.rs), but nothing pins whether points are added between them.",
   },
   {
     section: "8. Freedraw / pencil",
@@ -2162,7 +2182,7 @@ export const RULES: readonly Rule[] = [
     section: "32. Export",
     text: /^(Transparent background|Background color)$/,
     status: "gap",
-    why: "Canvas→PNG (engine.ts exportPng, canvas.toBlob()) has no transparent-background toggle and no background-color option, unlike the SVG export path.",
+    why: "The export dialog shows a transparent-background toggle and a scale picker (DrawExportModal.svelte), but neither reaches engine.exportPng(), which is canvas.toBlob() of the visible canvas. There is no background-colour option.",
   },
   {
     section: "32. Export",
