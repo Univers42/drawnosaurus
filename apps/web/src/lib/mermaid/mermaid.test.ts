@@ -72,6 +72,29 @@ describe("skeletonToElements", () => {
     expect(byType(elements, "text")[0]!.containerId).toBe(arrow!.id);
   });
 
+  it("binds an end only to a shape it reaches, so a message stays on its lifelines", () => {
+    // The sequence converter binds each message to the boxes atop both lifelines.
+    const [, , arrow] = skeletonToElements({
+      elements: [
+        node("A", 0),
+        node("B", 200),
+        {
+          type: "arrow",
+          x: 50,
+          y: 300,
+          points: [
+            [0, 0],
+            [200, 0],
+          ],
+          start: { id: "A" },
+          end: { id: "B" },
+        },
+      ],
+    });
+    expect([arrow!.startBinding, arrow!.endBinding]).toEqual([undefined, undefined]);
+    expect([arrow!.x, arrow!.y]).toEqual([50, 300]);
+  });
+
   it("reads arrowheads as the converter writes them: null is none, a crow's foot kept", () => {
     const [arrow] = skeletonToElements({
       elements: [

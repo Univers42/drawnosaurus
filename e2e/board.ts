@@ -63,6 +63,8 @@ declare global {
       clear(): void;
       /** Places a scene document's elements as the Mermaid dialog's Insert does. */
       insertJson(json: string, at?: { x: number; y: number }): boolean;
+      zoomToFitSelection(): void;
+      clearSelection(): void;
     };
     /** The Mermaid dialog's converter, set beside `__drawEngine`. */
     __mermaidToElements?: (definition: string) => Promise<Record<string, unknown>[]>;

@@ -71,6 +71,13 @@ const BADGE_GAP = 8;
 const ROUND = 8;
 const INK = "#1e1e1e";
 const BINDABLE: ReadonlySet<string> = new Set(["rectangle", "diamond", "ellipse"]);
+/**
+ * How far off a shape's box an arrow's end may stop and still be bound to it. Measured over
+ * the converter's own output: an end stops at most 33 off its box in a class diagram (the
+ * room Mermaid leaves for a marker), 5 in a flowchart; a sequence message runs 48 or more
+ * below the actor box it names.
+ */
+const BIND_REACH = 40;
 
 export class SkeletonError extends Error {}
 
@@ -291,10 +298,19 @@ export function skeletonToElements(result: SkeletonResult): DrawElementDto[] {
           endArrowhead: arrowhead(skeleton.endArrowhead, skeleton.type === "arrow" ? "arrow" : "none"),
         };
         if (skeleton.type === "line") return [linear];
+        // Bound only where it reaches the shape: the engine routes a bound end onto its
+        // shape, and a sequence message, which the converter binds to the boxes atop both
+        // lifelines, would jump up to them. Divergence: the oracle binds it anyway and keeps
+        // its points until a box moves (`bindLinearElementToElement`, `transform.ts@1118751f`).
         const start = bindable(skeleton.start?.id);
         const end = bindable(skeleton.end?.id);
-        if (start) linear.startBinding = start.id;
-        if (end) linear.endBinding = end.id;
+        const reaches = (shape: DrawElementDto, [px, py]: [number, number]) =>
+          linear.x + px >= shape.x - BIND_REACH &&
+          linear.x + px <= shape.x + shape.width + BIND_REACH &&
+          linear.y + py >= shape.y - BIND_REACH &&
+          linear.y + py <= shape.y + shape.height + BIND_REACH;
+        if (start && reaches(start, pts[0]!)) linear.startBinding = start.id;
+        if (end && reaches(end, pts.at(-1)!)) linear.endBinding = end.id;
         return labelled(linear, skeleton);
       }
       case "image": {
