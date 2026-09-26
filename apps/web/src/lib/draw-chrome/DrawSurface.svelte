@@ -4,10 +4,10 @@
   import { DARK_THEME, EMPTY_SELECTION_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
-    DrawElementStyle,
     DrawTheme,
     DrawTool,
     Scene,
+    StylePatch,
     TextEditRequest,
   } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
@@ -353,12 +353,12 @@
   }
 
   /** Style patches from the panel: onto the selection, or the next element without one. */
-  function applyStyle(patch: Partial<DrawElementStyle>): void {
+  function applyStyle(patch: StylePatch): void {
     engine?.applyStyle(patch);
     refreshStyle();
   }
 
-  function previewStyle(patch: Partial<DrawElementStyle>): void {
+  function previewStyle(patch: StylePatch): void {
     if (selectedCount > 0) engine?.previewStyle(patch);
     else engine?.setNextStyle(patch);
     refreshStyle();
@@ -382,15 +382,20 @@
 
   /** Captures the first selected element's look, or the next element's with nothing
    *  selected — `engine.getNextStyle()`, the same source `apply_style` itself falls back
-   *  to. Named generically; the panel's rename control is how it gets a real name. */
+   *  to. The font comes from `summary` instead: it is `selectionStyle()`'s own read of
+   *  the same two cases (null on a mixed selection, same as every other field), and
+   *  neither `DrawElementStyle` nor a `DrawElement` carries the next text's font on its
+   *  own. Named generically; the panel's rename control is how it gets a real name. */
   function saveCurrentAsPreset(): void {
     if (!engine) return;
     const source = engine.getSelectedElements()[0] ?? engine.getNextStyle();
-    userPresets = saveUserPreset(
-      userPresets,
-      `Preset ${userPresets.length + 1}`,
-      pickStyleFields(source),
-    );
+    const style = pickStyleFields({
+      ...source,
+      fontFamily: summary.fontFamily ?? undefined,
+      fontSize: summary.fontSize ?? undefined,
+      textAlign: summary.textAlign ?? undefined,
+    });
+    userPresets = saveUserPreset(userPresets, `Preset ${userPresets.length + 1}`, style);
     persistUserPresets(localStorage, userPresets);
   }
 

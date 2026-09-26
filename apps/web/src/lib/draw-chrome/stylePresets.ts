@@ -4,23 +4,20 @@
  * round-trip and the CRUD are unit tested without an engine or a component.
  *
  * A preset covers exactly what `DrawEngine::apply_style`/`engine.applyStyle` already
- * take — `DrawElementStylePatch`'s 8 fields (stroke/background colour, fill style, stroke
- * width and style, roughness, opacity, roundness) — reusing that one existing engine path
- * rather than adding another. Font family, size and text align are not part of a preset:
- * `DrawElementStylePatch` has no font fields, and giving it one means teaching
- * `apply_style` to remeasure wrapped text in the same commit, a real engine change out of
- * scope here.
- * `ponytail: presets cover the 8 DrawElementStyle fields only, not font family/size/text
- * align — upgrade path: add optional font fields to DrawElementStylePatch and remeasure in
- * apply_style before its commit.`
+ * take — `DrawElementStylePatch`'s 8 style fields (stroke/background colour, fill style,
+ * stroke width and style, roughness, opacity, roundness) plus its font — family, size,
+ * horizontal alignment — reusing that one existing engine path rather than adding another.
+ * The font reaches the selected texts and the labels of selected shapes, laid out again as
+ * one step with the rest of the patch, and falls back to the next text's style with
+ * nothing selected, exactly like the other fields (`engine/selection_style.rs`).
  */
 
-import type { DrawElementStyle } from "@osionos/draw-engine/types";
+import type { StylePatch } from "@osionos/draw-engine/types";
 
 export interface StylePreset {
   id: string;
   name: string;
-  style: Partial<DrawElementStyle>;
+  style: StylePatch;
 }
 
 const STYLE_FIELDS = [
@@ -32,12 +29,15 @@ const STYLE_FIELDS = [
   "roughness",
   "opacity",
   "roundness",
-] as const satisfies readonly (keyof DrawElementStyle)[];
+  "fontFamily",
+  "fontSize",
+  "textAlign",
+] as const satisfies readonly (keyof StylePatch)[];
 
-/** The 8 `DrawElementStyle` fields present on `source`, dropping everything else — an
- *  element's other properties (id, geometry, text, …) included. */
-export function pickStyleFields(source: Partial<DrawElementStyle>): Partial<DrawElementStyle> {
-  const result: Partial<DrawElementStyle> = {};
+/** The `StylePatch` fields present on `source`, dropping everything else — an element's
+ *  other properties (id, geometry, text, …) included. */
+export function pickStyleFields(source: Partial<StylePatch>): StylePatch {
+  const result: StylePatch = {};
   for (const field of STYLE_FIELDS) {
     if (source[field] !== undefined) {
       // Each field is copied at its own type; the loop itself is untyped over the union.
@@ -64,6 +64,7 @@ export const BUILTIN_PRESETS: readonly StylePreset[] = [
       roughness: 1.5,
       opacity: 100,
       roundness: 8,
+      fontFamily: 1, // Virgil — the hand-drawn face
     },
   },
   {
@@ -78,6 +79,7 @@ export const BUILTIN_PRESETS: readonly StylePreset[] = [
       roughness: 0,
       opacity: 100,
       roundness: 8,
+      fontFamily: 2, // Helvetica
     },
   },
   {
@@ -92,6 +94,7 @@ export const BUILTIN_PRESETS: readonly StylePreset[] = [
       roughness: 0,
       opacity: 100,
       roundness: 0,
+      fontFamily: 3, // Cascadia — monospace, technical
     },
   },
   {
@@ -106,6 +109,7 @@ export const BUILTIN_PRESETS: readonly StylePreset[] = [
       roughness: 1,
       opacity: 100,
       roundness: 8,
+      fontFamily: 7, // Lilita One — bold display face
     },
   },
   {
@@ -120,6 +124,7 @@ export const BUILTIN_PRESETS: readonly StylePreset[] = [
       roughness: 0.5,
       opacity: 80,
       roundness: 8,
+      fontFamily: 6, // Nunito — soft, quiet
     },
   },
 ];
@@ -136,7 +141,7 @@ function newPresetId(): string {
 export function saveUserPreset(
   presets: readonly StylePreset[],
   name: string,
-  style: Partial<DrawElementStyle>,
+  style: StylePatch,
 ): StylePreset[] {
   return [...presets, { id: newPresetId(), name, style }];
 }

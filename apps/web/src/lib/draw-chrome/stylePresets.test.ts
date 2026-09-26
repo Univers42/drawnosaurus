@@ -24,10 +24,18 @@ describe("BUILTIN_PRESETS", () => {
       expect(preset.style.strokeColor, preset.id).toBeTruthy();
     }
   });
+
+  it("gives every built-in a distinct font", () => {
+    const families = BUILTIN_PRESETS.map((p) => p.style.fontFamily);
+    for (const family of families) {
+      expect(family, "every built-in carries a font").toBeDefined();
+    }
+    expect(new Set(families).size).toBe(families.length);
+  });
 });
 
 describe("pickStyleFields", () => {
-  it("keeps only the 8 DrawElementStyle fields, dropping everything else", () => {
+  it("keeps only the known StylePatch fields, dropping everything else", () => {
     const source = {
       id: "el-1",
       type: "rectangle",
@@ -39,6 +47,9 @@ describe("pickStyleFields", () => {
       roughness: 1,
       opacity: 100,
       roundness: 8,
+      fontFamily: 5,
+      fontSize: 20,
+      textAlign: "center",
       x: 0,
       y: 0,
     } as unknown as Parameters<typeof pickStyleFields>[0];
@@ -52,7 +63,14 @@ describe("pickStyleFields", () => {
       roughness: 1,
       opacity: 100,
       roundness: 8,
+      fontFamily: 5,
+      fontSize: 20,
+      textAlign: "center",
     });
+  });
+
+  it("picks up a font with no other style field set", () => {
+    expect(pickStyleFields({ fontFamily: 7 })).toEqual({ fontFamily: 7 });
   });
 
   it("omits a field the source does not have, rather than writing undefined", () => {
