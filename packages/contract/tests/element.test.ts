@@ -313,6 +313,73 @@ describe("an elbow arrow's fields", () => {
   });
 });
 
+describe("an arrow's arrowheads", () => {
+  const arrow = element({
+    type: "arrow",
+    points: [
+      [0, 0],
+      [100, 0],
+    ],
+  });
+
+  it("accepts every modern value, including the cardinality/crow's-foot markers", () => {
+    for (const arrowhead of [
+      "none",
+      "arrow",
+      "triangle",
+      "triangle_outline",
+      "circle",
+      "circle_outline",
+      "diamond",
+      "diamond_outline",
+      "bar",
+      "cardinality_one",
+      "cardinality_many",
+      "cardinality_one_or_many",
+      "cardinality_exactly_one",
+      "cardinality_zero_or_one",
+      "cardinality_zero_or_many",
+    ] as const) {
+      expect(
+        drawElementSchema.safeParse({
+          ...arrow,
+          startArrowhead: arrowhead,
+          endArrowhead: arrowhead,
+        }).success,
+        arrowhead,
+      ).toBe(true);
+    }
+  });
+
+  it("still accepts a board saved with a legacy spelling, so it keeps loading unchanged", () => {
+    // The engine's own deserializer normalizes these on the way in (dot -> circle,
+    // crowfoot_one -> cardinality_one, crowfoot_many -> cardinality_many,
+    // crowfoot_one_or_many -> cardinality_one_or_many); the boundary's job is only to not
+    // refuse them.
+    for (const legacy of [
+      "dot",
+      "crowfoot_one",
+      "crowfoot_many",
+      "crowfoot_one_or_many",
+    ] as const) {
+      const parsed = drawElementSchema.safeParse({ ...arrow, endArrowhead: legacy });
+      expect(parsed.success, legacy).toBe(true);
+      if (parsed.success) expect(parsed.data.endArrowhead).toBe(legacy);
+    }
+  });
+
+  it("refuses an arrowhead that is neither a modern nor a legacy spelling", () => {
+    expect(drawElementSchema.safeParse({ ...arrow, endArrowhead: "hologram" }).success).toBe(false);
+  });
+
+  it("adds nothing to an arrow that carries neither: absent must read as the engine's own default", () => {
+    const parsed = drawElementSchema.parse(arrow);
+    expect(parsed).not.toHaveProperty("startArrowhead");
+    expect(parsed).not.toHaveProperty("endArrowhead");
+    expect(parsed).toEqual(arrow);
+  });
+});
+
 describe("a figure's fields", () => {
   const triangle = element({ id: "fig", type: "figure", figure: { kind: "polygon", sides: 3 } });
 

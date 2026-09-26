@@ -41,7 +41,45 @@ export const DRAW_ELEMENT_TYPES = [
 
 export const FILL_STYLES = ["hachure", "cross-hatch", "solid", "zigzag"] as const;
 export const STROKE_STYLES = ["solid", "dashed", "dotted"] as const;
-export const ARROWHEADS = ["none", "arrow", "triangle", "dot", "diamond", "bar"] as const;
+/** The oracle's modern `Arrowhead | CardinalityArrowhead` union, in
+ *  `packages/excalidraw/actions/actionProperties.tsx`'s own picker order — mirrors
+ *  `engine/src/types.ts`'s `ARROWHEADS` exactly. What anything on this side ever writes. */
+export const ARROWHEADS = [
+  "none",
+  "arrow",
+  "triangle",
+  "triangle_outline",
+  "circle",
+  "circle_outline",
+  "diamond",
+  "diamond_outline",
+  "bar",
+  "cardinality_one",
+  "cardinality_many",
+  "cardinality_one_or_many",
+  "cardinality_exactly_one",
+  "cardinality_zero_or_one",
+  "cardinality_zero_or_many",
+] as const;
+
+/** Wire spellings a board saved before this change may still carry
+ *  (`packages/element/src/types.ts`'s `ArrowheadLegacy`) — accepted here so an old board
+ *  keeps loading unchanged; the engine's own deserializer normalizes them to their modern
+ *  value (`dot` -> `circle`, `crowfoot_one` -> `cardinality_one`, `crowfoot_many` ->
+ *  `cardinality_many`, `crowfoot_one_or_many` -> `cardinality_one_or_many`) on the way in,
+ *  and nothing on this side ever emits one back out. */
+export const LEGACY_ARROWHEADS = [
+  "dot",
+  "crowfoot_one",
+  "crowfoot_many",
+  "crowfoot_one_or_many",
+] as const;
+
+/** What the wire schema accepts for `startArrowhead` / `endArrowhead` — modern values plus
+ *  the legacy spellings above. Kept apart from {@link ARROWHEADS} so a picker or any other
+ *  caller wanting only what a client may *write* does not have to filter legacy names back
+ *  out. */
+export const WIRE_ARROWHEADS = [...ARROWHEADS, ...LEGACY_ARROWHEADS] as const;
 export const TEXT_ALIGNS = ["left", "center", "right"] as const;
 export const VERTICAL_ALIGNS = ["top", "middle", "bottom"] as const;
 /** How an arrow end sits on its shape: exactly on its anchor, or a gap clear of the outline. */
@@ -164,8 +202,8 @@ export const drawElementSchema = z.object({
   endFixedPoint: fixedPoint.optional(),
   startBindMode: z.enum(BIND_MODES).optional(),
   endBindMode: z.enum(BIND_MODES).optional(),
-  startArrowhead: z.enum(ARROWHEADS).optional(),
-  endArrowhead: z.enum(ARROWHEADS).optional(),
+  startArrowhead: z.enum(WIRE_ARROWHEADS).optional(),
+  endArrowhead: z.enum(WIRE_ARROWHEADS).optional(),
   // An elbow arrow, routed round its shapes in horizontal and vertical runs (Excalidraw's
   // `elbowed`, `packages/element/src/types.ts@1118751f:394-408`). Optional and
   // undefaulted: an arrow saved before these existed is a sharp or curved one, and stays
