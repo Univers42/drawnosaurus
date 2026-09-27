@@ -52,6 +52,13 @@ function predictOrder<T extends StampedElement>(
   // A set, not `order.includes` per element: that was the board's length times the
   // patch's — 13 million comparisons to drop a stack of 1,500 shapes on a board of 9,000,
   // a 60ms stall at the end of the drag.
+  // ponytail: `present` is a live-only order standing in for "the server has seen this
+  // id", which is a different predicate — sound only while no id is tombstoned and then
+  // resurrected, since the server keeps tombstones in its array forever
+  // (`reconcile.ts:64-67`), so a resurrected id comes back in its ORIGINAL slot and
+  // this puts it on top. Pinned as a known failure by `sceneDiff.merges.test.ts`.
+  // Upgrade path: do not predict for an id `known` holds as a tombstone — send an
+  // explicit order for it, the path `diffAll` already takes on a mismatch.
   const present = new Set(order);
   const appended = patch
     .filter((element) => !element.isDeleted && !present.has(element.id))
