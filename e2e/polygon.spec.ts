@@ -65,6 +65,18 @@ async function pickYellowBackground(board: Board): Promise<void> {
   await page.keyboard.press("Escape");
 }
 
+/**
+ * Picks a fill style on the inspector's own row. The row is not on the panel until a
+ * background exists, so this only works after one has been picked — and the style has to
+ * be picked rather than assumed: a new shape's default fill is solid, the oracle's
+ * `DEFAULT_ELEMENT_PROPS.fillStyle` (`packages/common/src/constants.ts@1118751f:522`).
+ */
+async function pickFillStyle(board: Board, label: string): Promise<void> {
+  const row = board.page.getByRole("group", { name: "Fill style" });
+  await expect(row, "the row appears once the shape has a background").toBeVisible();
+  await row.getByRole("button", { name: label, exact: true }).click();
+}
+
 const polygonToggle = (board: Board) =>
   board.page.getByRole("button", { name: /^Close shape into a filled polygon/ });
 
@@ -108,11 +120,14 @@ test.describe("a closed line as a filled polygon", () => {
     const board = await openBoard(page);
     await drawTriangle(board);
     await pickYellowBackground(board);
+    // Hatching is what this measures, and it has to be asked for: the default fill is
+    // solid, so leaning on the default would leave the curve's fill path untested here.
+    await pickFillStyle(board, "Hachure");
     await page.mouse.click(board.box.x + START.x - 60, board.box.y + START.y - 60);
     await page.waitForTimeout(120);
     const line = await theLine(board);
     expect(line.roundness, "rounded by default, so drawn as a curve").toBeTruthy();
-    expect(line.fillStyle).toBe("hachure");
+    expect(line.fillStyle, "the pick reached the element").toBe("hachure");
 
     // The right edge runs from (220, 0) to (110, 180). At y = 101 it is at x ≈ 158 and
     // the curve bows out to x ≈ 186: x = 175 is inside the paint, outside the triangle.
