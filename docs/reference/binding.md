@@ -232,6 +232,47 @@ The suggestion goes out when the gesture ends, is cancelled or is taken over by 
 when the tool changes, when undo replaces the scene under it, and when the shape is
 deleted.
 
+## When the shape is deleted
+
+**VERIFIED** — an arrow that stays is **let go** of a shape deleted from under it, as
+Excalidraw's `fixBindingsAfterDeletion` does (`element/src/binding.ts@1118751f:2297-2311`):
+it calls `unbindAffected`, which writes `{ [bindingProp]: null }` (`:2569`) and takes the
+end's `fixedPoint` and `mode` with it.
+
+It **never rebinds**. On a deletion the oracle has no substitution — nothing
+`fixBindingsAfterDeletion` reaches rewrites a bound id; it writes `{ [bindingProp]: null }`
+on the arrow (`:2569`) and drops the entry from the shape's `boundElements`. The one place
+it does substitute is duplication (`fixDuplicatedBindingsAfterDuplication`, `:2256-2281`),
+which rewrites `endBinding.elementId` (`:2264`) and `startBinding.elementId` (`:2277`)
+through an `origIdToDuplicateId` map; that is our `materialize_within`
+(`engine/crates/draw-engine/src/edit/clipboard.rs`), and it is a copy rather than a
+removal — the shape was copied too, so the copy's binding must follow the copy
+(`ci_persistence.rs` › `copy_and_paste_preserves_internal_connector_bindings`). A
+vectorize is not a duplication: the arrow is not part of what was replaced. And where the
+oracle does try to rebind it says so itself: _"we cannot rebind arrows atm"_ (`:2577`)
+and _"we cannot rebind arrows with bindable element … TODO: #7348"_
+(`delta.ts:2024-2025`); even its rebind path releases when the target is gone
+(`:2489-2492`). So a feature that _replaces_ a bound shape with new elements — a
+vectorized trace under fresh ids — releases the arrows; it does not carry them over. The
+rule is one-directional (`delta.ts:1976-1979`): a binding must not point from a live
+element into a deleted one, and an end on a shape that survives is left exactly as it
+was.
+
+Three of the four paths that tombstone an element go through one function,
+`release_bindings_to_removed` (`engine/crates/draw-engine/src/scene/binding.rs`), called
+**before** the removals: the eraser (`engine/eraser.rs`), the Delete key
+(`engine/clipboard.rs` › `delete_selection`) and a vectorize that drops the image it
+replaces (`engine/vectorize.rs` › `commit_trace`, and only when `keep_original` is off —
+the image is then still on the board under its own id, so its bindings are still good).
+The fourth is the known limit below. The release is part of the same step of history as
+the tombstones, so one undo binds the arrow again. Tests:
+`ci_eraser.rs` › `an_arrow_is_let_go_of_an_erased_shape_and_undo_binds_it_again`,
+`ci_vectorize.rs` › `an_arrow_bound_to_a_vectorized_image_is_let_go_of_it`,
+`keeping_the_original_leaves_the_arrow_bound_to_it`,
+`one_undo_binds_the_arrow_to_the_image_again`, `an_arrow_is_let_go_of_only_the_image_end`,
+and `ci_persistence.rs` › `delete_selection_lets_an_arrow_go_of_the_shape_it_deleted`,
+`one_undo_binds_the_arrow_to_the_deleted_shape_again`.
+
 ## Moving things
 
 **VERIFIED** — an arrow turned or resized on its own lets go of both ends
@@ -241,3 +282,21 @@ rigidly, and an end bound to a shape outside the group lets go
 through its points (`group_transform.rs`), so it keeps no angle of its own and a leftward
 line no longer jumps a width when the group is flipped. A copy keeps an end's anchor
 only when the shape was copied with it.
+
+## Known limits
+
+- **A committed text emptied through the editor is tombstoned without a release.**
+  `remove_emptied_text` (`engine/text_session.rs`) is the fourth path that tombstones an
+  element, and it calls no `release_bindings_to_removed`; a free-standing text is a legal
+  arrow target ([`is_target_kind`](engine/crates/draw-engine/src/scene/binding.rs), whose
+  `Text` arm takes any `Text` with no `container_id`), so the hole is reachable. Bind an
+  arrow's end to a free-standing text, select it, delete its characters: the text is
+  tombstoned and the arrow keeps a binding into a deleted element. Closing it is a
+  separate commit on the stacked branch `bunny/p1.1b-text-bindings`, which adds the call;
+  nothing here depends on that branch.
+- **The oracle substitutes a bound id on duplication, and so do we** — through
+  `materialize_within` (`engine/crates/draw-engine/src/edit/clipboard.rs`), the port of
+  `fixDuplicatedBindingsAfterDuplication` (`binding.ts@1118751f:2256-2281`). It is recorded
+  here because it is the one case where a binding moves to another element's id, and the
+  release above is the _other_ case; the two are easy to confuse. Neither substitutes a
+  binding onto an element the copy did not carry.
