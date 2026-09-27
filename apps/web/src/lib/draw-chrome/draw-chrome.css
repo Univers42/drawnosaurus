@@ -55,6 +55,35 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
+/*
+  The way out of zen mode, bottom right where the oracle puts it
+  (`LayerUI.scss@1118751f:68-90`). Quiet on purpose: it is furniture, not a call to
+  action, and it only exists while the flag is on — which is the whole of its job.
+*/
+.exit-zen-mode {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 20;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px);
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.exit-zen-mode:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+}
+
 /* Modal and dialog backdrops */
 .draw-backdrop {
   position: fixed;

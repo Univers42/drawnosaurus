@@ -136,6 +136,12 @@ export const SHORTCUT_REGISTRY: readonly ShortcutEntry[] = [
     label: "Command palette",
     chords: ["CtrlOrCmd+/", "CtrlOrCmd+Shift+P"],
   },
+  // Zen mode, the oracle's own `keyTest` — `!CTRL_OR_CMD && altKey && code === Z`
+  // (`actionToggleZenMode.tsx@1118751f:34-35`), and only that: Shift with Alt still
+  // toggles, because the oracle never asks about it. Host-only, as `shortkey.md:384`
+  // describes it — the flag hides chrome and leaves the canvas alone, so it needs nothing
+  // from the engine, and `zen.ts` holds the inventory of what it hides.
+  { id: "view.zenMode", section: "View", label: "Toggle zen mode", chords: ["Alt+Z"] },
 
   // --- Editor (HelpDialog.tsx's "Editor" island) --------------------------------------
   { id: "editor.delete", section: "Editor", label: "Delete", chords: ["Delete", "Backspace"] },

@@ -12,6 +12,7 @@ import {
 import type { DrawEngine } from "@osionos/draw-engine/engine";
 import type { ShapeActions } from "./shapeActions.ts";
 import { ALL_TOOL_DEFS } from "./tools.ts";
+import { shortcutFor } from "./shortcutRegistry.ts";
 import { FIGURE_KIND_OPTIONS } from "./inspector.ts";
 
 function cmd(id: string, label: string, category: string, shortcut?: string): Command {
@@ -135,6 +136,7 @@ describe("buildCommands", () => {
       toggleGrid: vi.fn(),
       toggleObjectsSnap: vi.fn(),
       toggleFocusMode: vi.fn(),
+      toggleZenMode: vi.fn(),
       openExport: vi.fn(),
       openTemplates: vi.fn(),
       openMermaid: vi.fn(),
@@ -187,6 +189,18 @@ describe("buildCommands", () => {
   it("has no duplicate ids", () => {
     const ids = buildCommands(host()).map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("toggles zen mode from the palette, printing the registry's own chord", () => {
+    const h = host();
+    const command = buildCommands(h).find((c) => c.id === "view:zenMode");
+    expect(command, "view:zenMode").toBeDefined();
+    expect(command!.category).toBe("View");
+    expect(command!.shortcut).toBe(shortcutFor("view.zenMode"));
+    // Findable by the word the menu and the exit button both use.
+    expect(filterCommands(buildCommands(h), "zen").map((c) => c.id)).toContain("view:zenMode");
+    command!.run();
+    expect(h.toggleZenMode).toHaveBeenCalledOnce();
   });
 
   it("offers every toolbar tool, wired to setTool", () => {

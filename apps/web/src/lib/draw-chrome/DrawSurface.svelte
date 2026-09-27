@@ -135,6 +135,7 @@
     styleShortcut,
     type KeyTarget,
   } from "./shortcuts.ts";
+  import { chromeVisible } from "./zen.ts";
   import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
@@ -260,6 +261,14 @@
    * `onFocusModeKeydown`, the only place `pendingKeyboardTextEdit` is set.
    */
   let focusModeEnabled = $state(true);
+  /**
+   * Zen mode: `Alt+Z`, the palette command and the exit button all land here. A boolean on
+   * this chrome and nothing else — the canvas, the camera and the scene are not told, which
+   * is what `shortkey.md:384` means by a host-only feature. What it hides is `zen.ts`'s
+   * table, read here through `chromeVisible`; the inventory is not restated in this
+   * template, so the table stays the one place a decision is written down.
+   */
+  let zenMode = $state(false);
   let pendingKeyboardTextEdit = false;
   let cameraBeforeFocus: Camera | null = null;
   let focusAnim: CameraAnimation | null = null;
@@ -573,6 +582,16 @@
       typeof localStorage === "undefined" ? undefined : localStorage,
       focusModeEnabled,
     );
+  }
+
+  /**
+   * Zen mode: `Alt+Z`, the palette command and the exit button. Deliberately not persisted
+   * — the oracle keeps it in app state and not in storage either
+   * (`actionToggleZenMode.tsx@1118751f:18-26`), and a board that came back with its chrome
+   * hidden would be a surprise nobody asked for.
+   */
+  function toggleZenMode(): void {
+    zenMode = !zenMode;
   }
 
   let canvasHost: HTMLDivElement | undefined = $state();
@@ -1783,10 +1802,12 @@
 
     const mod = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
-    // Snap, grid, Present and the palette's own toggle chord are decided by the pure,
-    // tested `appShortcut` (`shortcuts.ts`) — the registry's proof runs real events
-    // through it, which an inline condition here could not offer.
-    const shortcut = appShortcut(event, presenting);
+    // Snap, grid, Present, zen mode and the palette's own toggle chord are decided by the
+    // pure, tested `appShortcut` (`shortcuts.ts`) — the registry's proof runs real events
+    // through it, which an inline condition here could not offer. `keyTarget` is the same
+    // question `onStyleShortcut` asks, and it is what keeps a chord out of a field and out
+    // of an open overlay.
+    const shortcut = appShortcut(event, presenting, keyTarget(event.target));
 
     if (event.key === "Escape") {
       // The engine lets the eraser's marks go on the same key; the trail goes with them.
@@ -1815,6 +1836,11 @@
       // Excalidraw's grid shortcut.
       event.preventDefault();
       pickGrid({ enabled: !grid.enabled });
+    } else if (shortcut === "zen") {
+      // Excalidraw's `Alt+Z` (`actionToggleZenMode.tsx@1118751f:34-35`). Host-only: it
+      // hides chrome and leaves the canvas, the camera and the scene alone.
+      event.preventDefault();
+      toggleZenMode();
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
@@ -1865,6 +1891,7 @@
     toggleGrid: () => pickGrid({ enabled: !grid.enabled }),
     toggleObjectsSnap: flipObjectsSnap,
     toggleFocusMode,
+    toggleZenMode,
     openExport: () => (showExport = true),
     openTemplates: () => (showTemplates = true),
     openMermaid: () => (showMermaid = true),
@@ -2209,6 +2236,7 @@
     <DrawToolbar
       active={tool}
       {toolLocked}
+      {zenMode}
       onSelect={handleToolSelect}
       onToggleToolLock={() => {
         if (!engine) return;
@@ -2218,7 +2246,7 @@
     />
   {/if}
 
-  {#if panelVisible && !presenting}
+  {#if panelVisible && !presenting && chromeVisible("inspector", zenMode)}
     <DrawInspector
       {summary}
       can={shapeActions}
@@ -2243,10 +2271,32 @@
   {/if}
 
   {#if !presenting}
-    <DrawZoomBar {engine} {zoom} {contentVisible} onFit={zoomToFit} />
+    <DrawZoomBar {engine} {zoom} {contentVisible} {zenMode} onFit={zoomToFit} />
   {/if}
 
-  {#if showPath && !presenting}
+  <!--
+    The way out of zen mode, and the reason the feature is not a trap.
+
+    Alt+Z is a chrome chord, and a chrome chord is exactly what the guard refuses while a
+    field or a dialog holds the focus — so a person part-way through a text box cannot
+    toggle zen mode off, which is right, and would also be stranded if this button were not
+    here. The oracle answers it the same way (`Actions.tsx@1118751f:915-931`,
+    `LayerUI.scss@1118751f:68-90`): a button that exists only while the flag is on, in the
+    corner the hidden panels came from.
+  -->
+  {#if zenMode && chromeVisible("exitZenMode", zenMode) && !presenting}
+    <button
+      type="button"
+      class="exit-zen-mode"
+      aria-label="Exit zen mode (Alt+Z)"
+      title="Exit zen mode — Alt+Z"
+      onclick={toggleZenMode}
+    >
+      Exit zen mode
+    </button>
+  {/if}
+
+  {#if showPath && !presenting && chromeVisible("pathPanel", zenMode)}
     <DrawPathPanel
       stops={pathStops}
       onVisit={visitStop}

@@ -161,6 +161,42 @@ describe("registry integrity", () => {
     expect(total).toBe(SHORTCUT_REGISTRY.length);
     expect(new Set(groups.map((g) => g.section)).size).toBe(groups.length);
   });
+
+  it("binds Alt+Z once, and no other entry claims the key", () => {
+    const claiming = SHORTCUT_REGISTRY.filter((e) => e.chords.includes("Alt+Z"));
+    expect(claiming.map((e) => e.id)).toEqual(["view.zenMode"]);
+  });
+
+  it("wires Alt+Z the way a browser reports it, so the proof below is the real chord", () => {
+    // The literal in `zen.test.ts`, tied to this file's own parser — one chord, one
+    // description of it, or the two files drift into testing different keys.
+    expect(parseChord(entry("view.zenMode").chords[0]!)).toEqual({
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: false,
+      metaKey: false,
+      altKey: true,
+      shiftKey: false,
+    });
+  });
+
+  it("leaves Alt+Z to the chrome: no other handler in the app answers it", () => {
+    // Shadowing is the failure that hides itself — the chord is printed, the registry entry
+    // is proven, and the key silently does something else. So the engine and each of the
+    // chrome's own handlers are asked directly, and every one of them must decline.
+    const chord = entry("view.zenMode").chords[0]!;
+    const parsed = parseChord(chord);
+
+    const { engine, calls } = recording();
+    expect(dispatchKeyDown(session(engine), keyEvent(chord))).toBe("pass");
+    expect(calls).toEqual([]);
+
+    expect(
+      styleShortcut(parsed, { selected: 1, tool: "select", strokeRow: true, backgroundRow: true }),
+    ).toBeNull();
+    expect(switchKey(parsed, { open: false, switchable: true, onBoard: true })).toBeNull();
+    expect(presentKeyAction(parsed.key)).toBeNull();
+  });
 });
 
 describe("tool chords activate the right tool", () => {
@@ -473,6 +509,22 @@ describe("app chords (owned by the chrome)", () => {
     expect(appShortcut(parseChord(chord), false)).toBe("present");
     expect(appShortcut(parseChord(chord), true)).toBeNull();
   });
+
+  it("Alt+Z toggles zen mode", () => {
+    const chord = entry("view.zenMode").chords[0]!;
+    expect(chord).toBe("Alt+Z");
+    expect(appShortcut(parseChord(chord), false)).toBe("zen");
+  });
+
+  it("Alt+Z is declined wherever a field or an overlay is holding the focus", () => {
+    // The oracle's own guard: `App.tsx@1118751f:5516` wraps its key dispatch in
+    // `if (!isInputLike(event.target))`, so no chord fires while a field has the focus.
+    // `zen.ts` holds the inventory; this holds the trap shut.
+    const chord = entry("view.zenMode").chords[0]!;
+    for (const target of ["textEditor", "field", "overlay"] as const) {
+      expect(appShortcut(parseChord(chord), false, target), target).toBeNull();
+    }
+  });
 });
 
 describe("presentation stepping chords", () => {
@@ -523,6 +575,7 @@ describe("the command palette prints this registry's own text", () => {
     toggleGrid: () => {},
     toggleObjectsSnap: () => {},
     toggleFocusMode: () => {},
+    toggleZenMode: () => {},
     openExport: () => {},
     openTemplates: () => {},
     openMermaid: () => {},
@@ -581,6 +634,7 @@ describe("the command palette prints this registry's own text", () => {
     "view:zoomToSelection": "view.zoomToFitSelection",
     "view:grid": "view.grid",
     "view:snap": "view.snap",
+    "view:zenMode": "view.zenMode",
     "view:present": "presentation.enter",
   };
 

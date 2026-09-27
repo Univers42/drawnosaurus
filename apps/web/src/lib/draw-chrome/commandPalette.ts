@@ -146,6 +146,7 @@ export interface PaletteHost {
   toggleGrid: () => void;
   toggleObjectsSnap: () => void;
   toggleFocusMode: () => void;
+  toggleZenMode: () => void;
   openExport: () => void;
   openTemplates: () => void;
   openMermaid: () => void;
@@ -585,6 +586,13 @@ export function buildCommands(host: PaletteHost): Command[] {
       label: "Toggle focus while typing",
       category: "View",
       run: host.toggleFocusMode,
+    },
+    {
+      id: "view:zenMode",
+      label: "Toggle zen mode",
+      category: "View",
+      shortcut: shortcutFor("view.zenMode"),
+      run: host.toggleZenMode,
     },
     {
       id: "view:present",

@@ -67,6 +67,59 @@ selector, this one for drop and paste. It is unexported, untested, and omits
 `[role="menu"]`. Pre-existing, recorded here rather than fixed: it is not a focus question
 and folding it into `insideOverlay` is a change of its own.
 
+## Zen mode: `Alt+Z`
+
+The one chord in the app that is purely about the chrome, and the only one whose guard is
+load-bearing rather than tidy.
+
+**The chord.** `Alt+Z`, on `code` rather than `key`, is the oracle's `keyTest` read
+literally — `!event[KEYS.CTRL_OR_CMD] && event.altKey && event.code === CODES.Z`
+(`actionToggleZenMode.tsx@1118751f:34-35`). Shift is not in that test, so **`Alt+Shift+Z`
+toggles it too**; that is the oracle's rule, not an oversight here. The registry entry is
+`view.zenMode` in the View section, and `appShortcut` (`shortcuts.ts`) returns `"zen"`.
+Nothing in the engine answers the chord: `keys.ts:300` returns `"pass"` for anything with
+Alt held, and `handlePlainKeys` has no case for `Z`.
+
+**What it hides** is `zen.ts`'s table — the oracle's own inventory, read off its CSS and
+mapped onto this chrome. It is a _distraction reducer_, not a chrome hider, and the
+difference is worth stating plainly because `shortkey.md:384` reads the other way:
+
+| surface                                                          | in zen mode                     | the oracle                                                                                    |
+| ---------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------- |
+| the top bar — menu trigger, title, Share                         | **kept**                        | never takes a zen class (`LayerUI.tsx@1118751f:241-244`)                                      |
+| the tool strip                                                   | **kept**, without its key hints | only `.ToolIcon__keybinding` and `.HintViewer` (`Toolbar.scss@1118751f:5-10`)                 |
+| the style panel                                                  | **hidden**                      | `transition-left` → `translate(-999px, 0)` (`LayerUI.tsx@1118751f:253-255`)                   |
+| the zoom controls                                                | **kept**                        | see the dangling class below (`Footer.tsx@1118751f:40-42`)                                    |
+| the undo and redo buttons                                        | **hidden**                      | `--transition-bottom` → `translate(0, 92px)` (`Footer.tsx@1118751f:56-58`)                    |
+| the path panel                                                   | **hidden**                      | ours; the oracle has no presentation mode, and it is the same kind of side panel              |
+| the canvas, the text being edited, the canvas menu, every dialog | **kept**                        | sibling containers, outside every zen rule (`App.tsx@1118751f:2529-2531`)                     |
+| the "Exit zen mode" button                                       | **shown**                       | `disable-zen-mode`, hidden until `disable-zen-mode--visible` (`Actions.tsx@1118751f:915-931`) |
+
+Two classes the oracle applies move **nothing**, because its CSS defines no rule for them,
+and this app reproduces the behaviour rather than the intention:
+
+- `layer-ui__wrapper__footer-left--transition-left` (`Footer.tsx@1118751f:42`) — the footer
+  left holds the zoom actions _and_ the undo/redo row. Only `--transition-bottom` is defined
+  (`LayerUI.scss@1118751f:61-63`), and it is on the undo/redo row. So zen mode takes undo
+  and redo and leaves the zoom controls, which is why this app's `DrawZoomBar` loses exactly
+  its undo/redo buttons and keeps the rest.
+- `MenuTrigger`'s `zen-mode-transition` (`DropdownMenuTrigger.tsx@1118751f:19-24`) carries no
+  direction at all, so the dropdown triggers do not move either.
+
+`zen-mode-visibility` (`styles.scss@1118751f:665-676`) is dead CSS in the oracle — no TSX
+uses it. Nothing here uses it either.
+
+**The guard, and why the exit button is not decoration.** `appShortcut` takes the same
+`KeyTarget` `styleShortcut` already takes and declines `field`, `textEditor` and `overlay`
+before it looks at the key. That is the oracle's rule with a different name: its key
+dispatch is wrapped whole in `if (!isInputLike(event.target))`
+(`App.tsx@1118751f:5516`), ours is `isTextField`/`insideDialog` (`shortcuts.ts:41`, `:84`).
+So `Alt+Z` typed into a text box, a board title or an open dialog does nothing — which is
+right, and is also why the exit button has to exist. A person part-way through a sentence
+cannot press the chord to get out, and a feature that hides the chrome must not be able to
+strand anyone who cannot see the key. The button appears only while the flag is on, bottom
+right, and is the oracle's own answer to the same problem.
+
 ## Focus
 
 `takeFocus` (`focusHandback.ts`) is one function for the pair an overlay owes: focus
@@ -147,6 +200,16 @@ next key is a board key, reused rather than a second opinion invented here.
   from the code, not observed.
 - **A key pressed on a toolbar button with a dialog open still reaches the board.** The
   guard is target-relative; see above.
+- **Zen mode's decision is unit-tested; its effect on the DOM is not.** The web suite runs
+  in vitest's `node` environment over `src/**/*.test.ts` (`apps/web/vite.config.ts`), so no
+  Svelte component is rendered and no CSS is applied — and adding jsdom would be a new
+  dependency. What `zen.test.ts` proves is the inventory, the chord, the guard and the exit
+  affordance: `chromeVisible` is what the template reads, so the table is the tested
+  surface. What no test proves is that the `{#if}`s in `DrawSurface.svelte`,
+  `DrawZoomBar.svelte` and `DrawToolbar.svelte` are wired to it, and that
+  `.exit-zen-mode` lands where it should. Closing that wants an e2e spec
+  (`e2e/shortcuts.spec.ts` has the harness) and a browser run, neither of which was
+  available when the feature landed. **Zen mode has never been seen in a browser.**
 - **No shared dialog component.** Each overlay is its own `<div class="modal-backdrop"
 role="dialog">`, its own Escape is one handler in `DrawModals.svelte` rather than one
   per dialog, and the focus pair (`takeFocus`) is what ten of the eleven dialogs now

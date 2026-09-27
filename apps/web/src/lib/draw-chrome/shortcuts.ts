@@ -171,7 +171,7 @@ export function styleShortcut(
   return null;
 }
 
-export type AppShortcut = "snap" | "grid" | "present" | "palette";
+export type AppShortcut = "snap" | "grid" | "present" | "palette" | "zen";
 
 export interface AppShortcutKey {
   key: string;
@@ -193,9 +193,22 @@ export interface AppShortcutKey {
  * Snap, grid and Present match `code`, the physical key, as the oracle's grid does, not
  * `key`, the character it types: on AZERTY, QWERTZ or Dvorak the apostrophe is elsewhere
  * or nowhere, and on a Mac Option+S types "ß" and Option+P "π".
+ *
+ * `target` is the same question `styleShortcut` asks, and the guard is the oracle's:
+ * `App.tsx@1118751f:5516` wraps its whole key dispatch in `if (!isInputLike(event.target))`,
+ * so no chord of its own fires while a field holds the focus. A key typed into a text box,
+ * a title or an open dialog is not a shortcut, and Alt+Z least of all — toggling zen mode
+ * while a sentence is being typed would take the chrome away mid-word, and the guard on
+ * `target` is what stops it.
  */
-export function appShortcut(event: AppShortcutKey, presenting: boolean): AppShortcut | null {
+export function appShortcut(
+  event: AppShortcutKey,
+  presenting: boolean,
+  target: KeyTarget = "board",
+): AppShortcut | null {
+  if (target === "field" || target === "textEditor" || target === "overlay") return null;
   const mod = event.ctrlKey || event.metaKey;
+  if (!mod && event.altKey && event.code === "KeyZ") return "zen";
   if (!mod && event.altKey && event.code === "KeyS") return "snap";
   if (mod && event.code === "Quote") return "grid";
   if (mod && event.altKey && event.code === "KeyP" && !presenting) return "present";
