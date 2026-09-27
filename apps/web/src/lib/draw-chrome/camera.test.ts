@@ -503,6 +503,29 @@ describe("boundsOf", () => {
     expect(screenY(box.minY), "its top edge is on screen").toBeGreaterThanOrEqual(0);
     expect(screenY(box.maxY), "…and its bottom edge").toBeLessThanOrEqual(viewport.height);
   });
+
+  // What a *selected text element* is when Enter frames it, and the reason the width the
+  // camera reads has to be the normalised one. `focusCamera` divides by
+  // `Math.max(bounds.width, 1)`, so an unnormalised negative width made the fit come from
+  // 1 world pixel and pinned the scale at the 2x cap. Wide enough here that the cap cannot
+  // hide the difference: `1280 × 0.8 / 512` is where a fit stops being capped.
+  it("frames a selected text element that has been mirrored, rather than capping the zoom", () => {
+    const text = [{ x: 1400, y: 400, width: -900, height: -40 }];
+    const viewport = { width: 1280, height: 800 };
+    const camera = focusCamera(unionBounds(text), viewport, { x: 0, y: 0, scale: 1 });
+    const box = referenceBounds(text);
+
+    expect(camera.scale, "the text's own width asked for the fit, not 1 world pixel").toBeCloseTo(
+      (viewport.width * 0.8) / (box.maxX - box.minX),
+      5,
+    );
+    expect(camera.scale, "…which is below the 2x cap for an element this wide").toBeLessThan(2);
+    // And the whole line is on screen, which at the cap it would not have been.
+    expect(box.maxX * camera.scale + camera.x, "its right edge is on screen").toBeLessThanOrEqual(
+      viewport.width,
+    );
+    expect(box.minX * camera.scale + camera.x, "…and its left edge").toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("focusCamera", () => {
