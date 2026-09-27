@@ -3,7 +3,7 @@
  * (`engine/convert.rs`), the chrome opens, steps and closes the panel that shows it, as
  * Excalidraw's `ConvertElementTypePopup` does (`App.tsx@1118751f:5543-5572`).
  */
-import { worldToScreen } from "@osionos/draw-engine/camera";
+import { worldToScreen } from "@osionos/draw-engine/cameraMath";
 import type { FlowchartShape } from "@osionos/draw-engine/types";
 import type { Box } from "./camera.ts";
 

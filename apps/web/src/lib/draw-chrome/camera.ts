@@ -1,4 +1,4 @@
-import { MAX_ZOOM, MIN_ZOOM } from "@osionos/draw-engine/types";
+import { maxZoom, minZoom } from "@osionos/draw-engine/cameraMath";
 
 /** Camera scale as an integer percentage (100 = 1:1). */
 export function zoomPercent(scale: number): number {
@@ -65,8 +65,8 @@ export function fitCamera(
   const worldH = Math.max(bounds.maxY - bounds.minY, 1);
   const scale = clamp(
     Math.min((viewport.width - padding * 2) / worldW, (viewport.height - padding * 2) / worldH),
-    MIN_ZOOM,
-    MAX_ZOOM,
+    minZoom(),
+    maxZoom(),
   );
   const centerX = (bounds.minX + bounds.maxX) / 2;
   const centerY = (bounds.minY + bounds.maxY) / 2;
