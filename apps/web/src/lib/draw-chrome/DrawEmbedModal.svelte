@@ -8,6 +8,7 @@
    * board to delete.
    */
   import type { DrawEngine } from "@osionos/draw-engine/engine";
+  import { onMount } from "svelte";
   import { ALLOWED_EMBED_HOSTS } from "./embed.ts";
 
   let {
@@ -46,6 +47,15 @@
       handleInsert();
     }
   }
+
+  let field: HTMLInputElement | undefined = $state();
+
+  // Not `autofocus`: Svelte honours that itself, in a microtask that only fires when
+  // nothing in the document is focused
+  // (`svelte@5.57.0/src/internal/client/dom/elements/misc.js:11`), and two of the four
+  // paths that open this — the palette and the engine's own `W` — leave the board
+  // focused, so the field never took it and a keypress meant for the link drew.
+  onMount(() => field?.focus());
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="embed-title">
@@ -55,12 +65,11 @@
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
     </div>
 
-    <!-- svelte-ignore a11y_autofocus -->
     <input
+      bind:this={field}
       bind:value={link}
       onkeydown={handleKeydown}
       type="url"
-      autofocus
       placeholder="https://www.youtube.com/watch?v=…"
       aria-label="Link to embed"
       aria-invalid={rejected}

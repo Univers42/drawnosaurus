@@ -119,6 +119,35 @@ async function drag(board: Board, from: { x: number; y: number }, by: { x: numbe
   await page.mouse.up();
 }
 
+const embedDialog = (page: Page) => page.getByRole("dialog", { name: "Embed a web page" });
+
+test.describe("asking for a link to embed", () => {
+  test("the dialog puts the cursor in its field, keyboard alone", async ({ page }, testInfo) => {
+    // The field is the only thing there is to type into, and it carried a bare
+    // `autofocus` — which Svelte honours itself, in a microtask that only fires when
+    // nothing in the document is focused
+    // (`svelte@5.57.0/src/internal/client/dom/elements/misc.js:11`). This path leaves the
+    // board focused, so on the base the field never took focus; it does from here.
+    // `DrawMermaidModal.svelte` already does it the way that works.
+    //
+    // Keyboard only, so the palette chord is the only way in.
+    await openBoard(page);
+    await page.locator('.draw-chrome [role="application"]').focus();
+    await page.keyboard.press("Control+/");
+    await page.keyboard.type("embed web page");
+    await page.keyboard.press("Enter");
+
+    await expect(embedDialog(page)).toBeVisible();
+    await expect(embedDialog(page).getByRole("textbox", { name: "Link to embed" })).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath("embed-focus.png") });
+    // The dialog's other mount — the context menu's "Edit link…", the same component with a
+    // link already in it — is not asserted here because it never needed this: on that path
+    // the menu button is removed as the dialog opens, so nothing is focused and Svelte's
+    // microtask did fire. Only the palette and the engine's `W` — where the board keeps the
+    // keyboard — leave the board focused, so those are the paths that were broken.
+  });
+});
+
 test.describe("loading a live page", () => {
   test("YouTube is told which site is embedding it", async ({ page }) => {
     const referrers = await stubProviders(page);
