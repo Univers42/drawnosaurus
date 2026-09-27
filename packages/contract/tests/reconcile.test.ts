@@ -11,6 +11,25 @@ import { element } from "./factory.ts";
 const stamps = (elements: readonly { id: string; version: number }[]): string =>
   elements.map((e) => `${e.id}@${e.version}`).join(",");
 
+/** The id pool a drawn stack and a drawn order are cut from. */
+const IDS = ["a", "b", "c", "d", "e", "f"];
+
+/**
+ * xorshift32, the 32-bit sibling of the xorshift64 the engine's own property tests run
+ * on (`ci_text_wrap_props.rs:107`), and a closure rather than a class so a case is one
+ * line. `seed | 0 || 1` because xorshift is stuck at zero, and a zero seed would make
+ * every case the same case.
+ */
+const rng = (seed: number) => {
+  let state = seed | 0 || 1;
+  return (n: number): number => {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return (state >>> 0) % n;
+  };
+};
+
 describe("compareStamps", () => {
   it("orders by version first", () => {
     const older = { version: 1, versionNonce: 9999, updated: 9999 };
@@ -113,6 +132,51 @@ describe("applyOrder", () => {
   it("ignores unknown ids so a stale order cannot resurrect anything", () => {
     const elements = [element({ id: "a" })];
     expect(applyOrder(elements, ["deleted", "a"]).map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("takes an id's first position when the order names it twice", () => {
+    // The guard on `reconcile.ts:93`, pinned by what it decides: a repeated id keeps the
+    // slot it was given first, as the oracle's fractional index does. No other case here
+    // carries a repeated id, so without this one the guard could be deleted and the rest
+    // of this file would still pass — measured, not assumed.
+    const elements = [element({ id: "a" }), element({ id: "b" }), element({ id: "c" })];
+    expect(applyOrder(elements, ["c", "a", "b", "a"]).map((e) => e.id)).toEqual(["c", "a", "b"]);
+  });
+
+  it("is idempotent — the same order applied again leaves the stack where it is", () => {
+    // A client sends its order on every autosave, so applyOrder is applied to a stack it
+    // has already applied it to, over and over, and each pass must land in the same
+    // place. Measured, not assumed: this survives the guard at `reconcile.ts:93` being
+    // deleted — a sort by a key read off the order is idempotent whatever that key is.
+    // What it does not survive is the unnamed bucket built the wrong way round
+    // (`unshift` for `push`), which reverses the stack on one pass and back on the next.
+    // The cases are drawn to reach both shapes: an order shorter than the stack, one
+    // naming an id the stack never had, and one naming the same id twice.
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const next = rng(seed);
+      // A scene's ids are unique, so the stack is a prefix of a shuffled pool; the order
+      // is drawn *with* replacement, which is how the duplicates and the strangers get in.
+      // Both indices are in range by construction; the `!` says so rather than the type.
+      const pool = [...IDS];
+      for (let i = pool.length - 1; i > 0; i -= 1) {
+        const j = next(i + 1);
+        const held = pool[i]!;
+        pool[i] = pool[j]!;
+        pool[j] = held;
+      }
+      const elements = pool
+        .slice(0, next(IDS.length + 1))
+        .map((id, at) => element({ id, x: at * 10 }));
+      const order = Array.from({ length: next(IDS.length + 1) }, () => IDS[next(IDS.length)]!);
+
+      const once = applyOrder(elements, order);
+      const twice = applyOrder(once, order);
+
+      expect(
+        twice.map((e) => e.id),
+        `seed ${seed}: elements [${elements.map((e) => e.id)}] order [${order}]`,
+      ).toEqual(once.map((e) => e.id));
+    }
   });
 });
 
