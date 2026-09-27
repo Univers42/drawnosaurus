@@ -16,7 +16,7 @@ const IDS = ["a", "b", "c", "d", "e", "f"];
 
 /**
  * xorshift32, the 32-bit sibling of the xorshift64 the engine's own property tests run
- * on (`ci_text_wrap_props.rs:107`), and a closure rather than a class so a case is one
+ * on (`ci_text_wrap_props.rs:107-113`), and a closure rather than a class so a case is one
  * line. `seed | 0 || 1` because xorshift is stuck at zero, and a zero seed would make
  * every case the same case.
  */
@@ -135,7 +135,7 @@ describe("applyOrder", () => {
   });
 
   it("takes an id's first position when the order names it twice", () => {
-    // The guard on `reconcile.ts:93`, pinned by what it decides: a repeated id keeps the
+    // The guard on `reconcile.ts:92`, pinned by what it decides: a repeated id keeps the
     // slot it was given first, as the oracle's fractional index does. No other case here
     // carries a repeated id, so without this one the guard could be deleted and the rest
     // of this file would still pass — measured, not assumed.
@@ -146,12 +146,18 @@ describe("applyOrder", () => {
   it("is idempotent — the same order applied again leaves the stack where it is", () => {
     // A client sends its order on every autosave, so applyOrder is applied to a stack it
     // has already applied it to, over and over, and each pass must land in the same
-    // place. Measured, not assumed: this survives the guard at `reconcile.ts:93` being
+    // place. Measured, not assumed: this survives the guard at `reconcile.ts:92` being
     // deleted — a sort by a key read off the order is idempotent whatever that key is.
     // What it does not survive is the unnamed bucket built the wrong way round
     // (`unshift` for `push`), which reverses the stack on one pass and back on the next.
     // The cases are drawn to reach both shapes: an order shorter than the stack, one
     // naming an id the stack never had, and one naming the same id twice.
+    //
+    // Its blind spot is the rank key itself: a command that moved the wrong one is
+    // invisible here, in all 200 draws, because a sort is idempotent whatever it sorts on
+    // — and 128 of them (86 naming no id of the stack, 42 naming one) would come out the
+    // same under any key at all, so only the other 72 could show a wrong key wrong. The
+    // named cases above are what a wrong key would have to break.
     for (let seed = 1; seed <= 200; seed += 1) {
       const next = rng(seed);
       // A scene's ids are unique, so the stack is a prefix of a shuffled pool; the order
@@ -164,9 +170,7 @@ describe("applyOrder", () => {
         pool[i] = pool[j]!;
         pool[j] = held;
       }
-      const elements = pool
-        .slice(0, next(IDS.length + 1))
-        .map((id, at) => element({ id, x: at * 10 }));
+      const elements = pool.slice(0, next(IDS.length + 1)).map((id) => element({ id }));
       const order = Array.from({ length: next(IDS.length + 1) }, () => IDS[next(IDS.length)]!);
 
       const once = applyOrder(elements, order);
