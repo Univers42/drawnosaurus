@@ -1839,8 +1839,8 @@
   /**
    * What each of `appShortcut`'s verdicts does. Split out of `onAppShortcut` because that
    * chain had outgrown the line budget, and because this is the whole of the mapping from
-   * a name to an action — total, so that adding a verdict to `AppShortcut` fails to compile
-   * here rather than falling through to whichever branch happens to be last.
+   * a name to an action. It is total by way of the `never` default below, not by way of
+   * the `switch`: a bare `switch` over a string union compiles fine with a member missing.
    *
    * The chords that are not in the registry stay inline in `onAppShortcut`, because they
    * touch the filesystem or open a dialog this registry does not describe.
@@ -1874,6 +1874,15 @@
         // Ctrl/Cmd+Alt+P.
         showPalette = true;
         break;
+      default: {
+        // A `switch` over a string union with no `default` is NOT an exhaustiveness check:
+        // add a member to `AppShortcut` and this still compiles, silently dropping the
+        // chord. `const unhandled: never = shortcut` is what actually makes it an error
+        // (TS2322), and the throw is unreachable — it is here so the failure names the
+        // verdict rather than arriving as silence.
+        const unhandled: never = shortcut;
+        throw new Error(`shortcutRegistry: no app shortcut runs "${unhandled}"`);
+      }
     }
   }
 
