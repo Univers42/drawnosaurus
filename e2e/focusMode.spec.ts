@@ -5,6 +5,7 @@ import {
   camera,
   focusBoard,
   openBoard,
+  sceneElements,
   waitForCameraLanded,
   waitForCameraStable,
   type Board,
@@ -27,10 +28,14 @@ interface SelectHandle {
 }
 
 /** A filled rectangle, so both a click in its middle and a double-click hit it — no need
- *  to aim at its outline. */
-async function placeFilledRectangle(board: Board, at: { x: number; y: number }): Promise<void> {
+ *  to aim at its outline. `box` is its own size, defaulting to the small one. */
+async function placeFilledRectangle(
+  board: Board,
+  at: { x: number; y: number },
+  box: { width: number; height: number } = { width: 60, height: 40 },
+): Promise<void> {
   await board.page.evaluate(
-    ({ at }) => {
+    ({ at, box }) => {
       const engine = window.__drawEngine!;
       const world = engine.screenToWorld(at.x, at.y);
       engine.loadScene(
@@ -44,8 +49,8 @@ async function placeFilledRectangle(board: Board, at: { x: number; y: number }):
               type: "rectangle",
               x: world.x,
               y: world.y,
-              width: 60,
-              height: 40,
+              width: box.width,
+              height: box.height,
               angle: 0,
               strokeColor: "#1e1e1e",
               backgroundColor: "#a5d8ff",
@@ -65,7 +70,7 @@ async function placeFilledRectangle(board: Board, at: { x: number; y: number }):
         }),
       );
     },
-    { at },
+    { at, box },
   );
 }
 
@@ -140,5 +145,50 @@ test.describe("focus mode", () => {
     await expect(editor(page)).toBeFocused();
 
     expect(await camera(page)).toEqual(before);
+  });
+
+  // A **mirrored** shape: `width` and `height` under zero, which is what the engine leaves
+  // behind the moment a drag crosses an edge. It still enters focus mode, and the editor
+  // opens on it. What the camera frames here is the shape's *label* — the engine selects
+  // the label when it opens one, so `boundsOf` is handed that, and a label is never
+  // mirrored. The normalisation is pinned in `camera.test.ts` and reaches a consumer in
+  // `shapeSwitch.spec.ts`; this is the case as a person meets it.
+  test("Enter on a mirrored shape opens its label with the camera on it", async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const board = await openBoard(page);
+    // Focus before selecting, as above: a click on empty canvas clears the selection.
+    await focusBoard(board);
+    await placeFilledRectangle(
+      board,
+      { x: OPEN_CANVAS.left + 480, y: OPEN_CANVAS.top + 320 },
+      { width: -700, height: -300 },
+    );
+    const [shape] = await sceneElements(board.page);
+    expect(shape!.width, "the shape is mirrored").toBeLessThan(0);
+    await board.page.evaluate(
+      ({ id }) => (window.__drawEngine as unknown as SelectHandle).select([id]),
+      { id: shape!.id },
+    );
+
+    await page.keyboard.press("Enter");
+    await expect(editor(page)).toBeFocused();
+
+    // The shape's own centre, from its two corners rather than from `x + width / 2`, and
+    // where the camera puts it on screen.
+    const { minX, minY, maxX, maxY } = {
+      minX: Math.min(shape!.x, shape!.x + shape!.width),
+      minY: Math.min(shape!.y, shape!.y + shape!.height),
+      maxX: Math.max(shape!.x, shape!.x + shape!.width),
+      maxY: Math.max(shape!.y, shape!.y + shape!.height),
+    };
+    const view = await camera(page);
+    const centreX = ((minX + maxX) / 2) * view.scale + view.x;
+    const centreY = ((minY + maxY) / 2) * view.scale + view.y;
+    expect(centreX).toBeCloseTo(board.box.width / 2, 0);
+    expect(centreY).toBeCloseTo(board.box.height / 2, 0);
+
+    await page.screenshot({ path: testInfo.outputPath("mirrored-focus.png") });
   });
 });

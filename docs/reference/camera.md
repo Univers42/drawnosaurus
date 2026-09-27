@@ -58,6 +58,46 @@ Switchable from the main menu ("Focus while typing") and the command palette, **
 default, persisted per viewer in `localStorage` (`drawnosaurus:focus-mode`) behind
 try/catch — `readFocusModePreference`/`persistFocusModePreference` in `camera.ts`.
 
+## `boundsOf` normalises a mirrored element
+
+`boundsOf` (`camera.ts`) is the front's only source of a set of elements' union box, and it
+read `x + width` as an element's right edge. A **mirrored** element — `width` or `height`
+under zero, which the engine leaves behind the moment a drag crosses an edge — therefore
+came back as a box whose min is past its max, which every consumer reads as empty or
+inverted. The worst case framed empty space: with a mirrored element beside a positive
+sibling the union lost the mirrored element's far corner, and the camera fit what was left.
+
+It normalises each element through `elementBounds`
+(`packages/contract/src/bounds.ts:40-47`) — the sanctioned mirror of the engine's
+`normalize_rect` (`scene/geometry.rs:14-21`), which is what gives a rect dragged up and to
+the left bounds at all. The front keeps no arithmetic of its own: `presentation.ts` already
+reaches for the same function. On an element that is **not** mirrored the call is the
+identity, so no well-behaved rect moves — `camera.test.ts` pins that on its own, with a
+fractional width and height among the literals.
+
+**Four consumers, three call sites.** All three calls are in `DrawSurface.svelte`, and one
+of them drives a consumer of its own:
+
+| call site                                                | what it drives                                                                                                                                                        |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DrawSurface.svelte:1085` `updateFlowchartStripPosition` | where the flowchart strip hangs beside the pending cluster                                                                                                            |
+| `DrawSurface.svelte:1126` `placeShapeSwitch`             | `switchPanelAt` (`shapeSwitch.ts:48`) — where Tab's shape-switch panel hangs under the selection. **The fourth consumer: a call site one step down from `boundsOf`.** |
+| `DrawSurface.svelte:1293` `enterFocusMode`               | `focusCamera` — the camera's ease in on the shape                                                                                                                     |
+
+**What each one reads, and why only one showed it.** The flowchart strip takes the box's
+centre (`bounds.x + bounds.width / 2`) and its top; `enterFocusMode` is handed the shape's
+_label_, because the engine selects the label when it opens one, and a label is never
+mirrored. For both, an inverted box and a normalised one give the same answer — a mirrored
+box's centre is its normalised centre. `switchPanelAt` is the one that reads a corner:
+`bounds.y + bounds.height` is the shape's **top** when its height is negative, so the panel
+hung above the shape instead of under it. That is the case `shapeSwitch.spec.ts` pins.
+
+**This is not the law-3 line closed.** The finish is an engine method that returns the union
+bounds of a _caller-chosen id set_ — `zoom_to_fit_selection` fits the current selection, and
+`pendingFlowchartElements` has no method at all — with the front calling it and this host
+copy deleted. That is a separate item; until it lands `boundsOf` stays here, and fixing its
+normalisation does not move the arithmetic anywhere.
+
 ## Where the host's camera formulas come from
 
 Since `1334bcf` the front imports them rather than keeping its own: `worldToScreen`,
