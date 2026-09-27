@@ -107,8 +107,16 @@ export interface GridPreference {
 
 /** The chosen preference, which is the engine's own grid default — `render/paint.rs`'s
  *  `DEFAULT_GRID_SIZE`/`DEFAULT_GRID_STEP`, read rather than copied, so the menu cannot
- *  offer a grid the engine would then ignore. */
-export const DEFAULT_GRID_PREFERENCE: GridPreference = DEFAULT_GRID;
+ *  offer a grid the engine would then ignore.
+ *
+ *  Spread, so the copy is ours. Aliasing the engine's `DEFAULT_GRID` hands out the
+ *  object every other reader of it shares: `readGridPreference` returns this very
+ *  reference on all three of its early returns, `DrawSurface` puts it straight into a
+ *  `$state`, and one in-place `grid.size = …` in the front would then rewrite
+ *  `engine/src/types.ts`'s constant for the whole app. Latent today — `pickGridMode` and
+ *  `toggleObjectsSnap` always spread, and Svelte 5's proxy keeps writes to itself — and
+ *  exactly the kind of thing that is not latent the day someone edits in place. */
+export const DEFAULT_GRID_PREFERENCE: GridPreference = { ...DEFAULT_GRID };
 
 /**
  * The stored grid choice, validated field by field.
