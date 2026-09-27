@@ -1,4 +1,4 @@
-import { LIGHT_THEME, type DrawTheme } from "@osionos/draw-engine/types";
+import { DEFAULT_GRID, LIGHT_THEME, type DrawTheme } from "@osionos/draw-engine/types";
 
 export interface CssVars {
   getPropertyValue(name: string): string;
@@ -105,12 +105,10 @@ export interface GridPreference {
   snap: boolean;
 }
 
-export const DEFAULT_GRID_PREFERENCE: GridPreference = {
-  enabled: false,
-  size: 20,
-  step: 5,
-  snap: true,
-};
+/** The chosen preference, which is the engine's own grid default — `render/paint.rs`'s
+ *  `DEFAULT_GRID_SIZE`/`DEFAULT_GRID_STEP`, read rather than copied, so the menu cannot
+ *  offer a grid the engine would then ignore. */
+export const DEFAULT_GRID_PREFERENCE: GridPreference = DEFAULT_GRID;
 
 /**
  * The stored grid choice, validated field by field.

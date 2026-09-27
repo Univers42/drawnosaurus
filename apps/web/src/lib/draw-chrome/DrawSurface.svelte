@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { DrawCanvas } from "@osionos/draw-engine/svelte";
+  import { screenToWorld, worldToScreen } from "@osionos/draw-engine/camera";
   import { DARK_THEME, EMPTY_SELECTION_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
@@ -25,7 +26,6 @@
     persistFocusModePreference,
     readFocusModePreference,
     setCameraExact,
-    worldToScreen,
     zoomPercent,
     type CameraAnimation,
     type CameraLike,
@@ -314,10 +314,10 @@
     const topLeft = worldToScreen(currentCamera, minX, minY);
     const bottomRight = worldToScreen(currentCamera, maxX, maxY);
     return {
-      x: topLeft.sx,
-      y: topLeft.sy,
-      width: bottomRight.sx - topLeft.sx,
-      height: bottomRight.sy - topLeft.sy,
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
     };
   });
   /** Four bands covering everything but `spotlightRect`, each a plain CSS rect — simpler
@@ -350,8 +350,8 @@
     if (!showPath || presenting || !camera) return [];
     return pathStops.flatMap((stop, index) => {
       if (!stop.bounds) return [];
-      const { sx, sy } = worldToScreen(camera, stop.bounds.minX, stop.bounds.minY);
-      return [{ id: stop.frameId, step: index + 1, x: sx, y: sy }];
+      const at = worldToScreen(camera, stop.bounds.minX, stop.bounds.minY);
+      return [{ id: stop.frameId, step: index + 1, x: at.x, y: at.y }];
     });
   });
 
@@ -1076,8 +1076,8 @@
       flowchartStripPos = null;
       return;
     }
-    const { sx, sy } = worldToScreen(currentCamera, bounds.x + bounds.width / 2, bounds.y);
-    flowchartStripPos = { x: sx, y: sy };
+    const centre = worldToScreen(currentCamera, bounds.x + bounds.width / 2, bounds.y);
+    flowchartStripPos = { x: centre.x, y: centre.y };
   }
 
   function chooseFlowchartShape(shape: FlowchartShape): void {
@@ -1657,7 +1657,8 @@
   //
   // Now: bound to the canvas, at most one computation per frame, skipped entirely when
   // the pointer has not moved a whole pixel, and the camera comes from the `currentCamera`
-  // the engine already pushes to us — so there is no WASM hop at all.
+  // the engine already pushes to us — which the engine's own `screenToWorld` takes
+  // directly, so there is no WASM hop at all.
   let cursorRaf = 0;
   let cursorPending: { x: number; y: number } | null = null;
   let lastSent = { x: Number.NaN, y: Number.NaN };
@@ -1684,11 +1685,8 @@
     lastPointer = { x: sx, y: sy };
 
     if (realtime && currentCamera) {
-      // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
-      cursorPending = {
-        x: (sx - currentCamera.x) / currentCamera.scale,
-        y: (sy - currentCamera.y) / currentCamera.scale,
-      };
+      const world = screenToWorld(currentCamera, sx, sy);
+      cursorPending = { x: world.x, y: world.y };
     }
 
     if (cursorRaf) return;
@@ -1727,10 +1725,7 @@
     const target = e.currentTarget as HTMLElement | null;
     if (!target) return;
     const rect = target.getBoundingClientRect();
-    const next = {
-      x: (e.clientX - rect.left - currentCamera.x) / currentCamera.scale,
-      y: (e.clientY - rect.top - currentCamera.y) / currentCamera.scale,
-    };
+    const next = screenToWorld(currentCamera, e.clientX - rect.left, e.clientY - rect.top);
     lastSent = next;
     realtime.sendCursor(next.x, next.y, "laser", down);
   }

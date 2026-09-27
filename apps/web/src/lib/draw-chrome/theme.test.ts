@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIGHT_THEME } from "@osionos/draw-engine/types";
+import { DEFAULT_GRID, LIGHT_THEME } from "@osionos/draw-engine/types";
 import {
   DEFAULT_GRID_PREFERENCE,
   persistObjectsSnapPreference,
@@ -180,5 +180,14 @@ describe("snap modes exclude each other", () => {
     const modes = { objectsSnap: true, grid: gridOff };
     expect(pickGridMode(modes, { size: 40 }).objectsSnap).toBe(true);
     expect(pickGridMode(modes, { enabled: false }).objectsSnap).toBe(true);
+  });
+});
+
+describe("the grid default", () => {
+  it("is the engine's own DEFAULT_GRID, not a third copy of the numbers", () => {
+    // `DEFAULT_GRID_SIZE`/`DEFAULT_GRID_STEP` live in `render/paint.rs` and are
+    // exported to the host once. A separate literal here could offer a size the engine
+    // then silently refuses.
+    expect(DEFAULT_GRID_PREFERENCE).toBe(DEFAULT_GRID);
   });
 });

@@ -1,3 +1,5 @@
+import { MAX_ZOOM, MIN_ZOOM } from "@osionos/draw-engine/types";
+
 /** Camera scale as an integer percentage (100 = 1:1). */
 export function zoomPercent(scale: number): number {
   return Math.round(scale * 100);
@@ -31,10 +33,6 @@ export function boundsOf(elements: Box[]): Box | null {
   }
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
-
-/** Mirrors the engine's `MIN_ZOOM`/`MAX_ZOOM` (`camera.rs`). */
-export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 30;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -334,19 +332,4 @@ export function persistFocusModePreference(
   } catch {
     // Not persisting is survivable; the current page still honours the choice.
   }
-}
-
-/**
- * World → screen, matching the engine's `world_to_screen`
- * (`wx * scale + camera.x`). Peer cursors are stored in world space.
- */
-export function worldToScreen(
-  camera: { x: number; y: number; scale: number },
-  wx: number,
-  wy: number,
-): { sx: number; sy: number } {
-  return {
-    sx: wx * camera.scale + camera.x,
-    sy: wy * camera.scale + camera.y,
-  };
 }
