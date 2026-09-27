@@ -349,6 +349,16 @@
   let showShare = $state(false);
   let showShortcuts = $state(false);
   let showPalette = $state(false);
+  /**
+   * The one command the palette remembers, kept here rather than in the dialog so it
+   * outlives the dialog — the oracle's `lastUsedPaletteItem` sits outside its palette for
+   * the same reason (`CommandPalette.tsx@1118751f:85`). In memory only, like the oracle's
+   * plain jotai store: a reload starts over, and no board change touches it.
+   */
+  let paletteRecentId = $state<string | null>(null);
+  /** The image the Vectorize dialog is open for — the palette's command as well as the
+   *  canvas menu's row opens it. */
+  let vectorizeId = $state<string | null>(null);
   /** The presentation path editor, and the stops it lists — read while it is open. */
   let showPath = $state(false);
   let pathStops = $state<Slide[]>([]);
@@ -1886,6 +1896,7 @@
     },
     copyStyles,
     stepFontSize,
+    vectorize: (id) => (vectorizeId = id),
   });
   const paletteCommands = $derived(showPalette ? buildCommands(paletteHost()) : []);
 </script>
@@ -2323,6 +2334,9 @@
       bind:showShortcuts
       bind:showPalette
       {paletteCommands}
+      {paletteRecentId}
+      bind:vectorizeId
+      onPaletteRun={(id) => (paletteRecentId = id)}
       onCopyStyles={copyStyles}
       onFit={zoomToFit}
       onEditEmbedLink={(id) => {

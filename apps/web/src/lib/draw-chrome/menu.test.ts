@@ -1,12 +1,15 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { DrawElement } from "@osionos/draw-engine/types";
 import {
   ARROWHEAD_GLYPH,
   ARROWHEAD_KINDS,
   ARROWHEAD_LABEL,
+  VECTORIZE_LABEL,
   clampMenuPosition,
   menuElementFromSelection,
   textMenu,
+  vectorizeAction,
 } from "./menu.ts";
 
 const el = (patch: Partial<DrawElement> & Pick<DrawElement, "type" | "id">): DrawElement => ({
@@ -139,6 +142,40 @@ describe("menuElementFromSelection", () => {
       true,
     );
     expect(info).toMatchObject({ linear: null, multi: true, grouped: true });
+  });
+});
+
+describe("vectorizeAction", () => {
+  const image = (id: string) => el({ id, type: "image" });
+
+  it("is the one declaration the canvas menu and the palette both read", () => {
+    // Two menus offer it, so it is written once. A second literal is how a palette entry
+    // silently stops matching the menu item — which is the bug this scan exists to fail on.
+    const sources = ["./commandPalette.ts", "./DrawContextMenu.svelte"];
+    for (const source of sources) {
+      const text = readFileSync(new URL(source, import.meta.url), "utf8");
+      expect(text.includes(`"${VECTORIZE_LABEL}"`), source).toBe(false);
+    }
+    const declared = readFileSync(new URL("./menu.ts", import.meta.url), "utf8");
+    expect(declared.includes(`"${VECTORIZE_LABEL}"`)).toBe(true);
+  });
+
+  it("names the one unlocked image, and nothing else", () => {
+    expect(vectorizeAction(menuElementFromSelection([image("i")], false, false))).toEqual({
+      label: VECTORIZE_LABEL,
+      elementId: "i",
+    });
+    // A locked image, two of anything, an embed, an empty canvas.
+    expect(vectorizeAction(menuElementFromSelection([image("i")], true, false))).toBeNull();
+    expect(
+      vectorizeAction(
+        menuElementFromSelection([image("i"), el({ id: "r", type: "rectangle" })], false, false),
+      ),
+    ).toBeNull();
+    expect(
+      vectorizeAction(menuElementFromSelection([el({ id: "e", type: "embed" })], false, false)),
+    ).toBeNull();
+    expect(vectorizeAction(null)).toBeNull();
   });
 });
 

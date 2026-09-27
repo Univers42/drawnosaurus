@@ -2,7 +2,7 @@
   import { onMount, tick } from "svelte";
   import type { Arrowhead } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
-  import { clampMenuPosition, type MenuElementInfo } from "./menu.ts";
+  import { clampMenuPosition, vectorizeAction, type MenuElementInfo } from "./menu.ts";
   import { shortcutLabel, zOrderShortcut } from "./shortcuts.ts";
   import { takeFocus } from "./focusHandback.ts";
   import DrawMenuExtremity from "./DrawMenuExtremity.svelte";
@@ -37,6 +37,9 @@
 
   let menuEl: HTMLDivElement | undefined;
   let pos = $state({ left: 0, top: 0 });
+
+  /** The Vectorize row, from the declaration the palette reads too (`menu.ts`). */
+  const vectorize = $derived(vectorizeAction(element));
 
   /**
    * An open menu takes the focus and hands it back when it closes — `takeFocus`, and why
@@ -110,10 +113,9 @@
     <div class="rule" aria-hidden="true"></div>
   {/if}
 
-  {#if element?.vectorizeId}
-    {@const id = element.vectorizeId}
-    <button type="button" role="menuitem" onclick={() => onVectorize(id)}>
-      <span>Vectorize image…</span>
+  {#if vectorize}
+    <button type="button" role="menuitem" onclick={() => onVectorize(vectorize.elementId)}>
+      <span>{vectorize.label}</span>
     </button>
     <div class="rule" aria-hidden="true"></div>
   {/if}

@@ -15,16 +15,16 @@ and gives the image back. Confidence markers as in the other references: **VERIF
 
 ## Where each part lives
 
-| part                | where                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------- |
-| the tracer          | `engine/crates/draw-trace` — its own WASM, `engine/pkg/draw_trace*`                    |
-| its thread          | `engine/src/vectorize.worker.ts`, driven by `TraceWorker` in `engine/src/vectorize.ts` |
-| the insert          | `engine/crates/draw-engine/src/engine/vectorize.rs`, bound in `wasm/vectorize_api.rs`  |
-| the insert, from TS | `DrawEngine.vectorizeImage` (`engine/src/engine.ts`)                                   |
-| presets, caps, copy | `apps/web/src/lib/draw-chrome/vectorize.ts`                                            |
-| the dialog          | `VectorizeDialog.svelte`, opened from `DrawModals.svelte`                              |
-| the menu entry      | `menu.ts` › `vectorizeId` (one selected, unlocked image), `DrawContextMenu.svelte`     |
-| the benchmark       | `perf/vectorize/` — not a test, nothing gates on it                                    |
+| part                | where                                                                                                                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| the tracer          | `engine/crates/draw-trace` — its own WASM, `engine/pkg/draw_trace*`                                                                                                                  |
+| its thread          | `engine/src/vectorize.worker.ts`, driven by `TraceWorker` in `engine/src/vectorize.ts`                                                                                               |
+| the insert          | `engine/crates/draw-engine/src/engine/vectorize.rs`, bound in `wasm/vectorize_api.rs`                                                                                                |
+| the insert, from TS | `DrawEngine.vectorizeImage` (`engine/src/engine.ts`)                                                                                                                                 |
+| presets, caps, copy | `apps/web/src/lib/draw-chrome/vectorize.ts`                                                                                                                                          |
+| the dialog          | `VectorizeDialog.svelte`, opened from `DrawModals.svelte`                                                                                                                            |
+| the menu entry      | `menu.ts` › `vectorizeId` (one selected, unlocked image) and `vectorizeAction`, the one declaration both menus read — `DrawContextMenu.svelte` and the palette's `commandPalette.ts` |
+| the benchmark       | `perf/vectorize/` — not a test, nothing gates on it                                                                                                                                  |
 
 The boundary rule holds: the tracer runs in the browser, the server never sees anything
 but the elements the insert makes.
@@ -215,12 +215,12 @@ reported: it can paint before the SVG has decoded.
 
 ## Tests
 
-| suite                                             | what                                                                  |
-| ------------------------------------------------- | --------------------------------------------------------------------- |
-| `engine/crates/draw-trace/tests/trace.rs`         | flattening, holes, caps, flat rings, stats (+ config unit tests)      |
-| `engine/crates/draw-engine/tests/ci_vectorize.rs` | mapping, elements, stacking, groups, history, bindings, every refusal |
-| `apps/web/.../vectorize.test.ts`, `menu.test.ts`  | presets, slider maps, caps, messages, the menu entry                  |
-| `e2e/vectorize.spec.ts`                           | both modes end to end, autosave, undo, the zoom sharpness             |
+| suite                                             | what                                                                   |
+| ------------------------------------------------- | ---------------------------------------------------------------------- |
+| `engine/crates/draw-trace/tests/trace.rs`         | flattening, holes, caps, flat rings, stats (+ config unit tests)       |
+| `engine/crates/draw-engine/tests/ci_vectorize.rs` | mapping, elements, stacking, groups, history, bindings, every refusal  |
+| `apps/web/.../vectorize.test.ts`, `menu.test.ts`  | presets, slider maps, caps, messages, the one menu/palette declaration |
+| `e2e/vectorize.spec.ts`                           | both modes end to end, autosave, undo, the zoom sharpness              |
 
 ## Known limits
 
@@ -235,8 +235,10 @@ reported: it can paint before the SVG has decoded.
   [`binding.md` › When the shape is deleted](binding.md#when-the-shape-is-deleted).
 - **A stroke added to a traced shape shows its keyhole bridges**, the zero-width cuts that
   carry its holes. Traced shapes have none, and without one the cuts are invisible.
-- **Only the context menu offers it**, for exactly one unlocked image; there is no inspector
-  entry or shortcut.
+- **Only the context menu and the command palette offer it**, both from the one declaration
+  (`menu.ts` › `vectorizeAction`), for exactly one unlocked image; there is no inspector
+  entry and no shortcut. The oracle has no vectorize command at all, in any category, at
+  `@1118751f`, so the palette row is this project's own.
 - **`MAX_GROUP_DEPTH` is written twice**: the contract does not export it, so `vectorize.ts`
   repeats 32 and `vectorize.test.ts` pins the two together through the element schema.
 - **A picture that has not arrived yet** (a peer's image whose bytes are still on their way)
