@@ -50,10 +50,10 @@
 
   let field: HTMLInputElement | undefined = $state();
 
-  // Not `autofocus`, which a browser honours only for what was in the page as it loaded —
-  // and this is mounted from an `{#if}`, so on every path that opens it the field never took
-  // focus. The palette, the engine's own `W` and the toolbar all hand the keyboard back to
-  // the board as they close, so a keypress meant for the link drew with the tool in hand.
+  // Not `autofocus`: Svelte honours that itself, in a microtask that only fires when
+  // nothing in the document is focused (`dom/elements/misc.js:11`), and two of the four
+  // paths that open this — the palette and the engine's own `W` — leave the board
+  // focused, so the field never took it and a keypress meant for the link drew.
   onMount(() => field?.focus());
 </script>
 

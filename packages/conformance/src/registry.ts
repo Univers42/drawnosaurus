@@ -654,11 +654,11 @@ export const RULES: readonly Rule[] = [
   {
     section: "🧱 Web embeds",
     status: "covered",
-    // e2e/embed.spec.ts is also where the dialog itself is exercised — it takes the cursor
-    // for the asker, keyboard alone. What sits behind it, the engine's placement, is
-    // asserted by that same file's tests, the ones that insert through the engine.
-    // `prompt/*.md` names no line for a dialog's focus, so nothing is claimed here beyond
-    // that.
+    // e2e/embed.spec.ts is also where the dialog itself is exercised: on the palette path
+    // the field takes no focus on the base and does after `onMount` focuses it. What sits
+    // behind it, the engine's placement, is asserted by that same file's tests, the ones
+    // that insert through the engine. `prompt/*.md` names no line for a dialog's focus, so
+    // nothing is claimed here beyond that.
     tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`, "e2e/embed.spec.ts"],
   },
   {

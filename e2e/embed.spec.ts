@@ -124,8 +124,9 @@ const embedDialog = (page: Page) => page.getByRole("dialog", { name: "Embed a we
 test.describe("asking for a link to embed", () => {
   test("the dialog puts the cursor in its field, keyboard alone", async ({ page }, testInfo) => {
     // The field is the only thing there is to type into, and it carried a bare
-    // `autofocus` — which a browser honours only for what was in the page as it loaded.
-    // Mounted from an `{#if}`, that attribute is inert, so the field never took focus.
+    // `autofocus` — which Svelte honours itself, in a microtask that only fires when
+    // nothing in the document is focused (`dom/elements/misc.js:11`). This path leaves the
+    // board focused, so on the base the field never took focus; it does from here.
     // `DrawMermaidModal.svelte` already does it the way that works.
     //
     // Keyboard only, so the palette chord is the only way in.
@@ -139,11 +140,10 @@ test.describe("asking for a link to embed", () => {
     await expect(embedDialog(page).getByRole("textbox", { name: "Link to embed" })).toBeFocused();
     await page.screenshot({ path: testInfo.outputPath("embed-focus.png") });
     // The dialog's other mount — the context menu's "Edit link…", the same component with a
-    // link already in it — is not asserted here because it never needed this: nothing hands
-    // the keyboard back to the board on that path, so the browser's own `autofocus` was
-    // left to honour the attribute and the field took focus by itself. Run against the old
-    // component it passes; only the palette path, where the board keeps the keyboard, is
-    // the fix.
+    // link already in it — is not asserted here because it never needed this: on that path
+    // the menu button is removed as the dialog opens, so nothing is focused and Svelte's
+    // microtask did fire. Run against the old component it passes; of the four paths only
+    // the palette and the engine's `W` — where the board keeps the keyboard — were broken.
   });
 });
 
