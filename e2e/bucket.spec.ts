@@ -179,8 +179,8 @@ test.describe("bucket fill", () => {
     // polygons every time someone taps the bucket.
     //
     // This one found a crash rather than a duplicate. The restyle path assigned the raw
-    // current fill style, which is hachure by default, and a pattern-filled curve is the
-    // one shape rough had no implementation for — so the second click aborted the WASM
+    // current fill style, which was hachure by default then, and a pattern-filled curve is
+    // the one shape rough had no implementation for — so the second click aborted the WASM
     // module and the board stopped responding entirely. Four more clicks here than feels
     // necessary, because the fourth is the one that used to catch it.
     const board = await openBoard(page);
