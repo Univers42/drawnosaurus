@@ -1,0 +1,142 @@
+// OpenCode's configuration for this project: what Claude Code gets from `.mcp.json`,
+// `~/.claude.json` and its plugins, ported for OpenCode v2. The agents and commands are in
+// `.opencode/`. Skills need nothing here: OpenCode already reads `.claude/skills/` and
+// `~/.claude/skills/`. It also reads CLAUDE.md and `~/.claude/CLAUDE.md`.
+//
+// This host has no node or npx, so every MCP server runs in a container. Each one was
+// handshake-tested on 2026-09-27, and the browsers were tested by loading a real page.
+{
+  "$schema": "https://opencode.ai/config.json",
+  // The plan and the laws for the agent that works on its own branches.
+  "instructions": ["BUNNY.md"],
+  "mcp": {
+    // Browser automation, headless Chromium. Snapshots and screenshots are written to
+    // ~/bunny/mcp-output, which is mounted at the same path inside and outside the container,
+    // so the file links the server returns are real files on the host.
+    "playwright": {
+      "type": "local",
+      "command": [
+        "sh",
+        "-c",
+        "mkdir -p \"$HOME/bunny/mcp-output\" && exec docker run -i --rm --init --network host --user \"$(id -u):$(id -g)\" -e HOME=/tmp -v \"$HOME/bunny/mcp-output:$HOME/bunny/mcp-output\" mcr.microsoft.com/playwright/mcp@sha256:77dccc5ce9e94cb8ae7ebea87ddbb6cd54b05760c4d63c54e16accf2726b8734 --output-dir \"$HOME/bunny/mcp-output\" --viewport-size 1280,800",
+      ],
+      "timeout": 60000,
+    },
+    // Performance traces, console and network, via the Chromium the browser suite pins.
+    "chrome-devtools": {
+      "type": "local",
+      "command": [
+        "docker",
+        "run",
+        "-i",
+        "--rm",
+        "--init",
+        "--network",
+        "host",
+        "-e",
+        "HOME=/tmp",
+        "-e",
+        "npm_config_update_notifier=false",
+        "mcr.microsoft.com/playwright:v1.63.0-noble",
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@1.10.1",
+        "--headless",
+        "--isolated",
+        "--executablePath=/ms-playwright/chromium-1243/chrome-linux64/chrome",
+        "--chromeArg=--no-sandbox",
+      ],
+      "timeout": 180000,
+    },
+    // The engine's own state (scene, camera, render stats, hit tests) from a Vite dev server.
+    // Its first start installs tools/editor-inspector/node_modules. It opens a board at the
+    // baseUrl given to open_board: a slot's Vite port, never 5373.
+    "editor-inspector": {
+      "type": "local",
+      "cwd": ".",
+      "command": [
+        "sh",
+        "-c",
+        "exec docker run -i --rm --init --network host --user \"$(id -u):$(id -g)\" -e HOME=/tmp -e npm_config_update_notifier=false -v \"$(pwd -P)/tools/editor-inspector:/app\" -w /app mcr.microsoft.com/playwright:v1.63.0-noble sh -c '[ -d node_modules ] || npm ci --no-audit --no-fund >&2; exec node src/index.ts'",
+      ],
+      "timeout": 300000,
+    },
+    // shadcn component reference, in its Svelte flavour to match apps/web.
+    // Image: docker build -t shadcn-mcp:latest ~/.claude/mcp-docker/shadcn
+    "shadcn": {
+      "type": "local",
+      "command": ["docker", "run", "-i", "--rm", "shadcn-mcp:latest", "--framework", "svelte"],
+      "timeout": 60000,
+    },
+    // 21st.dev Magic. Off: the key Claude Code had was reset by 21st.dev. Get a fresh one at
+    // https://21st.dev/mcp, export TWENTY_FIRST_API_KEY, then set enabled to true.
+    // Image: docker build -t magic-mcp:latest ~/.claude/mcp-docker/magic-mcp
+    "magic": {
+      "type": "local",
+      "command": ["docker", "run", "-i", "--rm", "-e", "API_KEY", "magic-mcp:latest"],
+      "environment": { "API_KEY": "{env:TWENTY_FIRST_API_KEY}" },
+      "enabled": false,
+      "timeout": 60000,
+    },
+    // Ruflo. Off: it exposes 353 tools, which would swamp the model's tool list on every call.
+    // Turn it on for a session that needs it. Image: docker build -t ruflo:latest ~/.claude/mcp-docker/ruflo
+    "ruflo": {
+      "type": "local",
+      "cwd": ".",
+      "command": ["sh", "-c", "exec \"$HOME/.local/bin/ruflo\" mcp start"],
+      "enabled": false,
+      "timeout": 180000,
+    },
+  },
+  // Hard limits for every agent in this project. With auto-approval on, only "deny" holds,
+  // so each rule here is a deny (or the narrow allow that follows one: the last match wins).
+  "permission": {
+    "read": {
+      "*.env": "deny",
+      "*.env.*": "deny",
+      "*.env.example": "allow",
+      "~/.ssh/*": "deny",
+      "~/.claude.json": "deny",
+      "~/.config/opencode/service.json": "deny",
+    },
+    // The work tree lives outside the project. "ask" would stall a sub-agent, because
+    // nobody is awake to answer.
+    "external_directory": {
+      "~/bunny/*": "allow",
+      "/tmp/*": "allow",
+    },
+    "bash": {
+      // Nothing leaves this machine: the owner reviews the bunny/* branches locally.
+      "git push*": "deny",
+      "git -C * push*": "deny",
+      "gh *": "deny",
+      "sudo *": "deny",
+      // ~/.gitconfig includes ~/bunny/.gitconfig-nopush, which turns every push under ~/bunny
+      // into an error.
+      "git config --global*": "deny",
+      // `make dev` force-removes the container named drawnosaurus-api, the owner's dev API.
+      // `make up/down/clean` in the owner's checkout would replace or stop the running stack.
+      "make dev*": "deny",
+      "make up*": "deny",
+      "make down*": "deny",
+      "make clean*": "deny",
+      "docker compose down*": "deny",
+      "docker compose -p bunny-* down*": "allow",
+      "docker compose --project-name bunny-* down*": "allow",
+      // Other projects share this Docker: remove only bunny-* resources, by name.
+      "docker * prune*": "deny",
+      "docker volume rm*": "deny",
+      "docker volume rm bunny-*": "allow",
+      "docker network rm*": "deny",
+      "docker network rm bunny-*": "allow",
+      "docker rmi*": "deny",
+      "docker image rm*": "deny",
+      // The owner's checkout and the lead's worktrees are read-only to agents.
+      "git -C /home/dlesieur/Documents/drawnosaurus *": "deny",
+      "git -C ~/Documents/drawnosaurus *": "deny",
+      "rm -rf /home/dlesieur/Documents*": "deny",
+      "rm -rf ~/Documents*": "deny",
+      "rm -rf ~/.cache/drawnosaurus-wt*": "deny",
+    },
+  },
+}
