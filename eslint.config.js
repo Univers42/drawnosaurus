@@ -50,7 +50,7 @@ export default ts.config(
             {
               name: "@osionos/draw-engine",
               message:
-                "Bare barrel pulls in the React adapter. Import a deep path: @osionos/draw-engine/svelte, /types, /json, /camera, /engine.",
+                "Bare barrel pulls in the React adapter. Import a deep path: @osionos/draw-engine/svelte, /types, /json, /cameraMath, /engine.",
             },
           ],
         },

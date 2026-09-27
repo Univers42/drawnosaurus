@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { screenToWorld, worldToScreen } from "@osionos/draw-engine/camera";
-import { MAX_ZOOM, MIN_ZOOM } from "@osionos/draw-engine/types";
+import { maxZoom, minZoom, screenToWorld, worldToScreen } from "@osionos/draw-engine/cameraMath";
 import {
   animateCamera,
   boundsOf,
@@ -29,9 +28,12 @@ describe("zoomPercent", () => {
 
 describe("worldToScreen", () => {
   it("is the engine's own world_to_screen: wx * scale + camera.x", () => {
-    // The host used to carry a second copy of this formula, returning `{sx, sy}`. It
-    // reads the engine's instead, so the numbers the five call sites place chrome with
-    // are the engine's own — a camera change cannot move them out from under us.
+    // The four values below are WASM exports of `camera.rs` now — the host's own mirror
+    // of them is gone — so these cases are the front's half of the contract: the numbers
+    // the five call sites place chrome with are the engine's, not a TypeScript copy of
+    // them. The arithmetic is pinned in Rust, in
+    // `engine/crates/draw-engine/tests/ci_camera.rs`; `cameraParity.test.ts` is what
+    // stops the copy coming back.
     expect(worldToScreen({ x: 100, y: 50, scale: 2 }, 10, 20)).toEqual({ x: 120, y: 90 });
   });
 
@@ -65,16 +67,16 @@ describe("fitCamera", () => {
   });
 
   it("clamps to the engine's own zoom limits", () => {
-    // Asserted against the engine's exported limits rather than 0.1/30 written out
+    // Asserted against what the engine answers rather than 0.1/30 written out
     // again here: a host that re-declared its own pair would drift silently, because
     // `setCameraExact` re-clamps through the engine's own `zoomAt` and hides it.
     const tiny = fitCamera({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, { width: 1000, height: 1000 });
-    expect(tiny.scale).toBe(MAX_ZOOM);
+    expect(tiny.scale).toBe(maxZoom());
     const huge = fitCamera(
       { minX: 0, minY: 0, maxX: 1_000_000, maxY: 1_000_000 },
       { width: 100, height: 100 },
     );
-    expect(huge.scale).toBe(MIN_ZOOM);
+    expect(huge.scale).toBe(minZoom());
   });
 });
 

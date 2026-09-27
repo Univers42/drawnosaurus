@@ -142,7 +142,10 @@ lint: ## eslint, zero warnings tolerated
 format: ## prettier --check
 	$(TOOLING) pnpm format
 
-test: ## Unit tests (contract, api, web)
+# $(ENGINE_PKG) for the same reason `typecheck` needs it: the web's tests now call the
+# engine's camera maths, which is a WASM call, and `apps/web/vitest.setup.ts` instantiates
+# it out of `engine/pkg`. Without the artifact they fail at that setup, not at a case.
+test: $(ENGINE_PKG) ## Unit tests (contract, api, web)
 	$(TOOLING) pnpm test
 
 conformance: ## What prompt/*.md asks for, and what covers it

@@ -61,34 +61,50 @@ try/catch — `readFocusModePreference`/`persistFocusModePreference` in `camera.
 ## Where the host's camera formulas come from
 
 Since `1334bcf` the front imports them rather than keeping its own: `worldToScreen`,
-`screenToWorld` and `MIN_ZOOM`/`MAX_ZOOM` from `@osionos/draw-engine/camera` and `/types`,
-and the grid default from `DEFAULT_GRID` in `/types`. The host's own
+`screenToWorld` and `MIN_ZOOM`/`MAX_ZOOM` from `@osionos/draw-engine/cameraMath`, and the
+grid default from `DEFAULT_GRID` in `/types`. The host's own
 `apps/web/src/lib/draw-chrome/camera.ts` used to export a second `worldToScreen` and its
 own zoom pair, and `DrawSurface.svelte` did `screen_to_world` by hand at two call sites.
 That read against law 3's "the front must never re-implement an engine formula in
 TypeScript", so it is worth being exact about what replaced it.
 
-**`engine/src/camera.ts` is a TypeScript mirror of the Rust `camera.rs`, not a WASM
-binding.** It is a hand-kept copy of `world_to_screen` (`camera.rs:147`),
-`screen_to_world` (`:154`), the zoom pair (`:5-6`) and the rest, and the front calling it
-calls neither Rust nor WASM. It is not the sanctioned mirror of
-`packages/contract/src/bounds.ts` either — that one is pinned to the Rust by tests, and
-`engine/src/camera.ts` is not: no test compares it to `camera.rs`, and a change on the
-engine side can drift from it silently. `DrawEngine.screenToWorld`
-(`engine/src/engine.ts:164`) writes the same expression out a third time, which is the
-copy to collapse.
+**The four values are WASM exports of `camera.rs`.** `world_to_screen` (`camera.rs:147`),
+`screen_to_world` (`:154`) and the zoom limits (`:5-6`) are bound in
+`engine/crates/draw-engine/src/wasm/camera_api.rs` and reach the host through
+`engine/src/cameraMath.ts`, which computes nothing: each function forwards to the glue and
+returns what it says. `engine/src/camera.ts` — the hand-kept mirror that stood here until
+this commit, and `MIN_ZOOM`/`MAX_ZOOM` as the literals `0.1` and `30` in
+`engine/src/types.ts` — are gone, and `DrawEngine.screenToWorld`
+(`engine/src/engine.ts:164`) no longer writes the expression out a third time either.
 
-**The real fix is a WASM export — a Rust `#[wasm_bindgen]` for these, a `DrawEngine`
-method for each — and that is an engine commit plus a submodule bump, not a web change.**
-Until it exists, this import is the closest the front can get to law 3 without one. Do not
-undo it on the grounds that it breaks law 3: a formula that is mirrored once and shared is
-a smaller offence than the divergent copies it replaced, and the numbers that are still
-duplicated live on the engine side, not here.
+**They are free functions, not `DrawEngine` methods,** and that is forced by the callers
+rather than chosen: a peer's cursor, the shape-switch panel and a presentation path badge
+all hold a `Camera` and have no engine, and a method would mean a `cameraJson` call and a
+`JSON.parse` per point on a path that runs per frame. They take the camera as three
+numbers and answer with a `Float64Array` of two, so nothing is copied to JS except the
+answer.
+
+**`cameraMath.ts` is the wrapper, and the arithmetic must not go back into it.**
+`apps/web/src/lib/draw-chrome/cameraParity.test.ts` is what holds that: it reads
+`camera.rs` and then goes looking for the expressions in `engine/src/**` and
+`apps/web/src/**`, so a hand-written `world_to_screen` reappearing — under any local names,
+which is how the old mirror hid it by returning `{sx, sy}` — fails with the file and line,
+as do the two zoom limits as their own literals. It also pins the four Rust values to the
+lines cited above, so moving one is a deliberate edit rather than a silent drift. The
+arithmetic as _behaviour_ is pinned in Rust, in
+`engine/crates/draw-engine/tests/ci_camera.rs`.
+
+**Unit tests reach the WASM.** The web's vitest suite runs in node, where the app's
+`loadDrawEngine()` cannot work — it is a `fetch` of a sibling `.wasm` — so
+`apps/web/vitest.setup.ts` instantiates the module from its bytes with `initSync` before
+each file. That is why `make test` now depends on `engine/pkg` (as `typecheck` already
+did) and why CI's `test` job takes the `engine-pkg` artifact. Without it a test of the
+front's camera maths could not call the engine at all.
 
 Where the front must keep the arithmetic out of the loop entirely — a per-frame path that
 already holds the camera — prefer the free function over `DrawEngine.screenToWorld`. The
-method's arithmetic is TypeScript, but it reads the camera through the `camera` getter
-(`engine/src/engine.ts:69`), which crosses into Rust for `cameraJson` and parses the
+method now forwards to the same WASM export, but it reads the camera through the `camera`
+getter (`engine/src/engine.ts:69`), which crosses into Rust for `cameraJson` and parses the
 result back in JS; on the peer-cursor path that is a WASM hop and a `JSON.parse` per
 frame, which is what the note above that path is about.
 

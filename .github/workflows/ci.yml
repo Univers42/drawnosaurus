@@ -126,6 +126,12 @@ jobs:
     name: Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The web's unit tests need engine/pkg, for the same reason the typecheck does: the
+    # front's camera maths is a WASM call now (`@osionos/draw-engine/cameraMath`, the
+    # `#[wasm_bindgen]`s on `camera.rs`), and `apps/web/vitest.setup.ts` instantiates the
+    # module from its bytes because node cannot fetch a sibling `.wasm` the way a browser
+    # does. Without the artifact every web test fails at that setup.
+    needs: wasm
     services:
       mongo:
         image: mongo:7
@@ -150,6 +156,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: engine-pkg
+          path: engine/pkg
 
       - run: pnpm install --frozen-lockfile
 
