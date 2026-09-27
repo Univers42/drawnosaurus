@@ -37,9 +37,9 @@ This is the generic branch of Excalidraw's `ConvertElementTypePopup`
   trap.
 - **Panel position.** The panel hangs under the selection's unrotated bottom-left corner.
   The oracle turns that corner for a single rotated shape. The corner comes from
-  `boundsOf` (`DrawSurface.svelte:1126`) — the **fourth** consumer of that box, after the
-  flowchart strip and focus mode, and the reason a mirrored shape used to hang the panel
-  off its own far corner. `docs/reference/camera.md`.
+  `boundsOf`, in `DrawSurface.svelte` › `placeShapeSwitch` — the **fourth** consumer of that
+  box, after the flowchart strip and focus mode, and the reason a mirrored shape used to
+  hang the panel off its own far corner. `docs/reference/camera.md`.
 - **Not ported:** the linear branch, which switches lines and arrows between sharp,
   curved and elbow.
 
