@@ -48,6 +48,6 @@ export default defineConfig({
     // Instantiates the engine's WASM for the tests, from its bytes: the app's
     // `loadDrawEngine()` fetches a sibling `.wasm`, which node cannot do. Needed since
     // the front's camera maths became a WASM call rather than a TypeScript mirror.
-    setupFiles: ["./vitest.setup.ts"],
+    setupFiles: ["./test/vitest.setup.ts"],
   },
 });

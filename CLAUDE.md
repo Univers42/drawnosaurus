@@ -94,7 +94,7 @@ pnpm exec playwright test e2e/zoom.spec.ts -g "the point under the cursor stays"
   its four values are WASM exports now (`docs/reference/camera.md`).
 - **A unit test that needs the engine needs `engine/pkg`.** The web's vitest suite runs in node, where
   the app's `loadDrawEngine()` cannot run — it is a `fetch` of a sibling `.wasm` — so
-  `apps/web/vitest.setup.ts` instantiates the module from its bytes with `initSync`. `make test`
+  `apps/web/test/vitest.setup.ts` instantiates the module from its bytes with `initSync`. `make test`
   therefore depends on `engine/pkg`, as `make typecheck` already did, and CI's `test` job takes the
   same artifact as `quality`. Without it the suite fails at that setup, not at a case.
 - **`wasm-bindgen-cli` must match the crate exactly** (`=0.2.128`). A mismatch produces glue that

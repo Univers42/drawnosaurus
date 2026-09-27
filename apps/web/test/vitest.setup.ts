@@ -15,11 +15,15 @@
  * `engine/pkg` is build output, not source: `make wasm` writes it and `make quality`
  * depends on that, so a test run without it fails here and says so, rather than skipping
  * the cases that need it.
+ *
+ * Under `test/` rather than beside `vite.config.ts` because that is the directory
+ * SvelteKit's generated tsconfig already includes, so `svelte-check` type-checks this
+ * file. A setup file is exactly where a type error should not be able to hide.
  */
 import { readFileSync } from "node:fs";
-import { initSync } from "../../engine/pkg/draw_engine.js";
+import { initSync } from "../../../engine/pkg/draw_engine.js";
 
-const WASM = new URL("../../engine/pkg/draw_engine_bg.wasm", import.meta.url);
+const WASM = new URL("../../../engine/pkg/draw_engine_bg.wasm", import.meta.url);
 
 /**
  * A flag rather than a bare `initSync`, because `initSync` does not check whether it has

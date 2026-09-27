@@ -96,7 +96,7 @@ arithmetic as _behaviour_ is pinned in Rust, in
 
 **Unit tests reach the WASM.** The web's vitest suite runs in node, where the app's
 `loadDrawEngine()` cannot work — it is a `fetch` of a sibling `.wasm` — so
-`apps/web/vitest.setup.ts` instantiates the module from its bytes with `initSync` before
+`apps/web/test/vitest.setup.ts` instantiates the module from its bytes with `initSync` before
 each file. That is why `make test` now depends on `engine/pkg` (as `typecheck` already
 did) and why CI's `test` job takes the `engine-pkg` artifact. Without it a test of the
 front's camera maths could not call the engine at all.
