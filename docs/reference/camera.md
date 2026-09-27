@@ -75,7 +75,8 @@ TypeScript", so it is worth being exact about what replaced it.
 returns what it says. `engine/src/camera.ts` — the hand-kept mirror that stood here until
 this commit, and `MIN_ZOOM`/`MAX_ZOOM` as the literals `0.1` and `30` in
 `engine/src/types.ts` — are gone, and `DrawEngine.screenToWorld`
-(`engine/src/engine.ts:164`) no longer writes the expression out a third time either.
+(`engine/src/engine.ts:177`) no longer writes the expression out a third time either: it
+forwards to the same WASM export now, through `cameraMath.ts`.
 
 **They are free functions, not `DrawEngine` methods,** and that is forced by the callers
 rather than chosen: a peer's cursor, the shape-switch panel and a presentation path badge
@@ -86,12 +87,18 @@ answer.
 
 **`cameraMath.ts` is the wrapper, and the arithmetic must not go back into it.**
 `apps/web/src/lib/draw-chrome/cameraParity.test.ts` is what holds that: it reads
-`camera.rs` and then goes looking for the expressions in `engine/src/**` and
-`apps/web/src/**`, so a hand-written `world_to_screen` reappearing — under any local names,
-which is how the old mirror hid it by returning `{sx, sy}` — fails with the file and line,
-as do the two zoom limits as their own literals. It also pins the four Rust values to the
-lines cited above, so moving one is a deliberate edit rather than a silent drift. The
-arithmetic as _behaviour_ is pinned in Rust, in
+`camera.rs` and then goes looking for the expressions in the host's own source — `.ts`
+**and `.svelte`**, because every consumer of these four is a Svelte component and p2.2a
+took a hand-written `screen_to_world` out of `DrawSurface.svelte` itself. A copy reappearing
+under any local names (which is how the old mirror hid itself, returning `{sx, sy}`) fails
+with the file and the line, and both commutations of each sum are matched, as is a division
+hoisted into a local, so reordering the arithmetic does not get past it either. The two zoom
+limits are matched **by name**: that one cannot be done by shape without flagging every
+`0.1` and every `30` in the tree, so renaming them escapes it — and the test says so rather
+than implying otherwise. The test also pins the four Rust values to the lines cited above,
+so moving one is a deliberate edit rather than a silent drift, and it excludes `*.test.ts`
+for a measured reason: `apps/web/src/lib/draw-chrome/camera.test.ts:423` asserts the very
+shape it hunts. The arithmetic as _behaviour_ is pinned in Rust, in
 `engine/crates/draw-engine/tests/ci_camera.rs`.
 
 **Unit tests reach the WASM.** The web's vitest suite runs in node, where the app's
@@ -104,7 +111,7 @@ front's camera maths could not call the engine at all.
 Where the front must keep the arithmetic out of the loop entirely — a per-frame path that
 already holds the camera — prefer the free function over `DrawEngine.screenToWorld`. The
 method now forwards to the same WASM export, but it reads the camera through the `camera`
-getter (`engine/src/engine.ts:69`), which crosses into Rust for `cameraJson` and parses the
+getter (`engine/src/engine.ts:70`), which crosses into Rust for `cameraJson` and parses the
 result back in JS; on the peer-cursor path that is a WASM hop and a `JSON.parse` per
 frame, which is what the note above that path is about.
 

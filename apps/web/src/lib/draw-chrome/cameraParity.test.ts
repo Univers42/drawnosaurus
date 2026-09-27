@@ -14,12 +14,25 @@ import { describe, expect, it } from "vitest";
  *
  * Those four values are WASM exports now (`#[wasm_bindgen]`, `src/wasm/camera_api.rs`), the
  * mirror is deleted, and this is what holds the two sides together. It reads the engine's
- * Rust and then goes looking for the expressions in TypeScript, so:
+ * Rust and then goes looking for the expressions in the host's own source — `.ts` **and
+ * `.svelte`**, since every consumer of these functions is a Svelte component and p2.2a
+ * took a hand-written `screen_to_world` out of `DrawSurface.svelte` itself. So:
  *
- * - a hand-written `world_to_screen` or `screen_to_world` reappearing anywhere in shipped
- *   TypeScript fails here, and the failure names the file and line;
- * - `MIN_ZOOM`/`MAX_ZOOM` reappearing as their own literals fails here;
+ * - a hand-written `world_to_screen` or `screen_to_world` reappearing in any of them
+ *   fails here, and the failure names the file and line. Both commutations of each sum
+ *   are matched, and a hoisted `1 / c.scale` is matched too, so reordering the
+ *   arithmetic does not get it past;
+ * - `MIN_ZOOM`/`MAX_ZOOM` reappearing **under those names** as their own literals fails
+ *   here. That one is name-anchored and cannot be otherwise: see `EXPRESSIONS`, and the
+ *   known limit below.
  * - the four Rust values moving fails here, and the message says where they went.
+ *
+ * **Known limit, so nobody has to find it the hard way:** a copy that renames its
+ * constants *and* is written as an object literal rather than an assignment — `const low
+ * = { min: 0.1, max: 30 }` — is not caught. The two transforms are caught by their shape;
+ * the two limits are only catchable by their name, and a name-blind search for `0.1` and
+ * `30` would match most of the tree. If that matters, it wants a real test on the
+ * numbers' meaning, not a wider regex.
  *
  * The arithmetic itself is pinned as behaviour in
  * `engine/crates/draw-engine/tests/ci_camera.rs`; this is the structural half — that the
@@ -69,9 +82,23 @@ const BINDINGS: ReadonlyArray<{ js: string; rust: string }> = [
 const EXPRESSIONS: ReadonlyArray<{ what: string; pattern: RegExp }> = [
   // `wx * camera.scale + camera.x`, and its y twin.
   { what: "world_to_screen", pattern: /\*\s*[\w.]+\.scale\s*\+/ },
+  // The same sum with the camera's own coordinate written first, which is the other
+  // half of the commutation. Both addends are required, and specifically the camera
+  // coordinate as one of them: `y + 18 * camera.scale` in `shapeSwitch.ts` is a chrome
+  // nudge off a world point and nothing to do with this formula, and matching on the
+  // multiply alone would flag it.
+  { what: "world_to_screen", pattern: /[\w.]+\.[xy]\s*\+\s*[\w.]+\s*\*\s*[\w.]+\.scale/ },
   // `(sx - camera.x) / camera.scale`, and its y twin.
   { what: "screen_to_world", pattern: /\(\s*[\w.]+\s*-\s*[\w.]+\.x\s*\)\s*\/\s*[\w.]+\.scale/ },
-  // The two limits, written out rather than asked for.
+  // The same quotient with the division hoisted into a local: `const k = 1 / c.scale`,
+  // then `(sx - c.x) * k`.
+  { what: "screen_to_world", pattern: /=\s*1\s*\/\s*[\w.]+\.scale\b/ },
+  // The two limits, written out rather than asked for. **Name-anchored, and that is a
+  // real limit rather than an oversight**: a transform is recognisable by its shape, but
+  // "0.1 and 30" only mean the zoom limits next to a name that says so. Searching for
+  // the bare numbers would flag every `0.1` and every `30` in the tree, which is a guard
+  // that cries wolf and gets deleted. So renaming `MIN_ZOOM` escapes this, and only
+  // this — see "known limit" in the report.
   { what: "MIN_ZOOM", pattern: /MIN_ZOOM\s*=\s*0\.1\b/ },
   { what: "MAX_ZOOM", pattern: /MAX_ZOOM\s*=\s*30\b/ },
 ];
@@ -96,14 +123,32 @@ function sourceOf(url: URL): string {
   }
 }
 
-/** Every `.ts` under `dir`, comments removed, split into lines. Test files are excluded. */
-function typescriptLines(dir: URL): Map<string, string[]> {
+/**
+ * Every shipped source file under `dir`, comments removed, split into lines.
+ *
+ * **`.svelte` is scanned and `.test.ts` is not, and the difference is load-bearing.**
+ * All four consumers of these functions are Svelte components — `DrawSurface.svelte`,
+ * `PeerCursors.svelte`, `shapeSwitch.ts` beside them — and p2.2a took a hand-written
+ * `screen_to_world` out of `DrawSurface.svelte` itself, so a `.ts`-only scan left the
+ * one file type where the mirror actually lived unwatched. `.ts` alone is not enough.
+ *
+ * Test files are the other side of it, and the exclusion is **already load-bearing, not
+ * hypothetical**: `apps/web/src/lib/draw-chrome/camera.test.ts:423` asserts
+ * `centerX * camera.scale + camera.x` to check where `focusCamera` puts a shape, which is
+ * the shape of the very expression this file hunts. Widening the scan to test files turns
+ * that assertion — and `bunny-p2.g2-bounds-normalise`'s, which asserts the same thing
+ * under its own name — into a false positive, and a guard that cries wolf is a guard that
+ * gets switched off. So do not "helpfully" drop the `\.test\.ts$` exclusion. The
+ * `it("has files to check")` case below is what notices if the scan quietly stops seeing
+ * anything.
+ */
+function shippedSourceLines(dir: URL): Map<string, string[]> {
   const found = new Map<string, string[]>();
   const walk = (url: URL): void => {
     for (const entry of readdirSync(url, { withFileTypes: true })) {
       const child = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, url);
       if (entry.isDirectory()) walk(child);
-      else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+      else if (/\.(ts|svelte)$/.test(entry.name) && !/\.test\.ts$/.test(entry.name)) {
         found.set(fileURLToPath(child), withoutComments(readFileSync(child, "utf8")).split("\n"));
       }
     }
@@ -156,14 +201,20 @@ describe("the host's TypeScript", () => {
   const shipped = new Map(
     // The trailing slash matters: `new URL("camera.ts", "…/engine/src")` resolves
     // `src` as a file and lands in `…/engine/camera.ts`.
-    TS_ROOTS.flatMap((root) => [...typescriptLines(new URL(`${root}/`, REPO_ROOT))]),
+    TS_ROOTS.flatMap((root) => [...shippedSourceLines(new URL(`${root}/`, REPO_ROOT))]),
   );
 
-  it("has files to check, so a broken path cannot pass this vacuously", () => {
+  it("has files to check, and sees the Svelte components — so a `.ts`-only scan cannot pass this", () => {
     const paths = [...shipped.keys()];
     expect(paths.length).toBeGreaterThan(50);
     expect(paths.some((path) => path.includes("/engine/src/"))).toBe(true);
     expect(paths.some((path) => path.includes("/apps/web/src/"))).toBe(true);
+    // The four consumers of these functions are Svelte components. A scan that stopped
+    // at `.ts` would sail past a hand-written copy in any of them, and this file's own
+    // header says it looks in "shipped TypeScript" as though `.svelte` were included.
+    const svelte = paths.filter((path) => path.endsWith(".svelte"));
+    expect(svelte.length).toBeGreaterThan(10);
+    expect(svelte.some((path) => path.endsWith("draw-chrome/DrawSurface.svelte"))).toBe(true);
   });
 
   it("carries no hand-written copy of the engine's camera expressions", () => {
