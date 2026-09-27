@@ -53,7 +53,8 @@
   let syntax: HTMLTextAreaElement | undefined = $state();
 
   // Not `autofocus`: Svelte honours that itself, in a microtask that only fires when
-  // nothing in the document is focused (`dom/elements/misc.js:11`).
+  // nothing in the document is focused
+  // (`svelte@5.57.0/src/internal/client/dom/elements/misc.js:11`).
   onMount(() => syntax?.focus());
 
   // Converted once typing settles; a result that arrives after a newer one started is dropped.

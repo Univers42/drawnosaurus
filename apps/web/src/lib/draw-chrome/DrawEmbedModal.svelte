@@ -51,7 +51,8 @@
   let field: HTMLInputElement | undefined = $state();
 
   // Not `autofocus`: Svelte honours that itself, in a microtask that only fires when
-  // nothing in the document is focused (`dom/elements/misc.js:11`), and two of the four
+  // nothing in the document is focused
+  // (`svelte@5.57.0/src/internal/client/dom/elements/misc.js:11`), and two of the four
   // paths that open this — the palette and the engine's own `W` — leave the board
   // focused, so the field never took it and a keypress meant for the link drew.
   onMount(() => field?.focus());
