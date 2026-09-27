@@ -115,16 +115,26 @@ describe("Alt+Z is the zen chord", () => {
     expect(appShortcut({ ...ALT_Z, metaKey: true }, false)).toBeNull();
   });
 
-  it("still toggles while presenting — the flag is the chrome's, not the board's", () => {
-    expect(appShortcut(ALT_Z, true)).toBe("zen");
+  it("does not toggle while presenting, where every way out of it is hidden", () => {
+    // `!presenting`, the same guard the present chord carries one line below. Presenting
+    // hides the exit button, the palette and the main menu, so a zen flag set from here
+    // would be on with no visible way to clear it. The oracle does not make this
+    // distinction — its own chrome stays reachable in presentation — so this is a
+    // deliberate divergence, recorded in `docs/reference/shortcuts.md`.
+    expect(appShortcut(ALT_Z, true)).toBeNull();
   });
 });
 
-describe("the guard: Alt+Z is a chrome key, and the chrome is busy", () => {
+describe("the guard: Alt+Z is a chrome key, and a field is not a shortcut target", () => {
   // `App.tsx@1118751f:5516` — the oracle's own `isInputLike` guard wraps the whole of its
-  // key dispatch, so no chord fires while a field has the focus. Ours is
-  // `isTextField`/`insideDialog` (`shortcuts.ts:41`, `:84`) and the same `KeyTarget` the
-  // style chords already answer to (`shortcuts.ts:112`).
+  // key dispatch, so no chord fires while a *field* has the focus. Ours is the same
+  // `KeyTarget` the style chords already answer to (`shortcuts.ts:112`).
+  //
+  // `textEditor` and `field` cannot both be reached through the call site: `onAppShortcut`
+  // opens with `if (isTextField(event.target)) return;`, and the text editor is a
+  // `<textarea>`, so the textarea is caught there before `keyTarget` is ever asked. They
+  // are kept as the statement of intent the guard exists to express, and `e2e` covers the
+  // call site.
   it("does nothing while the text being edited on the board has the focus", () => {
     expect(appShortcut(ALT_Z, false, "textEditor")).toBeNull();
   });
@@ -133,26 +143,46 @@ describe("the guard: Alt+Z is a chrome key, and the chrome is busy", () => {
     expect(appShortcut(ALT_Z, false, "field")).toBeNull();
   });
 
-  it("does nothing inside an open dialog or menu — share, export, the palette", () => {
-    expect(appShortcut(ALT_Z, false, "overlay")).toBeNull();
+  it("still fires inside a menu, because the menu prints the chords", () => {
+    // The regression this file was wrong about. The main menu is a `role="menu"`, not a
+    // `role="dialog"`, and it prints `Alt+S` and `Ctrl+Alt+P` beside its own items
+    // (`DrawMainMenu.svelte:314`, `:256`). A guard that answered "overlay" with `null`
+    // silenced those two as a side effect, leaving them printed on dead keys. Menus are
+    // not this function's business; dialogs are stopped one level down, by `insideDialog`.
+    expect(appShortcut(ALT_Z, false, "overlay")).toBe("zen");
   });
 
-  it("is the only target where it fires", () => {
+  it("is guarded on fields only — the board and a menu, nothing else", () => {
     expect(TARGETS.map((target) => appShortcut(ALT_Z, false, target))).toEqual([
       "zen",
       null,
       null,
-      null,
+      "zen",
     ]);
   });
 
-  it("keeps the other app chords behind the same guard", () => {
-    // The guard is on the app chords, not bolted onto zen alone: a chord this registry
-    // advertises must not fire from inside a dialog either.
+  it("keeps the other app chords behind the same field guard", () => {
     const snap = { ...ALT_Z, key: "s", code: "KeyS" };
     expect(appShortcut(snap, false, "board")).toBe("snap");
-    expect(appShortcut(snap, false, "overlay")).toBeNull();
+    expect(appShortcut(snap, false, "field")).toBeNull();
     const palette = { ...ALT_Z, key: "/", code: "Slash", altKey: false, ctrlKey: true };
-    expect(appShortcut(palette, false, "overlay")).toBeNull();
+    expect(appShortcut(palette, false, "field")).toBeNull();
+  });
+
+  // The test that should have existed before this feature: the guard was added for zen and
+  // took two unrelated chords with it. It says so in `shortcuts.ts`'s own docstring; this is
+  // the half that keeps it from happening again.
+  it("still reaches snap and Present from inside the main menu", () => {
+    // `DrawMainMenu.svelte:314` prints `Alt+S`, `:256` prints `Ctrl+Alt+P`, and the menu
+    // is a `role="menu"` — so `insideOverlay` sees it, `insideDialog` does not, and the
+    // two chords are reachable only if the guard declines to answer "overlay" at all.
+    const snap = { ...ALT_Z, key: "s", code: "KeyS" };
+    // Ctrl+Alt+P, both modifiers — the menu prints `Ctrl+Alt+P`, and `appShortcut` tests
+    // `event.code === "KeyP"` with `mod && event.altKey`, so `altKey` has to be set.
+    const present = { ...ALT_Z, key: "p", code: "KeyP", altKey: true, ctrlKey: true };
+    for (const target of ["board", "overlay"] as const) {
+      expect(appShortcut(snap, false, target), `Alt+S from ${target}`).toBe("snap");
+      expect(appShortcut(present, false, target), `Ctrl+Alt+P from ${target}`).toBe("present");
+    }
   });
 });

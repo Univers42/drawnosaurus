@@ -516,14 +516,39 @@ describe("app chords (owned by the chrome)", () => {
     expect(appShortcut(parseChord(chord), false)).toBe("zen");
   });
 
-  it("Alt+Z is declined wherever a field or an overlay is holding the focus", () => {
+  it("Alt+Z is declined wherever a field is holding the focus", () => {
     // The oracle's own guard: `App.tsx@1118751f:5516` wraps its key dispatch in
     // `if (!isInputLike(event.target))`, so no chord fires while a field has the focus.
     // `zen.ts` holds the inventory; this holds the trap shut.
     const chord = entry("view.zenMode").chords[0]!;
-    for (const target of ["textEditor", "field", "overlay"] as const) {
+    for (const target of ["textEditor", "field"] as const) {
       expect(appShortcut(parseChord(chord), false, target), target).toBeNull();
     }
+  });
+
+  it("Alt+Z does not toggle while presenting, where the way out of it is hidden", () => {
+    // `!presenting`, as the present chord above carries. Presenting hides the exit button
+    // and the palette, so a flag set from in there is on with nothing to clear it.
+    const chord = entry("view.zenMode").chords[0]!;
+    expect(appShortcut(parseChord(chord), true)).toBeNull();
+  });
+
+  it("Alt+Z is still reachable from inside a menu, which prints its own chords", () => {
+    // The regression this registry's guard caused when the zen chord brought a `KeyTarget`
+    // along: `overlay` covers `[role="menu"]`, and the main menu prints `Alt+S` and
+    // `Ctrl+Alt+P` beside its items. The two chords below are the ones it took with it.
+    const chord = entry("view.zenMode").chords[0]!;
+    expect(appShortcut(parseChord(chord), false, "overlay")).toBe("zen");
+
+    const snap = entry("view.snap").chords[0]!;
+    const present = entry("presentation.enter").chords[0]!;
+    expect(appShortcut(parseChord(snap), false, "overlay"), "Alt+S from the main menu").toBe(
+      "snap",
+    );
+    expect(
+      appShortcut(parseChord(present), false, "overlay"),
+      "Ctrl+Alt+P from the main menu",
+    ).toBe("present");
   });
 });
 
