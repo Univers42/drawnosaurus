@@ -1214,8 +1214,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "6. Line",
     text: /^Move entire line$|^Rotate$/,
-    status: "gap",
-    why: "Implemented, untested: no test moves or rotates a Line-kind (multi-point) element specifically and checks its points.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_line_multipoint.rs`],
   },
   // A polyline's corner-handle resize and its individual point handles, from the general
   // handle suite rather than this section's own files.
@@ -1551,14 +1551,14 @@ export const RULES: readonly Rule[] = [
   {
     section: "10. Images",
     text: /^Rotate$/,
-    status: "gap",
-    why: "Rotation is a generic transform-engine feature (ci_handles.rs), but no test rotates an inserted image specifically to confirm it behaves the same way.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_image.rs`],
   },
   {
     section: "10. Images",
     text: /^Copy\/paste$/,
-    status: "gap",
-    why: "implemented, untested — duplicating or copying an existing image element is never exercised with an image; ci_duplicate.rs and ci_persistence.rs's copy/paste tests use rectangles only, so the data URL is never checked to survive.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_image.rs`],
   },
   {
     section: "10. Images",
@@ -1579,14 +1579,14 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "not implemented — a note's stroke_color is the date footer's ink, not a border; nothing renders an outline in it.",
   },
-  // angle is a plain field a note shares with every element, and ci_sticky.rs's
-  // a_turned_note_grows_from_its_top_edge sets it directly to check the resize math
-  // around a pre-rotated note — no test drives the rotation handle on a sticky note.
+  // ci_sticky.rs now drives the rotation handle itself, in a new `mod turning_it`: the
+  // handle turns the note, a turned note turns its bound label with it as
+  // rotateSingleElement does, and a turn changes nothing about a note's size or its label.
   {
     section: "11. Sticky notes",
     text: /^Rotate$/,
-    status: "gap",
-    why: "implemented, untested — a note rotates like any element (angle field, resize math accounts for it), but no test drags its rotation handle.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_sticky.rs`],
   },
   {
     section: "11. Sticky notes",
@@ -1622,14 +1622,19 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "See the Frames rule: export has no frame mode.",
   },
-  // Resize handles are not excluded for DrawElementType::Frame, so dragging one works the
-  // same as any rectangle-shaped element — but no test drags a frame's own handle and
-  // checks its children re-clip against the new bounds.
+  // Three cases in ci_frame.rs now drag a frame's own handle: the grown bounds take in
+  // what they now hold, the shrunken bounds let go of what no longer fits, and the handles
+  // are its eight sides and corners. The rule stays a gap because the fourth thing is not
+  // true. Shrinking a frame RELEASES a child left straddling its new edge, where the oracle
+  // keeps and clips it (frame.ts@1118751f:312-316) — FrameOwners::of_bounds decides on
+  // containment alone, so a straddling child resolves to None and needs_frame_clip goes
+  // false. Filed as a Phase 1 task; flipping this rule before that is fixed would claim a
+  // behaviour the engine does not have.
   {
     section: "12. Frames",
     text: /^Resize frame$/,
     status: "gap",
-    why: "implemented, untested — a frame resizes through the generic handle path, but no test drags one and checks membership re-clips.",
+    why: "A frame grows and shrinks through the generic handle path and its membership follows (ci_frame.rs) — but a child left crossing the shrunken frame's new edge is released instead of kept and clipped, which is what the oracle does. Phase 1.",
   },
   // No action selects a frame's children as a set — clicking the frame's border selects
   // only the frame (a_frame_is_grabbed_by_its_border_and_not_through_its_middle).
