@@ -143,12 +143,13 @@ test.describe("focus mode", () => {
     expect(await camera(page)).toEqual(before);
   });
 
-  // A **mirrored** shape: `width` and `height` under zero, which is what the engine leaves
-  // behind the moment a drag crosses an edge. It still enters focus mode, and the editor
-  // opens on it. What the camera frames here is the shape's *label* — the engine selects
-  // the label when it opens one, so `boundsOf` is handed that, and a label is never
-  // mirrored. The normalisation is pinned in `camera.test.ts` and reaches a consumer in
-  // `shapeSwitch.spec.ts`; this is the case as a person meets it.
+  // A **mirrored** shape: `width` and `height` under zero, which is what a resize drag
+  // crossing the anchor leaves behind. It still enters focus mode, and the editor opens on
+  // it. What the camera frames here is the shape's *label* — the engine selects the label
+  // when it opens one, so `boundsOf` is handed that, and a label is never mirrored. The
+  // normalisation is pinned in `camera.test.ts`, and the two consumers it moves are pinned
+  // in `shapeSwitch.spec.ts` and `flowchart.spec.ts`; this is the case as a person meets
+  // it, and the case the camera itself is not: see `docs/reference/camera.md`.
   test("Enter on a mirrored shape opens its label with the camera on it", async ({
     page,
   }, testInfo) => {

@@ -397,12 +397,16 @@ test("the shape strip sits above a mirrored pending node, not on it", async ({
     ...pending.map((element) => Math.max(element.y, element.y + element.height)),
   );
   const view = await camera(page);
+  // `boundingBox()` is in page coordinates and the camera's `y` is canvas-relative, so
+  // every edge here carries `board.box.y` — the canvas is at the origin today, and a test
+  // that forgets this only passes because of it.
   const screenTop = top * view.scale + view.y + board.box.y;
+  const screenBottom = bottom * view.scale + view.y + board.box.y;
   const at = (await strip.boundingBox())!;
   const foot = at.y + at.height;
   expect(foot, "the strip sits above the cluster's top edge").toBeLessThan(screenTop);
   expect(foot, "…right against it, bar its own 8px gap").toBeGreaterThan(screenTop - 16);
-  expect(foot, "and nowhere near its bottom edge").toBeLessThan(bottom * view.scale + view.y);
+  expect(foot, "and nowhere near its bottom edge").toBeLessThan(screenBottom);
 
   await page.screenshot({ path: testInfo.outputPath("mirrored-strip.png") });
   await page.keyboard.up("Control");
