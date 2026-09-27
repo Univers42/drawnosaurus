@@ -22,10 +22,10 @@ why an overlay that takes it and never gives it back leaves the board unreachabl
 keyboard.
 
 The chrome's own chords are not on that footing, and the difference matters when reading
-the guard below: `onAppShortcut` rides on the window (`DrawSurface.svelte:1891`), so it
+the guard below: `onAppShortcut` rides on the window (`DrawSurface.svelte:1946`), so it
 sees a key wherever the focus is and is kept off an overlay by the guard rather than by the
 focus. The style chords and the shape-switch chords ride the chrome root's capture-phase
-`onkeydown` (`:1899-1906`), which is inside the same container, so they need the focus as
+`onkeydown` (`:1954-1961`), which is inside the same container, so they need the focus as
 well as the guard.
 
 `DrawSurface.svelte`'s `keyTarget` (`:472-479`) sorts the press into one of four:
@@ -232,15 +232,21 @@ next key is a board key, reused rather than a second opinion invented here.
   from the code, not observed.
 - **A key pressed on a toolbar button with a dialog open still reaches the board.** The
   guard is target-relative; see above.
-- **Zen mode's decision is unit-tested; its effect on the DOM needed a browser.** The web
-  suite runs in vitest's `node` environment over `src/**/*.test.ts`
+- **Zen mode's decision is unit-tested; its effect on the DOM is tested in a browser.** The
+  web suite runs in vitest's `node` environment over `src/**/*.test.ts`
   (`apps/web/vite.config.ts`), so no Svelte component is rendered and no CSS is applied —
   and adding jsdom would be a new dependency. `zen.test.ts` proves the inventory, the
   chord and the guard, because `chromeVisible` is what the template reads.
   `e2e/zen.spec.ts` covers what that cannot: that the `{#if}`s in `DrawSurface.svelte`,
   `DrawZoomBar.svelte` and `DrawToolbar.svelte` are wired to the table, that the canvas and
   the scene survive, and that the exit button is legible rather than inheriting the chrome's
-  button reset.
+  button reset. **It was written and typechecked a round before it was ever executed, and
+  two of its seven cases were red on their first run** — the text editor was opened with
+  `press("t")` when the tool's key is `8`, and a case asserted the style inspector, which
+  is gated on the hover rather than on zen. Both are fixed; it now passes 7/7 in
+  `mcr.microsoft.com/playwright:v1.63.0-noble`, twice, with no page reload or HMR event in
+  either log, and `e2e/shortcuts.spec.ts` is 60/60 beside it. A spec that has not been run
+  is not evidence, whatever the registry names it beside.
 - **That last one was a real defect, and the irony is not lost.** A bare `.exit-zen-mode` at
   (0,1,0) loses to `.draw-chrome button` at (0,1,1) on padding, background, border, colour
   and — through that rule's `font: inherit` shorthand — size and weight, so the one control

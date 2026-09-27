@@ -64,8 +64,10 @@
   (0,1,1) and wins: a bare `.exit-zen-mode` loses `padding`, `background`, `border`,
   `color`, and — through that rule's `font: inherit` shorthand — `font-size` and
   `font-weight` as well, so the one control that has to be visible would have rendered
-  as bare body-size text with no panel and no padding. The hover needs the same scoping,
-  since `.draw-chrome button:hover:not(:disabled)` is (0,3,1).
+  as bare body-size text with no panel and no padding. The hover is scoped for the same
+  reason, and by the same rule rather than by specificity: `.draw-chrome
+  button:hover:not(:disabled)` is also (0,3,1), so the two tie and the later one wins —
+  and scoping puts this rule later.
 */
 .draw-chrome button.exit-zen-mode {
   position: absolute;
