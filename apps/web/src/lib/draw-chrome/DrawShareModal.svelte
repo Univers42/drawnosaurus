@@ -29,6 +29,8 @@
   let busy = $state(false);
   let requestError = $state<string | null>(null);
 
+  let card: HTMLDivElement | undefined;
+
   async function refresh(): Promise<void> {
     try {
       info = await getShareInfo();
@@ -38,6 +40,11 @@
   }
 
   onMount(() => {
+    // An open dialog takes the focus, as the oracle's does
+    // (`Dialog.tsx@1118751f:55-71`) and as the other dialogs in `DrawModals.svelte` do. A
+    // board still holding the focus answers every key pressed over this one — and this
+    // dialog is the one with the most to lose, a link copied by a key meant for the board.
+    card?.focus();
     void refresh();
   });
 
@@ -172,7 +179,7 @@
 {/snippet}
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="share-title">
-  <div class="modal-card pop-in">
+  <div class="modal-card pop-in" tabindex="-1" bind:this={card}>
     <div class="modal-header">
       <div class="title-with-status">
         <h3 id="share-title">Live Collaboration</h3>
@@ -293,6 +300,12 @@
     width: 460px;
     max-width: 90vw;
     box-shadow: var(--shadow-lg);
+  }
+
+  /* The card is focused only so the dialog keeps the keys; a ring round the whole card
+     would say the dialog is a control, which it is not (`VectorizeDialog.svelte`). */
+  .modal-card:focus {
+    outline: none;
   }
 
   .modal-header {

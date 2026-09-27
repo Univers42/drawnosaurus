@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { ApiClientError, createBoard, replaceBoard } from "$lib/api/client.ts";
@@ -28,6 +29,16 @@
   let busyId = $state<string | null>(null);
   let error = $state<string | null>(null);
 
+  let card: HTMLDivElement | undefined;
+
+  /**
+   * An open dialog takes the focus, as the oracle's does
+   * (`Dialog.tsx@1118751f:55-71`) and as the other dialogs in `DrawModals.svelte` do. A
+   * board still holding the focus answers every key pressed over this one, and a template
+   * picked with the keyboard behind the dialog becomes a rectangle.
+   */
+  onMount(() => card?.focus());
+
   async function use(template: (typeof TEMPLATES)[number]): Promise<void> {
     if (busyId) return;
     busyId = template.id;
@@ -50,7 +61,7 @@
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="templates-title">
-  <div class="modal-card">
+  <div class="modal-card" tabindex="-1" bind:this={card}>
     <div class="modal-header">
       <h3 id="templates-title">Templates</h3>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
@@ -114,6 +125,12 @@
     width: 480px;
     max-width: 92vw;
     box-shadow: var(--shadow-lg);
+  }
+
+  /* The card is focused only so the dialog keeps the keys; a ring round the whole card
+     would say the dialog is a control, which it is not (`VectorizeDialog.svelte`). */
+  .modal-card:focus {
+    outline: none;
   }
 
   .modal-header {

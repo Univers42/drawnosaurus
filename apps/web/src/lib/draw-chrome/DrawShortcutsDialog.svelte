@@ -1,14 +1,25 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { groupedShortcuts, shortcutFor } from "./shortcutRegistry.ts";
 
   let { onClose }: { onClose: () => void } = $props();
 
+  let card: HTMLDivElement | undefined;
+
   // Static: the registry does not change at runtime, so this needs no reactivity.
   const GROUPS = groupedShortcuts();
+
+  /**
+   * An open dialog takes the focus, as the oracle's does
+   * (`Dialog.tsx@1118751f:55-71`). The board keeps it only if nothing here takes it, and
+   * a board still holding the focus answers every key pressed over a dialog: `R` chose
+   * the rectangle tool while someone read these very shortcuts.
+   */
+  onMount(() => card?.focus());
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
-  <div class="modal-card">
+  <div class="modal-card" tabindex="-1" bind:this={card}>
     <div class="modal-header">
       <h3 id="shortcuts-title">Keyboard Shortcuts</h3>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
@@ -52,6 +63,12 @@
     width: 620px;
     max-width: 92vw;
     box-shadow: var(--shadow-lg);
+  }
+
+  /* The card is focused only so the dialog keeps the keys; a ring round the whole card
+     would say the dialog is a control, which it is not (`VectorizeDialog.svelte`). */
+  .modal-card:focus {
+    outline: none;
   }
 
   .modal-header {

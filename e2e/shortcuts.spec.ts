@@ -566,6 +566,88 @@ test.describe("grid", () => {
   });
 });
 
+/**
+ * An overlay that never takes the focus leaves the board holding it, and the board
+ * answers every key. Nine of the fourteen overlays here focus themselves on open, the
+ * way the oracle's do (`Dialog.tsx@1118751f:55-71`, `Popover.tsx@1118751f:36-50`); the
+ * export, templates, share and shortcuts dialogs and the canvas menu did not, so opening
+ * one and typing a key gave a rectangle instead of the key doing what the dialog says.
+ *
+ * Each test says the same two things around the key press, because a key reaches the
+ * board only if the board is holding the focus: before the overlay opens, the board has
+ * it; after the overlay opens, the overlay has it. Press a key with the focus anywhere
+ * else and neither the engine's container listener nor the window handler sees it, and
+ * the test would pass whether the bug was there or not.
+ */
+test.describe("an open overlay keeps the board's keys", () => {
+  /**
+   * The editor container. The engine's key listener rides on this element and on nothing
+   * else (`engine/src/host/keyboardInput.ts:33`), so it is where a leaked key shows up.
+   */
+  const editor = (page: Page) => page.getByRole("application");
+
+  test("the export dialog keeps the tool keys", async ({ page }, testInfo) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    // Opened on the chord the main menu advertises (`Ctrl+Shift+E`), so the focus that
+    // stays behind is the board's own. Clicking "Export image…" instead would leave the
+    // focus on the menu button, and the key would reach nothing either way.
+    await page.keyboard.press("Control+Shift+e");
+    await expect(page.getByRole("dialog", { name: "Export Drawing" })).toBeVisible();
+    await expect(editor(page), "the board gave up the focus").not.toBeFocused();
+
+    await page.keyboard.press("r");
+    await page.screenshot({ path: testInfo.outputPath("export-dialog-tool-key.png") });
+
+    expect(await activeTool(page)).toBe("diamond");
+  });
+
+  test("the shortcuts dialog keeps the tool keys", async ({ page }, testInfo) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("o");
+    expect(await activeTool(page)).toBe("ellipse");
+
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeVisible();
+    await expect(editor(page), "the board gave up the focus").not.toBeFocused();
+
+    await page.keyboard.press("r");
+    await page.screenshot({ path: testInfo.outputPath("shortcuts-dialog-tool-key.png") });
+
+    expect(await activeTool(page)).toBe("ellipse");
+  });
+
+  test("the canvas menu keeps the tool keys", async ({ page }, testInfo) => {
+    // The menu is `role="menu"`, which the guard on the style chords did not match, and
+    // the one overlay a person opens over a shape they are about to keep drawing.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    await page.mouse.click(
+      board.box.x + OPEN_CANVAS.right - 40,
+      board.box.y + OPEN_CANVAS.bottom - 40,
+      { button: "right" },
+    );
+    const menu = page.getByRole("menu", { name: "Canvas menu" });
+    await expect(menu).toBeVisible();
+    await expect(menu, "the menu took the focus").toBeFocused();
+
+    await page.keyboard.press("r");
+    await page.screenshot({ path: testInfo.outputPath("canvas-menu-tool-key.png") });
+
+    expect(await activeTool(page)).toBe("diamond");
+  });
+});
+
 test("the open canvas region really is clear of chrome", async ({ page }) => {
   // The harness constant every drawing spec depends on. When a panel grows, gestures
   // start being swallowed silently and the specs that use it fail somewhere else

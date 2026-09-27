@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
 
@@ -13,6 +14,16 @@
   let transparent = $state(false);
   let scale = $state(2);
   let exporting = $state(false);
+
+  let card: HTMLDivElement | undefined;
+
+  /**
+   * An open dialog takes the focus, as the oracle's does
+   * (`Dialog.tsx@1118751f:55-71`) and as the other dialogs in `DrawModals.svelte` do.
+   * A board still holding the focus answers every key pressed over this one, and the tool
+   * that comes back is not what a person asked for.
+   */
+  onMount(() => card?.focus());
 
   async function handleExportPng(): Promise<void> {
     if (!engine) return;
@@ -42,7 +53,7 @@
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="export-title">
-  <div class="modal-card pop-in">
+  <div class="modal-card pop-in" tabindex="-1" bind:this={card}>
     <div class="modal-header">
       <h3 id="export-title">Export Drawing</h3>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
@@ -121,6 +132,12 @@
     width: 480px;
     max-width: 92vw;
     box-shadow: var(--shadow-lg);
+  }
+
+  /* The card is focused only so the dialog keeps the keys; a ring round the whole card
+     would say the dialog is a control, which it is not (`VectorizeDialog.svelte`). */
+  .modal-card:focus {
+    outline: none;
   }
 
   .modal-header {

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import type { Arrowhead } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { clampMenuPosition, type MenuElementInfo } from "./menu.ts";
@@ -36,6 +36,14 @@
 
   let menuEl: HTMLDivElement | undefined;
   let pos = $state({ left: 0, top: 0 });
+
+  /**
+   * An open menu takes the focus, as the oracle's popover does
+   * (`Popover.tsx@1118751f:36-50`): a right-click leaves the pointer on the board, and
+   * with the board still holding the focus every key reaches it — `R` changed the tool
+   * while the menu sat there offering Copy.
+   */
+  onMount(() => menuEl?.focus());
 
   $effect(() => {
     void x;
