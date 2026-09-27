@@ -1,3 +1,4 @@
+import { elementBounds } from "@drawnosaurus/contract";
 import { maxZoom, minZoom } from "@osionos/draw-engine/cameraMath";
 
 /** Camera scale as an integer percentage (100 = 1:1). */
@@ -25,11 +26,18 @@ export function boundsOf(elements: Box[]): Box | null {
   let top = Infinity;
   let right = -Infinity;
   let bottom = -Infinity;
-  for (const el of elements) {
-    left = Math.min(left, el.x);
-    top = Math.min(top, el.y);
-    right = Math.max(right, el.x + el.width);
-    bottom = Math.max(bottom, el.y + el.height);
+  for (const box of elements) {
+    // Normalised per element, so a **mirrored** one — `width` or `height` under zero,
+    // which is what a resize drag crossing the anchor leaves behind — keeps its far corner
+    // instead of yielding a box whose min is past its max. That is the engine's
+    // `normalize_rect` (`scene/geometry.rs:14-21`), reached through the one sanctioned
+    // mirror of it, `elementBounds` (`packages/contract/src/bounds.ts:35-44`); on an
+    // element that is not mirrored it is the identity, so no well-behaved rect moves.
+    const el = elementBounds(box);
+    left = Math.min(left, el.minX);
+    top = Math.min(top, el.minY);
+    right = Math.max(right, el.maxX);
+    bottom = Math.max(bottom, el.maxY);
   }
   return { x: left, y: top, width: right - left, height: bottom - top };
 }

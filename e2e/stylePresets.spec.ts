@@ -1,5 +1,12 @@
 import { expect, test } from "./fixtures.ts";
-import { OPEN_CANVAS, focusBoard, openBoard, sceneElements, type Board } from "./board.ts";
+import {
+  OPEN_CANVAS,
+  focusBoard,
+  openBoard,
+  sceneElements,
+  type Board,
+  type SelectHandle,
+} from "./board.ts";
 
 /**
  * Style presets (`docs/reference/stylePresets.md`): applying one restyles the selection as
@@ -8,11 +15,6 @@ import { OPEN_CANVAS, focusBoard, openBoard, sceneElements, type Board } from ".
  * proves — that clicking a preset chip actually reaches the engine and that undo takes it
  * back in one step, not one per field it touched).
  */
-
-/** The debug handle's `select`, which `board.ts`'s own declaration leaves out. */
-interface SelectHandle {
-  select(ids: string[]): void;
-}
 
 async function placeFilledRectangle(board: Board, at: { x: number; y: number }): Promise<void> {
   await board.page.evaluate(

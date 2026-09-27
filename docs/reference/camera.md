@@ -58,6 +58,66 @@ Switchable from the main menu ("Focus while typing") and the command palette, **
 default, persisted per viewer in `localStorage` (`drawnosaurus:focus-mode`) behind
 try/catch — `readFocusModePreference`/`persistFocusModePreference` in `camera.ts`.
 
+## `boundsOf` normalises a mirrored element
+
+`boundsOf` (`camera.ts`) is the front's only source of a set of elements' union box, and it
+read `x + width` as an element's right edge. A **mirrored** element — `width` or `height`
+under zero, which the engine leaves behind the moment a resize drag crosses the anchor
+(`selection/transform.rs:175-198`) — therefore came back as a box whose min is past its max,
+which every consumer reads as empty or inverted.
+
+It normalises each element through `elementBounds`
+(`packages/contract/src/bounds.ts:35-44`) — the sanctioned mirror of the engine's
+`normalize_rect` (`scene/geometry.rs:14-21`), which is what gives a rect dragged up and to
+the left bounds at all. The front keeps no arithmetic **of its own for the normalisation**:
+`presentation.ts` already reaches for the same function. It still accumulates the union with
+four `Math.min`/`Math.max`, and it is still on §2's list — see below. On an element that is
+**not** mirrored the call is the identity, so no well-behaved rect moves; `camera.test.ts`
+pins that on its own, with a fractional width and height among the literals.
+
+**Three call sites, and a fourth consumer one step down.** All three calls are in
+`DrawSurface.svelte`, cited by function name rather than by line because a line number here
+goes stale the moment a line above it moves — which is this project's most common defect.
+`placeShapeSwitch` hands its box to `switchPanelAt`, so four things read it and three call
+sites produce it.
+
+| call site                      | what it reads                                                                  | a mirrored element moved it by                     |
+| ------------------------------ | ------------------------------------------------------------------------------ | -------------------------------------------------- |
+| `updateFlowchartStripPosition` | the cluster's centre-x and its **top**                                         | the strip sat on the node instead of above it      |
+| `placeShapeSwitch`             | `switchPanelAt` (`shapeSwitch.ts:48`) — the selection's **bottom-left** corner | the panel hung above the shape instead of under it |
+| `enterFocusMode`               | `focusCamera` — the **width** and the centre                                   | the scale, on a selected text element — fixed here |
+
+Each has its own case, and two of the three are pinned in a browser:
+
+- **The strip.** A pending node copies the start node's extents verbatim
+  (`flowchart.rs:356-357`), and `create_element` writes them with no normalisation of its own
+  (`scene/element.rs:577`), so a start node whose own width and height are negative makes a
+  pending node negative too, and `bounds.y` is that node's _bottom_. The strip — which is
+  meant to sit above the node being created — sat on it, its foot 42px below the cluster's
+  top edge. `flowchart.spec.ts` › "the shape strip sits above a mirrored pending node, not on
+  it", and `mirrored-strip.png` in the evidence shows it.
+- **The panel.** `switchPanelAt` reads `bounds.y + bounds.height`, the selection's bottom
+  edge, which for a negative height is its _top_; the panel hung above the shape instead of
+  under it. `shapeSwitch.spec.ts` › "a mirrored shape hangs the switch under its bottom-left
+  corner", and `mirrored-panel.png` in the evidence shows it.
+
+**Focus mode is the third.** A _shape_ on Enter is not a case at all: `edit_selected_text`
+opens the shape's **label** and selects that (`text.rs:185-186`, `text.rs:338-341`), and a
+label's geometry comes from the text layout, which is never negative. A **selected text
+element** is, and the same line fixes it: `focusCamera` divides the viewport by
+`Math.max(bounds.width, 1)`, so a negative width made the fit come from **1 world pixel** and
+the camera always landed on the 2× cap. The text is framed now. The cap still applies to a
+text narrower than `viewport.width × marginRatio ÷ maxScale` — 512 world px at the default
+1280-wide viewport — because it caps any element that small, so the difference is visible on
+a long line rather than a short one. `camera.test.ts` › "frames a selected text element that
+has been mirrored, rather than capping the zoom".
+
+**This is not the law-3 line closed.** The finish is an engine method that returns the union
+bounds of a _caller-chosen id set_ — `zoom_to_fit_selection` fits the current selection, and
+`pendingFlowchartElements` has no method at all — with the front calling it and this host
+copy deleted. That is a separate item; until it lands `boundsOf` stays here, and fixing its
+normalisation does not move the arithmetic anywhere.
+
 ## Where the host's camera formulas come from
 
 Since `1334bcf` the front imports them rather than keeping its own: `worldToScreen`,

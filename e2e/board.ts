@@ -593,6 +593,16 @@ export function selection(page: Page): Promise<string[]> {
   return page.evaluate(() => window.__drawEngine!.getSelection());
 }
 
+/**
+ * The debug handle's `select`, which the engine's own declaration leaves out — it is on the
+ * `__drawEngine` window object, not on `DrawEngine`, so a spec that drives it says so. It
+ * lives here rather than in each spec because three of them declare the same two lines;
+ * `flowchart.spec.ts` declares its own, wider handle for the calls only it makes.
+ */
+export interface SelectHandle {
+  select(ids: string[]): void;
+}
+
 /** The elements the engine currently holds, deleted ones excluded. */
 export async function sceneElements(page: Page): Promise<SceneElement[]> {
   const json = await page.evaluate(() => window.__drawEngine!.exportJson());

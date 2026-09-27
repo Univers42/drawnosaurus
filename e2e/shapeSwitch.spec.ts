@@ -7,6 +7,7 @@ import {
   sceneElements,
   selection,
   type SceneElement,
+  type SelectHandle,
 } from "./board.ts";
 
 /**
@@ -21,6 +22,53 @@ const panel = (page: Page) => page.getByRole("toolbar", { name: "Switch shape" }
 const boardElement = (page: Page) => page.locator('.draw-chrome [role="application"]');
 const byId = async (page: Page, id: string): Promise<SceneElement> =>
   (await sceneElements(page)).find((element) => element.id === id)!;
+
+/**
+ * A rectangle whose own `width` and `height` are negative — the state a resize drag that
+ * crosses the anchor leaves behind, loaded straight in because no keyboard gesture here
+ * produces one: the engine's Shift+H / Shift+V mirror (`host/keys.ts:233-236`) keeps a
+ * *box's* own size positive
+ * (`edit/flip.rs`, "Boxes … land on their mirror image with the same width and height"), and
+ * `Alt+Arrow` is not a mirror at all — it walks the flowchart
+ * (`flowchart.rs:936-940`, "Alt+Arrow: selects the node linked in that direction").
+ */
+async function placeMirroredRectangle(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const engine = window.__drawEngine!;
+    engine.loadScene(
+      JSON.stringify({
+        type: "osidraw",
+        version: 1,
+        source: "e2e",
+        elements: [
+          {
+            id: "shape",
+            type: "rectangle",
+            x: 520,
+            y: 420,
+            width: -300,
+            height: -160,
+            angle: 0,
+            strokeColor: "#1e1e1e",
+            backgroundColor: "#a5d8ff",
+            fillStyle: "solid",
+            strokeWidth: 2,
+            strokeStyle: "solid",
+            roughness: 0,
+            opacity: 100,
+            roundness: null,
+            seed: 1,
+            version: 1,
+            versionNonce: 1,
+            updated: 0,
+            isDeleted: false,
+          },
+        ],
+      }),
+    );
+    (engine as unknown as SelectHandle).select(["shape"]);
+  });
+}
 
 /** A labelled rectangle and a node grown off it with Ctrl+Right, the first one selected. */
 async function labelledPair(page: Page): Promise<{ first: string; arrow: string }> {
@@ -126,4 +174,36 @@ test("with nothing to switch, Tab moves focus on as it does anywhere", async ({ 
   await page.keyboard.press("Tab");
   await expect(panel(page)).toHaveCount(0);
   await expect(boardElement(page)).not.toBeFocused();
+});
+
+// A **mirrored** shape — `width` and `height` under zero, which is what a drag across an
+// edge leaves behind. `boundsOf` read `x + width` as its right edge, so the panel hung off
+// the shape's own top-right instead of under its bottom-left: the fourth consumer of that
+// box, and the one where the box's own top and bottom are both read. `camera.test.ts` pins
+// the maths; this is the panel on screen. `docs/reference/camera.md`.
+test("a mirrored shape hangs the switch under its bottom-left corner", async ({
+  page,
+}, testInfo) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeMirroredRectangle(page);
+  const [shape] = await sceneElements(page);
+  expect(shape!.width, "the shape is mirrored").toBeLessThan(0);
+  expect(shape!.height, "…on both axes").toBeLessThan(0);
+
+  await page.keyboard.press("Tab");
+  await expect(panel(page)).toBeVisible();
+
+  // Its own corners, not `x + width` and `y + height`, which for a mirrored shape are its
+  // top-left.
+  const left = Math.min(shape!.x, shape!.x + shape!.width);
+  const bottom = Math.max(shape!.y, shape!.y + shape!.height);
+  const at = (await panel(page).boundingBox())!;
+  const view = await camera(page);
+  const screenLeft = left * view.scale + view.x + board.box.x;
+  const screenBottom = bottom * view.scale + view.y + board.box.y;
+  expect(at.y, "the panel hangs below the shape's bottom edge").toBeGreaterThan(screenBottom);
+  expect(at.x, "…and left of its left edge").toBeLessThan(screenLeft);
+
+  await page.screenshot({ path: testInfo.outputPath("mirrored-panel.png") });
 });
