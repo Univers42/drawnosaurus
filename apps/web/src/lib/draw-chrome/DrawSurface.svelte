@@ -1662,9 +1662,9 @@
   //
   // This used to run on every raw mousemove — ~120/s on a high-polling mouse — and each
   // one did `engine.screenToWorld`, followed by an unthrottled WebSocket frame. The
-  // arithmetic in that method is TypeScript, but the camera it reads is not: it goes
-  // through the `camera` getter (`engine/src/engine.ts:69`), which crosses into Rust for
-  // `cameraJson` and parses the camera back out of JSON in JS. It also fired while the
+  // arithmetic in that method was TypeScript, and the camera it reads still is not: it
+  // goes through the `camera` getter (`engine/src/engine.ts:70`), which crosses into Rust
+  // for `cameraJson` and parses the camera back out of JSON in JS. It also fired while the
   // pointer was merely over the toolbar, because the handler sat on the outermost chrome
   // div.
   //
@@ -1673,7 +1673,7 @@
   // the engine already pushes to us — so `screenToWorld`, the engine's own
   // `screen_to_world` reached from `@osionos/draw-engine/cameraMath`, needs no camera read
   // and no `JSON.parse`. The free function rather than the method, for that reason alone:
-  // the method reads the camera through the `camera` getter (`engine/src/engine.ts:69`),
+  // the method reads the camera through the `camera` getter (`engine/src/engine.ts:70`),
   // which crosses into Rust for `cameraJson`. It is a WASM call now either way, and a
   // cheap one — five numbers across and two back, once a frame.
   let cursorRaf = 0;
