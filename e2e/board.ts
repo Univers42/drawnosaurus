@@ -57,8 +57,11 @@ declare global {
       embedFramesJson(): string;
       /** The selection, serialised as this scene's own clipboard JSON — Ctrl+C's write. */
       copySelection(): string | null;
-      /** Rasterises the current view exactly as the Export dialog's PNG button does. */
-      exportPng(): Promise<Blob | null>;
+      /**
+       * Rasterises the whole scene, exactly as the Export dialog's PNG button does. The
+       * camera is not consulted: the export is framed by the scene's own bounds.
+       */
+      exportPng(options?: { scale?: number; transparent?: boolean }): Promise<Blob | null>;
       /** Empties the board: no undo step, no autosave — a fuzzer's reset between cases. */
       clear(): void;
       /** Places a scene document's elements as the Mermaid dialog's Insert does. */

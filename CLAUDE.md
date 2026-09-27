@@ -118,6 +118,17 @@ wire format start here.
 to WASM and the API has no WASM runtime. Its semantics are pinned by tests so drift fails a test
 rather than mis-framing a thumbnail.
 
+### Export: the four numbers, and who owns them
+
+A whole-scene PNG is the scene's bounds, the oracle's 10px padding, `trunc(dimension × scale)`
+device pixels, and one boolean for the background — **all four in the engine**
+(`crates/draw-engine/src/export/png.rs`, `ExportFrame`). `apps/web` reads `scale` and
+`transparent` off the dialog and hands the returned `Blob` to a download. The scale is the
+device ratio, **not** the camera's, because the oracle multiplies the canvas by it and hands
+the same number to the renderer as the scale it draws at. `docs/reference/export.md` has the
+line-by-line citations, the empty/one-element/zero-width cases, and the two exports'
+disagreements.
+
 ### Autosave: the dirty-set diff
 
 `routes/boards/[slug]/+page.svelte` keeps a plain `live: DrawElement[]` (never reads the DOM), fed by
