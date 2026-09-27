@@ -58,6 +58,40 @@ Switchable from the main menu ("Focus while typing") and the command palette, **
 default, persisted per viewer in `localStorage` (`drawnosaurus:focus-mode`) behind
 try/catch — `readFocusModePreference`/`persistFocusModePreference` in `camera.ts`.
 
+## Where the host's camera formulas come from
+
+Since `1334bcf` the front imports them rather than keeping its own: `worldToScreen`,
+`screenToWorld` and `MIN_ZOOM`/`MAX_ZOOM` from `@osionos/draw-engine/camera` and `/types`,
+and the grid default from `DEFAULT_GRID` in `/types`. The host's own
+`apps/web/src/lib/draw-chrome/camera.ts` used to export a second `worldToScreen` and its
+own zoom pair, and `DrawSurface.svelte` did `screen_to_world` by hand at two call sites.
+That read against law 3's "the front must never re-implement an engine formula in
+TypeScript", so it is worth being exact about what replaced it.
+
+**`engine/src/camera.ts` is a TypeScript mirror of the Rust `camera.rs`, not a WASM
+binding.** It is a hand-kept copy of `world_to_screen` (`camera.rs:147`),
+`screen_to_world` (`:154`), the zoom pair (`:5-6`) and the rest, and the front calling it
+calls neither Rust nor WASM. It is not the sanctioned mirror of
+`packages/contract/src/bounds.ts` either — that one is pinned to the Rust by tests, and
+`engine/src/camera.ts` is not: no test compares it to `camera.rs`, and a change on the
+engine side can drift from it silently. `DrawEngine.screenToWorld`
+(`engine/src/engine.ts:164`) writes the same expression out a third time, which is the
+copy to collapse.
+
+**The real fix is a WASM export — a Rust `#[wasm_bindgen]` for these, a `DrawEngine`
+method for each — and that is an engine commit plus a submodule bump, not a web change.**
+Until it exists, this import is the closest the front can get to law 3 without one. Do not
+undo it on the grounds that it breaks law 3: a formula that is mirrored once and shared is
+a smaller offence than the divergent copies it replaced, and the numbers that are still
+duplicated live on the engine side, not here.
+
+Where the front must keep the arithmetic out of the loop entirely — a per-frame path that
+already holds the camera — prefer the free function over `DrawEngine.screenToWorld`. The
+method's arithmetic is TypeScript, but it reads the camera through the `camera` getter
+(`engine/src/engine.ts:69`), which crosses into Rust for `cameraJson` and parses the
+result back in JS; on the peer-cursor path that is a WASM hop and a `JSON.parse` per
+frame, which is what the note above that path is about.
+
 ## Known limits
 
 - Focus mode frames the shape that was selected when Enter was pressed, not the caret —

@@ -46,6 +46,7 @@
   import { sharedShape, switchKey, switchPanelAt } from "./shapeSwitch.ts";
   import type { FlowchartShape } from "@osionos/draw-engine/types";
   import {
+    DEFAULT_GRID_PREFERENCE,
     persistCanvasBackground,
     persistThemePreference,
     persistGridPreference,
@@ -167,7 +168,7 @@
   let themeMode = $state<ThemeMode>("light");
   let themePreference = $state<ThemePreference>("light");
   let canvasBackground = $state<string | null>(null);
-  let grid = $state<GridPreference>({ enabled: false, size: 20, step: 5, snap: true });
+  let grid = $state<GridPreference>({ ...DEFAULT_GRID_PREFERENCE });
   /** Snapping to other elements while moving. Off until turned on, as in Excalidraw. */
   let objectsSnap = $state(false);
   let ink = $state("#1e1e1e");
@@ -1650,15 +1651,21 @@
   // Peer-cursor broadcast, rAF-coalesced.
   //
   // This used to run on every raw mousemove — ~120/s on a high-polling mouse — and each
-  // one did `engine.screenToWorld`, which is a WASM call that serialises the camera to
-  // JSON in Rust and parses it back in JS, followed by an unthrottled WebSocket frame.
-  // It also fired while the pointer was merely over the toolbar, because the handler sat
-  // on the outermost chrome div.
+  // one did `engine.screenToWorld`, followed by an unthrottled WebSocket frame. The
+  // arithmetic in that method is TypeScript, but the camera it reads is not: it goes
+  // through the `camera` getter (`engine/src/engine.ts:69`), which crosses into Rust for
+  // `cameraJson` and parses the camera back out of JSON in JS. It also fired while the
+  // pointer was merely over the toolbar, because the handler sat on the outermost chrome
+  // div.
   //
   // Now: bound to the canvas, at most one computation per frame, skipped entirely when
   // the pointer has not moved a whole pixel, and the camera comes from the `currentCamera`
-  // the engine already pushes to us — which the engine's own `screenToWorld` takes
-  // directly, so there is no WASM hop at all.
+  // the engine already pushes to us — so `screenToWorld`, the same expression imported
+  // from `@osionos/draw-engine/camera`, needs no camera read and there is no WASM hop at
+  // all. The free function rather than the method, for that reason alone: the method is
+  // written out a third time, at `engine/src/engine.ts:164`, and the engine is where
+  // that comes together, not here. `docs/reference/camera.md` says so, pending that
+  // commit.
   let cursorRaf = 0;
   let cursorPending: { x: number; y: number } | null = null;
   let lastSent = { x: Number.NaN, y: Number.NaN };
