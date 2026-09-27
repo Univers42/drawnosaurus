@@ -53,12 +53,12 @@
   let preview = $state.raw<DrawEngine | null>(null);
   let syntax: HTMLTextAreaElement | undefined = $state();
 
-    // Not `autofocus`, which a browser honours only for what was in the page as it loaded:
-    // Svelte honours that itself, in a microtask that only fires when nothing in the
-    // document is focused (`svelte@5.57.0/src/internal/client/dom/elements/misc.js:11`).
-    // The dialog takes the focus and hands it back on close — `takeFocus`, and why it is
-    // two things and not one, in `focusHandback.ts`.
-    onMount(() => takeFocus(syntax));
+  // Not `autofocus`, which a browser honours only for what was in the page as it loaded:
+  // Svelte honours that itself, in a microtask that only fires when nothing in the
+  // document is focused (`svelte@5.57.0/src/internal/client/dom/elements/misc.js:11`).
+  // The dialog takes the focus and hands it back on close — `takeFocus`, and why it is
+  // two things and not one, in `focusHandback.ts`.
+  onMount(() => takeFocus(syntax));
 
   // Converted once typing settles; a result that arrives after a newer one started is dropped.
   let latest = 0;
