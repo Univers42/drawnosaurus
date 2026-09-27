@@ -22,7 +22,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { liveElements, reconcileElements } from "@drawnosaurus/contract";
-import { SceneDiffTracker, type StampedElement } from "./sceneDiff.ts";
+import { SceneDiffTracker, type ScenePatch, type StampedElement } from "./sceneDiff.ts";
 
 const el = (id: string, version = 1, patch: Partial<StampedElement> = {}): StampedElement => ({
   id,
@@ -32,6 +32,9 @@ const el = (id: string, version = 1, patch: Partial<StampedElement> = {}): Stamp
   isDeleted: false,
   ...patch,
 });
+
+/** Deterministic nonce so a synthesised stamp is assertable. */
+const nonce = () => 777;
 
 /**
  * The live id order the API ends up holding. The truth the client is guessing at.
@@ -49,6 +52,26 @@ const loaded = (elements: readonly StampedElement[]): SceneDiffTracker<StampedEl
   const tracker = new SceneDiffTracker<StampedElement>();
   tracker.reset(elements);
   return tracker;
+};
+
+/**
+ * One save: the patch that would go out, and its acknowledgement — the production path,
+ * where the patch carries whatever `diff` decided to put in it.
+ */
+const saved = (
+  tracker: SceneDiffTracker<StampedElement>,
+  current: readonly StampedElement[],
+  now: number,
+  lookup?: (id: string) => StampedElement | undefined,
+): ScenePatch<StampedElement> => {
+  // A null patch would already have failed the caller's assertion, so acknowledging an
+  // empty one costs nothing and keeps this free of a non-null assertion — the line after
+  // it is the one that reports the damage.
+  const patch: ScenePatch<StampedElement> = tracker.diff(current, now, nonce, lookup) ?? {
+    elements: [],
+  };
+  tracker.acknowledge(patch);
+  return patch;
 };
 
 describe("the client's model of the server's z-order", () => {
@@ -78,11 +101,21 @@ describe("the client's model of the server's z-order", () => {
     expect(tracker.serverOrder).toEqual(serverOrder(board, [fresh]));
   });
 
-  // A KNOWN FAILURE, and the only one in the repo. It is `it.fails` rather than skipped
-  // on purpose: it passes only while the divergence is still there, so the day
-  // `predictOrder` stops guessing wrong the ratchet turns red and someone has to come
-  // and read this. It carries ONE assertion — the survivor half is the test above, so a
-  // red here can only be the resurrection.
+  // A KNOWN FAILURE, and the only one in the repo. `it.fails` rather than skipped, so it
+  // cannot be deleted later as obsolete: it is green only for as long as the divergence
+  // is there.
+  //
+  // What it does NOT tell you is how the divergence gets fixed, and the obvious answer is
+  // wrong. MEASURED, with and without the design's guard
+  // (`resurrected ? null : predictOrder(...)` in `diffAll`): this test stays red either
+  // way, because it drives `acknowledge` on a patch that carries no `order`, and
+  // `acknowledge` runs `predictOrder` whenever `patch.order` is absent. The guard
+  // deliberately leaves that line alone — on the production path the patch arrives WITH
+  // an order, which is the case below. So a fix has to stop an orderless patch being
+  // predicted for; changing what `diffAll` predicts will not turn this green, and
+  // whoever lands it should not delete this on the strength of having done so.
+  //
+  // It carries ONE assertion, so a red here can only be the resurrection.
   it.fails("puts a resurrected id back where the server's merge puts it", () => {
     const board = [el("a"), el("b"), el("c")];
     const tracker = loaded(board);
@@ -100,16 +133,48 @@ describe("the client's model of the server's z-order", () => {
     // newcomer: it appends, and predicts ["a", "c", "b"] where the server holds
     // ["a", "b", "c"].
     //
-    // The observable cost today is a redundant full-order PATCH on every undo of a
-    // delete, because `diffAll` sees the mismatch against the live scene and sends an
-    // explicit `order` anyway. Fixing the prediction is a separate task, and it is the
-    // conservative one: send an explicit order for any id the client holds as a
-    // tombstone, rather than guess. Do not make this test pass by moving
-    // `reconcileElements` — the in-place tombstone is load-bearing, and compacting it
-    // would silently restack every existing board on its next write.
+    // Nothing is corrupted by this, and the reason is the case below, not this one. Do
+    // not make this test pass by moving `reconcileElements` — the in-place tombstone is
+    // load-bearing, and compacting it would silently restack every existing board on its
+    // next write.
     const back = el("b", 5);
     tracker.acknowledge({ elements: [back] });
 
+    expect(tracker.serverOrder).toEqual(serverOrder(afterDelete, [back]));
+  });
+
+  it("keeps the server's order when the patch goes out through diff", () => {
+    // The production path, and the reason the case above is not corrupting anything: the
+    // patch a save actually sends is built by `diff`, and `diffAll` compares the
+    // prediction against the live scene it was handed, sees them disagree, and puts the
+    // correction on the wire as an explicit `order` — so `acknowledge` runs THAT and the
+    // model the client keeps is the server's. The cost of the wrong prediction is a
+    // full-order PATCH on every undo of a delete, not a restacked board.
+    //
+    // A characterisation, not a ratchet: green today, and green with the design's guard
+    // as well, which only changes how `diffAll` gets to the explicit-order path. It is
+    // here so the honest reason a wrong primitive is survivable stays pinned — a change
+    // that made `diffAll` stop sending the order on a mismatch would leave the next
+    // reader wrong about why nothing has been lost yet.
+    const board = [el("a"), el("b"), el("c")];
+    const tracker = loaded(board);
+
+    // Delete b the way a save does: note it, diff, acknowledge. The engine's export
+    // drops tombstones, so the lookup hands back the deleted shape and the tracker
+    // synthesises the tombstone the server's merge needs.
+    const tombstone = el("b", 2, { isDeleted: true });
+    tracker.noteChanged(["b"]);
+    const deleting = saved(tracker, [el("a"), tombstone, el("c")], 100, (id) =>
+      id === "b" ? tombstone : el(id),
+    );
+    expect(deleting.elements.map((element) => element.id)).toEqual(["b"]);
+    const afterDelete = [el("a"), tombstone, el("c")];
+
+    // Undo: the engine sends a whole scene, so the comparison is against everything.
+    const back = el("b", 5);
+    tracker.noteEverything();
+    const undo = saved(tracker, [el("a"), back, el("c")], 200);
+    expect(undo.order).toEqual(["a", "b", "c"]);
     expect(tracker.serverOrder).toEqual(serverOrder(afterDelete, [back]));
   });
 });

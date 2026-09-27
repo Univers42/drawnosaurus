@@ -15,8 +15,10 @@
  *     lose to the tombstone we already sent. A resurrection is therefore re-stamped
  *     to outrank it.
  *  3. Z-order is array position, and `reorder_elements` moves elements without
- *     touching stamps, so a reorder is invisible to a stamp diff. We predict the
- *     order the server will arrive at and send an explicit one only on a mismatch.
+ *     touching stamps, so a reorder is invisible to a stamp diff. We TRY to predict
+ *     the order the server will arrive at and send an explicit one on a mismatch,
+ *     which is what stops a wrong prediction from persisting — the prediction is
+ *     wrong for a resurrected id (see `predictOrder`).
  */
 
 export interface StampedElement {
@@ -38,10 +40,12 @@ const sameSequence = (a: readonly string[], b: readonly string[]): boolean =>
 
 /**
  * The live id order the server will hold after applying `patch` with no explicit
- * order: survivors keep their sequence, new ids append.
+ * order: survivors keep their sequence, new ids append, and a resurrected id comes
+ * back in the slot its tombstone kept — which the third case gets wrong, below.
  *
  * Both the prediction in `diff` and the bookkeeping in `acknowledge` go through
- * here, so the two cannot disagree about what the server ended up with.
+ * here, so the two cannot disagree with each other. Neither is checked against the
+ * server by anything in this file: that is what `sceneDiff.merges.test.ts` is for.
  */
 function predictOrder<T extends StampedElement>(
   order: readonly string[],
@@ -52,13 +56,17 @@ function predictOrder<T extends StampedElement>(
   // A set, not `order.includes` per element: that was the board's length times the
   // patch's — 13 million comparisons to drop a stack of 1,500 shapes on a board of 9,000,
   // a 60ms stall at the end of the drag.
-  // ponytail: `present` is a live-only order standing in for "the server has seen this
-  // id", which is a different predicate — sound only while no id is tombstoned and then
-  // resurrected, since the server keeps tombstones in its array forever
-  // (`reconcile.ts:64-67`), so a resurrected id comes back in its ORIGINAL slot and
-  // this puts it on top. Pinned as a known failure by `sceneDiff.merges.test.ts`.
-  // Upgrade path: do not predict for an id `known` holds as a tombstone — send an
-  // explicit order for it, the path `diffAll` already takes on a mismatch.
+  // ponytail: `present` is this client's LIVE-only order standing in for "the server has
+  // seen this id", which is a different predicate — sound only while no id the SERVER
+  // holds as a tombstone is named by a patch: this client's own undo, or a peer's undo
+  // of a delete from before this client loaded. The server keeps tombstones in its
+  // array forever (`reconcile.ts:64-67`), so such an id comes back in its ORIGINAL slot
+  // and this puts it on top. Nothing is corrupted today — `diffAll` compares the
+  // prediction against the live scene, sees the mismatch, and sends an explicit order,
+  // which is a coincidence rather than a guard — so the cost is a full-order PATCH on
+  // every undo of a delete. `sceneDiff.merges.test.ts` pins both halves: the primitive
+  // red, the production path green. Upgrade path: do not predict for an id `known`
+  // holds as a tombstone, or for one this client's live-only order cannot vouch for.
   const present = new Set(order);
   const appended = patch
     .filter((element) => !element.isDeleted && !present.has(element.id))

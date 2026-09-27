@@ -1838,13 +1838,18 @@ export const RULES: readonly Rule[] = [
     ],
   },
   // Deletion tombstones an element in place rather than removing it from the array
-  // (z-order is array position, CLAUDE.md), so the rest are stable by construction — but
-  // no test deletes from a stack and checks the survivors keep their relative order.
+  // (z-order is array position, CLAUDE.md), so the rest are stable by construction. The
+  // server keeps the slot over HTTP (boards.test.ts) and in the merge itself
+  // (reconcile.test.ts), the engine keeps it around a tombstone in a peer's order
+  // (ci_zorder.rs), and the client's own model of a delete now matches the real merge
+  // (sceneDiff.merges.test.ts). Not pinned: a LOCAL delete followed by another z-order
+  // command — `scene.remove` tombstones and keeps the array length (draw_engine.rs) but
+  // nothing asserts where the survivors stand afterwards.
   {
     section: "17. Z-order",
     text: /^Stable ordering after deletion$/,
     status: "gap",
-    why: "implemented, untested — deletion tombstones in place rather than reindexing, so order should be stable by construction, but no test asserts it.",
+    why: "partly pinned — the merge keeps the slot (reconcile.test.ts, boards.test.ts over HTTP), the engine keeps it around a tombstone in a peer's order (ci_zorder.rs), and the client's model of a delete matches the real merge (sceneDiff.merges.test.ts). Not pinned: a local delete followed by another z-order command, where nothing asserts where the survivors stand.",
   },
   {
     section: "17. Z-order",
@@ -2261,11 +2266,16 @@ export const RULES: readonly Rule[] = [
   // prediction is wrong identically on both sides and every assertion there passes. What
   // pins it is apps/web/src/lib/autosave/sceneDiff.merges.test.ts, which puts the
   // tracker's model against `reconcileElements` — the merge the API actually runs — so
-  // the prediction has to agree with a module the client never calls. Two of its three
-  // cases are green; the third, a resurrected id, is a declared `it.fails` and will turn
-  // the suite red the day the prediction is fixed. Not a `gap`: a divergence is recorded,
-  // not shipped unseen — but the client is still wrong for a resurrected element, and
-  // that is what zorder.md's cross-client row now says.
+  // the prediction has to agree with a module the client never calls.
+  //
+  // Three of its four cases are green and one is not, and the split IS the finding: the
+  // primitive is wrong for a resurrected id, while the production path is right anyway
+  // because `diffAll` notices the mismatch and sends an explicit order. The client is
+  // therefore still wrong, which is what zorder.md's cross-client row now says.
+  //
+  // Not a `gap`: nothing here is unwatched, and no §17 checklist line is a cross-client
+  // order merge — a rule placed there would match nothing and fail the registry's own
+  // dead-rule check, or hijack an unrelated item.
   {
     section: "31. Persistence",
     status: "covered",

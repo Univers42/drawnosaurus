@@ -126,8 +126,11 @@ shape it, and each is a test:
    re-stamps a resurrection only when it does _not_ outrank the tombstone already sent (an older
    engine, a local draft) — minting a second stamp for an engine-stamped one would desync the two;
 3. **z-order is array position** and the engine reorders without touching stamps, so a reorder is
-   invisible to a stamp diff. The client predicts the order the server will reach and sends an
-   explicit `order` only on a mismatch.
+   invisible to a stamp diff. The client **tries to** predict the order the server will reach — it is
+   wrong for a resurrected id (`docs/reference/zorder.md`) — and sends an explicit `order` on a
+   mismatch, which is what stops the wrong prediction from persisting. Nothing is corrupted today:
+   the engine's `structural` flag on undo and that same comparison keep ordinary single-client paths
+   honest, so the cost is a redundant full-order PATCH on every undo of a delete.
 
 The `send` callback must **not** swallow the rejection: the autosaver needs it to leave the patch
 unacknowledged and arm the retry.
