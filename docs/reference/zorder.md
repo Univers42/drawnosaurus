@@ -11,7 +11,9 @@ cases, 161 steps, each citing its line).
 
 - a **group** is one block to step over — its outermost group, or inside an entered group
   the level just inside it (`getTargetIndex`, `zindex.ts@1118751f:181-287`); inside an entered group
-  nothing steps or goes to an end outside it (`:214-254`, `:458-486`);
+  nothing steps or goes to an end outside it (`:214-254`, `:458-486`) — and a selection holding
+  anything outside the entered group is **refused outright**, nothing inside it moving either
+  (pinned by `ci_zorder.rs` › `a_selection_straddling_the_entered_group_is_refused`);
 - a **frame and its children** are one block to step over (`:256-267`); a selected frame
   takes its children (`includeElementsInFrames`, `selection.ts@1118751f:196-210`); a child moved
   alone goes to the end of its frame's range, not of the board (`:543-621`) — with
