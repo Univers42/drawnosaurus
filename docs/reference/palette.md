@@ -11,7 +11,12 @@ tested without mounting anything. `DrawCommandPalette.svelte` is a thin list ove
 `Ctrl/Cmd+/` and `Ctrl/Cmd+Shift+P` — the oracle's own toggle chord
 (`CommandPalette.tsx@1118751f:145-146`). Both are wired in `DrawSurface.svelte`'s
 `onAppShortcut`, the same window-level handler that already owns `Ctrl+O`/`Ctrl+S`/`?`, so
-typing in a text field is never intercepted (`isTextField`).
+typing in a text field is never intercepted (`isTextField`) and neither is a key pressed
+inside an open dialog (`insideDialog` in `shortcuts.ts`) — with the shortcuts dialog open,
+`Ctrl+/` opens nothing on top of it. The guard is dialogs only, because the main menu is a
+`role="menu"` that holds the focus and prints `Ctrl+O`/`Ctrl+S` beside its own items, so
+the chords it advertises still reach it; the style chords ask the wider question and stop
+at a menu too (`insideOverlay`). `docs/reference/shortcuts.md` has both rules in full.
 
 ## What it lists
 
@@ -70,8 +75,9 @@ oracle's own palette uses. Arrow keys move the highlight, wrapping from the last
 back to the first and back; Enter runs the highlighted command and closes; Escape closes without
 running anything, same as `DrawModals`' own stacked-dialog Escape handler, which also
 knows about this layer. Closing returns keyboard focus to whatever had it before the
-palette opened — the board, most often — captured in `DrawCommandPalette.svelte`'s
-`onMount`/`onDestroy` rather than assumed.
+palette opened — the board, most often — captured on mount and restored on close
+(`takeFocus`, `docs/reference/shortcuts.md` › Focus), unless the command it ran opened a
+dialog of its own, which then keeps the focus.
 
 ## Known limits
 

@@ -812,13 +812,14 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "PNG export is the visible canvas as it stands (engine.ts exportPng, canvas.toBlob()), not the whole scene, and nothing copies it to the clipboard. No read-only share link. SVG and JSON are done.",
   },
-  // The binding is real; only the shortcut itself is unexercised — Save/export and
-  // Import are covered through their underlying JSON pipeline below.
+  // The binding is real; the chord is now pressed, and only the load behind it is
+  // unexercised — Save/export and Import are covered through their underlying JSON
+  // pipeline below.
   {
     section: "💾 Files",
     text: /Ctrl\/Cmd \+ O` — Open\/load a scene/,
     status: "gap",
-    why: "implemented, untested — DrawSurface.svelte's onAppShortcut binds mod+O to open the file picker (mainMenu.openFile()), but no test presses Ctrl/Cmd+O or drives the open flow.",
+    why: "half — `e2e/shortcuts.spec.ts` presses Ctrl+O with the main menu open and the file chooser opens, which is the half that was untested (`DrawSurface.svelte`'s `onAppShortcut` binds mod+O to `mainMenu.openFile()`). No test answers the picker: nothing loads a scene from a file through this chord.",
   },
   {
     section: "💾 Files",
@@ -2637,7 +2638,7 @@ export const RULES: readonly Rule[] = [
     section: "48. Accessibility",
     text: /High contrast|Reduced motion|Screen-reader|focus trap|Focus management/,
     status: "gap",
-    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs, and a dialog now takes the cursor for its asker (e2e/embed.spec.ts), but no focus trap exists anywhere in `apps/web/src` and the rest is unaudited.",
+    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs, and every overlay that takes the focus on open hands it back on close — `takeFocus` in `focusHandback.ts`, which is the oracle's own pair (`Dialog.tsx@1118751f:52`, `:99-104`), asserted for the export, shortcuts and canvas-menu overlays in `e2e/shortcuts.spec.ts` and for the share and templates dialogs in their own specs. Two of the fourteen overlays take no focus on open, named rather than rounded up: the More tools menu keeps the focus on the board on purpose, so its chords still reach the board (`DrawToolbar.svelte:42-44`, `:112-127`), and the embed dialog focuses nothing, which is the open Phase 1.5. The main menu's hand-back lands on its trigger button, not on the board, which is correct for a menu and leaves the board without the focus until it is clicked — a design decision, not a bug, and `docs/reference/shortcuts.md` › Known limits carries the inventory. But there is still no focus trap: Tab walks out of an overlay, where the oracle cycles inside it (`Dialog.tsx@1118751f:69-95`, `Popover.tsx@1118751f:52-80`). High contrast and screen-reader labels are unaudited.",
   },
   // DrawMainMenu.svelte's onKeyDown answers ArrowDown/ArrowUp by stepping the highlighted
   // item, and DrawContextMenu.svelte has its own handler — but no test presses either key
@@ -2649,12 +2650,14 @@ export const RULES: readonly Rule[] = [
     why: "implemented, untested — both menus answer ArrowDown/ArrowUp, but no test opens one and presses an arrow key.",
   },
   // Every menu item shows its own chord inline (dropdown-menu-item__shortcut) and `?`
-  // opens the shortcuts help — but nothing asserts the hint text or opens that dialog.
+  // opens the shortcuts help. Read *and* pressed: the canvas menu's z-order hints, and
+  // the main menu's. The two style hints and the palette's `<kbd>` are not read by
+  // anything.
   {
     section: "48. Accessibility",
     text: /^Shortcut discoverability$/,
     status: "gap",
-    why: "implemented, untested — menu items render their shortcut inline and `?` opens the help dialog, but no test checks either.",
+    why: "half — `?` opens the shortcuts dialog and `e2e/shortcuts.spec.ts` presses it; the canvas menu's front and back z-order hints are read and the chord each names is then pressed (`e2e/console.spec.ts:305-326`), and the main menu's `dropdown-menu-item__shortcut` is read and pressed by `e2e/shortcuts.spec.ts`. Not read: the canvas menu's Copy-styles and Paste-styles hints — their chords are pressed (`e2e/console.spec.ts:268`, `:271`) and the items themselves clicked (`:284`, `:287`), but no test reads those two hints — and the `<kbd>` the command palette prints beside each command (`DrawCommandPalette.svelte:105`).",
   },
   {
     section: "48. Accessibility",

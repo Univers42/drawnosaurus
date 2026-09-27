@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "./fixtures.ts";
-import { focusBoard, openBoard, sceneElements } from "./board.ts";
+import { activeTool, focusBoard, openBoard, sceneElements } from "./board.ts";
 
 const checkoutTemplate = fileURLToPath(
   new URL("../apps/web/src/lib/templates/checkout.osidraw.json", import.meta.url),
@@ -85,4 +85,24 @@ test("a guest refused a new board gets the template inserted into this one", asy
   await focusBoard(board);
   await board.page.keyboard.press("Control+z");
   await expect.poll(async () => (await sceneElements(page)).length).toBe(0);
+});
+
+test("the dialog takes the focus, so the board's tool keys stay on the board", async ({ page }) => {
+  // The card is focused on open, as the oracle's dialogs do (`Dialog.tsx@1118751f:63-68`).
+  // Without it the board kept the focus behind the dialog and answered every key pressed
+  // over it — `R` changed the tool while the templates sat there to be picked.
+  const board = await openBoard(page);
+  await focusBoard(board);
+  expect(await activeTool(page)).toBe("select");
+
+  await page.getByRole("button", { name: "Open main menu" }).click();
+  await page.getByRole("menuitem", { name: "Templates…" }).click();
+  await expect(
+    page.locator('[role="dialog"] .modal-card'),
+    "the dialog took the focus",
+  ).toBeFocused();
+
+  await page.keyboard.press("r");
+
+  expect(await activeTool(page)).toBe("select");
 });

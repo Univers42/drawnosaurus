@@ -566,6 +566,207 @@ test.describe("grid", () => {
   });
 });
 
+/**
+ * An overlay that never takes the focus leaves the board holding it, and the board
+ * answers every key. Twelve of the fourteen overlays here focus themselves on open, the
+ * way the oracle's do (`Dialog.tsx@1118751f:63-68`, `Popover.tsx@1118751f:44-50`); the
+ * export, templates, share and shortcuts dialogs and the canvas menu did not, so opening
+ * one and typing a key gave a rectangle instead of the key doing what the dialog says.
+ * The two that still take no focus are the More tools menu, which keeps the focus on the
+ * board on purpose, and the embed dialog — the inventory is in
+ * `docs/reference/shortcuts.md` › Focus.
+ *
+ * Each test says the same two things around the key press, because a key reaches the
+ * board only if the board is holding the focus: before the overlay opens, the board has
+ * it; after the overlay opens, the overlay has it. Press a key with the focus anywhere
+ * else and neither the engine's container listener nor the window handler sees it, and
+ * the test would pass whether the bug was there or not.
+ */
+test.describe("an open overlay keeps the board's keys", () => {
+  /**
+   * The editor container. The engine's key listener rides on this element and on nothing
+   * else (`engine/src/host/keyboardInput.ts:33`), so it is where a leaked key shows up.
+   */
+  const editor = (page: Page) => page.getByRole("application");
+
+  test("the export dialog keeps the tool keys", async ({ page }, testInfo) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    // Opened on the chord the main menu advertises (`Ctrl+Shift+E`), so the focus that
+    // stays behind is the board's own. Clicking "Export image…" instead would leave the
+    // focus on the menu button, and the key would reach nothing either way.
+    await page.keyboard.press("Control+Shift+e");
+    await expect(page.getByRole("dialog", { name: "Export Drawing" })).toBeVisible();
+    await expect(editor(page), "the board gave up the focus").not.toBeFocused();
+
+    await page.keyboard.press("r");
+    await page.screenshot({ path: testInfo.outputPath("export-dialog-tool-key.png") });
+
+    expect(await activeTool(page)).toBe("diamond");
+  });
+
+  test("the shortcuts dialog keeps the tool keys", async ({ page }, testInfo) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("o");
+    expect(await activeTool(page)).toBe("ellipse");
+
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeVisible();
+    await expect(editor(page), "the board gave up the focus").not.toBeFocused();
+
+    await page.keyboard.press("r");
+    await page.screenshot({ path: testInfo.outputPath("shortcuts-dialog-tool-key.png") });
+
+    expect(await activeTool(page)).toBe("ellipse");
+  });
+
+  test("the canvas menu keeps the tool keys", async ({ page }, testInfo) => {
+    // The menu is `role="menu"`, which the guard on the style chords did not match, and
+    // the one overlay a person opens over a shape they are about to keep drawing.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    await page.mouse.click(
+      board.box.x + OPEN_CANVAS.right - 40,
+      board.box.y + OPEN_CANVAS.bottom - 40,
+      { button: "right" },
+    );
+    const menu = page.getByRole("menu", { name: "Canvas menu" });
+    await expect(menu).toBeVisible();
+    await expect(menu, "the menu took the focus").toBeFocused();
+
+    await page.keyboard.press("r");
+    await page.screenshot({ path: testInfo.outputPath("canvas-menu-tool-key.png") });
+
+    expect(await activeTool(page)).toBe("diamond");
+  });
+
+  test("an open dialog keeps the app chords", async ({ page }, testInfo) => {
+    // `onAppShortcut` rides on the window and guarded only text fields, so with a dialog
+    // open `Ctrl+/` opened the command palette on top of it — two overlays, and the one
+    // underneath unreachable. Escape is the exception: it is how the topmost one closes.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeVisible();
+
+    await page.keyboard.press("Control+/");
+    await page.screenshot({ path: testInfo.outputPath("dialog-keeps-app-chords.png") });
+
+    await expect(page.getByRole("combobox", { name: "Command palette" })).toBeHidden();
+  });
+
+  test("the main menu's own chords still work while it is open", async ({ page }) => {
+    // The main menu is a `role="menu"`, so a guard that named menus as well as dialogs
+    // left it printing four chords it then ignored — `DrawMainMenu.svelte` puts
+    // `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+E` and `Alt+S` next to its own items, and its
+    // docstring says a menu that prints a chord and ignores it is worse than one that
+    // prints nothing. `Ctrl+O` is the one of the four with something a test can watch:
+    // the file input is the only thing on this board a chord opens that is not a dialog.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await page.getByRole("button", { name: "Open main menu" }).click();
+    const menu = page.getByRole("menu", { name: "Main menu" });
+    await expect(menu).toBeVisible();
+    await expect(menu, "the menu took the focus").toBeFocused();
+    const chord = await menu
+      .getByRole("menuitem", { name: /^Open/ })
+      .locator(".dropdown-menu-item__shortcut")
+      .innerText();
+    expect(chord, "the chord the menu prints beside Open").toBe("Ctrl+O");
+
+    // Held open by listening; a picker nobody answers is dismissed at once, and the menu
+    // would go back to being an open menu. See `listenForPicker`.
+    const listening = await listenForPicker(page);
+
+    await page.keyboard.press("Control+o");
+
+    await listening.opened;
+  });
+
+  test("the export dialog hands the focus back when it closes", async ({ page }) => {
+    // Taking the focus is half of what a dialog owes. The other half: nine of the
+    // overlays that took it never gave it back, so Escape left the focus on `<body>` and
+    // the board — the thing the dialog was covering — was unreachable from the keyboard
+    // until it was clicked. The oracle's dialog hands it back from `onClose`
+    // (`Dialog.tsx@1118751f:99-104`); `takeFocus` in `focusHandback.ts` is that pair.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    await page.keyboard.press("Control+Shift+e");
+    await expect(page.getByRole("dialog", { name: "Export Drawing" })).toBeVisible();
+    await expect(editor(page), "the dialog took the focus").not.toBeFocused();
+
+    await page.keyboard.press("Escape");
+
+    await expect(page.getByRole("dialog", { name: "Export Drawing" })).toBeHidden();
+    await expect(editor(page), "the board got the focus back").toBeFocused();
+
+    await page.keyboard.press("r");
+
+    expect(await activeTool(page), "the key after Escape is the board's again").toBe("rectangle");
+  });
+
+  test("the shortcuts dialog hands the focus back when it closes", async ({ page }) => {
+    // The same pair on the dialog most likely to be opened and then read: `?` from the
+    // board, Escape, and the next key belongs to the board again.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeVisible();
+    await expect(editor(page), "the dialog took the focus").not.toBeFocused();
+
+    await page.keyboard.press("Escape");
+
+    await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeHidden();
+    await expect(editor(page), "the board got the focus back").toBeFocused();
+
+    await page.keyboard.press("r");
+
+    expect(await activeTool(page), "the key after Escape is the board's again").toBe("rectangle");
+  });
+
+  test("the canvas menu hands the focus back when it closes", async ({ page }) => {
+    // Taking the focus is half of what a menu owes: it has to give it back, or dismissing
+    // a right-click menu leaves the board unreachable from the keyboard and the next key
+    // draws nothing. The oracle's dialog does exactly this
+    // (`Dialog.tsx@1118751f:99-104`), as `DrawMainMenu.svelte:74-89` already did here.
+    const board = await openBoard(page);
+    await drawRectangle(page, board);
+    await focusBoard(board);
+    await clickElement(board, 0);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    await clickElement(board, 0, { button: "right" });
+    const menu = page.getByRole("menu", { name: "Canvas menu" });
+    await expect(menu, "the menu took the focus").toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+
+    await page.keyboard.press("r");
+
+    expect(await activeTool(page)).toBe("rectangle");
+  });
+});
+
 test("the open canvas region really is clear of chrome", async ({ page }) => {
   // The harness constant every drawing spec depends on. When a panel grows, gestures
   // start being swallowed silently and the specs that use it fail somewhere else

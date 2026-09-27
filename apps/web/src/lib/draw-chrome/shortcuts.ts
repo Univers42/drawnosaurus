@@ -46,6 +46,45 @@ export function isTextField(target: EventTarget | null): boolean {
   );
 }
 
+/** The `role` an overlay carries, as `closest` wants to be given it. */
+const DIALOG = '[role="dialog"]';
+const DIALOG_OR_MENU = `${DIALOG}, [role="menu"]`;
+
+function inside(target: EventTarget | null, selector: string): boolean {
+  const element = target as { closest?: (selector: string) => unknown } | null;
+  return element?.closest?.(selector) != null;
+}
+
+/**
+ * Whether a key pressed on `target` belongs to an open overlay — a dialog or a menu.
+ *
+ * An overlay takes the focus when it opens (`Dialog.tsx@1118751f:63-68`,
+ * `Popover.tsx@1118751f:44-50`), and that focus is what keeps a key off the board: both
+ * the engine's listener and the chrome's ride on a focused element, so a key only reaches
+ * them while nothing inside an overlay holds it. The walk is over the ancestors because
+ * the target is a control inside the overlay far more often than the overlay itself — a
+ * dialog focuses a card with no role of its own.
+ *
+ * What it answers is "is this key inside an overlay", not "is one open". A key pressed
+ * while the focus sits on a toolbar button still gets through, and closing that gap wants
+ * the state `DrawModals.svelte` already keeps for Escape, plus a focus trap to go with it.
+ */
+export function insideOverlay(target: EventTarget | null): boolean {
+  return inside(target, DIALOG_OR_MENU);
+}
+
+/**
+ * Whether a key pressed on `target` belongs to an open dialog — the narrower question the
+ * app chords ask, and the reason is `DrawMainMenu.svelte`: it is a `role="menu"` that
+ * takes the focus on open and prints `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+E` and `Alt+S` beside
+ * its own items (`:193`, `:204`, `:215`, `:314`). A guard that named menus here made the
+ * menu advertise four chords it then ignored, which its own docstring calls worse than
+ * printing nothing.
+ */
+export function insideDialog(target: EventTarget | null): boolean {
+  return inside(target, DIALOG);
+}
+
 export type StyleShortcut =
   | "copyStyles"
   | "pasteStyles"
@@ -65,11 +104,12 @@ export interface StyleShortcutKey {
 }
 
 /**
- * Where a key was pressed: on the board, in the text being edited on it, or in any other
- * field. A field takes every key as typing; the text editor takes every key but the font
- * size chords.
+ * Where a key was pressed: on the board, in the text being edited on it, in any other
+ * field, or inside an open overlay. A field takes every key as typing; the text editor
+ * takes every key but the font size chords; an overlay takes its own, because an open
+ * dialog or menu is holding the focus and a menu's keys are the menu's.
  */
-export type KeyTarget = "board" | "textEditor" | "field";
+export type KeyTarget = "board" | "textEditor" | "field" | "overlay";
 
 /**
  * Ctrl/Cmd+Shift+> and <: `actionIncreaseFontSize` / `actionDecreaseFontSize`, whose
@@ -111,7 +151,11 @@ export function styleShortcut(
   },
 ): StyleShortcut | null {
   const target = context.target ?? "board";
-  if (target === "field") return null;
+  // An overlay gets nothing: the colour picker's own S and G pick blue and pink, and the
+  // guard on the style chords named only dialogs, so with a menu open they reached the
+  // board. The canvas menu and the main menu are `role="menu"` (`DrawContextMenu.svelte`,
+  // `DrawMainMenu.svelte`) and are named in `insideOverlay`.
+  if (target === "field" || target === "overlay") return null;
   const fontSize = fontSizeShortcut(event);
   if (target === "textEditor" || fontSize) return fontSize;
   const mod = event.ctrlKey || event.metaKey;

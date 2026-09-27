@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { moveStop, type Slide } from "./presentation.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   /**
    * The presentation path: every frame, in the order Present visits them. Prezi's path
@@ -30,7 +31,9 @@
   const ids = $derived(stops.flatMap((stop) => (stop.frameId ? [stop.frameId] : [])));
 
   onMount(() => {
-    (list?.querySelector<HTMLButtonElement>(".stop") ?? root)?.focus();
+    // It takes the focus on the first stop and hands it back on close — `takeFocus`, and
+    // why it is two things and not one, in `focusHandback.ts`.
+    return takeFocus(list?.querySelector<HTMLButtonElement>(".stop") ?? root);
   });
 
   /** Moves the stop at `from` to `to`, then keeps the focus on it at its new place. */

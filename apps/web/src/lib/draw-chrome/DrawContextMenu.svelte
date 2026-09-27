@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import type { Arrowhead } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { clampMenuPosition, type MenuElementInfo } from "./menu.ts";
   import { shortcutLabel, zOrderShortcut } from "./shortcuts.ts";
+  import { takeFocus } from "./focusHandback.ts";
   import DrawMenuExtremity from "./DrawMenuExtremity.svelte";
 
   let {
@@ -36,6 +37,16 @@
 
   let menuEl: HTMLDivElement | undefined;
   let pos = $state({ left: 0, top: 0 });
+
+  /**
+   * An open menu takes the focus and hands it back when it closes — `takeFocus`, and why
+   * that is two things and not one, in `focusHandback.ts`. Without the first, a right-click
+   * leaves the pointer on the board and the board keeps the focus, so every key reaches
+   * it: `R` changed the tool while the menu sat there offering Copy. Without the second,
+   * the board is unreachable from the keyboard once the menu is gone, and the next key
+   * draws nothing.
+   */
+  onMount(() => takeFocus(menuEl));
 
   $effect(() => {
     void x;

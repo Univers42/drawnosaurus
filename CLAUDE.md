@@ -34,6 +34,8 @@ envelopes. User guide: `docs/collaboration.md`.
 thing crossing between them is an `.osidraw` scene document.
 
 Camera math, shortcuts, bindings and the frame budget: `.claude/skills/canvas-engine/SKILL.md`.
+Which chord reaches the board, when an open overlay stops it, and where the focus goes when
+that overlay closes: `docs/reference/shortcuts.md`.
 
 ## Commands
 

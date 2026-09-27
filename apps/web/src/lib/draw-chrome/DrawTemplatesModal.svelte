@@ -1,8 +1,10 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { ApiClientError, createBoard, replaceBoard } from "$lib/api/client.ts";
   import { TEMPLATES } from "$lib/templates/index.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   /**
    * Lists the five starter boards (`$lib/templates`) and puts the one picked wherever
@@ -28,6 +30,16 @@
   let busyId = $state<string | null>(null);
   let error = $state<string | null>(null);
 
+  let card: HTMLDivElement | undefined;
+
+  /**
+   * An open dialog takes the focus and hands it back on close — `takeFocus`, and why it
+   * is two things and not one, in `focusHandback.ts`. Opened from the main menu, so the
+   * hand-back lands on that menu and not on the board: both are still there, and the menu
+   * is the one on top.
+   */
+  onMount(() => takeFocus(card));
+
   async function use(template: (typeof TEMPLATES)[number]): Promise<void> {
     if (busyId) return;
     busyId = template.id;
@@ -50,7 +62,7 @@
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="templates-title">
-  <div class="modal-card">
+  <div class="modal-card" tabindex="-1" bind:this={card}>
     <div class="modal-header">
       <h3 id="templates-title">Templates</h3>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
@@ -114,6 +126,12 @@
     width: 480px;
     max-width: 92vw;
     box-shadow: var(--shadow-lg);
+  }
+
+  /* The card is focused only so the dialog keeps the keys; a ring round the whole card
+     would say the dialog is a control, which it is not (`VectorizeDialog.svelte`). */
+  .modal-card:focus {
+    outline: none;
   }
 
   .modal-header {
