@@ -215,17 +215,21 @@ reported: it can paint before the SVG has decoded.
 
 ## Tests
 
-| suite                                             | what                                                             |
-| ------------------------------------------------- | ---------------------------------------------------------------- |
-| `engine/crates/draw-trace/tests/trace.rs`         | flattening, holes, caps, flat rings, stats (+ config unit tests) |
-| `engine/crates/draw-engine/tests/ci_vectorize.rs` | mapping, elements, stacking, groups, history, every refusal      |
-| `apps/web/.../vectorize.test.ts`, `menu.test.ts`  | presets, slider maps, caps, messages, the menu entry             |
-| `e2e/vectorize.spec.ts`                           | both modes end to end, autosave, undo, the zoom sharpness        |
+| suite                                             | what                                                                  |
+| ------------------------------------------------- | --------------------------------------------------------------------- |
+| `engine/crates/draw-trace/tests/trace.rs`         | flattening, holes, caps, flat rings, stats (+ config unit tests)      |
+| `engine/crates/draw-engine/tests/ci_vectorize.rs` | mapping, elements, stacking, groups, history, bindings, every refusal |
+| `apps/web/.../vectorize.test.ts`, `menu.test.ts`  | presets, slider maps, caps, messages, the menu entry                  |
+| `e2e/vectorize.spec.ts`                           | both modes end to end, autosave, undo, the zoom sharpness             |
 
 ## Known limits
 
-- **Arrows bound to the image are not bound to the trace.** The image is removed exactly
-  as a delete removes it, and its arrows are left as a delete leaves them.
+- **An arrow bound to the image is let go of it, not carried onto the trace.** The image
+  is removed exactly as a delete removes it, and the delete releases the arrows bound to
+  what it takes — the trace arrives under new ids, and the oracle has no way to move a
+  binding to them ("we cannot rebind arrows atm", `binding.ts@1118751f:2577`). With
+  **Keep original** the image is still on the board, so its arrows stay bound to it. See
+  [`binding.md` › When the shape is deleted](binding.md#when-the-shape-is-deleted).
 - **A stroke added to a traced shape shows its keyhole bridges**, the zero-width cuts that
   carry its holes. Traced shapes have none, and without one the cuts are invisible.
 - **Only the context menu offers it**, for exactly one unlocked image; there is no inspector
