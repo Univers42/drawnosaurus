@@ -170,10 +170,30 @@ test("pasted text that only starts like Mermaid places no diagram", async ({ pag
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const board = await openBoard(page);
   await focusBoard(board);
-  await page.evaluate(() => navigator.clipboard.writeText("graph paper, 5 mm squares"));
+  const pasted = "graph paper, 5 mm squares";
+  await page.evaluate((text) => navigator.clipboard.writeText(text), pasted);
   await page.mouse.move(board.box.x + 800, board.box.y + 420);
   await page.keyboard.press("Control+v");
-  // Given its time to convert and fail; the fixture fails the test had anything thrown.
+  // Given its time to convert and fail. The fixture still earns its keep here
+  // (`e2e/fixtures.ts`): the conversion is genuinely attempted, and the fallback that
+  // pastes the text has to swallow that failure quietly.
   await page.waitForTimeout(1_500);
-  expect(await sceneElements(page)).toHaveLength(0);
+
+  // "No diagram" said structurally, never by a count on its own. A conversion is
+  // several shapes and arrows — the test above lands eight for a valid definition —
+  // and no element of one is a bare text element carrying the definition it came from,
+  // so a diagram satisfies none of the three: the count is the one line pasted, the one
+  // element is text, and it holds that line. The oracle pastes anything it cannot
+  // convert as the text it is (`App.tsx@1118751f:4704-4708`, `:4757`), so this is the
+  // outcome, not an absence of one.
+  const elements = await sceneElements(page);
+  expect(elements, "the pasted line, and nothing the converter made").toHaveLength(1);
+  expect(
+    elements.map((element) => element.type),
+    "text, not a shape or an arrow",
+  ).toEqual(["text"]);
+  expect(
+    elements[0]!.originalText,
+    "the line as pasted — a diagram's labels are never the definition",
+  ).toBe(pasted);
 });
