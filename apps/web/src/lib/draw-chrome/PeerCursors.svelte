@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { worldToScreen } from "@osionos/draw-engine/camera";
+  import { worldToScreen } from "@osionos/draw-engine/cameraMath";
   import type { Camera } from "@osionos/draw-engine/types";
   import type { PeerCursor } from "../realtime/realtimeClient.ts";
 

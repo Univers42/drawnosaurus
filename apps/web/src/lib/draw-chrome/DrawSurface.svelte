@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { DrawCanvas } from "@osionos/draw-engine/svelte";
-  import { screenToWorld, worldToScreen } from "@osionos/draw-engine/camera";
+  import { screenToWorld, worldToScreen } from "@osionos/draw-engine/cameraMath";
   import { DARK_THEME, EMPTY_SELECTION_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
@@ -1680,12 +1680,12 @@
   //
   // Now: bound to the canvas, at most one computation per frame, skipped entirely when
   // the pointer has not moved a whole pixel, and the camera comes from the `currentCamera`
-  // the engine already pushes to us — so `screenToWorld`, the same expression imported
-  // from `@osionos/draw-engine/camera`, needs no camera read and there is no WASM hop at
-  // all. The free function rather than the method, for that reason alone: the method is
-  // written out a third time, at `engine/src/engine.ts:164`, and the engine is where
-  // that comes together, not here. `docs/reference/camera.md` says so, pending that
-  // commit.
+  // the engine already pushes to us — so `screenToWorld`, the engine's own
+  // `screen_to_world` reached from `@osionos/draw-engine/cameraMath`, needs no camera read
+  // and no `JSON.parse`. The free function rather than the method, for that reason alone:
+  // the method reads the camera through the `camera` getter (`engine/src/engine.ts:69`),
+  // which crosses into Rust for `cameraJson`. It is a WASM call now either way, and a
+  // cheap one — five numbers across and two back, once a frame.
   let cursorRaf = 0;
   let cursorPending: { x: number; y: number } | null = null;
   let lastSent = { x: Number.NaN, y: Number.NaN };

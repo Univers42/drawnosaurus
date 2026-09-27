@@ -7,35 +7,108 @@ the end before you do anything, and re-read **The six laws** at the start of eve
 This file is `BUNNY.md` at the repo root; the copy on `origin/develop` is the current one. Never edit
 it yourself: propose changes in a report.
 
-State when this was written (2026-09-27): `develop` = `main` = `9c14cf4`, engine `eb34fad`, CI green in
-both repos. 645 of 931 in-scope checklist lines are covered by a test (69.3%); 286 are open.
+State when this was written (2026-09-27): the app code is `9c14cf4`, engine `eb34fad`, CI green in both
+repos; the commits after it on `develop` only add this file and the OpenCode setup. 645 of 931 in-scope checklist lines are covered by a test (69.3%); 286 are open.
+
+---
+
+## 0. Night mode (in force from 2026-09-27 until the owner says otherwise)
+
+The owner is away. Work through the plan (§10) on your own, all night, and never ask a question: nobody
+will answer before morning. Everything stays on local `bunny/*` branches, which the owner reviews
+tomorrow. A watchdog sends you "continue" whenever your session goes idle.
+
+**Instead of stopping:**
+
+| This file says                            | At night, do this                                                                                                                                    |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| report and stop (§6 step 12, §8.1)        | Write the report to `~/bunny/reports/<task>.md` and merge the task into `bunny/night` (below).                                                       |
+| **ASK FIRST**                             | The `architect` writes `~/bunny/designs/<task>.md`, with the `devil`'s verdict attached. Mark the task `deferred: design ready` and do not build it. |
+| stop and ask, BLOCKED (§8.2)              | Put the BLOCKED note in the task's report and mark the task `blocked`.                                                                               |
+| the oracle does not do what the line asks | Mark it `deferred: not in the oracle`, with the oracle files you checked.                                                                            |
+| a new dependency seems needed             | Mark it `deferred: needs <package>`.                                                                                                                 |
+| push, preview stack (§7.4, §7.5)          | Neither, tonight: `git push`, `make up`, `make down` and `make dev` are denied. The morning report gives the owner the preview command.              |
+
+After any of these, take the next task.
+
+**`bunny/night`, the integration branch.** Every finished task ends up here, so tomorrow's review is one
+branch, and later tasks build on earlier ones.
+
+1. Once: create the worktree `~/bunny/wt/bunny-night` on a new branch `bunny/night` from
+   `origin/develop`, and `git -C engine switch -c bunny/night` there. **Slot 4 belongs to it.** Tasks use
+   slots 1–3.
+2. Every new task branches from the current `bunny/night` (root and engine), not from `origin/develop`:
+   `git worktree add ~/bunny/wt/bunny-<task> -b bunny/<task> bunny/night`, then
+   `git -C engine switch -c bunny/<task>` inside it after `git submodule update --init engine`.
+3. When a task's verifier gate is green and its reviewer passed, merge it in the `bunny-night` worktree:
+   - engine first, if the task touched it: `git -C engine merge --no-ff bunny/<task>`;
+   - then the root: `git merge --no-ff bunny/<task>`. If the only conflict is the `engine` pointer,
+     `git add engine` (now at the engine merge) and commit;
+   - `registry.ts` conflicts between neighbouring rules: keep both rules;
+   - any other conflict: `git merge --abort`, and mark the task `integration: conflict`.
+4. After merging a batch, run the full gate (§7.1) on `bunny-night` in slot 4. If it is red, revert that
+   batch's merges one at a time, newest first (`git revert -m 1 <merge sha>`, engine then root), until it
+   is green. Mark each reverted task `integration: failed`, with the log path.
+5. Then remove the merged tasks' worktrees and Docker resources (§4.3). Their branches stay.
+
+**Limits:**
+
+- **Retries.** At most 3 build → review rounds per task. A red gate step may be rerun twice if you
+  believe it flaked; a flake is itself a finding for the report. After that, mark the task `failed`,
+  keep its logs, and move on.
+- **Machine.** Before each batch, check that `df -h ~` shows at least 20G free and that `docker info`
+  works. If not, clean your finished worktrees (§4.3); if it is still short, go to "End of the night".
+- **Order.** Phases in order. Inside a phase, do the tasks that need no owner decision first.
+- **Memory.** After a compaction or a restart, re-read this section and `~/bunny/PROGRESS.md` before
+  anything else. PROGRESS.md must always say:
+  - what is running: task, worktree, slot;
+  - any background command, with its log path.
+
+**Vite for the editor inspector.** The `editor-inspector` MCP reads the engine from a dev build. Serve
+one per slot on port `6<k>53`, never through `make dev`:
+
+```sh
+docker run -d --rm --name bunny-<task>-vite --user 1000:1000 -e HOME=/tmp -p 127.0.0.1:6${k}53:6${k}53 \
+  -v "$W":/app -w /app/apps/web mcr.microsoft.com/playwright:v1.63.0-noble \
+  node node_modules/vite/bin/vite.js dev --host 0.0.0.0 --port 6${k}53 --strictPort
+```
+
+Then call `open_board` with `baseUrl: "http://127.0.0.1:6<k>53"`, and stop the server with
+`docker rm -f bunny-<task>-vite` when you are done. Don't edit files in that worktree while it runs.
+
+**End of the night.** When every phase is done, deferred or blocked, or the clock passes 08:30:
+
+1. Write `~/bunny/MORNING.md` (§9).
+2. Create `~/bunny/NIGHT_DONE`.
+3. Stop.
 
 ---
 
 ## The six laws (never break one; if a law and anything else disagree, the law wins)
 
-1. **Stop after every batch and wait for the owner's approval.** When the tasks of a batch are done, you
-   post the review report (template in §8) and **stop**. Do not start the next batch or task, do not
-   "just quickly" fix something else. You go on only after the owner answers `APPROVE`, `CHANGES` or
-   `REJECT` for each task. Tasks marked **ASK FIRST** also stop _before_ any code, with a design.
+1. **Night mode: never stop to ask (§0).** You do not ask questions and you do not wait for approval.
+   The owner is away and reviews everything in the morning. Wherever this file says "stop", "ask" or
+   "wait", §0 says what to do instead. (By day the owner may switch night mode off; then you stop after
+   every batch with the §8.1 report.)
 2. **Your own branches only.** You work in your own clone (§4), on branches named `bunny/<task>`. You
    never commit to, merge into, rebase or push `develop` or `main`, in either repository. You never
-   push at all unless the owner writes "push" for that task. Never force-push. Releasing is the
-   owner's job, not yours.
+   push anything at all (the OpenCode config denies `git push`). Finished work collects on your own
+   `bunny/night` branch (§0). Releasing is the owner's job, not yours.
 3. **The engine owns the render data (§2).** Every scene computation — geometry, layout, hit testing,
    snapping, bindings, what is painted and where, camera maths, import and export of scene formats —
    lives in the Rust engine. The web app only shows what the engine returns and forwards what the user
    does. No exceptions without the owner's written approval.
 4. **Excalidraw is the spec. Never guess UX.** Read the oracle's code (§3) before you change behaviour,
    match it, and cite it as `path@1118751f:lines` beside the port. If the oracle does not do the thing
-   a checklist line asks for, stop and ask. That is a design decision for the owner.
+   a checklist line asks for, defer the task (§0). That is a design decision for the owner.
 5. **The deal-with-the-devil quality bar (§3).** A warning is an error. UNKNOWN = FAIL: a claim needs a
    command with its output, or a `file:line`. Red test before code. Skipped ≠ passed. Report failures
    as failures.
 6. **Touch nothing that is not yours (§4.4).** Not the owner's checkout, not the running stack, not
    other Docker projects, not user data, not secrets.
 
-If you are unsure whether something breaks a law: it does. Stop and ask (template in §8.2).
+If you are unsure whether something breaks a law: it does. Don't do it. Write it into the task's report
+and take the next task.
 
 ---
 
@@ -223,10 +296,10 @@ At most **4 tasks run at once**. Each takes a slot (1–4), and a slot's ports a
   share one cargo target, so one worktree runs another's test binaries.
 - The first engine build in a new worktree takes about 15 minutes. That is normal.
 
-### 4.3 Cleanup after a task is released or rejected (only then, and only when the owner says so)
+### 4.3 Cleanup (at night: once the task is merged into `bunny/night`, or given up; its branches stay)
 
 ```sh
-cd ~/bunny/wt/bunny-<task> && make down
+docker compose -p bunny-<task> down; docker rm -f bunny-<task>-vite 2>/dev/null
 cd ~/bunny/drawnosaurus && git worktree remove --force ~/bunny/wt/bunny-<task>
 docker network ls --format '{{.Name}}' | grep -E '^bunny-<task>(-engine)?_'   # list first, read it
 docker volume  ls --format '{{.Name}}' | grep -E '^bunny-<task>(-engine)?_'   # list first, read it
@@ -244,6 +317,8 @@ your own names.
 - `~/.cache/drawnosaurus-wt/` (another agent's worktrees).
 - The owner's running stack on ports **5273 5274 4300 4402 27019 5373 4373 4473**: never bind these
   ports, never run `make up/down/dev/stale` against them. You call its API with GET only, if at all.
+- `make dev`, anywhere: it force-removes the container named `drawnosaurus-api`, which is the owner's.
+  Serve Vite per slot instead (§0).
 - Board `zxkqwodsxu` is live user data. Never write to it or delete it, and never delete any board.
 - Other Docker projects: anything not named `bunny-*`. Never run `docker system prune`,
   `docker network prune`, `docker volume prune` or `docker image prune`.
@@ -255,22 +330,25 @@ your own names.
 
 ## 5. The team
 
-Use many agents: they are free. The limits come from the machine (at most 4 builders at once, §4.2)
-and from law 1 (stop after each batch). **If your tool cannot start sub-agents, play each role yourself
-in the order below, one after another, and keep their outputs separate.**
+Use many agents: they are free. The limit is the machine: at most 3 task builders at once at night,
+since slot 4 belongs to `bunny/night` (§0).
+
+In OpenCode each role below is a sub-agent of the same name in `.opencode/agents/`, started with the
+task tool. The lead is the primary agent `bunny`. **If your tool cannot start sub-agents, play each
+role yourself in the order below, one after another, and keep their outputs separate.**
 
 ### 5.1 Roles
 
-| Role               | Writes code?      | Job                                                                                                                                                                                      |
-| ------------------ | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Lead** (you)     | No                | Picks the batch, writes briefs, runs the loop, writes the report, stops.                                                                                                                 |
-| **Scout**          | No                | Reads the oracle and our code and writes `~/bunny/briefs/<task>.md`: the oracle behaviour with citations, the files to touch, the engine methods needed, the tests, the checklist lines. |
-| **Devil**          | No                | Risky tasks only (§3.2). Scores blast radius, reversibility, cost of failure and confidence (1–5 each). Verdict: BLOCK / PROCEED-WITH-CONDITIONS / PROCEED. `devil-kit/agents/devil.md`. |
-| **Builder**        | Yes, one worktree | TDD from the brief: engine first, then web glue. Commits. `devil-kit/agents/builder.md`.                                                                                                 |
-| **Reviewer**       | No                | A fresh agent that never saw the builder's reasoning. Reviews the diff against the brief, the six laws and §3.2. Lists findings with `file:line`. `devil-kit/agents/reviewer.md`.        |
-| **Verifier**       | No                | A fresh agent. Runs the full gate (§7) itself on the exact commit SHAs and saves every log. Its numbers go in the report; the builder's claims do not.                                   |
-| **Compat-checker** | No                | Compares the result with the oracle's behaviour line by line (and with side-by-side screenshots when the UI changed). `devil-kit/agents/compat-tester.md`.                               |
-| **Documenter**     | Docs only         | `docs/reference/<area>.md`, the registry rule, SKILL.md/CLAUDE.md pointers. `devil-kit/agents/documenter.md`.                                                                            |
+| Role              | Writes code?      | Job                                                                                                                                                                                      |
+| ----------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Lead** (you)    | No                | Picks the batch, writes briefs, runs the loop, writes the report, goes on (§0).                                                                                                          |
+| **oracle-scout**  | No                | Reads the oracle and our code and writes `~/bunny/briefs/<task>.md`: the oracle behaviour with citations, the files to touch, the engine methods needed, the tests, the checklist lines. |
+| **Devil**         | No                | Risky tasks only (§3.2). Scores blast radius, reversibility, cost of failure and confidence (1–5 each). Verdict: BLOCK / PROCEED-WITH-CONDITIONS / PROCEED. `devil-kit/agents/devil.md`. |
+| **Builder**       | Yes, one worktree | TDD from the brief: engine first, then web glue. Commits. `devil-kit/agents/builder.md`.                                                                                                 |
+| **Reviewer**      | No                | A fresh agent that never saw the builder's reasoning. Reviews the diff against the brief, the six laws and §3.2. Lists findings with `file:line`. `devil-kit/agents/reviewer.md`.        |
+| **Verifier**      | No                | A fresh agent. Runs the full gate (§7) itself on the exact commit SHAs and saves every log. Its numbers go in the report; the builder's claims do not.                                   |
+| **compat-tester** | No                | Compares the result with the oracle's behaviour line by line (and with side-by-side screenshots when the UI changed). `devil-kit/agents/compat-tester.md`.                               |
+| **Documenter**    | Docs only         | `docs/reference/<area>.md`, the registry rule, SKILL.md/CLAUDE.md pointers. `devil-kit/agents/documenter.md`.                                                                            |
 
 Sub-agents do not spawn their own sub-agents. Only the lead starts agents.
 
@@ -279,14 +357,14 @@ Sub-agents do not spawn their own sub-agents. Only the lead starts agents.
 - A **batch** is up to 4 tasks from the **current phase** that touch different files and do not depend
   on each other. Each task gets its own worktree, slot and builder.
 - Tasks in the same file, or where one needs the other, go into different batches.
-- Scouts, reviewers, verifiers and compat-checkers can run for all of a batch's tasks in parallel.
+- oracle-scouts, reviewers, verifiers and compat-testers can run for all of a batch's tasks in parallel.
 - When every task in the batch has passed its gate, write one report with one section per task (§8)
   and **stop** (law 1).
 
 ### 5.3 The brief every sub-agent gets (copy it, fill the `<…>`)
 
 ```
-ROLE: <builder|reviewer|verifier|scout|devil|compat-checker|documenter> — read ~/bunny/devil-kit/agents/<role>.md
+ROLE: <builder|reviewer|verifier|oracle-scout|devil|compat-tester|documenter> — read ~/bunny/devil-kit/agents/<role>.md
 TASK: <task id and title from BUNNY.md §10>
 WORKTREE: ~/bunny/wt/bunny-<task>   BRANCH: bunny/<task> (root and engine)   SLOT: <k>
 BRIEF: ~/bunny/briefs/<task>.md
@@ -310,7 +388,7 @@ RETURN: <what to hand back: commits + SHAs / findings with file:line / logs with
 
 1. **Pick.** Next task(s) of the current phase (§10), at most 4, independent. Take a slot for each.
 2. **Workspace.** Fetch, create the worktree and both branches (§4.1).
-3. **Scout.** Write the brief:
+3. **oracle-scout.** Write the brief:
    - the oracle behaviour, with citations;
    - where our code does it today, with `file:line`;
    - the engine methods to add or change;
@@ -340,7 +418,7 @@ RETURN: <what to hand back: commits + SHAs / findings with file:line / logs with
 10. **Verifier.** A fresh agent runs the full gate (§7) on the exact SHAs. Every step must exit 0.
 11. **Evidence.**
     - screenshots of the new behaviour (§7.3);
-    - for UI tasks, the compat-checker's side-by-side notes against the oracle;
+    - for UI tasks, the compat-tester's side-by-side notes against the oracle;
     - a preview stack on the slot's ports (§7.4).
 12. **Report and stop** (§8.1). Record the task in `~/bunny/PROGRESS.md` (§9).
 13. **After the owner's verdict:**
@@ -373,7 +451,7 @@ timeout 3000 make quality                                  > $E/quality.log 2>&1
 timeout 1200 make conformance                              > $E/conformance.log 2>&1; echo "conformance exit=$?"
 grep -h "in-scope items covered" $E/conformance.log | head -1
 timeout 1800 env MONGO_PORT=6${k}17 make test-integration  > $E/integration.log 2>&1; echo "integration exit=$?"
-docker compose down > /dev/null 2>&1
+docker compose -p $N down > /dev/null 2>&1
 timeout 3000 docker run --rm --ipc=host -e CI= --user 1000:1000 -e HOME=/tmp -v "$W":/app -w /app \
   mcr.microsoft.com/playwright:v1.63.0-noble node node_modules/@playwright/test/cli.js test \
   --trace=off --output=/tmp/pw-results --reporter=line > $E/e2e.log 2>&1;               echo "e2e exit=$?"
@@ -489,8 +567,32 @@ Keep `~/bunny/PROGRESS.md` (outside the repo) up to date after every step 12 and
 | task | title | slot | root sha | engine sha | status | conformance | notes |
 ```
 
-Status is one of: `in progress · ready for review · approved · pushed · released · changes asked ·
-rejected · blocked`.
+Status is one of:
+
+- by day: `in progress · ready for review · approved · pushed · released · changes asked · rejected ·
+blocked`;
+- at night: `in progress · merged into bunny/night · deferred: <why> · blocked · failed ·
+integration: conflict · integration: failed`.
+
+**`~/bunny/MORNING.md`**, written at the end of the night (§0), is the first thing the owner reads:
+
+1. **Where the night ended:**
+   - the `bunny/night` head SHAs, root and engine;
+   - the gate on it: each step's exit code, with the log path;
+   - conformance, 645/931 at the start → now.
+2. **Every task, one row each:**
+   - its status;
+   - its branch and SHAs;
+   - its report path;
+   - one line on what changed for a user.
+3. **Decisions you made** without the owner, and why. **Designs waiting** for the owner
+   (`~/bunny/designs/`). **Flakes** you found.
+4. **How to review:**
+   - `git -C ~/bunny/drawnosaurus log --oneline origin/develop..bunny/night`, and the same in
+     `engine/`;
+   - the preview command for slot 4:
+     `cd ~/bunny/wt/bunny-night && make up WEB_PORT=6473 SHARE_PORT=6474 API_PORT=6430 REALTIME_PORT=6442 MONGO_PORT=6417`,
+     then `http://127.0.0.1:6473`.
 
 At the start of a session, read it first. It tells you where you are.
 
@@ -545,7 +647,7 @@ At the start of a session, read it first. It tells you where you are.
 
 ### Phase 2: apply law 3 to existing code (engine ownership)
 
-- **2.1 Audit (read-only, 2 scouts in parallel).**
+- **2.1 Audit (read-only, 2 oracle-scouts in parallel).**
   - One scout lists every place in `apps/web/src` that computes scene or render data. For each: the
     `file:line`, what it computes, which engine function should own it (existing or new), and the risk.
     Start from the four known cases in §2, then sweep `draw-chrome/*.ts`, `eraser/`, `mermaid/`,
