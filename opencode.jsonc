@@ -9,6 +9,11 @@
   "$schema": "https://opencode.ai/config.json",
   // The plan and the laws for the agent that works on its own branches.
   "instructions": ["BUNNY.md"],
+  // Auto-compaction starts at min(input limit − reserved, context − max(output, reserved)).
+  // space-bunny-free takes 524,288 input tokens, so the 20,000 default compacts at ~504k;
+  // 124,288 makes it 400k, before long contexts start to cost answer quality. A model under
+  // ~160k context would compact on nearly every turn with this, so revisit it on a model change.
+  "compaction": { "reserved": 124288 },
   "mcp": {
     // Browser automation, headless Chromium. Snapshots and screenshots are written to
     // ~/bunny/mcp-output, which is mounted at the same path inside and outside the container,
