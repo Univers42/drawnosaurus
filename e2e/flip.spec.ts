@@ -143,10 +143,10 @@ async function settle(board: Board): Promise<void> {
  * A bar stood on its end beside a box, with a turned line of words inside them, in
  * canvas pixels from `ORIGIN`.
  *
- * The bar's *turned* footprint reaches x:60..80, y:40..100 — not its box (60..80 is its
- * width, 40..100 its height turned) — so the frame drawn round the trio is
- * (60,40)-(180,100) and its handles sit on that, as everywhere else
- * (`docs/reference/resize.md` › the multi-selection frame).
+ * The bar's *turned* footprint reaches x:40..100, y:60..80 — a 20×60 box turned on its
+ * end stands 60 wide and 20 tall, not the width and height it has flat — so the frame
+ * drawn round the trio is (40,40)-(180,100), 140 wide, and its handles sit on that, as
+ * everywhere else (`docs/reference/resize.md` › the multi-selection frame).
  *
  * The words are here for the screenshot and not for the arithmetic: a rectangle turned by
  * π/2 and by −π/2 is the same rectangle, so a picture of one proves nothing about which
@@ -154,10 +154,11 @@ async function settle(board: Board): Promise<void> {
  * reverses a text's turn with everything else's (`resizeElements.ts@1118751f:1417-1419`).
  * They sit well inside the frame so they cannot move it.
  *
- * The frame is 120 wide, so taking the east handle a **full frame width** past the anchor
- * — a scale of −1, the group mirrored at its own size — lands at x = −60, still on open
- * canvas. Any shorter and the crossing shrinks the group to a fraction of itself, which
- * squashes the words to a few pixels and leaves a screenshot nobody can read.
+ * The drag below takes the east handle 100px past the frame's own west edge at x=40,
+ * which is a scale of `(−60 − 40) / 140 = −0.714`: mirrored, at about seven tenths of its
+ * own size, and still readable. Any shorter and the crossing shrinks the group to a
+ * fraction of itself, which squashes the words to a few pixels and leaves a screenshot
+ * nobody can read.
  */
 function groupWithATurnedMember(): Record<string, unknown>[] {
   return [
@@ -354,13 +355,15 @@ test.describe("flip", () => {
     await select(page, ["bar", "box", "word"]);
 
     // The frame is the union of the members' *turned* footprints: a 20×60 bar on its end
-    // stands at x:60..80, y:40..100, so the union is (60,40)-(180,100) and the east
-    // handle is drawn at (188, 70) — 8px out along that one axis, not diagonally.
+    // stands at x:40..100, y:60..80, so the union is (40,40)-(180,100) and the east
+    // handle is drawn at (188, 70) — `max_x` + 8 out along that one axis, at the frame's
+    // own middle rather than at a corner.
     const east = { x: ORIGIN.x + 188, y: ORIGIN.y + 70 };
     await page.mouse.move(board.box.x + east.x, board.box.y + east.y);
     await page.mouse.down();
-    // A full frame width past the anchor at x=60: past it on this axis only, and a scale
-    // of −1, so the group comes out mirrored at its own size and still readable.
+    // 100px past the frame's own west edge at x=40, on this axis only. The pointer lands
+    // on element x = −60, so the scale is `(−60 − 40) / 140 = −0.714`: mirrored, and still
+    // big enough to read.
     await page.mouse.move(board.box.x + ORIGIN.x - 52, board.box.y + east.y, { steps: 4 });
     await page.mouse.up();
 
@@ -399,7 +402,8 @@ test.describe("flip", () => {
     const southEast = { x: ORIGIN.x + 188, y: ORIGIN.y + 108 };
     await page.mouse.move(board.box.x + southEast.x, board.box.y + southEast.y);
     await page.mouse.down();
-    // Past the anchor (60, 40) on both axes, a frame's width and height beyond it.
+    // Past the anchor at (40, 40) on both axes — 100 past it on x, a whole frame height
+    // past it on y.
     await page.mouse.move(board.box.x + ORIGIN.x - 52, board.box.y + ORIGIN.y - 12, {
       steps: 4,
     });
