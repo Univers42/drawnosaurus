@@ -263,11 +263,16 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${WEB}/mermaid/mermaid.test.ts`, "e2e/mermaid.spec.ts"],
   },
+  // The paste itself is ported (`paste_text.rs`, `keyboardInput.ts`): one element per line,
+  // each wrapped to max(min(visible width / 2, 800), 200) and centred on the pointer. What
+  // the line asks for beyond that — pasting rich content from Google Docs, and
+  // "paste as single element" — is design.md:1279 and shortkey.md:421,423, which are
+  // Phase 4.8's, so the line stays a gap rather than being half-claimed.
   {
     section: "🔤 Text",
     text: /wrap text where appropriate/,
     status: "gap",
-    why: "Pasting plain text makes no text element: the host hands it to pasteJson, which takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not.",
+    why: "Plain text pasted now becomes text elements, one per line and wrapped to max(min(visible width / 2, 800), 200) as Excalidraw does (ci_paste_text.rs, paste_text.rs, App.tsx@1118751f:4979-5096). The rest of the line is the rich part this checklist asks for elsewhere and does not have: pasting from Google Docs, and 'paste as single element' (design.md:1279, shortkey.md:421,423) — Phase 4.8. Ctrl+V of a paragraph is split into one element per line, which is the oracle's behaviour, not the one a reader of the clipboard meant.",
   },
   // `T` activates the text tool: ci_shortcuts.rs' oracle table drives it generically
   // through every tool's letter, not one of the section rule's own named files.
@@ -803,8 +808,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "📋 Clipboard tricks",
     text: /^Paste text directly$/,
-    status: "gap",
-    why: "not implemented — same gap as design.md's Text paste: arbitrary clipboard text never becomes a text element (engine/src/host/keyboardInput.ts falls back to re-pasting the internal clipboard, which fails to parse plain text).",
+    status: "covered",
+    tests: [`${ENGINE}/ci_paste_text.rs`, "e2e/clipboard.spec.ts"],
   },
   {
     section: "📋 Clipboard tricks",
@@ -2228,8 +2233,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "30. Clipboard",
     text: /^Text paste$/,
-    status: "gap",
-    why: "not implemented — paste_json (engine/crates/draw-engine/src/engine/clipboard.rs) only accepts this app's own osidraw JSON; arbitrary clipboard text fails to parse and falls back to re-pasting the last internal copy (or nothing), never becoming a text element the way Excalidraw's paste does.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_paste_text.rs`, "e2e/clipboard.spec.ts"],
   },
   {
     section: "31. Persistence",

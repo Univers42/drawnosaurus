@@ -195,6 +195,58 @@ point editor; `e2e/arrowLabel.spec.ts` › a double click on a curved arrow's li
 | The editor listens for presses from the moment it opens, since it never opens inside one; after a press on the style panel it takes the keys back unless a field or the colour picker has them.                                                                             | waits a frame; refocuses on the scene's next update unless a popup is open (`textWysiwyg.tsx@1118751f:897-936`, `:1008-1015`)                                            | `e2e/textEditor.spec.ts`                                                                                                                            |
 | Escape and Ctrl/Cmd+S are held while an IME composes, so accepting the composition takes priority: Escape cancels the composition instead of also ending the whole edit out from under it, and Ctrl/Cmd+S waits rather than also ending the edit and saving the board.      | lets both through unguarded during a composition (`textWysiwyg.tsx@1118751f:627-629`, `:683-686`; `actionSaveToActiveFile.keyTest`, `actionExport.tsx@1118751f:324-325`) | `textEditor.test.ts`, `e2e/textEditor.spec.ts` › Ctrl/Cmd+Enter, Tab and Escape are held                                                            |
 
+## Paste
+
+**VERIFIED**: plain text pasted makes text elements, **VERIFIED** one per line, and
+**VERIFIED** by `ci_paste_text.rs` (20 cases) and `e2e/clipboard.spec.ts` › _Ctrl+V of
+two plain-text lines makes two text elements_.
+
+The whole of it is `DrawEngine::paste_text`
+(`engine/crates/draw-engine/src/engine/paste_text.rs`), the second branch of a paste. The
+first is `paste_json`, which takes this app's own element JSON; the host tries that first
+and `paste_text` for everything else, exactly as `insertClipboardContent` decides between
+them (`clipboard.ts@1118751f:538-553` → `App.tsx@1118751f:4757`). Before this, a line of
+text was refused by `paste_json` and the internal buffer re-pasted instead: a paste of
+plain text made nothing, and said nothing either.
+
+| decision                                                                                                          | here                                  | oracle                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| one element per line, split on `\n` alone                                                                         | `text.split('\n')`                    | `App.tsx@1118751f:5017`                                                                                      |
+| each line trimmed; a blank one is a paragraph, not an element                                                     | `pasted_line`                         | `:5020`, `:5053-5062`                                                                                        |
+| wrap width: half the visible width in scene units, capped at 800, floored at 200                                  | `pasted_text_width`                   | `:5011-5013` (`getVisibleSceneBounds`, `bounds.ts@1118751f:1149-1159`)                                       |
+| a line too wide wraps and stops auto-sizing; one that fits sizes itself                                           | `pasted_text_element`                 | `:5027-5048` (`textElement.ts@1118751f:89-99`)                                                               |
+| each line centred on the pointer's `x`, the first on its `y`, then one line height plus a 10-unit gap each        | `pasted_text_elements`                | `:5014`, `:5038-5039`, `:5052`                                                                               |
+| the element is the engine's own `new_text_element`, in the next style; the commit stamps it and settles its frame | `pasted_text_element`, `push_history` | `newTextElement` (`newElement.ts@1118751f:335-390`); `getTopLayerFrameAtSceneCoords` (`:5022-5025`, `:5049`) |
+
+`at` is a **scene** point, the pointer converted by the host — the same convention
+`paste_json` takes, so `engine.screenToWorld` is read where the pointer already is, not
+recomputed. With no pointer the text lands at the top left of the canvas, which is where
+`viewport.lastPosition` starts (`App.viewport.ts@1118751f:438`).
+
+**Law 3, and how it is held.** Every one of those decisions is scene data, so all of them
+are in the engine and the front only reads the clipboard and calls the method. That is not
+a convention anyone can be trusted to keep by reading the code — a `split("\n")` or a
+`800`/`200` pair beside a paste call in the front would still _look_ right in a screenshot,
+because the count of elements would be the same and only the width or the gap would differ.
+`apps/web/src/lib/draw-chrome/paste.test.ts` is the scan that fails: it walks every
+`.ts`/`.svelte` in `apps/web/src` **and** in the engine's TypeScript host, takes the files
+that call a paste method, and refuses a line split, a wrap-width constant, or pointer
+arithmetic in any of them. Both halves were proved by mutation: a `split("\n")` and a
+`Math.max(Math.min(w * 0.5, 800), 200)` written into the host's own paste listener each
+turn it red (`~/bunny/evidence/p3.1/mutation-split-in-the-front.log`,
+`mutation-wrap-width-in-the-front.log`).
+
+**IMPLEMENTATION DETAIL, divergent** — a tab in pasted text is one character wide here, not
+the eight spaces the oracle expands it to (`textMeasurements.ts@1118751f:64-70`). The engine
+has no tab width in its measurer, and the text editor leaves a pasted tab as it is too, so
+expanding it in the paste path alone would measure the same character two ways.
+
+**Not here**: "paste as one element" (`Ctrl/Cmd+Shift+V`, `isPlainPaste` in
+`App.tsx@1118751f:5017`) and pasting from Google Docs. Both are `shortkey.md:421,423` and
+`design.md:1279` — Phase 4.8. A paragraph pasted with plain Ctrl+V is split into one
+element per line, which is the oracle's behaviour and not what the reader of the clipboard
+meant; that is what the toast at `App.tsx@1118751f:5082-5095` is for.
+
 ## Layout
 
 One function lays a text out, `text::layout::layout_text`
