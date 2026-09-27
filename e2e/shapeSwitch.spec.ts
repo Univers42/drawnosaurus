@@ -7,6 +7,7 @@ import {
   sceneElements,
   selection,
   type SceneElement,
+  type SelectHandle,
 } from "./board.ts";
 
 /**
@@ -22,16 +23,14 @@ const boardElement = (page: Page) => page.locator('.draw-chrome [role="applicati
 const byId = async (page: Page, id: string): Promise<SceneElement> =>
   (await sceneElements(page)).find((element) => element.id === id)!;
 
-/** The debug handle's `select`, which `board.ts`'s own declaration leaves out. */
-interface SelectHandle {
-  select(ids: string[]): void;
-}
-
 /**
  * A rectangle whose own `width` and `height` are negative — the state a resize drag that
- * crosses an edge leaves behind, loaded straight in because no gesture here produces one:
- * the engine's `Alt+Arrow` mirror keeps a box's own size positive
- * (`edit/flip.rs`, "Boxes … land on their mirror image with the same width and height").
+ * crosses the anchor leaves behind, loaded straight in because no keyboard gesture here
+ * produces one: the engine's Shift+H / Shift+V mirror (`host/keys.ts:233-236`) keeps a
+ * *box's* own size positive
+ * (`edit/flip.rs`, "Boxes … land on their mirror image with the same width and height"), and
+ * `Alt+Arrow` is not a mirror at all — it walks the flowchart
+ * (`flowchart.rs:936-940`, "Alt+Arrow: selects the node linked in that direction").
  */
 async function placeMirroredRectangle(page: Page): Promise<void> {
   await page.evaluate(() => {

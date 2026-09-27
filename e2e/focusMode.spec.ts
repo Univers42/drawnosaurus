@@ -9,6 +9,7 @@ import {
   waitForCameraLanded,
   waitForCameraStable,
   type Board,
+  type SelectHandle,
 } from "./board.ts";
 
 /**
@@ -21,11 +22,6 @@ import {
  */
 
 const editor = (page: Page) => page.locator("textarea[aria-label='Text editor']");
-
-/** The debug handle's `select`, which `board.ts`'s own declaration leaves out. */
-interface SelectHandle {
-  select(ids: string[]): void;
-}
 
 /** A filled rectangle, so both a click in its middle and a double-click hit it — no need
  *  to aim at its outline. `box` is its own size, defaulting to the small one. */
