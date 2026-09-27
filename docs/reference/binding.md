@@ -248,27 +248,38 @@ trace under fresh ids — releases the arrows; it does not carry them over. The 
 one-directional (`delta.ts:1976-1979`): a binding must not point from a live element into
 a deleted one, and an end on a shape that survives is left exactly as it was.
 
-Every path that deletes goes through one function, `release_bindings_to_removed`
-(`engine/crates/draw-engine/src/scene/binding.rs`), called **before** the removals: the
-eraser (`engine/eraser.rs`), the Delete key (`engine/clipboard.rs` › `delete_selection`),
-a vectorize that drops the image it replaces (`engine/vectorize.rs` ›
+Every **local** path that deletes goes through one function,
+`release_bindings_to_removed` (`engine/crates/draw-engine/src/scene/binding.rs`), called
+**before** the removals: the eraser (`engine/eraser.rs`), the Delete key (`engine/clipboard.rs` ›
+`delete_selection`), a vectorize that drops the image it replaces (`engine/vectorize.rs` ›
 `commit_trace`, and only when `keep_original` is off — the image is then still on the
 board under its own id, so its bindings are still good), and a text emptied out of
 existence (`engine/text_session.rs` › `remove_emptied_text` — a committed text cleared to
-nothing is a delete, so it releases too; guarded by `is_target_kind`
-(`engine/crates/draw-engine/src/scene/binding.rs`), since a free-standing text **is** an
-arrow target and a label, which belongs to its shape, is not). The release is part of the
-same step of history as the tombstones, so one undo binds the arrow again. Tests:
-`ci_eraser.rs` › `an_arrow_is_let_go_of_an_erased_shape_and_undo_binds_it_again`,
-`ci_vectorize.rs` › `an_arrow_bound_to_a_vectorized_image_is_let_go_of_it`,
+nothing is a delete, so it releases too). The release is **not** guarded by bindability,
+because the oracle's is not: `unbindAffected` matches on id equality alone
+(`binding.ts@1118751f:2568`) and `ElementsDelta` runs it for every removed element
+(`delta.ts@1118751f:1936-1939`). A **label** releases like anything else, and can be bound
+in the first place — "Bind text" gives a free-standing text a container without touching
+the arrows already bound to it (`engine/bound_text.rs` › `as_label`) — so a bound text is
+the common case here, not a corner. A **remote** peer's tombstone is the one delete that
+does not come through here: it arrives already applied (`engine/clipboard.rs` ›
+`apply_remote_patch_step`), which is benign because the arrow the peer let go of arrives
+in the same patch, already let go of.
+
+The release is part of the same step of history as the tombstones, so one undo binds the
+arrow again. Tests: `ci_eraser.rs` ›
+`an_arrow_is_let_go_of_an_erased_shape_and_undo_binds_it_again`, `ci_vectorize.rs` ›
+`an_arrow_bound_to_a_vectorized_image_is_let_go_of_it`,
 `keeping_the_original_leaves_the_arrow_bound_to_it`,
 `one_undo_binds_the_arrow_to_the_image_again`, `an_arrow_is_let_go_of_only_the_image_end`,
 `ci_persistence.rs` › `delete_selection_lets_an_arrow_go_of_the_shape_it_deleted`,
 `one_undo_binds_the_arrow_to_the_deleted_shape_again`, and `ci_text_edit.rs` ›
 `emptying_a_free_text_lets_an_arrow_go_of_it`,
-`emptying_a_text_that_belongs_to_a_shape_lets_no_arrow_go_of_it`,
+`emptying_a_text_that_belongs_to_a_shape_lets_an_arrow_go_of_it`,
 `emptying_a_text_leaves_an_arrow_bound_to_whoever_survives`,
-`one_undo_binds_the_arrow_to_the_emptied_text_again`.
+`emptying_erasing_and_deleting_a_label_all_let_an_arrow_go_of_it` (the three paths agree),
+`one_undo_binds_the_arrow_to_the_emptied_text_again` (the history path, not the release —
+it passes with or without the release call).
 
 ## Moving things
 
