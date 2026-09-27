@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  insideDialog,
   insideOverlay,
   isTextField,
   shortcutLabel,
@@ -178,5 +179,19 @@ describe("an overlay's keys", () => {
     expect(insideOverlay(focusedIn("menuitem"))).toBe(false);
     expect(insideOverlay(focusedIn("button", "toolbar"))).toBe(false);
     expect(insideOverlay(null)).toBe(false);
+  });
+
+  it("belongs to a dialog, but to no menu, on the app chords", () => {
+    // The app chords stop at a dialog — `Ctrl+/` opened the palette on top of the
+    // shortcuts dialog, and `?` stacked a second one — but they must reach the main
+    // menu, which prints `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+E` and `Alt+S` beside its own
+    // items (`DrawMainMenu.svelte:189`, `:200`, `:211`, `:310`). So the two guards do
+    // not ask the same question, and the narrower one is this.
+    expect(insideDialog(focusedIn("dialog"))).toBe(true);
+    expect(insideDialog(focusedIn("div", "dialog"))).toBe(true);
+    expect(insideDialog(focusedIn("menu"))).toBe(false);
+    expect(insideDialog(focusedIn("menuitem", "menu"))).toBe(false);
+    expect(insideDialog(focusedIn("application"))).toBe(false);
+    expect(insideDialog(null)).toBe(false);
   });
 });

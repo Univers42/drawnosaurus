@@ -11,9 +11,11 @@
 
   /**
    * An open dialog takes the focus, as the oracle's does
-   * (`Dialog.tsx@1118751f:55-71`). The board keeps it only if nothing here takes it, and
-   * a board still holding the focus answers every key pressed over a dialog: `R` chose
-   * the rectangle tool while someone read these very shortcuts.
+   * (`Dialog.tsx@1118751f:63-68`) — though the oracle focuses the first focusable
+   * *control*, and here the card itself is what takes it, as `VectorizeDialog.svelte` does
+   * it. The board keeps it only if nothing here takes it, and a board still holding the
+   * focus answers every key pressed over a dialog: `R` chose the rectangle tool while
+   * someone read these very shortcuts.
    */
   onMount(() => card?.focus());
 </script>

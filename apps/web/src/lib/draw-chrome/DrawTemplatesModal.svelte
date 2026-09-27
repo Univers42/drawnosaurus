@@ -33,9 +33,11 @@
 
   /**
    * An open dialog takes the focus, as the oracle's does
-   * (`Dialog.tsx@1118751f:55-71`) and as the other dialogs in `DrawModals.svelte` do. A
-   * board still holding the focus answers every key pressed over this one, and a template
-   * picked with the keyboard behind the dialog becomes a rectangle.
+   * (`Dialog.tsx@1118751f:63-68`) and as the other dialogs in `DrawModals.svelte` do —
+   * though the oracle focuses the first focusable *control* and we focus the card, as
+   * `VectorizeDialog.svelte` does here. A board still holding the focus answers every key
+   * pressed over this one, and a template picked with the keyboard behind the dialog
+   * becomes a rectangle.
    */
   onMount(() => card?.focus());
 

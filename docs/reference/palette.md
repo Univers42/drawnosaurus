@@ -12,8 +12,11 @@ tested without mounting anything. `DrawCommandPalette.svelte` is a thin list ove
 (`CommandPalette.tsx@1118751f:145-146`). Both are wired in `DrawSurface.svelte`'s
 `onAppShortcut`, the same window-level handler that already owns `Ctrl+O`/`Ctrl+S`/`?`, so
 typing in a text field is never intercepted (`isTextField`) and neither is a key pressed
-inside an open dialog or menu (`insideOverlay` in `shortcuts.ts`) — with the shortcuts
-dialog open, `Ctrl+/` opens nothing on top of it.
+inside an open dialog (`insideDialog` in `shortcuts.ts`) — with the shortcuts dialog open,
+`Ctrl+/` opens nothing on top of it. The guard is dialogs only: the main menu is a
+`role="menu"` that holds the focus and prints `Ctrl+O`/`Ctrl+S` beside its own items, so
+the chords it advertises still reach it. The style chords ask the wider question and stop
+at a menu too (`insideOverlay`).
 
 ## What it lists
 

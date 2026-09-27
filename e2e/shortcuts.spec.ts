@@ -661,6 +661,58 @@ test.describe("an open overlay keeps the board's keys", () => {
 
     await expect(page.getByRole("combobox", { name: "Command palette" })).toBeHidden();
   });
+
+  test("the main menu's own chords still work while it is open", async ({ page }) => {
+    // The main menu is a `role="menu"`, so a guard that named menus as well as dialogs
+    // left it printing four chords it then ignored — `DrawMainMenu.svelte` puts
+    // `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+E` and `Alt+S` next to its own items, and its
+    // docstring says a menu that prints a chord and ignores it is worse than one that
+    // prints nothing. `Ctrl+O` is the one of the four with something a test can watch:
+    // the file input is the only thing on this board a chord opens that is not a dialog.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await page.getByRole("button", { name: "Open main menu" }).click();
+    const menu = page.getByRole("menu", { name: "Main menu" });
+    await expect(menu).toBeVisible();
+    await expect(menu, "the menu took the focus").toBeFocused();
+    const chord = await menu
+      .getByRole("menuitem", { name: /^Open/ })
+      .locator(".dropdown-menu-item__shortcut")
+      .innerText();
+    expect(chord, "the chord the menu prints beside Open").toBe("Ctrl+O");
+
+    // Held open by listening; a picker nobody answers is dismissed at once, and the menu
+    // would go back to being an open menu. See `listenForPicker`.
+    const listening = await listenForPicker(page);
+
+    await page.keyboard.press("Control+o");
+
+    await listening.opened;
+  });
+
+  test("the canvas menu hands the focus back when it closes", async ({ page }) => {
+    // Taking the focus is half of what a menu owes: it has to give it back, or dismissing
+    // a right-click menu leaves the board unreachable from the keyboard and the next key
+    // draws nothing. The oracle's dialog does exactly this
+    // (`Dialog.tsx@1118751f:99-104`), as `DrawMainMenu.svelte:81-85` already did here.
+    const board = await openBoard(page);
+    await drawRectangle(page, board);
+    await focusBoard(board);
+    await clickElement(board, 0);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    await clickElement(board, 0, { button: "right" });
+    const menu = page.getByRole("menu", { name: "Canvas menu" });
+    await expect(menu, "the menu took the focus").toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+
+    await page.keyboard.press("r");
+
+    expect(await activeTool(page)).toBe("rectangle");
+  });
 });
 
 test("the open canvas region really is clear of chrome", async ({ page }) => {

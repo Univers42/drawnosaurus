@@ -39,11 +39,18 @@
 
   /**
    * An open menu takes the focus, as the oracle's popover does
-   * (`Popover.tsx@1118751f:36-50`): a right-click leaves the pointer on the board, and
+   * (`Popover.tsx@1118751f:44-50`): a right-click leaves the pointer on the board, and
    * with the board still holding the focus every key reaches it — `R` changed the tool
-   * while the menu sat there offering Copy.
+   * while the menu sat there offering Copy. And it hands the focus back when it closes, as
+   * the oracle's dialog does (`Dialog.tsx@1118751f:99-104`) and as `DrawMainMenu.svelte`
+   * already did here: taking it and dropping it on the way out leaves the board
+   * unreachable from the keyboard, and the next key draws nothing.
    */
-  onMount(() => menuEl?.focus());
+  onMount(() => {
+    const returnTo = document.activeElement as HTMLElement | null;
+    menuEl?.focus();
+    return () => returnTo?.focus?.();
+  });
 
   $effect(() => {
     void x;

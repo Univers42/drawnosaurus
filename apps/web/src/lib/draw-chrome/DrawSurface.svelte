@@ -128,6 +128,7 @@
   import { getShapeActions } from "./shapeActions.ts";
   import {
     appShortcut,
+    insideDialog,
     insideOverlay,
     isTextField,
     styleShortcut,
@@ -452,13 +453,17 @@
 
   /**
    * Where a key was pressed. The text being edited on the board is told apart from every
-   * other field by its editor's name, because it is the one field a style chord reaches.
+   * other field by its editor's name, because it is the one field a style chord reaches,
+   * and an open overlay is told apart from all of them because it is holding the focus:
+   * both guards below — the style chords and Enter's focus mode — then leave its keys
+   * alone, and neither has to ask the question again.
    */
   function keyTarget(target: EventTarget | null): KeyTarget {
     const typing = textEdit !== null;
     if (typing && (target as Element | null)?.matches?.('textarea[aria-label="Text editor"]')) {
       return "textEditor";
     }
+    if (insideOverlay(target)) return "overlay";
     return isTextField(target) ? "field" : "board";
   }
 
@@ -471,14 +476,12 @@
   /**
    * The chrome's style keys, ahead of the engine's: Ctrl/Cmd+Alt+C and +V copy and paste
    * styles, S, G and Shift+F open the pickers, Ctrl/Cmd+Shift+< and > step the font size
-   * — see `styleShortcut`. On the capture phase, because the engine's listener sits on
-   * the canvas below and would otherwise take Ctrl+Alt+C for an element copy and S for
-   * the lasso, and the text editor stops every key it is given.
+   * — see `styleShortcut`, which also declines every key that lands inside an open
+   * overlay. On the capture phase, because the engine's listener sits on the canvas below
+   * and would otherwise take Ctrl+Alt+C for an element copy and S for the lasso, and the
+   * text editor stops every key it is given.
    */
   function onStyleShortcut(event: KeyboardEvent): void {
-    // An open dialog or menu keeps its keys too: the colour picker's own S and G pick
-    // blue and pink. The menu was missing here, and a menu's keys are the menu's.
-    if (insideOverlay(event.target)) return;
     const action = styleShortcut(event, {
       selected: summary.count,
       tool,
@@ -1764,11 +1767,14 @@
    * They live here rather than in the engine's key handler because they are application
    * actions — open a file, save one, open a dialog — not canvas edits. A menu that
    * prints "Ctrl+O" next to an item and then ignores the key is worse than one that
-   * prints nothing.
+   * prints nothing, which is why the menu below is not in the guard after Escape: the
+   * main menu *is* a `role="menu"` and holds the focus, and these four chords are the
+   * ones it prints (`DrawMainMenu.svelte:189`, `:200`, `:211`, `:310`).
    *
    * Skipped while a text field has focus, so typing in the title or the text editor is
-   * never intercepted, and while a key lands inside an open overlay, which is the same
-   * guard the style chords take and for the same reason.
+   * never intercepted, and while a key lands inside an open *dialog* — which is the
+   * narrower question `insideDialog` asks. `Ctrl+/` used to open the palette on top of
+   * the shortcuts dialog, and `?` to stack a second one.
    */
   function onAppShortcut(event: KeyboardEvent): void {
     if (isTextField(event.target)) return;
@@ -1786,9 +1792,7 @@
       // and `DrawModals.svelte` decides which one, innermost first.
       eraserTrail.stop();
       activeEmbed = null;
-    } else if (insideOverlay(event.target)) {
-      // An open overlay keeps its own keys: `Ctrl+/` opened the palette on top of the
-      // shortcuts dialog, and `?` would have stacked a second shortcuts dialog.
+    } else if (insideDialog(event.target)) {
       return;
     } else if (mod && event.shiftKey && key === "e") {
       event.preventDefault();
