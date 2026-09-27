@@ -21,6 +21,12 @@ import {
  * reaches it with the pointer's position at all — it used to not: the host's own paste
  * listener (`engine/src/host/keyboardInput.ts`) called `pasteJson` with no position,
  * which falls back to the engine's fixed Ctrl+D-style offset regardless of the cursor.
+ *
+ * Plain text is the other branch of the same event, and the one that used to do nothing:
+ * `pasteJson` takes only this app's own element JSON, so a line of text was refused and
+ * the internal buffer re-pasted instead. It now goes through `pasteText`, whose per-line,
+ * wrap-width, placement and minting decisions are `paste_text.rs`'s and are pinned by
+ * `ci_paste_text.rs`; what this file adds is that the browser's clipboard reaches it.
  */
 
 async function drawRectangle(
@@ -114,6 +120,31 @@ test.describe("clipboard", () => {
     await page.mouse.move(board.box.x + 700, board.box.y + 400);
     await page.keyboard.press("Control+v");
     await expect.poll(async () => (await sceneElements(page)).length).toBe(1);
+  });
+
+  // Phase 3.1, by name in the plan. Plain text pasted is text elements: the oracle's
+  // `addTextFromPaste` makes one per line (`App.tsx@1118751f:5017`), and before this a
+  // paste of anything that was not this app's own element JSON made nothing at all — the
+  // count stayed at zero and no error said so.
+  test("Ctrl+V of two plain-text lines makes two text elements", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await page.evaluate(async () => {
+      await navigator.clipboard.writeText("alpha\nbeta");
+    });
+
+    const at = { x: 700, y: 380 };
+    await page.mouse.move(board.box.x + at.x, board.box.y + at.y);
+    await page.keyboard.press("Control+v");
+
+    await expect.poll(async () => (await sceneElements(page)).length).toBe(2);
+    const elements = await sceneElements(page);
+    expect(elements.map((element) => element.type)).toEqual(["text", "text"]);
+    expect(elements.map((element) => element.originalText)).toEqual(["alpha", "beta"]);
+    // Selected as one paste, so Ctrl+Z takes both — the engine's `ci_paste_text.rs`
+    // asserts the same one step of undo, and this is the browser half of it.
+    expect(await selection(page)).toHaveLength(2);
   });
 
   test("Ctrl+D still offsets from the source, unaffected by the pointer", async ({ page }) => {

@@ -785,8 +785,9 @@
   /**
    * A pasted Mermaid definition goes in as its diagram, at the pointer and with the camera
    * left where it is, as the oracle's paste does (`App.tsx@1118751f:4686-4708`). A definition
-   * that does not convert is pasted as the text it is, the way the engine's own paste would
-   * have taken it.
+   * that does not convert is pasted as the text it is: the oracle warns and falls through to
+   * the same `addTextFromPaste` any other text reaches (`App.tsx@1118751f:4704-4708`), where
+   * this used to re-paste the engine's internal buffer instead — never the definition.
    */
   async function pasteMermaid(target: DrawEngine, text: string): Promise<void> {
     const at = lastPointer ?? viewportCentre();
@@ -794,7 +795,7 @@
     try {
       target.insertJson(sceneJson(await mermaidToElements(text)), world);
     } catch {
-      if (!target.pasteJson(text, world)) target.pasteJson(null, world);
+      if (!target.pasteText(text, world)) target.pasteJson(null, world);
     }
   }
 
