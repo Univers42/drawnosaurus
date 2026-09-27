@@ -62,35 +62,46 @@ try/catch — `readFocusModePreference`/`persistFocusModePreference` in `camera.
 
 `boundsOf` (`camera.ts`) is the front's only source of a set of elements' union box, and it
 read `x + width` as an element's right edge. A **mirrored** element — `width` or `height`
-under zero, which the engine leaves behind the moment a drag crosses an edge — therefore
-came back as a box whose min is past its max, which every consumer reads as empty or
-inverted. The worst case framed empty space: with a mirrored element beside a positive
-sibling the union lost the mirrored element's far corner, and the camera fit what was left.
+under zero, which the engine leaves behind the moment a resize drag crosses the anchor
+(`selection/transform.rs:175-198`) — therefore came back as a box whose min is past its max,
+which every consumer reads as empty or inverted.
 
 It normalises each element through `elementBounds`
-(`packages/contract/src/bounds.ts:40-47`) — the sanctioned mirror of the engine's
+(`packages/contract/src/bounds.ts:35-44`) — the sanctioned mirror of the engine's
 `normalize_rect` (`scene/geometry.rs:14-21`), which is what gives a rect dragged up and to
-the left bounds at all. The front keeps no arithmetic of its own: `presentation.ts` already
-reaches for the same function. On an element that is **not** mirrored the call is the
-identity, so no well-behaved rect moves — `camera.test.ts` pins that on its own, with a
-fractional width and height among the literals.
+the left bounds at all. The front keeps no arithmetic **of its own for the normalisation**:
+`presentation.ts` already reaches for the same function. It still accumulates the union with
+four `Math.min`/`Math.max`, and it is still on §2's list — see below. On an element that is
+**not** mirrored the call is the identity, so no well-behaved rect moves; `camera.test.ts`
+pins that on its own, with a fractional width and height among the literals.
 
-**Four consumers, three call sites.** All three calls are in `DrawSurface.svelte`, and one
-of them drives a consumer of its own:
+**Three call sites, four consumers, and what each one reads.** All three calls are in
+`DrawSurface.svelte`; one of them drives a consumer of its own, so four things read this box.
 
-| call site                                                | what it drives                                                                                                                                                        |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DrawSurface.svelte:1085` `updateFlowchartStripPosition` | where the flowchart strip hangs beside the pending cluster                                                                                                            |
-| `DrawSurface.svelte:1126` `placeShapeSwitch`             | `switchPanelAt` (`shapeSwitch.ts:48`) — where Tab's shape-switch panel hangs under the selection. **The fourth consumer: a call site one step down from `boundsOf`.** |
-| `DrawSurface.svelte:1293` `enterFocusMode`               | `focusCamera` — the camera's ease in on the shape                                                                                                                     |
+| call site                                                | what it reads                                                                  | a mirrored element moved it by                     |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------- |
+| `DrawSurface.svelte:1085` `updateFlowchartStripPosition` | the cluster's centre-x and its **top**                                         | the strip sat on the node instead of above it      |
+| `DrawSurface.svelte:1126` `placeShapeSwitch`             | `switchPanelAt` (`shapeSwitch.ts:48`) — the selection's **bottom-left** corner | the panel hung above the shape instead of under it |
+| `DrawSurface.svelte:1293` `enterFocusMode`               | `focusCamera` — the **width** and the centre                                   | the scale, on a selected text element (below)      |
 
-**What each one reads, and why only one showed it.** The flowchart strip takes the box's
-centre (`bounds.x + bounds.width / 2`) and its top; `enterFocusMode` is handed the shape's
-_label_, because the engine selects the label when it opens one, and a label is never
-mirrored. For both, an inverted box and a normalised one give the same answer — a mirrored
-box's centre is its normalised centre. `switchPanelAt` is the one that reads a corner:
-`bounds.y + bounds.height` is the shape's **top** when its height is negative, so the panel
-hung above the shape instead of under it. That is the case `shapeSwitch.spec.ts` pins.
+Two of the three are pinned in a browser, and each has its own case:
+
+- **The strip.** A pending node copies the start node's extents verbatim
+  (`flowchart.rs:356-357`), so a start node whose own width and height are negative makes a
+  pending node negative too, and `bounds.y` is that node's _bottom_. The strip — which is
+  meant to sit above the node being created — sat on it, its foot 42px below the cluster's
+  top edge. `flowchart.spec.ts` › "the shape strip sits above a mirrored pending node, not on
+  it".
+- **The panel.** `switchPanelAt` reads `bounds.y + bounds.height`, the selection's bottom
+  edge, which for a negative height is its _top_; the panel hung above the shape instead of
+  under it. `shapeSwitch.spec.ts` › "a mirrored shape hangs the switch under its bottom-left
+  corner", and `mirrored-panel.png` in the evidence shows it.
+
+**Focus mode is the third, and it is a camera bug rather than a bounds one.** A _shape_ on
+Enter is not a case at all: `edit_selected_text` opens the shape's **label** and selects that
+(`text.rs:184-186`, `text.rs:338-340`), and a label's geometry is written from the text
+layout, which is never negative. A **selected text element** on Enter is a case — see the
+known limit at the end of this page.
 
 **This is not the law-3 line closed.** The finish is an engine method that returns the union
 bounds of a _caller-chosen id set_ — `zoom_to_fit_selection` fits the current selection, and
@@ -152,6 +163,20 @@ frame, which is what the note above that path is about.
 
 - Focus mode frames the shape that was selected when Enter was pressed, not the caret —
   a very tall or wide label can still overflow the margin vertically once typed.
+- **A selected _text element_ that has been mirrored enters focus mode zoomed to the 2×
+  cap instead of being framed.** Enter on a selected text element takes the
+  `single.kind == Text` branch of `edit_selected_text` (`text.rs:20-22`), which requests the
+  edit and leaves the selection on that element, and a text element's geometry is written
+  straight from `resize_element_within` (`pointer_move.rs:756-768`), which returns a
+  negative extent once a handle crosses the anchor (`selection/transform.rs:183-198`).
+  `focusCamera` then divides the viewport by `Math.max(bounds.width, 1)`
+  (`camera.ts:307`) — before the normalisation it read a negative width, so the fit was
+  computed from 1 world pixel and clamped to the cap. **Repro:** draw a text element, drag
+  a side handle past the opposite edge so `width` goes negative, select it, press Enter: the
+  camera lands at 2× with the text running off the sides, where a 400px-wide element should
+  sit at about 1×. `boundsOf` now hands over a correct box, so the remaining fault is
+  `focusCamera`'s own `Math.max(bounds.width, 1)` guard — a camera concern, not a bounds
+  one, and **not fixed here**: it is a separate item.
 - The 250ms zoom ease and the 80%/2× focus numbers are this project's own picks, not
   ported from the oracle (see the citations above); tune in `style.rs`/`camera.ts` if they
   read wrong in practice.

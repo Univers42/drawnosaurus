@@ -1,11 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { sceneBounds, type WorldBounds } from "@drawnosaurus/contract";
-import {
-  maxZoom,
-  minZoom,
-  screenToWorld,
-  worldToScreen,
-} from "@osionos/draw-engine/cameraMath";
+import { maxZoom, minZoom, screenToWorld, worldToScreen } from "@osionos/draw-engine/cameraMath";
 import {
   animateCamera,
   boundsOf,
@@ -455,7 +450,7 @@ describe("boundsOf", () => {
   // A **mirrored** element — one whose width or height went negative, which is what a
   // drag across an edge leaves behind — still occupies a box: the engine normalises it
   // (`normalize_rect`, `scene/geometry.rs:14-21`) and the contract's mirror does the
-  // same (`elementBounds`, `packages/contract/src/bounds.ts:40-47`). Reading `x + width`
+  // same (`elementBounds`, `packages/contract/src/bounds.ts:35-44`). Reading `x + width`
   // instead leaves `min_x > max_x`, which every consumer then reads as an empty or
   // inverted box. These four cases are the fix; the literals above are what must not move.
   it("normalises an element mirrored on both axes", () => {

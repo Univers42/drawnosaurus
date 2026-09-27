@@ -28,11 +28,11 @@ export function boundsOf(elements: Box[]): Box | null {
   let bottom = -Infinity;
   for (const box of elements) {
     // Normalised per element, so a **mirrored** one — `width` or `height` under zero,
-    // which is what a drag across an edge leaves behind — keeps its far corner instead of
-    // yielding a box whose min is past its max. That is the engine's `normalize_rect`
-    // (`scene/geometry.rs:14-21`), reached through the one sanctioned mirror of it,
-    // `elementBounds` (`packages/contract/src/bounds.ts:40-47`); on an element that is
-    // not mirrored it is the identity, so no well-behaved rect moves.
+    // which is what a resize drag crossing the anchor leaves behind — keeps its far corner
+    // instead of yielding a box whose min is past its max. That is the engine's
+    // `normalize_rect` (`scene/geometry.rs:14-21`), reached through the one sanctioned
+    // mirror of it, `elementBounds` (`packages/contract/src/bounds.ts:35-44`); on an
+    // element that is not mirrored it is the identity, so no well-behaved rect moves.
     const el = elementBounds(box);
     left = Math.min(left, el.minX);
     top = Math.min(top, el.minY);
