@@ -646,6 +646,21 @@ test.describe("an open overlay keeps the board's keys", () => {
 
     expect(await activeTool(page)).toBe("diamond");
   });
+
+  test("an open dialog keeps the app chords", async ({ page }, testInfo) => {
+    // `onAppShortcut` rides on the window and guarded only text fields, so with a dialog
+    // open `Ctrl+/` opened the command palette on top of it — two overlays, and the one
+    // underneath unreachable. Escape is the exception: it is how the topmost one closes.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeVisible();
+
+    await page.keyboard.press("Control+/");
+    await page.screenshot({ path: testInfo.outputPath("dialog-keeps-app-chords.png") });
+
+    await expect(page.getByRole("combobox", { name: "Command palette" })).toBeHidden();
+  });
 });
 
 test("the open canvas region really is clear of chrome", async ({ page }) => {

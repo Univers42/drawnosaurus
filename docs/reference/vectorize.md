@@ -234,7 +234,12 @@ reported: it can paint before the SVG has decoded.
   repeats 32 and `vectorize.test.ts` pins the two together through the element schema.
 - **A picture that has not arrived yet** (a peer's image whose bytes are still on their way)
   cannot be read; the dialog says so and offers to try again.
-- **The board's window-level shortcuts** (Ctrl+S, Ctrl+O, N, …) still fire while the dialog
-  has focus, as under the other dialogs in `DrawModals.svelte`.
+- **The board's window-level shortcuts** (Ctrl+S, Ctrl+O, `?`, …) now stop at the dialog
+  too: it takes the focus on open, and `onAppShortcut` and the style chords leave a key
+  alone once it lands inside a dialog or a menu (`shortcuts.ts` › `insideOverlay`).
+  Escape is the one that still passes, because it is how the topmost overlay closes
+  (`DrawModals.svelte`). A key pressed while the focus sits on a _toolbar button_ with this
+  dialog open would still reach the board — the guard asks where the key landed, not
+  whether something is open.
 - **Zoomed far past the size it was traced at**, an editable trace shows the facets of its
   flattened curves; the picture keeps the curves.

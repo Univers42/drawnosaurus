@@ -126,7 +126,13 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
-  import { appShortcut, isTextField, styleShortcut, type KeyTarget } from "./shortcuts.ts";
+  import {
+    appShortcut,
+    insideOverlay,
+    isTextField,
+    styleShortcut,
+    type KeyTarget,
+  } from "./shortcuts.ts";
   import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
@@ -470,8 +476,9 @@
    * the lasso, and the text editor stops every key it is given.
    */
   function onStyleShortcut(event: KeyboardEvent): void {
-    // An open dialog keeps its keys too: the colour picker's own S and G pick blue and pink.
-    if ((event.target as Element).closest?.('[role="dialog"]')) return;
+    // An open dialog or menu keeps its keys too: the colour picker's own S and G pick
+    // blue and pink. The menu was missing here, and a menu's keys are the menu's.
+    if (insideOverlay(event.target)) return;
     const action = styleShortcut(event, {
       selected: summary.count,
       tool,
@@ -1760,7 +1767,8 @@
    * prints nothing.
    *
    * Skipped while a text field has focus, so typing in the title or the text editor is
-   * never intercepted.
+   * never intercepted, and while a key lands inside an open overlay, which is the same
+   * guard the style chords take and for the same reason.
    */
   function onAppShortcut(event: KeyboardEvent): void {
     if (isTextField(event.target)) return;
@@ -1774,8 +1782,14 @@
 
     if (event.key === "Escape") {
       // The engine lets the eraser's marks go on the same key; the trail goes with them.
+      // Left out of the guard below on purpose: Escape is how an overlay is dismissed,
+      // and `DrawModals.svelte` decides which one, innermost first.
       eraserTrail.stop();
       activeEmbed = null;
+    } else if (insideOverlay(event.target)) {
+      // An open overlay keeps its own keys: `Ctrl+/` opened the palette on top of the
+      // shortcuts dialog, and `?` would have stacked a second shortcuts dialog.
+      return;
     } else if (mod && event.shiftKey && key === "e") {
       event.preventDefault();
       showExport = true;

@@ -2628,7 +2628,7 @@ export const RULES: readonly Rule[] = [
     section: "48. Accessibility",
     text: /High contrast|Reduced motion|Screen-reader|focus trap|Focus management/,
     status: "gap",
-    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited.",
+    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs, and every dialog and menu now takes the focus when it opens (`e2e/shortcuts.spec.ts`, `e2e/share.spec.ts`, `e2e/templates.spec.ts`) — but there is still no focus trap: Tab walks out of an overlay, where the oracle cycles inside it (`Dialog.tsx@1118751f:69-95`, `Popover.tsx@1118751f:52-80`). High contrast and screen-reader labels are unaudited.",
   },
   // DrawMainMenu.svelte's onKeyDown answers ArrowDown/ArrowUp by stepping the highlighted
   // item, and DrawContextMenu.svelte has its own handler — but no test presses either key
@@ -2640,12 +2640,13 @@ export const RULES: readonly Rule[] = [
     why: "implemented, untested — both menus answer ArrowDown/ArrowUp, but no test opens one and presses an arrow key.",
   },
   // Every menu item shows its own chord inline (dropdown-menu-item__shortcut) and `?`
-  // opens the shortcuts help — but nothing asserts the hint text or opens that dialog.
+  // opens the shortcuts help — `?` is now pressed by `e2e/shortcuts.spec.ts`, the hint
+  // text on a menu item is still read by no test.
   {
     section: "48. Accessibility",
     text: /^Shortcut discoverability$/,
     status: "gap",
-    why: "implemented, untested — menu items render their shortcut inline and `?` opens the help dialog, but no test checks either.",
+    why: "half — `?` opens the shortcuts dialog and `e2e/shortcuts.spec.ts` presses it, but no test reads the chord a menu item prints inline.",
   },
   {
     section: "48. Accessibility",

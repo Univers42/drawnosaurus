@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  insideOverlay,
   isTextField,
   shortcutLabel,
   styleShortcut,
@@ -134,5 +135,48 @@ describe("typing", () => {
     expect(isTextField(at("DIV", true))).toBe(true);
     expect(isTextField(at("DIV"))).toBe(false);
     expect(isTextField(null)).toBe(false);
+  });
+});
+
+describe("an overlay's keys", () => {
+  /**
+   * A stand-in for the element holding the focus and the ancestors above it, each named
+   * by the role it carries. `closest` answers the way the DOM does for a `role="…"`
+   * selector — the element itself or the nearest ancestor that carries it — so a guard
+   * that forgot `role="menu"` finds nothing here, as it would in a browser. There is no
+   * DOM in this environment (`vite.config.ts` › `test.environment`), so this is a
+   * stand-in for the query, not a CSS engine.
+   */
+  const focusedIn = (...chain: string[]): EventTarget => {
+    const roles = chain.map((role) => ({ role }));
+    return {
+      closest: (selector: string) =>
+        roles.find((node) => selector.includes(`role="${node.role}"`)) ?? null,
+    } as unknown as EventTarget;
+  };
+
+  it("belongs to a dialog, the backdrop itself or anything inside it", () => {
+    // The card is what a dialog focuses on open (`Dialog.tsx@1118751f:55-71`), and it is
+    // a plain `div[tabindex="-1"]` with no role of its own — the walk is the only way to
+    // reach the dialog around it.
+    expect(insideOverlay(focusedIn("dialog"))).toBe(true);
+    expect(insideOverlay(focusedIn("div", "dialog"))).toBe(true);
+  });
+
+  it("belongs to a menu too, which the style guard did not match", () => {
+    // The canvas menu and the main menu are `role="menu"` (`DrawContextMenu.svelte`,
+    // `DrawMainMenu.svelte`), and the guard on the style chords named only dialogs — so
+    // `S` and `G` reached the board with a menu open.
+    expect(insideOverlay(focusedIn("menu"))).toBe(true);
+    expect(insideOverlay(focusedIn("menuitem", "menu"))).toBe(true);
+  });
+
+  it("belongs to nothing on the board itself", () => {
+    // The editor container is `role="application"`; a key pressed there is the board's,
+    // and must stay the board's.
+    expect(insideOverlay(focusedIn("application"))).toBe(false);
+    expect(insideOverlay(focusedIn("menuitem"))).toBe(false);
+    expect(insideOverlay(focusedIn("button", "toolbar"))).toBe(false);
+    expect(insideOverlay(null)).toBe(false);
   });
 });

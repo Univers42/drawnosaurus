@@ -11,7 +11,9 @@ tested without mounting anything. `DrawCommandPalette.svelte` is a thin list ove
 `Ctrl/Cmd+/` and `Ctrl/Cmd+Shift+P` — the oracle's own toggle chord
 (`CommandPalette.tsx@1118751f:145-146`). Both are wired in `DrawSurface.svelte`'s
 `onAppShortcut`, the same window-level handler that already owns `Ctrl+O`/`Ctrl+S`/`?`, so
-typing in a text field is never intercepted (`isTextField`).
+typing in a text field is never intercepted (`isTextField`) and neither is a key pressed
+inside an open dialog or menu (`insideOverlay` in `shortcuts.ts`) — with the shortcuts
+dialog open, `Ctrl+/` opens nothing on top of it.
 
 ## What it lists
 

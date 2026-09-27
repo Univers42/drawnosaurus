@@ -46,6 +46,25 @@ export function isTextField(target: EventTarget | null): boolean {
   );
 }
 
+/**
+ * Whether a key pressed on `target` belongs to an open overlay — a dialog or a menu.
+ *
+ * An overlay takes the focus when it opens (`Dialog.tsx@1118751f:55-71`,
+ * `Popover.tsx@1118751f:36-50`), and that focus is what keeps a key off the board: both
+ * the engine's listener and the chrome's ride on a focused element, so a key only reaches
+ * them while nothing inside an overlay holds it. The walk is over the ancestors because
+ * the target is a control inside the overlay far more often than the overlay itself — a
+ * dialog focuses a card with no role of its own.
+ *
+ * What it answers is "is this key inside an overlay", not "is one open". A key pressed
+ * while the focus sits on a toolbar button still gets through, and closing that gap wants
+ * the state `DrawModals.svelte` already keeps for Escape, plus a focus trap to go with it.
+ */
+export function insideOverlay(target: EventTarget | null): boolean {
+  const element = target as { closest?: (selector: string) => unknown } | null;
+  return element?.closest?.('[role="dialog"], [role="menu"]') != null;
+}
+
 export type StyleShortcut =
   | "copyStyles"
   | "pasteStyles"
