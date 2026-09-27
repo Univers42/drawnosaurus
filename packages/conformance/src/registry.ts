@@ -1620,7 +1620,11 @@ export const RULES: readonly Rule[] = [
   {
     section: "12. Frames",
     // Frame ordering — what is drawn, pasted or dragged into a frame, or taken in by one
-    // drawn or resized, goes directly below it — is pinned in ci_zorder.rs.
+    // drawn or resized, goes directly below it — is pinned in ci_zorder.rs, through undo
+    // and redo (a new element's place is part of its creation, so the step records no
+    // reorder of its own) and through a peer's order patch, which cannot name a child the
+    // peer has never seen and now leaves it in the slot it was drawn in rather than on
+    // top (ci_zorder.rs › a_peers_order_leaves_a_new_frame_child_where_the_peer_never_saw_it).
     status: "covered",
     tests: [
       `${ENGINE}/ci_frame.rs`,
