@@ -125,12 +125,10 @@ test.describe("asking for a link to embed", () => {
   test("the dialog puts the cursor in its field, keyboard alone", async ({ page }, testInfo) => {
     // The field is the only thing there is to type into, and it carried a bare
     // `autofocus` — which a browser honours only for what was in the page as it loaded.
-    // Mounted from an `{#if}`, that attribute is inert, so on every path that opens this
-    // dialog (palette, toolbar, the engine's own `W`, the context menu) the keyboard was
-    // left on the board underneath and a stray keypress drew with whatever tool was
-    // active. `DrawMermaidModal.svelte` already does it the way that works.
+    // Mounted from an `{#if}`, that attribute is inert, so the field never took focus.
+    // `DrawMermaidModal.svelte` already does it the way that works.
     //
-    // The board is focused rather than clicked, so the palette chord is the only way in.
+    // Keyboard only, so the palette chord is the only way in.
     await openBoard(page);
     await page.locator('.draw-chrome [role="application"]').focus();
     await page.keyboard.press("Control+/");
@@ -140,6 +138,12 @@ test.describe("asking for a link to embed", () => {
     await expect(embedDialog(page)).toBeVisible();
     await expect(embedDialog(page).getByRole("textbox", { name: "Link to embed" })).toBeFocused();
     await page.screenshot({ path: testInfo.outputPath("embed-focus.png") });
+    // The dialog's other mount — the context menu's "Edit link…", the same component with a
+    // link already in it — is not asserted here because it never needed this: nothing hands
+    // the keyboard back to the board on that path, so the browser's own `autofocus` was
+    // left to honour the attribute and the field took focus by itself. Run against the old
+    // component it passes; only the palette path, where the board keeps the keyboard, is
+    // the fix.
   });
 });
 

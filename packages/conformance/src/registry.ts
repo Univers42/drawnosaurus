@@ -654,10 +654,11 @@ export const RULES: readonly Rule[] = [
   {
     section: "🧱 Web embeds",
     status: "covered",
-    // e2e/embed.spec.ts also opens the URL dialog by keyboard alone, which is the only
-    // place the dialog itself is exercised — focus lands in its field (the asker is
-    // keyboard-only) and the engine's placement behind it is asserted. `prompt/*.md`
-    // names no line for a dialog's focus, so nothing is claimed here beyond that.
+    // e2e/embed.spec.ts is also where the dialog itself is exercised — it takes the cursor
+    // for the asker, keyboard alone. What sits behind it, the engine's placement, is
+    // asserted by that same file's tests, the ones that insert through the engine.
+    // `prompt/*.md` names no line for a dialog's focus, so nothing is claimed here beyond
+    // that.
     tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`, "e2e/embed.spec.ts"],
   },
   {
@@ -2632,7 +2633,7 @@ export const RULES: readonly Rule[] = [
     section: "48. Accessibility",
     text: /High contrast|Reduced motion|Screen-reader|focus trap|Focus management/,
     status: "gap",
-    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited.",
+    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs, and a dialog now takes the cursor for its asker (e2e/embed.spec.ts), but no focus trap exists anywhere in `apps/web/src` and the rest is unaudited.",
   },
   // DrawMainMenu.svelte's onKeyDown answers ArrowDown/ArrowUp by stepping the highlighted
   // item, and DrawContextMenu.svelte has its own handler — but no test presses either key

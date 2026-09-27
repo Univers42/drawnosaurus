@@ -51,8 +51,9 @@
   let field: HTMLInputElement | undefined = $state();
 
   // Not `autofocus`, which a browser honours only for what was in the page as it loaded —
-  // and this is mounted from an `{#if}`, so it never took focus on any of the paths that
-  // open it and a keypress meant for the link went to the board instead.
+  // and this is mounted from an `{#if}`, so on every path that opens it the field never took
+  // focus. The palette, the engine's own `W` and the toolbar all hand the keyboard back to
+  // the board as they close, so a keypress meant for the link drew with the tool in hand.
   onMount(() => field?.focus());
 </script>
 
