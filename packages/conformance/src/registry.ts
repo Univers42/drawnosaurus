@@ -2683,13 +2683,15 @@ export const RULES: readonly Rule[] = [
     why: "Toolbar and menu roles and labels are in place and asserted by the browser specs, and every overlay that takes the focus on open hands it back on close — `takeFocus` in `focusHandback.ts`, which is the oracle's own pair (`Dialog.tsx@1118751f:52`, `:99-104`), asserted for the export, shortcuts and canvas-menu overlays in `e2e/shortcuts.spec.ts` and for the share and templates dialogs in their own specs. Two of the fourteen overlays take no focus on open, named rather than rounded up: the More tools menu keeps the focus on the board on purpose, so its chords still reach the board (`DrawToolbar.svelte:42-44`, `:112-127`), and the embed dialog focuses nothing, which is the open Phase 1.5. The main menu's hand-back lands on its trigger button, not on the board, which is correct for a menu and leaves the board without the focus until it is clicked — a design decision, not a bug, and `docs/reference/shortcuts.md` › Known limits carries the inventory. But there is still no focus trap: Tab walks out of an overlay, where the oracle cycles inside it (`Dialog.tsx@1118751f:69-95`, `Popover.tsx@1118751f:52-80`). High contrast and screen-reader labels are unaudited.",
   },
   // DrawMainMenu.svelte's onKeyDown answers ArrowDown/ArrowUp by stepping the highlighted
-  // item, and DrawContextMenu.svelte has its own handler — but no test presses either key
-  // with a menu open.
+  // One of the two does. The main menu answers ArrowDown/ArrowUp and e2e/keysMenus.spec.ts
+  // now drives it; the canvas menu's onkeydown handles Escape and nothing else
+  // (DrawContextMenu.svelte:90-92), so focus never leaves its own box. The old why here
+  // said "both menus answer ArrowDown/ArrowUp" — that was false, and 3.4(d) is what found it.
   {
     section: "48. Accessibility",
     text: /^Menu keyboard navigation$/,
     status: "gap",
-    why: "implemented, untested — both menus answer ArrowDown/ArrowUp, but no test opens one and presses an arrow key.",
+    why: "Half done, and the half that is missing is a feature rather than a test. The main menu answers ArrowDown/ArrowUp and keysMenus.spec.ts drives it; the canvas menu's onkeydown handles Escape only (DrawContextMenu.svelte:90-92), so it answers no arrow key at all. Phase 1.",
   },
   // Every menu item shows its own chord inline (dropdown-menu-item__shortcut) and `?`
   // opens the shortcuts help. Read *and* pressed: the canvas menu's z-order hints, and
