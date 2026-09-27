@@ -250,14 +250,17 @@ a deleted one, and an end on a shape that survives is left exactly as it was.
 
 Every path that deletes goes through one function, `release_bindings_to_removed`
 (`engine/crates/draw-engine/src/scene/binding.rs`), called **before** the removals: the
-eraser (`engine/eraser.rs`) and a vectorize that drops the image it replaces
-(`engine/vectorize.rs` › `commit_trace`, and only when `keep_original` is off — the image
-is then still on the board under its own id, so its bindings are still good). The release
-is part of the same step of history as the tombstones, so one undo binds the arrow again.
-Tests: `ci_eraser.rs` › `an_arrow_is_let_go_of_an_erased_shape_and_undo_binds_it_again`,
+eraser (`engine/eraser.rs`), the Delete key (`engine/clipboard.rs` › `delete_selection`)
+and a vectorize that drops the image it replaces (`engine/vectorize.rs` ›
+`commit_trace`, and only when `keep_original` is off — the image is then still on the
+board under its own id, so its bindings are still good). The release is part of the same
+step of history as the tombstones, so one undo binds the arrow again. Tests:
+`ci_eraser.rs` › `an_arrow_is_let_go_of_an_erased_shape_and_undo_binds_it_again`,
 `ci_vectorize.rs` › `an_arrow_bound_to_a_vectorized_image_is_let_go_of_it`,
 `keeping_the_original_leaves_the_arrow_bound_to_it`,
-`one_undo_binds_the_arrow_to_the_image_again`, `an_arrow_is_let_go_of_only_the_image_end`.
+`one_undo_binds_the_arrow_to_the_image_again`, `an_arrow_is_let_go_of_only_the_image_end`,
+and `ci_persistence.rs` › `delete_selection_lets_an_arrow_go_of_the_shape_it_deleted`,
+`one_undo_binds_the_arrow_to_the_deleted_shape_again`.
 
 ## Moving things
 
