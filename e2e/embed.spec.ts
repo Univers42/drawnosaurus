@@ -119,6 +119,30 @@ async function drag(board: Board, from: { x: number; y: number }, by: { x: numbe
   await page.mouse.up();
 }
 
+const embedDialog = (page: Page) => page.getByRole("dialog", { name: "Embed a web page" });
+
+test.describe("asking for a link to embed", () => {
+  test("the dialog puts the cursor in its field, keyboard alone", async ({ page }, testInfo) => {
+    // The field is the only thing there is to type into, and it carried a bare
+    // `autofocus` — which a browser honours only for what was in the page as it loaded.
+    // Mounted from an `{#if}`, that attribute is inert, so on every path that opens this
+    // dialog (palette, toolbar, the engine's own `W`, the context menu) the keyboard was
+    // left on the board underneath and a stray keypress drew with whatever tool was
+    // active. `DrawMermaidModal.svelte` already does it the way that works.
+    //
+    // The board is focused rather than clicked, so the palette chord is the only way in.
+    await openBoard(page);
+    await page.locator('.draw-chrome [role="application"]').focus();
+    await page.keyboard.press("Control+/");
+    await page.keyboard.type("embed web page");
+    await page.keyboard.press("Enter");
+
+    await expect(embedDialog(page)).toBeVisible();
+    await expect(embedDialog(page).getByRole("textbox", { name: "Link to embed" })).toBeFocused();
+    await page.screenshot({ path: testInfo.outputPath("embed-focus.png") });
+  });
+});
+
 test.describe("loading a live page", () => {
   test("YouTube is told which site is embedding it", async ({ page }) => {
     const referrers = await stubProviders(page);

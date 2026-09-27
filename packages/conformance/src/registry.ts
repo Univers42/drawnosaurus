@@ -654,6 +654,10 @@ export const RULES: readonly Rule[] = [
   {
     section: "🧱 Web embeds",
     status: "covered",
+    // e2e/embed.spec.ts also opens the URL dialog by keyboard alone, which is the only
+    // place the dialog itself is exercised — focus lands in its field (the asker is
+    // keyboard-only) and the engine's placement behind it is asserted. `prompt/*.md`
+    // names no line for a dialog's focus, so nothing is claimed here beyond that.
     tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`, "e2e/embed.spec.ts"],
   },
   {
