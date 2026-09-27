@@ -47,6 +47,7 @@ bracket key (Dvorak, QWERTZ). The oracle matches zoom by physical key too
 | a locked element in the selection   | never there on its own — Select All skips locked elements (`actionSelectAll.ts@1118751f:32-38`)                                                                                   | this Select All takes them, to unlock from the menu; the command moves the carried set, so a loose locked element stays and a locked group member goes with its group                                                             |
 | a label in the selection            | never there: Select All skips bound text (`actionSelectAll.ts@1118751f:32-38`), and a click on a label hits its shape, since bound text is not hit (`App.tsx@1118751f:6728-6738`) | Select All takes labels, but not one whose shape a peer holds, and a label moves only with its shape, so a lone label stays where it is. A click or a right-click on a label selects its shape, as the oracle's does, moving both |
 | a peer's hold                       | —                                                                                                                                                                                 | a frame child or label a peer holds still moves with what carries it: the stack is not stamped, so it takes nothing from their edit                                                                                               |
+| what a peer's order leaves out      | returns an element the incoming order does not name untouched, its own fractional index and all (`packages/element/src/fractionalIndex.ts@1118751f:185-193`)                      | keeps the place the stack had: the pass hands back as much of the order as it has met so far before each element the order does not name, over ids resolved to this scene's own live elements first                               |
 | to-the-end chords                   | Shift on Windows and Linux, Alt on macOS (`actionZindex.tsx`)                                                                                                                     | both, on every platform                                                                                                                                                                                                           |
 | a command that moves nothing        | the store records no step for unchanged elements                                                                                                                                  | the same, and no scene is sent to the host                                                                                                                                                                                        |
 | each frame's pass of Bring to front | scans the whole stack, once per frame whose children move (`getIndicesToMove`, `:36-70`)                                                                                          | scans that frame's range: the same result, O(n) over the board (`cargo bench --bench editing -- reorder`)                                                                                                                         |
@@ -91,7 +92,13 @@ same step, so undo takes both back. The stack moved, and the delta says so with 
 every live id (`Scene::take_delta`): the host puts its copy in that order
 (`sceneMirror.ts`), and the autosave and the live link send the order they hold
 (`sceneDiff.ts`). Where something created in the step goes is part of its creation, not a
-reorder undo records: undo tombstones it where it stands and redo brings it back there.
+reorder undo records: undo tombstones it where it stands and redo brings it back there —
+and so does a peer's order, which leaves everything it does not name where the stack had
+it. Pinned by `ci_zorder.rs` ›
+`a_peers_order_leaves_a_new_frame_child_where_the_peer_never_saw_it`,
+`a_tombstone_in_a_peers_order_leaves_what_it_left_out_where_it_was`,
+`an_element_never_received_in_a_peers_order_leaves_what_it_left_out_where_it_was`, and
+`ci_text_edit.rs` › `a_new_label_keeps_its_place_through_a_peers_patch`.
 
 **MEASURED** (`cargo bench --bench editing -- frame_join`, native, press to events) — one
 rectangle drawn into a frame on 20,000 elements: 23.6ms when the whole scene went to the

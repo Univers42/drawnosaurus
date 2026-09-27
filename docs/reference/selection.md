@@ -85,6 +85,20 @@ _current_ (tombstoned) element and leaves `isDeleted` exactly as it has it
 before and after agree it was never deleted (`engine/stamp.rs`). Pinned by
 `undo_does_not_resurrect_what_a_peer_deleted_since` (`ci_version_stamps.rs`).
 
+**A residual gap, pinned as it stands and not endorsed.** A label erased while it was
+being typed stays named in the selection — a _committed_ one does not
+(`ci_text_edit.rs` › `a_peer_taking_the_shape_takes_its_label_out_of_the_selection`, and
+that label is then out of the next Delete's reach too). `abandon_gesture` drops the
+un-committed label on the floor: the baseline holds no before for an element that never
+committed, so it is discarded rather than restored (`engine/peers.rs:141-146`), and that
+happens before `set_peers` looks, so by the time it prunes, `is_held` has no container to
+reach through — the label is not in the store at all (`engine/peers.rs:159-166`). What the
+peer did was erase it, and the rule above (`filterSelectedElements`,
+`delta.ts@1118751f:875-902`) takes a selected id out of the selection when its element is
+gone or deleted; here nothing else prunes, and the id dangles until the next selection.
+Pinned by `ci_text_edit.rs` › `a_peer_taking_the_shape_of_a_label_still_being_typed_erases_it`
+— the assertion and its message carry it, so it is in the test rather than in a commit body.
+
 | what               | Excalidraw                                                                                                          | here                                                                                                                 |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | a selection change | its own history entry when nothing else changed: undo walks back through selections (`history.ts@1118751f:117-137`) | never a step: undo and redo move only through edits, each putting back the selection it recorded (`engine/stamp.rs`) |

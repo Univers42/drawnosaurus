@@ -132,7 +132,7 @@ Measured again once the smallest room read its chars from the cache: the same 2.
 | Alt: resize from the centre                   | Alt scales about the centre (`shouldResizeFromCenter`)                                                                                                                                                                                 | ported, one element or several, composed with Shift's aspect lock (`self.alt_held`, read live during every resize move)                                                                                                                                                        | `ci_selection.rs` › alt_resizes_a_single_element_from_its_centre, shift_and_alt_compose_on_a_single_element; `ci_group_resize.rs` › alt_resizes_a_group_from_the_frames_centre; `ci_text_resize.rs` › alt_resizes_a_free_text_from_its_centre; `e2e/resizeCenter.spec.ts` |
 
 The arrow's-label row is a decision, not an oversight — it carries no `**gap**` marker
-where the two below it do. A group's members include the label, so a group's frame counts
+where `:129` and `:131` do. A group's members include the label, so a group's frame counts
 it; a loose selection carries only what `set_selection` was given and is never given a
 bound label, and `element_outline_bounds` (`scene/geometry.rs:260-302`) is handed one
 element with no scene to look a label up in. Closing it means threading the scene through
