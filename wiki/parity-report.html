@@ -4,6 +4,11 @@
   line of prompt/*.md through ruleFor() in packages/conformance/src/registry.ts. The live
   figure is whatever `make conformance` prints; regenerate this page when a wave moves it
   (remaining-work.html › Regenerating the numbers).
+
+  One post-freeze correction, 2026-09-27: the 🔤 Text › "Paste text" row said pasting plain
+  text "makes no text element". That was true at cd01892 and false from 568ea27, which is why
+  it was corrected here rather than left to the next regeneration. Everything else in this file
+  is still the 26 September snapshot, frozen counts included.
 -->
 <html lang="en">
   <head>
@@ -2791,7 +2796,7 @@
           </details>
           <details
             class="lsec"
-            data-q="🔤 text paste text — automatically create/wrap text where appropriate pasting plain text makes no text element: the host hands it to pastejson, which takes only element json (engine/src/host/keyboardinput.ts). excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (app.tsx:4978-5030). the wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not."
+            data-q="🔤 text paste text — automatically create/wrap text where appropriate plain text pasted now becomes text elements, one per line and wrapped to max(min(visible width / 2, 800), 200) as excalidraw does. the host tries pastejson first — it takes only element json — then pastetext, which is the branch that makes them (engine/src/host/keyboardinput.ts › the paste handler; engine/src/engine.ts › pastetext; ci_paste_text.rs, engine/crates/draw-engine/src/engine/paste_text.rs). the oracle's addtextfrompaste is app.tsx@1118751f:4979-5096. what the line also asks for and still does not have is the rich part: pasting from google docs, and &#x27;paste as single element&#x27; (design.md:1279, shortkey.md:421,423) — phase 4.8. ctrl+v of a paragraph is split into one element per line, which is the oracle&#x27;s behaviour, not the one a reader of the clipboard meant."
           >
             <summary>
               <span class="lname">🔤 Text</span><span class="lsrc">shortkey.md</span
@@ -2805,11 +2810,16 @@
                 </li>
               </ul>
               <p class="lwhy">
-                Pasting plain text makes no text element: the host hands it to pasteJson, which
-                takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per
-                line and wraps any wider than max(min(visible width / 2, 800), 200)
-                (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the
-                paste is not.
+                Plain text pasted now becomes text elements, one per line and wrapped to
+                max(min(visible width / 2, 800), 200) as Excalidraw does. The host tries pasteJson
+                first — it takes only element JSON — then pasteText, which is the branch that makes
+                them (engine/src/host/keyboardInput.ts › the paste handler; engine/src/engine.ts ›
+                pasteText; ci_paste_text.rs, engine/crates/draw-engine/src/engine/paste_text.rs).
+                The oracle's addTextFromPaste is App.tsx@1118751f:4979-5096. What the line also asks
+                for and still does not have is the rich part: pasting from Google Docs, and "paste
+                as single element" (design.md:1279, shortkey.md:421,423) — Phase 4.8. Ctrl+V of a
+                paragraph is split into one element per line, which is the oracle's behaviour, not
+                the one a reader of the clipboard meant.
               </p>
             </div>
           </details>
