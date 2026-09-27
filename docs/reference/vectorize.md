@@ -227,7 +227,10 @@ reported: it can paint before the SVG has decoded.
 - **An arrow bound to the image is let go of it, not carried onto the trace.** The image
   is removed exactly as a delete removes it, and the delete releases the arrows bound to
   what it takes — the trace arrives under new ids, and the oracle has no way to move a
-  binding to them ("we cannot rebind arrows atm", `binding.ts@1118751f:2577`). With
+  binding onto them on a deletion: nothing `fixBindingsAfterDeletion` reaches rewrites a
+  bound id, and it substitutes one only when the shape was copied too
+  (`fixDuplicatedBindingsAfterDuplication`, `binding.ts@1118751f:2256-2281`).
+  A vectorize is not a duplication — the arrow is not part of what was replaced. With
   **Keep original** the image is still on the board, so its arrows stay bound to it. See
   [`binding.md` › When the shape is deleted](binding.md#when-the-shape-is-deleted).
 - **A stroke added to a traced shape shows its keyhole bridges**, the zero-width cuts that
