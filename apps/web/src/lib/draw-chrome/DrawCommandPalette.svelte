@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { paletteGroups, type Command } from "./commandPalette.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   let { commands, onClose }: { commands: Command[]; onClose: () => void } = $props();
 
@@ -8,7 +9,8 @@
   let activeIndex = $state(0);
   let inputEl: HTMLInputElement | undefined = $state();
   let root: HTMLElement | undefined = $state();
-  let previouslyFocused: HTMLElement | null = null;
+  /** The hand-back `takeFocus` returns, kept for the teardown's own condition. */
+  let handBack: (() => void) | null = null;
 
   const groups = $derived(paletteGroups(commands, query));
   const flat = $derived(groups.flatMap((group) => group.commands));
@@ -17,15 +19,14 @@
   onMount(() => {
     // A real widget, not a click target: whatever had focus — the board, most often —
     // gets it back on close, the combobox/listbox pattern's own contract.
-    previouslyFocused = document.activeElement as HTMLElement | null;
-    inputEl?.focus();
+    handBack = takeFocus(inputEl);
   });
 
   onDestroy(() => {
     // Unless the command gave focus somewhere to go — a dialog it opened, focusing its
     // own field — which handing it back would take away from under the keyboard.
     const now = document.activeElement;
-    if (now === null || now === document.body || root?.contains(now)) previouslyFocused?.focus?.();
+    if (now === null || now === document.body || root?.contains(now)) handBack?.();
   });
 
   function runActive(): void {

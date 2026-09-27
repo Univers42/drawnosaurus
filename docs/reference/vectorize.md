@@ -234,15 +234,12 @@ reported: it can paint before the SVG has decoded.
   repeats 32 and `vectorize.test.ts` pins the two together through the element schema.
 - **A picture that has not arrived yet** (a peer's image whose bytes are still on their way)
   cannot be read; the dialog says so and offers to try again.
-- **The board's window-level shortcuts** (Ctrl+S, Ctrl+O, `?`, …) now stop at the dialog
-  too: it takes the focus on open, and `onAppShortcut` leaves a key alone once it lands
-  inside a dialog (`shortcuts.ts` › `insideDialog`) while the style chords stop at a
-  dialog or a menu (› `insideOverlay`).
-  Escape is the one that still passes, because it is how the topmost overlay closes
-  (`DrawModals.svelte`). A key pressed while the focus sits on a _toolbar button_ with this
-  dialog open would still reach the board — the guard asks where the key landed, not
-  whether something is open. The main menu is not a dialog, deliberately: it prints
-  `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+E` and `Alt+S` beside its own items and takes the focus,
-  so the app chords have to reach it.
+- **The board's window-level shortcuts** (Ctrl+S, Ctrl+O, `?`, …) stop at this dialog: it
+  takes the focus on open and hands it back on close (`takeFocus`), and a key that lands
+  inside it is left to the dialog — `onAppShortcut` at a dialog (`shortcuts.ts` ›
+  `insideDialog`), the style chords at a dialog or a menu (› `insideOverlay`). Escape is
+  the one that still passes, because it is how the topmost overlay closes
+  (`DrawModals.svelte`). The rules, and what they do not cover, are in
+  `docs/reference/shortcuts.md`.
 - **Zoomed far past the size it was traced at**, an editable trace shows the facets of its
   flattened curves; the picture keeps the curves.

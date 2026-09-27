@@ -3,6 +3,7 @@
   import { BUILD, describeBuild } from "../build.ts";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
+  import { takeFocus } from "./focusHandback.ts";
   import MainMenuIcon from "./MainMenuIcon.svelte";
   import { CANVAS_BACKGROUNDS, GRID_SIZES } from "./inspector.ts";
   import { migrateLegacyStickyJson } from "../notes/stickyNotes.ts";
@@ -71,18 +72,21 @@
   let root: HTMLDivElement | undefined;
 
   /**
-   * Focus the menu when it opens, and hand focus back to the trigger when it closes.
+   * Focus the menu when it opens, and hand focus back when it closes — `takeFocus`, and
+   * why that is two things and not one, in `focusHandback.ts`.
    *
    * Without the first, the arrow keys do nothing: the keydown handler lives on the menu,
    * and with focus still on the page body the event never reaches it — so the menu reads
    * as keyboard-navigable and is not. Without the second, dismissing leaves focus
    * nowhere, and the next Tab restarts from the top of the document.
+   *
+   * Where it lands is the trigger button, and that is deliberate — it is where the menu
+   * came from, and the oracle's dialog hands the focus back to the element it captured on
+   * mount the same way (`Dialog.tsx@1118751f:52`, `:99-104`). The cost is that this app
+   * has no roving-focus model: the board then holds no focus, so `R` does not reach it
+   * until the board is clicked. `docs/reference/shortcuts.md` › Known limits.
    */
-  onMount(() => {
-    const returnTo = document.activeElement as HTMLElement | null;
-    root?.focus();
-    return () => returnTo?.focus?.();
-  });
+  onMount(() => takeFocus(root));
 
   /** Runs an action and dismisses, which is what selecting a menu item means. */
   function pick(run: () => void): void {

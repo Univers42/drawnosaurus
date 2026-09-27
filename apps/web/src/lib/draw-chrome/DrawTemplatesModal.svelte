@@ -4,6 +4,7 @@
   import { resolve } from "$app/paths";
   import { ApiClientError, createBoard, replaceBoard } from "$lib/api/client.ts";
   import { TEMPLATES } from "$lib/templates/index.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   /**
    * Lists the five starter boards (`$lib/templates`) and puts the one picked wherever
@@ -32,14 +33,12 @@
   let card: HTMLDivElement | undefined;
 
   /**
-   * An open dialog takes the focus, as the oracle's does
-   * (`Dialog.tsx@1118751f:63-68`) and as the other dialogs in `DrawModals.svelte` do —
-   * though the oracle focuses the first focusable *control* and we focus the card, as
-   * `VectorizeDialog.svelte` does here. A board still holding the focus answers every key
-   * pressed over this one, and a template picked with the keyboard behind the dialog
-   * becomes a rectangle.
+   * An open dialog takes the focus and hands it back on close — `takeFocus`, and why it
+   * is two things and not one, in `focusHandback.ts`. Opened from the main menu, so the
+   * hand-back lands on that menu and not on the board: both are still there, and the menu
+   * is the one on top.
    */
-  onMount(() => card?.focus());
+  onMount(() => takeFocus(card));
 
   async function use(template: (typeof TEMPLATES)[number]): Promise<void> {
     if (busyId) return;

@@ -4,6 +4,7 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { clampMenuPosition, type MenuElementInfo } from "./menu.ts";
   import { shortcutLabel, zOrderShortcut } from "./shortcuts.ts";
+  import { takeFocus } from "./focusHandback.ts";
   import DrawMenuExtremity from "./DrawMenuExtremity.svelte";
 
   let {
@@ -38,19 +39,14 @@
   let pos = $state({ left: 0, top: 0 });
 
   /**
-   * An open menu takes the focus, as the oracle's popover does
-   * (`Popover.tsx@1118751f:44-50`): a right-click leaves the pointer on the board, and
-   * with the board still holding the focus every key reaches it — `R` changed the tool
-   * while the menu sat there offering Copy. And it hands the focus back when it closes, as
-   * the oracle's dialog does (`Dialog.tsx@1118751f:99-104`) and as `DrawMainMenu.svelte`
-   * already did here: taking it and dropping it on the way out leaves the board
-   * unreachable from the keyboard, and the next key draws nothing.
+   * An open menu takes the focus and hands it back when it closes — `takeFocus`, and why
+   * that is two things and not one, in `focusHandback.ts`. Without the first, a right-click
+   * leaves the pointer on the board and the board keeps the focus, so every key reaches
+   * it: `R` changed the tool while the menu sat there offering Copy. Without the second,
+   * the board is unreachable from the keyboard once the menu is gone, and the next key
+   * draws nothing.
    */
-  onMount(() => {
-    const returnTo = document.activeElement as HTMLElement | null;
-    menuEl?.focus();
-    return () => returnTo?.focus?.();
-  });
+  onMount(() => takeFocus(menuEl));
 
   $effect(() => {
     void x;

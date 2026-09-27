@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   let {
     engine,
@@ -18,13 +19,13 @@
   let card: HTMLDivElement | undefined;
 
   /**
-   * An open dialog takes the focus, as the oracle's does
-   * (`Dialog.tsx@1118751f:63-68`) and as the other dialogs in `DrawModals.svelte` do —
-   * though the oracle focuses the first focusable *control* and we focus the card, as
-   * `VectorizeDialog.svelte` does here. A board still holding the focus answers every key
-   * pressed over this one, and the tool that comes back is not what a person asked for.
+   * An open dialog takes the focus and hands it back on close — `takeFocus`, and why it
+   * is two things and not one, in `focusHandback.ts`. Without the first, the board answers
+   * every key pressed over this one and the tool that comes back is not what a person
+   * asked for; without the second, closing leaves the focus on `<body>` and the board
+   * unreachable until it is clicked.
    */
-  onMount(() => card?.focus());
+  onMount(() => takeFocus(card));
 
   async function handleExportPng(): Promise<void> {
     if (!engine) return;

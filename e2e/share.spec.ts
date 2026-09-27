@@ -68,7 +68,7 @@ const primary = (page: Page) => page.locator(".link-row--primary input");
 
 test.describe("the Share dialog", () => {
   test("it takes the focus, so the board's tool keys stay on the board", async ({ page }) => {
-    // The card is focused on open, as the oracle's dialogs do (`Dialog.tsx@1118751f:55-71`).
+    // The card is focused on open, as the oracle's dialogs do (`Dialog.tsx@1118751f:63-68`).
     // Without it the board kept the focus behind the dialog and answered every key pressed
     // over it — `R` changed the tool while the links sat there to be copied.
     const board = await openBoard(page);

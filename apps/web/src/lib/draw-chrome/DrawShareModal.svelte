@@ -5,6 +5,7 @@
   import { getShareInfo, startTunnel, stopTunnel } from "$lib/api/client.ts";
   import type { ConnectionStatus, PeerCursor } from "../realtime/realtimeClient.ts";
   import { copyText, describeLink, internetPrompt, shareLinks, type ShareLink } from "./share.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   let {
     slug,
@@ -40,14 +41,13 @@
   }
 
   onMount(() => {
-    // An open dialog takes the focus, as the oracle's does
-    // (`Dialog.tsx@1118751f:63-68`) and as the other dialogs in `DrawModals.svelte` do —
-    // though the oracle focuses the first focusable *control* and we focus the card, as
-    // `VectorizeDialog.svelte` does here. A board still holding the focus answers every
-    // key pressed over this one — and this dialog is the one with the most to lose, a
-    // link copied by a key meant for the board.
-    card?.focus();
+    // An open dialog takes the focus and hands it back on close — `takeFocus`, and why it
+    // is two things and not one, in `focusHandback.ts`. A board still holding the focus
+    // answers every key pressed over this one — and this dialog is the one with the most
+    // to lose, a link copied by a key meant for the board.
+    const handBack = takeFocus(card);
     void refresh();
+    return handBack;
   });
 
   // While the internet link opens, ask again every second until it is on or failed.

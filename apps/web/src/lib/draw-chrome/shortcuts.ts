@@ -77,7 +77,7 @@ export function insideOverlay(target: EventTarget | null): boolean {
  * Whether a key pressed on `target` belongs to an open dialog — the narrower question the
  * app chords ask, and the reason is `DrawMainMenu.svelte`: it is a `role="menu"` that
  * takes the focus on open and prints `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+E` and `Alt+S` beside
- * its own items (`:189`, `:200`, `:211`, `:310`). A guard that named menus here made the
+ * its own items (`:193`, `:204`, `:215`, `:314`). A guard that named menus here made the
  * menu advertise four chords it then ignored, which its own docstring calls worse than
  * printing nothing.
  */

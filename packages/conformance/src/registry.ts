@@ -2629,7 +2629,7 @@ export const RULES: readonly Rule[] = [
     section: "48. Accessibility",
     text: /High contrast|Reduced motion|Screen-reader|focus trap|Focus management/,
     status: "gap",
-    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs, and every dialog and menu except one now takes the focus when it opens and hands it back on close (`e2e/shortcuts.spec.ts`, `e2e/share.spec.ts`, `e2e/templates.spec.ts`) — the exception is the More tools menu in the toolbar, which deliberately focuses the trigger instead, so its chords still reach the board (`DrawToolbar.svelte:56-61`). But there is still no focus trap: Tab walks out of an overlay, where the oracle cycles inside it (`Dialog.tsx@1118751f:69-95`, `Popover.tsx@1118751f:52-80`). High contrast and screen-reader labels are unaudited.",
+    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs, and every overlay that takes the focus on open hands it back on close — `takeFocus` in `focusHandback.ts`, which is the oracle's own pair (`Dialog.tsx@1118751f:52`, `:99-104`), asserted for the export, shortcuts and canvas-menu overlays in `e2e/shortcuts.spec.ts` and for the share and templates dialogs in their own specs. Two of the fourteen overlays take no focus on open, named rather than rounded up: the More tools menu keeps the focus on the board on purpose, so its chords still reach the board (`DrawToolbar.svelte:42-44`, `:112-127`), and the embed dialog focuses nothing, which is the open Phase 1.5. The main menu's hand-back lands on its trigger button, not on the board, which is correct for a menu and leaves the board without the focus until it is clicked — a design decision, not a bug, and `docs/reference/shortcuts.md` › Known limits carries the inventory. But there is still no focus trap: Tab walks out of an overlay, where the oracle cycles inside it (`Dialog.tsx@1118751f:69-95`, `Popover.tsx@1118751f:52-80`). High contrast and screen-reader labels are unaudited.",
   },
   // DrawMainMenu.svelte's onKeyDown answers ArrowDown/ArrowUp by stepping the highlighted
   // item, and DrawContextMenu.svelte has its own handler — but no test presses either key
@@ -2641,13 +2641,14 @@ export const RULES: readonly Rule[] = [
     why: "implemented, untested — both menus answer ArrowDown/ArrowUp, but no test opens one and presses an arrow key.",
   },
   // Every menu item shows its own chord inline (dropdown-menu-item__shortcut) and `?`
-  // opens the shortcuts help. The canvas menu's hints and the main menu's are now both
-  // read and pressed; the palette's `<kbd>` is not read by anything.
+  // opens the shortcuts help. Read *and* pressed: the canvas menu's z-order hints, and
+  // the main menu's. The two style hints and the palette's `<kbd>` are not read by
+  // anything.
   {
     section: "48. Accessibility",
     text: /^Shortcut discoverability$/,
     status: "gap",
-    why: "half — `?` opens the shortcuts dialog and `e2e/shortcuts.spec.ts` presses it; the canvas menu's inline chords are read and pressed by `e2e/console.spec.ts:294`, and the main menu's `dropdown-menu-item__shortcut` is read and pressed by `e2e/shortcuts.spec.ts`. The command palette prints each command's chord in a `<kbd>` (`DrawCommandPalette.svelte:104`) and no test reads it.",
+    why: "half — `?` opens the shortcuts dialog and `e2e/shortcuts.spec.ts` presses it; the canvas menu's front and back z-order hints are read and the chord each names is then pressed (`e2e/console.spec.ts:305-326`), and the main menu's `dropdown-menu-item__shortcut` is read and pressed by `e2e/shortcuts.spec.ts`. Not read: the canvas menu's Copy-styles and Paste-styles hints — their chords are pressed (`e2e/console.spec.ts:268`, `:271`) and the items themselves clicked (`:284`, `:287`), but no test reads those two hints — and the `<kbd>` the command palette prints beside each command (`DrawCommandPalette.svelte:105`).",
   },
   {
     section: "48. Accessibility",

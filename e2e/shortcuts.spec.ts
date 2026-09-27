@@ -568,10 +568,13 @@ test.describe("grid", () => {
 
 /**
  * An overlay that never takes the focus leaves the board holding it, and the board
- * answers every key. Nine of the fourteen overlays here focus themselves on open, the
- * way the oracle's do (`Dialog.tsx@1118751f:55-71`, `Popover.tsx@1118751f:36-50`); the
+ * answers every key. Twelve of the fourteen overlays here focus themselves on open, the
+ * way the oracle's do (`Dialog.tsx@1118751f:63-68`, `Popover.tsx@1118751f:44-50`); the
  * export, templates, share and shortcuts dialogs and the canvas menu did not, so opening
  * one and typing a key gave a rectangle instead of the key doing what the dialog says.
+ * The two that still take no focus are the More tools menu, which keeps the focus on the
+ * board on purpose, and the embed dialog — the inventory is in
+ * `docs/reference/shortcuts.md` › Focus.
  *
  * Each test says the same two things around the key press, because a key reaches the
  * board only if the board is holding the focus: before the overlay opens, the board has
@@ -690,11 +693,60 @@ test.describe("an open overlay keeps the board's keys", () => {
     await listening.opened;
   });
 
+  test("the export dialog hands the focus back when it closes", async ({ page }) => {
+    // Taking the focus is half of what a dialog owes. The other half: nine of the
+    // overlays that took it never gave it back, so Escape left the focus on `<body>` and
+    // the board — the thing the dialog was covering — was unreachable from the keyboard
+    // until it was clicked. The oracle's dialog hands it back from `onClose`
+    // (`Dialog.tsx@1118751f:99-104`); `takeFocus` in `focusHandback.ts` is that pair.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    await page.keyboard.press("Control+Shift+e");
+    await expect(page.getByRole("dialog", { name: "Export Drawing" })).toBeVisible();
+    await expect(editor(page), "the dialog took the focus").not.toBeFocused();
+
+    await page.keyboard.press("Escape");
+
+    await expect(page.getByRole("dialog", { name: "Export Drawing" })).toBeHidden();
+    await expect(editor(page), "the board got the focus back").toBeFocused();
+
+    await page.keyboard.press("r");
+
+    expect(await activeTool(page), "the key after Escape is the board's again").toBe("rectangle");
+  });
+
+  test("the shortcuts dialog hands the focus back when it closes", async ({ page }) => {
+    // The same pair on the dialog most likely to be opened and then read: `?` from the
+    // board, Escape, and the next key belongs to the board again.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await expect(editor(page), "the board holds the focus").toBeFocused();
+    await page.keyboard.press("d");
+    expect(await activeTool(page)).toBe("diamond");
+
+    await page.keyboard.press("?");
+    await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeVisible();
+    await expect(editor(page), "the dialog took the focus").not.toBeFocused();
+
+    await page.keyboard.press("Escape");
+
+    await expect(page.getByRole("dialog", { name: "Keyboard Shortcuts" })).toBeHidden();
+    await expect(editor(page), "the board got the focus back").toBeFocused();
+
+    await page.keyboard.press("r");
+
+    expect(await activeTool(page), "the key after Escape is the board's again").toBe("rectangle");
+  });
+
   test("the canvas menu hands the focus back when it closes", async ({ page }) => {
     // Taking the focus is half of what a menu owes: it has to give it back, or dismissing
     // a right-click menu leaves the board unreachable from the keyboard and the next key
     // draws nothing. The oracle's dialog does exactly this
-    // (`Dialog.tsx@1118751f:99-104`), as `DrawMainMenu.svelte:81-85` already did here.
+    // (`Dialog.tsx@1118751f:99-104`), as `DrawMainMenu.svelte:74-89` already did here.
     const board = await openBoard(page);
     await drawRectangle(page, board);
     await focusBoard(board);

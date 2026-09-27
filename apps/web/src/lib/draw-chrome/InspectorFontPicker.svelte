@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import Icon from "./Icon.svelte";
-  import { giveKeysBack } from "./textEditor.ts";
+  import { takeFocus } from "./focusHandback.ts";
   import { QUICK_FONTS, fontGroups, fontLabel, fontPickerKey, type FontChoice } from "./fonts.ts";
 
   /**
@@ -51,6 +51,8 @@
    * (`actionProperties.tsx@1118751f:1395-1405`).
    */
   let chosen = $state<number | null>(null);
+  /** The hand-back for this open, set once the popover is up. See `focusHandback.ts`. */
+  let handBack: (() => void) | null = null;
 
   const shown = $derived(open ? chosen : value);
   const groups = $derived(fontGroups(inScene, search));
@@ -75,12 +77,17 @@
       }
       void tick().then(() => {
         dialog?.showPopover();
-        searchInput?.focus();
+        handBack = takeFocus(searchInput);
       });
     });
     return () => {
       hovered = null;
       onPreview(null);
+      // Whichever way the list closes — Escape or a press outside it — the keys go back
+      // where they came from, and the trigger never took them (see `holdFocus`), so that
+      // is the text being typed or the board.
+      handBack?.();
+      handBack = null;
     };
   });
 
@@ -100,10 +107,9 @@
     onPreview(null);
   }
 
-  /** Back to the text being typed, or to the board. */
+  /** Out. The hand-back is the effect's teardown, so a press outside lands the same way. */
   function close(): void {
     onToggle(false);
-    giveKeysBack(document);
   }
 
   function pick(id: number): void {

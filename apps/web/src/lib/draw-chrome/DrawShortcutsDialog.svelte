@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { groupedShortcuts, shortcutFor } from "./shortcutRegistry.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -10,14 +11,13 @@
   const GROUPS = groupedShortcuts();
 
   /**
-   * An open dialog takes the focus, as the oracle's does
-   * (`Dialog.tsx@1118751f:63-68`) — though the oracle focuses the first focusable
-   * *control*, and here the card itself is what takes it, as `VectorizeDialog.svelte` does
-   * it. The board keeps it only if nothing here takes it, and a board still holding the
-   * focus answers every key pressed over a dialog: `R` chose the rectangle tool while
-   * someone read these very shortcuts.
+   * An open dialog takes the focus and hands it back on close — `takeFocus`, and why it
+   * is two things and not one, in `focusHandback.ts`. The board keeps the focus only if
+   * nothing here takes it, and a board still holding the focus answers every key pressed
+   * over a dialog: `R` chose the rectangle tool while someone read these very shortcuts,
+   * and after Escape the board was unreachable from the keyboard.
    */
-  onMount(() => card?.focus());
+  onMount(() => takeFocus(card));
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">

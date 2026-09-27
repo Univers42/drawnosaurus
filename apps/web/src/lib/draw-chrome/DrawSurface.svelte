@@ -1769,7 +1769,7 @@
    * prints "Ctrl+O" next to an item and then ignores the key is worse than one that
    * prints nothing, which is why the menu below is not in the guard after Escape: the
    * main menu *is* a `role="menu"` and holds the focus, and these four chords are the
-   * ones it prints (`DrawMainMenu.svelte:189`, `:200`, `:211`, `:310`).
+   * ones it prints (`DrawMainMenu.svelte:193`, `:204`, `:215`, `:314`).
    *
    * Skipped while a text field has focus, so typing in the title or the text editor is
    * never intercepted, and while a key lands inside an open *dialog* — which is the

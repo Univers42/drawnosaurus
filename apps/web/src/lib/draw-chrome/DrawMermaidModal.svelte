@@ -14,6 +14,7 @@
   import { DrawCanvas } from "@osionos/draw-engine/svelte";
   import { onMount } from "svelte";
   import { mermaidToElements, sceneJson } from "../mermaid/importMermaid.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   let {
     onInsert,
@@ -53,7 +54,9 @@
   let syntax: HTMLTextAreaElement | undefined = $state();
 
   // Not `autofocus`, which a browser honours only for what was in the page as it loaded.
-  onMount(() => syntax?.focus());
+  // The dialog takes the focus and hands it back on close — `takeFocus`, and why it is two
+  // things and not one, in `focusHandback.ts`.
+  onMount(() => takeFocus(syntax));
 
   // Converted once typing settles; a result that arrives after a newer one started is dropped.
   let latest = 0;

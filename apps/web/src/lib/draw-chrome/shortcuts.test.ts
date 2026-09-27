@@ -157,7 +157,7 @@ describe("an overlay's keys", () => {
   };
 
   it("belongs to a dialog, the backdrop itself or anything inside it", () => {
-    // The card is what a dialog focuses on open (`Dialog.tsx@1118751f:55-71`), and it is
+    // The card is what a dialog focuses on open (`Dialog.tsx@1118751f:63-68`), and it is
     // a plain `div[tabindex="-1"]` with no role of its own — the walk is the only way to
     // reach the dialog around it.
     expect(insideOverlay(focusedIn("dialog"))).toBe(true);
@@ -185,7 +185,7 @@ describe("an overlay's keys", () => {
     // The app chords stop at a dialog — `Ctrl+/` opened the palette on top of the
     // shortcuts dialog, and `?` stacked a second one — but they must reach the main
     // menu, which prints `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+E` and `Alt+S` beside its own
-    // items (`DrawMainMenu.svelte:189`, `:200`, `:211`, `:310`). So the two guards do
+    // items (`DrawMainMenu.svelte:193`, `:204`, `:215`, `:314`). So the two guards do
     // not ask the same question, and the narrower one is this.
     expect(insideDialog(focusedIn("dialog"))).toBe(true);
     expect(insideDialog(focusedIn("div", "dialog"))).toBe(true);
