@@ -75,11 +75,17 @@ export function insideOverlay(target: EventTarget | null): boolean {
 
 /**
  * Whether a key pressed on `target` belongs to an open dialog — the narrower question the
- * app chords ask, and the reason is `DrawMainMenu.svelte`: it is a `role="menu"` that
- * takes the focus on open and prints `Ctrl+O`, `Ctrl+S`, `Ctrl+Shift+E` and `Alt+S` beside
- * its own items (`:193`, `:204`, `:215`, `:314`). A guard that named menus here made the
- * menu advertise four chords it then ignored, which its own docstring calls worse than
- * printing nothing.
+ * app chords ask, and the reason is `DrawMainMenu.svelte`: it is a `role="menu"` that takes
+ * the focus on open and prints `Ctrl+O` (`:193`), `Ctrl+S` (`:204`), `Ctrl+Shift+E`
+ * (`:215`), `Ctrl+Alt+P` (`:256`), `?` (`:277`) and `Alt+S` (`:314`) beside its own items.
+ * A guard that named menus here made the menu advertise chords it then ignored, which its
+ * own docstring calls worse than printing nothing.
+ *
+ * Naming menus is still the wrong move in a second place, and got there twice: `appShortcut`
+ * took a `KeyTarget` for zen mode and answered `"overlay"` with `null`, which silenced
+ * `Ctrl+Alt+P` and `Alt+S` — the two chords that route through it — while the menu went on
+ * printing all six. `insideOverlay` still *reports* a menu, because the style chords need
+ * that; what `appShortcut` does with the answer is a separate decision, and it is "carry on".
  */
 export function insideDialog(target: EventTarget | null): boolean {
   return inside(target, DIALOG);
@@ -171,7 +177,7 @@ export function styleShortcut(
   return null;
 }
 
-export type AppShortcut = "snap" | "grid" | "present" | "palette";
+export type AppShortcut = "snap" | "grid" | "present" | "palette" | "zen";
 
 export interface AppShortcutKey {
   key: string;
@@ -193,9 +199,37 @@ export interface AppShortcutKey {
  * Snap, grid and Present match `code`, the physical key, as the oracle's grid does, not
  * `key`, the character it types: on AZERTY, QWERTZ or Dvorak the apostrophe is elsewhere
  * or nowhere, and on a Mac Option+S types "ß" and Option+P "π".
+ *
+ * `target` is the same question `styleShortcut` asks, and the guard is the oracle's:
+ * `App.tsx@1118751f:5516` wraps its whole key dispatch in `if (!isInputLike(event.target))`,
+ * so no chord of its own fires while a **field** holds the focus. A key typed into a text
+ * box or a title is not a shortcut, and Alt+Z least of all — toggling zen mode while a
+ * sentence is being typed would take the chrome away mid-word, and the guard on `target`
+ * is what stops it.
+ *
+ * **`overlay` is deliberately NOT guarded here, and naming it is a bug this function once
+ * committed.** Two of the chords below are printed beside the main menu's own items
+ * (`Alt+S` at `DrawMainMenu.svelte:314`, `Ctrl+Alt+P` at `:256`), the menu is a
+ * `role="menu"` rather than a `role="dialog"`, and so `insideOverlay` — which sees
+ * `[role="menu"]` — reported those presses as `"overlay"` and this guard returned `null`
+ * for them. Both chords were left printing on a key that did nothing, which is the exact
+ * failure this module's own `insideDialog` docstring calls worse than printing nothing.
+ * Dialogs are still stopped, one level down, by `insideDialog` in `onAppShortcut`; menus
+ * are not, on purpose. The guard belongs to fields, and only to fields.
  */
-export function appShortcut(event: AppShortcutKey, presenting: boolean): AppShortcut | null {
+export function appShortcut(
+  event: AppShortcutKey,
+  presenting: boolean,
+  target: KeyTarget = "board",
+): AppShortcut | null {
+  if (target === "field" || target === "textEditor") return null;
   const mod = event.ctrlKey || event.metaKey;
+  // `!presenting` for the same reason as the present chord below: every way out of zen
+  // mode is chrome, and presenting hides the chrome — the exit button, the palette, the
+  // main menu. A mode that latched on behind a hidden exit button and could only be
+  // cleared by the very key that could no longer reach it is a trap, and the house answer
+  // is the same as it is for entering presentation twice.
+  if (!mod && event.altKey && event.code === "KeyZ" && !presenting) return "zen";
   if (!mod && event.altKey && event.code === "KeyS") return "snap";
   if (mod && event.code === "Quote") return "grid";
   if (mod && event.altKey && event.code === "KeyP" && !presenting) return "present";

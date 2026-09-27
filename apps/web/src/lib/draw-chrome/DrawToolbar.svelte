@@ -14,15 +14,23 @@
   import type { DrawTool } from "@osionos/draw-engine/types";
   import Icon from "./Icon.svelte";
   import { DRAW_TOOLS, EXTRA_TOOLS, hotkeyLabel, isExtraTool, toolDef } from "./tools.ts";
+  import { chromeVisible } from "./zen.ts";
 
   let {
     active,
     toolLocked,
+    zenMode = false,
     onSelect,
     onToggleToolLock,
   }: {
     active: DrawTool;
     toolLocked: boolean;
+    /** Zen mode takes the visible key hints off the tools and nothing else — the tools
+     *  themselves stay, as they do in the oracle. The decision and its citation are the
+     *  `toolbarKeyHints` row in `zen.ts`, not this prop's docstring. The `aria-label` and
+     *  `title` keep their chord on purpose: the oracle hides the badge with CSS and leaves
+     *  the accessible name alone. */
+    zenMode?: boolean;
     onSelect: (tool: DrawTool) => void;
     onToggleToolLock: () => void;
   } = $props();
@@ -103,7 +111,9 @@
       onclick={() => onSelect(entry.tool)}
     >
       <Icon name={entry.icon} size={18} />
-      <span class="hotkey-badge">{hotkeyLabel(entry)}</span>
+      {#if chromeVisible("toolbarKeyHints", zenMode)}
+        <span class="hotkey-badge">{hotkeyLabel(entry)}</span>
+      {/if}
     </button>
   {/each}
 
@@ -140,7 +150,9 @@
           >
             <Icon name={entry.icon} size={16} />
             <span class="name">{entry.label}</span>
-            <kbd>{hotkeyLabel(entry)}</kbd>
+            {#if chromeVisible("toolbarKeyHints", zenMode)}
+              <kbd>{hotkeyLabel(entry)}</kbd>
+            {/if}
           </button>
         {/each}
       </div>

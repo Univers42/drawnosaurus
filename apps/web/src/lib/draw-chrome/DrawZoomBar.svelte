@@ -1,16 +1,21 @@
 <script lang="ts">
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import Icon from "./Icon.svelte";
+  import { chromeVisible } from "./zen.ts";
 
   let {
     engine,
     zoom,
     contentVisible,
+    zenMode = false,
     onFit,
   }: {
     engine: DrawEngine | null;
     zoom: number;
     contentVisible: boolean;
+    /** Zen mode takes the undo and redo row and leaves the zoom actions beside it, as the
+     *  oracle's footer does — see `zen.ts`. */
+    zenMode?: boolean;
     /** Shift+1, measured against the chrome where it is now. */
     onFit: () => void;
   } = $props();
@@ -66,27 +71,35 @@
     </button>
   </div>
 
-  <div class="rule" aria-hidden="true"></div>
+  <!--
+    The undo and redo row, which the oracle's zen mode slides off the bottom while leaving
+    the zoom actions in the same footer where they are
+    (`Footer.tsx@1118751f:56-58` with `LayerUI.scss@1118751f:61-63`). The rule goes with
+    them: left in place it would divide nothing.
+  -->
+  {#if chromeVisible("undoButton", zenMode)}
+    <div class="rule" aria-hidden="true"></div>
 
-  <button
-    type="button"
-    onmousedown={holdFocus}
-    aria-label="Undo (⌘Z)"
-    title="Undo — ⌘Z"
-    onclick={() => engine?.undo()}
-  >
-    <Icon name="undo" size={15} />
-  </button>
+    <button
+      type="button"
+      onmousedown={holdFocus}
+      aria-label="Undo (⌘Z)"
+      title="Undo — ⌘Z"
+      onclick={() => engine?.undo()}
+    >
+      <Icon name="undo" size={15} />
+    </button>
 
-  <button
-    type="button"
-    onmousedown={holdFocus}
-    aria-label="Redo (⌘⇧Z)"
-    title="Redo — ⌘⇧Z"
-    onclick={() => engine?.redo()}
-  >
-    <Icon name="redo" size={15} />
-  </button>
+    <button
+      type="button"
+      onmousedown={holdFocus}
+      aria-label="Redo (⌘⇧Z)"
+      title="Redo — ⌘⇧Z"
+      onclick={() => engine?.redo()}
+    >
+      <Icon name="redo" size={15} />
+    </button>
+  {/if}
 
   {#if !contentVisible}
     <div class="rule" aria-hidden="true"></div>

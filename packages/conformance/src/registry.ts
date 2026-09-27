@@ -749,8 +749,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "🌙 Interface modes",
     text: /Zen mode|zen/i,
-    status: "gap",
-    why: "No zen mode. It is a host concern — hide the chrome — and needs nothing from the engine.",
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/zen.test.ts`, "e2e/zen.spec.ts"],
   },
   {
     section: "🌙 Interface modes",

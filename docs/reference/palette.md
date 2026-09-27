@@ -25,7 +25,8 @@ duplicated by hand:
 
 - every toolbar tool (`ALL_TOOL_DEFS`, `tools.ts`), with its own hotkey shown beside it;
 - **Add rectangle / diamond / ellipse** — keyboard-only diagramming, below;
-- zoom in/out/reset, fit, zoom to selection, grid and snap toggles, focus mode, Present;
+- zoom in/out/reset, fit, zoom to selection, grid and snap toggles, focus mode, **zen mode**
+  (`Alt+Z`), Present;
 - theme (light/dark/system);
 - Export, Templates (`docs/reference/templates.md`);
 - every style preset, built-in and saved (`stylePresets.ts`, `docs/reference/
