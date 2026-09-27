@@ -128,7 +128,7 @@ describe("Alt+Z is the zen chord", () => {
 describe("the guard: Alt+Z is a chrome key, and a field is not a shortcut target", () => {
   // `App.tsx@1118751f:5516` — the oracle's own `isInputLike` guard wraps the whole of its
   // key dispatch, so no chord fires while a *field* has the focus. Ours is the same
-  // `KeyTarget` the style chords already answer to (`shortcuts.ts:112`).
+  // `KeyTarget` the style chords already answer to (`shortcuts.ts:118`).
   //
   // `textEditor` and `field` cannot both be reached through the call site: `onAppShortcut`
   // opens with `if (isTextField(event.target)) return;`, and the text editor is a

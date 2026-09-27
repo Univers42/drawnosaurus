@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { focusBoard, openBoard, sceneElements, type Board } from "./board.ts";
+import { focusBoard, openBoard, OPEN_CANVAS, sceneElements, type Board } from "./board.ts";
 
 /**
  * Zen mode: `Alt+Z` takes the oracle's chrome away and leaves the canvas.
@@ -44,6 +44,58 @@ async function drawSelectedRectangle(page: Page, board: Board): Promise<void> {
 async function zenOn(page: Page): Promise<void> {
   await page.keyboard.press("Alt+KeyZ");
   await expect(EXIT_ZEN(page), "the way out appears with the flag").toBeVisible();
+}
+
+/**
+ * A filled rectangle placed at a known screen point, loaded straight into the engine — the
+ * helper `focusMode.spec.ts:31-70` and `stylePresets.spec.ts:17` both use, so that a
+ * double-click has a solid interior to land on. The point is in board coordinates.
+ */
+async function placeFilledRectangle(board: Board, at: { x: number; y: number }): Promise<void> {
+  await board.page.evaluate(
+    ({ at }) => {
+      const engine = window.__drawEngine!;
+      const world = engine.screenToWorld(at.x, at.y);
+      engine.loadScene(
+        JSON.stringify({
+          type: "osidraw",
+          version: 1,
+          source: "e2e",
+          elements: [
+            {
+              id: "shape",
+              type: "rectangle",
+              x: world.x,
+              y: world.y,
+              width: 60,
+              height: 40,
+              angle: 0,
+              strokeColor: "#1e1e1e",
+              backgroundColor: "#a5d8ff",
+              fillStyle: "solid",
+              strokeWidth: 2,
+              strokeStyle: "solid",
+              roughness: 0,
+              opacity: 100,
+              roundness: null,
+              seed: 1,
+              version: 1,
+              versionNonce: 1,
+              isDeleted: false,
+              groupIds: [],
+              frameId: null,
+              index: "a0",
+              boundElements: null,
+              updated: 1,
+              link: null,
+              locked: false,
+            },
+          ],
+        }),
+      );
+    },
+    { at },
+  );
 }
 
 test.describe("zen mode", () => {
@@ -121,12 +173,19 @@ test.describe("zen mode", () => {
 
   test("Alt+Z does nothing while a text box is being edited", async ({ page }) => {
     // The trap the guard exists for: hiding the chrome mid-sentence, with no way back.
+    //
+    // The editor is opened by double-clicking a shape, the way every other spec in `e2e/`
+    // does it (`textEditor.spec.ts:67-74`, `focusMode.spec.ts:139-140`) — not by pressing the
+    // text tool's key. That key is `8`, not `t` (`tools.ts:48`), and an assertion about a
+    // hotkey is a different test from an assertion about the editor.
     const board = await openBoard(page);
     await focusBoard(board);
-    await page.keyboard.press("t");
-    await page.keyboard.type("hello");
+    const at = { x: OPEN_CANVAS.left + 60, y: OPEN_CANVAS.top + 60 };
+    await placeFilledRectangle(board, at);
+    await page.mouse.dblclick(board.box.x + at.x + 30, board.box.y + at.y + 20);
     const editorField = page.locator("textarea[aria-label='Text editor']");
     await expect(editorField).toBeFocused();
+    await page.keyboard.type("hello");
 
     await page.keyboard.press("Alt+KeyZ");
 
@@ -152,7 +211,15 @@ test.describe("zen mode", () => {
       "leaving Present",
     ).toHaveCount(0);
     await expect(EXIT_ZEN(page), "no invisible zen mode was left behind").toHaveCount(0);
-    await expect(INSPECTOR(page), "and the chrome is intact").toBeVisible();
+    // What zen owns, not the style inspector: that panel is gated on `panelVisible`, which
+    // follows the selection and the hover (`DrawSurface.svelte:248-251`) and drops when the
+    // pointer leaves the board — so it was asserting about hover, and would have failed
+    // here for a reason that has nothing to do with zen mode.
+    await expect(ZOOM_BAR(page), "the zoom bar is intact").toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /^Rectangle \(/ }),
+      "the tool strip is intact",
+    ).toBeVisible();
   });
 });
 
