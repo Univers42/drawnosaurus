@@ -76,6 +76,17 @@ docker run -d --rm --name bunny-<task>-vite --user 1000:1000 -e HOME=/tmp -p 127
 Then call `open_board` with `baseUrl: "http://127.0.0.1:6<k>53"`, and stop the server with
 `docker rm -f bunny-<task>-vite` when you are done. Don't edit files in that worktree while it runs.
 
+**Your MCP servers are containers too.** OpenCode runs `playwright`, `chrome-devtools`,
+`editor-inspector` and `shadcn` as unnamed containers. Two of them use the pinned Playwright image, so
+never stop containers by image: stop only those named `bunny-*`. If an MCP server's tools vanish, its
+container died. Reconnect it; the session does not need a restart:
+
+```sh
+cd /home/dlesieur/Documents/drawnosaurus
+~/.opencode/bin/opencode api POST /api/experimental/mcp/<name>/connect -H "x-opencode-directory:$PWD"
+~/.opencode/bin/opencode api GET /api/mcp -H "x-opencode-directory:$PWD"   # each one: "connected"
+```
+
 **End of the night.** When every phase is done, deferred or blocked, or the clock passes 08:30:
 
 1. Write `~/bunny/MORNING.md` (§9).
