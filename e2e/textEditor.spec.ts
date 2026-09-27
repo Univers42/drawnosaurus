@@ -11,6 +11,7 @@ import {
   sceneElements,
   selection,
   shownZoomPercent,
+  waitForCameraStable,
   type Board,
   type SceneElement,
 } from "./board.ts";
@@ -35,6 +36,24 @@ const SHAPE = {
 };
 
 const editor = (page: Page): Locator => page.locator("textarea[aria-label='Text editor']");
+
+/**
+ * The editor's own text and selection, as the browser has them.
+ *
+ * Read, never worked out: the caret and the range in a native textarea are the browser's
+ * (`editable.select` and `getCaretIndexFromInitialSceneCoords`, `textWysiwyg.tsx@1118751f`),
+ * and the only part of this row that is ours is which box the editor sits over.
+ */
+function editorRange(page: Page): Promise<{ value: string; start: number; end: number }> {
+  return editor(page).evaluate((n) => {
+    const textarea = n as HTMLTextAreaElement;
+    return {
+      value: textarea.value,
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd,
+    };
+  });
+}
 
 async function drawShape(board: Board, shape = SHAPE): Promise<void> {
   const { page, box } = board;
@@ -80,6 +99,45 @@ function painted(page: Page): Promise<void> {
     () =>
       new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
   );
+}
+
+/**
+ * The text on the board, read once its box has stopped changing.
+ *
+ * A text is laid out first in a fallback's widths and re-laid once its face arrives
+ * (`watchFonts` in `DrawSurface.svelte` calls the engine's `fontsLoaded`), so a box read
+ * too early is the fallback's — 93.4 where the face's is 102 for the same eleven
+ * characters — and anything measured against it reads as a change that never happened.
+ * Two reads a beat apart, until they agree.
+ */
+async function settledText(page: Page): Promise<SceneElement> {
+  let previous: string | null = null;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const now = JSON.stringify(await byType(page, "text"));
+    if (now === previous) return JSON.parse(now) as SceneElement;
+    previous = now;
+    await page.waitForTimeout(50);
+  }
+  throw new Error("the text's box never settled");
+}
+
+/**
+ * Waits for the face the editor draws the text in, so its box stops moving under the hand.
+ *
+ * The face is only asked for once the editor is up, so this cannot run before it: in
+ * fallback widths the box is 93.4 wide where the face's is 102, so a drag aimed at a
+ * fraction of it lands on a different character from one run to the next — a flake in the
+ * pointer arithmetic and not in the app. Asked for by name and awaited, so the re-layout
+ * it triggers is a settled fact by the time the caller measures.
+ */
+async function faceLoaded(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const node = document.querySelector<HTMLTextAreaElement>("textarea[aria-label='Text editor']");
+    if (!node) throw new Error("no editor to read the face from");
+    const [family = ""] = getComputedStyle(node).fontFamily.split(",");
+    await document.fonts.load(`20px ${family.trim().replace(/["']/g, "")}`);
+  });
+  await painted(page);
 }
 
 test("the text being typed is on screen once: the editor's, not also the canvas's", async ({
@@ -192,6 +250,75 @@ test("Escape keeps what was typed, leaves the shape selected, and Enter opens it
   await page.keyboard.press("Enter");
   await expect(editor(page)).toBeFocused();
   await expect(editor(page)).toHaveValue("Kept");
+});
+
+/**
+ * Clicking away, the other way an edit ends: `commitTextEdit` with `viaKeyboard` false,
+ * which is the whole of what the flag is for (`handleTextWysiwyg`'s `onSubmit`'s
+ * `elementIdToSelect`, `App.tsx@1118751f`).
+ *
+ * The ending is compared inside one test on purpose. Both halves commit the same way, so
+ * "the text is there" cannot tell them apart; the selection is the difference, and a
+ * click-away assertion alone would pass just as happily if the blur submitted as a key.
+ * The press is on the header's status, not on the board, so nothing but the commit can
+ * have cleared the selection — a press on the canvas reaches the board's own handler and
+ * would clear it anyway, which is the trap this placement avoids.
+ */
+test("clicking away commits the edit and lets go of the shape, where Escape keeps it", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await drawShape(board);
+  const shape = await byType(page, "rectangle");
+  await openLabel(board);
+  await page.keyboard.type("Blurred");
+
+  await page.locator('span.save-status[aria-label="Save status"]').click();
+
+  await expect(editor(page)).toHaveCount(0);
+  const blurred = await byType(page, "text");
+  expect(blurred.originalText, "the click-away committed it").toBe("Blurred");
+  expect(blurred.text, "and the canvas's copy is the same words").toBe("Blurred");
+  expect(await selection(page), "a click away lets go, where Escape keeps the shape").toEqual([]);
+
+  // The same edit, ended with the keyboard: committed the same way, and the shape stays
+  // selected. A click away let go of it, so it takes a click on the label to have it
+  // back — which is the first half of this test, seen from the other side.
+  const label = await onCanvas(page, blurred);
+  await page.mouse.click(
+    board.box.x + (label.left + label.right) / 2,
+    board.box.y + (label.top + label.bottom) / 2,
+  );
+  expect(await selection(page)).toEqual([shape.id]);
+  await page.keyboard.press("Enter");
+  await expect(editor(page)).toBeFocused();
+  await page.keyboard.press("End");
+  await page.keyboard.type("!");
+  await page.keyboard.press("Escape");
+
+  expect((await byType(page, "text")).originalText).toBe("Blurred!");
+  expect(await selection(page)).toEqual([shape.id]);
+});
+
+/**
+ * The same commit by the editor's own `onblur`, which is the row's word: a focus that
+ * moves with no press under it at all. Nothing reaches the board here, so the selection
+ * the commit leaves is the only thing that can have set it.
+ */
+test("losing the focus with no press commits the edit, and lets go of the shape", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await drawShape(board);
+  await openLabel(board);
+  await page.keyboard.type("Blurred");
+  // Tab indents and Escape submits, so a spec cannot walk the focus away the way a person
+  // would; the browser's own blur is what is left, and it is the handler's own trigger.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  await expect(editor(page)).toHaveCount(0);
+  expect((await byType(page, "text")).originalText, "the blur committed it").toBe("Blurred");
+  expect(await selection(page), "nothing is left selected").toEqual([]);
 });
 
 test("Tab indents the line and Shift+Tab takes it back, the editor keeping the keys", async ({
@@ -476,6 +603,97 @@ test("a click on a text that was already the sole selection opens the caret ther
   expect(caret[0]).toBe(caret[1]);
   expect(caret[0]).toBeGreaterThan(0);
   expect(caret[0]).toBeLessThan(5);
+});
+
+/**
+ * A selection made *inside* the editor, and the row's other half: the caret above is
+ * where the editor opens, this is what the hand does once it is open. Both are the
+ * textarea's own — the oracle's too, its `editable.onpointerdown` stopping the press
+ * before the canvas sees it (`textWysiwyg.tsx@1118751f`) — so the range is the browser's
+ * to report and the engine's part is that nothing moves while it is drawn.
+ *
+ * The caret is walked there with the keys rather than clicked, so the drag below is the
+ * only press in the editor: a press that reached the canvas would move the text, and a
+ * second press on the pixel a click left is a double click, which selects by word.
+ *
+ * Asserted against the browser's numbers and the engine's element, never a re-wrapped
+ * caret: the width of the range is bounded on both sides and the text that replaces it
+ * is spliced from the range as reported, so a zero-width selection (the failure mode
+ * this row is prone to) and a whole-line one both fail.
+ */
+test("a selection drawn inside the editor is its own, and the text is not dragged", async ({
+  page,
+}) => {
+  // A camera move eases; this spec aims the mouse by the camera, and Enter on a selected
+  // element eases the camera *into* it (focus mode, `enterFocusMode` in
+  // `DrawSurface.svelte`), so the editor's box would travel under the pointer. Reduced
+  // motion makes the move a jump, and the wait below is the belt to that braces.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const board = await openBoard(page);
+  await pickTool(page, "Text");
+  const at = { x: OPEN_CANVAS.left + 200, y: OPEN_CANVAS.top + 200 };
+  await page.mouse.click(board.box.x + at.x, board.box.y + at.y);
+  await page.keyboard.type("hello there");
+  await page.keyboard.press("Escape");
+  await expect(editor(page)).toHaveCount(0);
+
+  const before = await settledText(page);
+  expect(before.originalText).toBe("hello there");
+  expect(before.width, "a laid-out text, not an empty one").toBeGreaterThan(20);
+
+  // Reopened, the whole line is selected (`autoSelect` → `editable.select`,
+  // `textWysiwyg.tsx@1118751f`).
+  await page.keyboard.press("Enter");
+  await expect(editor(page)).toBeFocused();
+  await faceLoaded(page);
+  await waitForCameraStable(page);
+  const whole = await editorRange(page);
+  expect(whole.start, "the line opens selected").toBe(0);
+  expect(whole.end).toBe(whole.value.length);
+
+  // The caret, walked to the middle of the line with the keys: `editorKey` passes Home
+  // and the arrows to the textarea (`textEditor.ts`), and the engine's own key listener
+  // sits on the canvas below, so a nudge cannot reach the text from here.
+  await page.keyboard.press("Home");
+  for (let step = 0; step < 4; step++) await page.keyboard.press("ArrowRight");
+  const caret = await editorRange(page);
+  expect(caret.start, "a caret in the middle, not a range and not the end").toBe(caret.end);
+  expect(caret.start).toBe(4);
+
+  // The box the editor is now over, in the face's widths and not the fallback's.
+  const opened = await settledText(page);
+  const box = await onCanvas(page, opened);
+  const line = board.box.y + box.top + 8;
+  const across = (fraction: number): number =>
+    board.box.x + box.left + (box.right - box.left) * fraction;
+  await page.mouse.move(across(0.2), line);
+  await page.mouse.down();
+  await page.mouse.move(across(0.8), line, { steps: 8 });
+  await page.mouse.up();
+
+  // The drag was the editor's: the element is where the engine laid it out, to the pixel,
+  // and the press inside it did not end the edit — the oracle's
+  // `editable.onpointerdown` stopping the press before the canvas sees it
+  // (`textWysiwyg.tsx@1118751f`), ours as the window handler's own guard.
+  const after = await settledText(page);
+  expect(
+    { x: after.x, y: after.y, width: after.width, height: after.height },
+    "the text was dragged instead of the words in it selected",
+  ).toEqual({ x: opened.x, y: opened.y, width: opened.width, height: opened.height });
+  await expect(editor(page), "the press inside the editor ended the edit").toHaveCount(1);
+
+  const range = await editorRange(page);
+  expect(range.value, "the editor's own text, unwrapped").toBe("hello there");
+  expect(range.end - range.start, "a real range, not a caret").toBeGreaterThanOrEqual(3);
+  expect(range.start, "and not from the first character").toBeGreaterThan(0);
+  expect(range.end, "not the whole line either").toBeLessThan(range.value.length);
+
+  // And it is a range the editor acts on: what is typed replaces exactly it, and the
+  // engine is handed the whole of the new text, never the selected part of it.
+  await page.keyboard.type("X");
+  expect((await byType(page, "text")).originalText).toBe(
+    range.value.slice(0, range.start) + "X" + range.value.slice(range.end),
+  );
 });
 
 test("a fixed-width text shows its box outline while it is typed, an auto-sizing one none", async ({
