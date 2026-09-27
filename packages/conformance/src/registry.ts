@@ -2256,6 +2256,16 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_text_model_compat.rs`, `${ENGINE}/ci_text_align.rs`],
   },
+  // The order half of autosave is NOT carried by sceneDiff.test.ts, which cannot: `diff`
+  // and `acknowledge` share `predictOrder` and read the same `this.order`, so a wrong
+  // prediction is wrong identically on both sides and every assertion there passes. What
+  // pins it is apps/web/src/lib/autosave/sceneDiff.merges.test.ts, which puts the
+  // tracker's model against `reconcileElements` — the merge the API actually runs — so
+  // the prediction has to agree with a module the client never calls. Two of its three
+  // cases are green; the third, a resurrected id, is a declared `it.fails` and will turn
+  // the suite red the day the prediction is fixed. Not a `gap`: a divergence is recorded,
+  // not shipped unseen — but the client is still wrong for a resurrected element, and
+  // that is what zorder.md's cross-client row now says.
   {
     section: "31. Persistence",
     status: "covered",
@@ -2263,6 +2273,7 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_persistence.rs`,
       `${WEB}/autosave/autosaver.test.ts`,
       `${WEB}/autosave/sceneDiff.test.ts`,
+      `${WEB}/autosave/sceneDiff.merges.test.ts`,
     ],
   },
   // Both are Canvas→PNG-only options, and Canvas→PNG is canvas.toBlob() on the on-screen
