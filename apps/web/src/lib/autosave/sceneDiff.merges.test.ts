@@ -151,11 +151,17 @@ describe("the client's model of the server's z-order", () => {
     // model the client keeps is the server's. The cost of the wrong prediction is a
     // full-order PATCH on every undo of a delete, not a restacked board.
     //
-    // A characterisation, not a ratchet: green today, and green with the design's guard
-    // as well, which only changes how `diffAll` gets to the explicit-order path. It is
-    // here so the honest reason a wrong primitive is survivable stays pinned — a change
-    // that made `diffAll` stop sending the order on a mismatch would leave the next
-    // reader wrong about why nothing has been lost yet.
+    // A ratchet, but not on the prediction — on the safety net. MEASURED: drop the
+    // explicit order on a mismatch and the assertion on `undo.order` goes red with
+    // "expected undefined to deeply equal [ 'a', 'b', 'c' ]". It stays green with the
+    // design's guard, which only changes how `diffAll` gets to this path, not whether.
+    //
+    // The two cases are one claim in two halves: a wrong primitive, rescued by a second
+    // mechanism that is not a guard. Take the net away and delete the order assertion
+    // above, and the line after it reports the very divergence `it.fails` documents —
+    // [ 'a', 'c', 'b' ] against the server's [ 'a', 'b', 'c' ] — on the path that
+    // actually ships. That is why this is here: it pins the rescue, so the next reader
+    // is not left guessing why nothing has been lost yet.
     const board = [el("a"), el("b"), el("c")];
     const tracker = loaded(board);
 
