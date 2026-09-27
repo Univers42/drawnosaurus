@@ -43,17 +43,30 @@ shape's own frame (`focus_point` turns it with the shape), so both are gone.
 
 ## Where an end binds
 
-**VERIFIED** — `anchor_for_drop` transcribes `binding.ts@1118751f:654-962`:
+**VERIFIED** — `anchor_for_drop` transcribes `binding.ts@1118751f:654-962`, but for one row,
+marked:
 
 | Where the end is let go                     | Binding                                |
 | ------------------------------------------- | -------------------------------------- |
 | nowhere near a target                       | unbound                                |
 | near the shape the other end is bound to    | both ends `inside`, where put          |
-| inside a shape's outline (fill-independent) | `inside`, exactly there                |
+| inside a shape's outline (fill-independent) | `orbit`, anchored at the drop (ray)    |
 | near one, Alt held                          | `inside`, exactly there                |
 | beside one, near a side midpoint (no grid)  | `orbit`, anchored at the midpoint      |
 | beside one, otherwise                       | `orbit`, projected (below)             |
 | Ctrl/Cmd held                               | unbound (`App.tsx@1118751f:5754-5762`) |
+
+**Divergence, the ray rule** (owner's decision, 2026-09-27) — an end let go inside a shape
+orbits, anchored exactly at the drop: it is aimed there and drawn where the arrow first
+meets the outline, a gap clear of it, like a ray stopping at the first obstacle. So an
+arrow never runs through the shape it is bound to, and a turn of the shape keeps it on the
+outline at every step (`ci_binding_anchor.rs` › `inside_a_shape_the_end_stops_at_its_outline`,
+`a_turning_shape_never_lets_its_arrow_through`). Excalidraw's shipped default binds that end
+`inside` and draws the arrow through the outline to it (`binding.ts@1118751f:846-852`,
+`1975-1984`; the `ci_binding_dense.rs` probes measured it on excalidraw.com); its
+`COMPLEX_BINDINGS` strategy orbits it, as here (`binding.ts@1118751f:447-452`), with inside
+reached by holding still 700 ms, which is Alt here. Which shape binds is the oracle's
+either way. Arrows saved bound `inside` before the change keep it until an end is dragged.
 
 The projection (`element/src/utils.ts@1118751f:810-902`) continues the arrow's own line — from
 the far anchor for a straight arrow, from the neighbouring point of a bent one —

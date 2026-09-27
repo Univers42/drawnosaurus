@@ -118,6 +118,9 @@ world  = (screen - (x, y)) / scale     screen_to_world
 
 - An element-level bind stores the target id plus a fixed point on it. Elbow arrows route
   through `src/scene/elbow/` (`bind_and_route` binds both ends, then routes over a `Board`).
+- An end let go or pressed inside a shape orbits, aimed at that point and stopped at the
+  outline, so an arrow never runs through its own shape, turned or not; only Alt binds
+  inside (the ray rule, a divergence: `docs/reference/binding.md`).
 - A flowchart link (Ctrl+Arrow) is an elbow arrow 6px off the side middles
   (`src/engine/flowchart.rs`, `ARROW_PADDING`).
 - Replayed against the oracle's own output by `tests/ci_flowchart_oracle.rs`. The fixtures

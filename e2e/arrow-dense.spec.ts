@@ -117,13 +117,16 @@ test.describe("an arrow aimed into a Ctrl+D pack", () => {
     expect(arrow.endBindMode).toBe("orbit");
   });
 
-  test("a double click inside a packed square labels the arrow, not the square", async ({
+  test("a double click inside a packed square types a free text, never a label on the square", async ({
     page,
   }) => {
     const board = await openBoard(page);
     const { pack, lone } = await packAndLone(board);
-    // Inside the seventh square and nearest its own outline (excalidraw.com: r6, inside)
-    // — the first click places a waypoint, the second finishes there.
+    // Inside the seventh square and nearest its own outline (excalidraw.com: r6) — the
+    // first click places a waypoint, the second finishes there. The end orbits r6: aimed
+    // at the pointer, stopped at the outline, so the double click is not on the arrow and
+    // types a free text, as after any orbiting end. excalidraw.com binds that end inside,
+    // at the pointer, and labels the arrow (docs/reference/binding.md, the ray rule).
     const square = pack[6]!;
     const target = await onPage(board, pack[0]!.x + 71.3, pack[0]!.y + 70.7);
     await startPathTo(board, lone, target);
@@ -134,12 +137,12 @@ test.describe("an arrow aimed into a Ctrl+D pack", () => {
     expect(await activeTool(page), "the double click finished the arrow").toBe("select");
     const arrow = await theArrow(board);
     expect(arrow.endBinding).toBe(square.id);
-    expect(arrow.endBindMode).toBe("inside");
-    const labels = (await sceneElements(page)).filter((el) => el.type === "text");
+    expect(arrow.endBindMode).toBe("orbit");
+    const texts = (await sceneElements(page)).filter((el) => el.type === "text");
     expect(
-      labels.map((el) => el.containerId),
-      "the label opened on the new arrow",
-    ).toEqual([arrow.id]);
+      texts.map((el) => el.containerId ?? null),
+      "a free text, on no square and not on the arrow",
+    ).toEqual([null]);
   });
 
   test("a double click whose first click binds in orbit types a free text, not a label", async ({
