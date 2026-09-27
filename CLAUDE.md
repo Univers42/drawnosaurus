@@ -90,7 +90,13 @@ pnpm exec playwright test e2e/zoom.spec.ts -g "the point under the cursor stays"
 - **Import deep paths, never the bare barrel.** `engine/src/index.ts` re-exports a React adapter that
   would drag `react` into a Svelte app that does not install it. An eslint `no-restricted-imports`
   rule turns that into a lint error. Use `@osionos/draw-engine/svelte`, `/types`, `/json`, `/engine`,
-  `/camera`.
+  `/cameraMath`. A `/camera` module is gone: it was a hand-kept TypeScript mirror of `camera.rs`, and
+  its four values are WASM exports now (`docs/reference/camera.md`).
+- **A unit test that needs the engine needs `engine/pkg`.** The web's vitest suite runs in node, where
+  the app's `loadDrawEngine()` cannot run — it is a `fetch` of a sibling `.wasm` — so
+  `apps/web/test/vitest.setup.ts` instantiates the module from its bytes with `initSync`. `make test`
+  therefore depends on `engine/pkg`, as `make typecheck` already did, and CI's `test` job takes the
+  same artifact as `quality`. Without it the suite fails at that setup, not at a case.
 - **`wasm-bindgen-cli` must match the crate exactly** (`=0.2.128`). A mismatch produces glue that
   disagrees with the binary and fails in the browser, not at build time; `scripts/wasm-build.sh`
   reads the pin back out of the manifest and refuses to build on a drift.
