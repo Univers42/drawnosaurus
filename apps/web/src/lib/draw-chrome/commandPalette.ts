@@ -133,7 +133,9 @@ export const RECENT_CATEGORY = "Recents";
 export function paletteGroups(
   commands: readonly Command[],
   query: string,
-  lastUsedId: string | null = null,
+  /** Required, and no default: a caller who forgets it should be told, not silently given a
+   *  palette with no recents. Pass `null` for "nothing has been run". */
+  lastUsedId: string | null,
 ): CommandGroup[] {
   if (query.trim() !== "") {
     const filtered = filterCommands(commands, query);
@@ -458,20 +460,7 @@ function styleCommands(host: PaletteHost, { can }: PaletteSelection): Command[] 
   // The rows the panel sets through the engine rather than a style patch.
   return [
     ...commands,
-    // The font family row, one command per family: the same `FONT_CHOICES` the picker
-    // lists and the same `can.text` that shows the row (`shapeActions.ts:143-144`), applied
-    // through the same style patch the panel's own pick applies. Beyond the oracle, which
-    // leaves the row to its properties panel and has no font command in its palette at
-    // `@1118751f` — this is the palette being reachable where the panel is not.
-    ...offered(
-      "Style",
-      FONT_CHOICES.map((font) => ({
-        id: `style:fontFamily:${font.id}`,
-        label: `Font: ${font.label}`,
-        when: can.text,
-        run: () => host.applyStyle({ fontFamily: font.id }),
-      })),
-    ),
+    ...fontFamilyCommands(can.text, host),
     ...offered(
       "Style",
       TEXT_ALIGNS.map(({ label, value }) => ({
@@ -500,6 +489,25 @@ function styleCommands(host: PaletteHost, { can }: PaletteSelection): Command[] 
       })),
     ),
   ];
+}
+
+/**
+ * The font family row, one command per family: the same `FONT_CHOICES` the picker lists
+ * and the same `can.text` that shows the row (`shapeActions.ts:143-144`), applied through
+ * the same style patch the panel's own pick applies. Beyond the oracle, which leaves the
+ * row to its properties panel and has no font command in its palette at `@1118751f` — this
+ * is the palette being reachable where the panel is not.
+ */
+function fontFamilyCommands(canText: boolean, host: PaletteHost): Command[] {
+  return offered(
+    "Style",
+    FONT_CHOICES.map((font) => ({
+      id: `style:fontFamily:${font.id}`,
+      label: `Font: ${font.label}`,
+      when: canText,
+      run: () => host.applyStyle({ fontFamily: font.id }),
+    })),
+  );
 }
 
 const REGISTRY_IDS = new Set(SHORTCUT_REGISTRY.map((entry) => entry.id));

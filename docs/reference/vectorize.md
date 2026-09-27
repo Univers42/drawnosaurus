@@ -215,12 +215,13 @@ reported: it can paint before the SVG has decoded.
 
 ## Tests
 
-| suite                                             | what                                                                   |
-| ------------------------------------------------- | ---------------------------------------------------------------------- |
-| `engine/crates/draw-trace/tests/trace.rs`         | flattening, holes, caps, flat rings, stats (+ config unit tests)       |
-| `engine/crates/draw-engine/tests/ci_vectorize.rs` | mapping, elements, stacking, groups, history, bindings, every refusal  |
-| `apps/web/.../vectorize.test.ts`, `menu.test.ts`  | presets, slider maps, caps, messages, the one menu/palette declaration |
-| `e2e/vectorize.spec.ts`                           | both modes end to end, autosave, undo, the zoom sharpness              |
+| suite                                             | what                                                                                                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `engine/crates/draw-trace/tests/trace.rs`         | flattening, holes, caps, flat rings, stats (+ config unit tests)                                                                             |
+| `engine/crates/draw-engine/tests/ci_vectorize.rs` | mapping, elements, stacking, groups, history, bindings, every refusal                                                                        |
+| `apps/web/.../vectorize.test.ts`, `menu.test.ts`  | presets, slider maps, caps, messages, the one menu/palette declaration, and the scan that fails on a second copy of the label                |
+| `apps/web/.../commandPalette.test.ts:509`         | that the palette's Vectorize command is that same row — same label, same image id, offered in the five selection cases the menu offers it in |
+| `e2e/vectorize.spec.ts`                           | both modes end to end, autosave, undo, the zoom sharpness                                                                                    |
 
 ## Known limits
 

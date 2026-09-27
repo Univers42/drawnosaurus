@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { DrawElement } from "@osionos/draw-engine/types";
 import {
@@ -149,15 +149,22 @@ describe("vectorizeAction", () => {
   const image = (id: string) => el({ id, type: "image" });
 
   it("is the one declaration the canvas menu and the palette both read", () => {
-    // Two menus offer it, so it is written once. A second literal is how a palette entry
-    // silently stops matching the menu item — which is the bug this scan exists to fail on.
-    const sources = ["./commandPalette.ts", "./DrawContextMenu.svelte"];
-    for (const source of sources) {
-      const text = readFileSync(new URL(source, import.meta.url), "utf8");
-      expect(text.includes(`"${VECTORIZE_LABEL}"`), source).toBe(false);
-    }
-    const declared = readFileSync(new URL("./menu.ts", import.meta.url), "utf8");
-    expect(declared.includes(`"${VECTORIZE_LABEL}"`)).toBe(true);
+    // Two menus offer it, so it is written once. A second copy is how a palette entry
+    // quietly stops matching the menu item beside it.
+    //
+    // Three things this scan has to get right, and each was a hole in the first version:
+    // it matches the *label* and not the whole quoted literal, so a drifted spelling —
+    // a stray trailing space, a different quote character — is still a hit; it covers
+    // every source file in the directory rather than a list of the two known consumers,
+    // so a third one cannot slip past; and it anchors on the ellipsis, because the
+    // Vectorize dialog's own `<h3>` is the same words without it and is not a second
+    // declaration. Test files are exempt: a test has to be able to quote the label.
+    const dir = new URL(".", import.meta.url);
+    const pattern = /["'`]Vectorize image…/;
+    const holders = readdirSync(dir)
+      .filter((name) => /\.(ts|svelte)$/.test(name) && !name.endsWith(".test.ts"))
+      .filter((name) => pattern.test(readFileSync(new URL(name, dir), "utf8")));
+    expect(holders, "the label is declared once, in menu.ts").toEqual(["menu.ts"]);
   });
 
   it("names the one unlocked image, and nothing else", () => {

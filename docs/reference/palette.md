@@ -151,8 +151,18 @@ dialog of its own, which then keeps the focus.
   an exact substring above a scattered one and an earlier match above a later one, which
   covers a command palette's usual queries without a new dependency for it.
 - **The remembered command is not persisted** — a reload forgets it, as it does in the
-  oracle. It is also forgotten whenever the command is no longer offered (it was
-  selection-dependent and the selection changed), which is what the oracle's own
-  `isCommandAvailable` check does before showing the recents row.
+  oracle. It is also _hidden_ while the command is not offered (it was selection-dependent
+  and the selection changed), and back if it returns. **That is a divergence from the
+  oracle, which forgets it outright**: `:621-624` re-resolves the remembered item against
+  the current command list and stores `null` when it is gone, so it never comes back. Ours
+  keeps the id and lets the `commands.some(...)` guard in `paletteGroups` decide
+  (`commandPalette.ts:141`). The difference is invisible except across a selection
+  round-trip — select an image, run Vectorize, deselect, reselect, and the oracle's palette
+  would have forgotten it by the last step while ours offers it again. `isCommandAvailable`
+  (`:915`, `:932`) only _hides_ the row; nothing in the oracle's palette nulls the atom
+  except `:621-624`.
 - **No recents while searching.** A query outranks the memory entirely, as in the oracle,
   so "toggle" finds the command but the recents heading is gone.
+- **The recents group is a bare label.** The oracle's heading carries a
+  `historyCommandIcon` beside the words (`CommandPalette.tsx@1118751f:919-926`); ours is
+  text only, like every other group heading this palette draws.
