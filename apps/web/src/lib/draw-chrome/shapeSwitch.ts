@@ -3,8 +3,9 @@
  * (`engine/convert.rs`), the chrome opens, steps and closes the panel that shows it, as
  * Excalidraw's `ConvertElementTypePopup` does (`App.tsx@1118751f:5543-5572`).
  */
+import { worldToScreen } from "@osionos/draw-engine/camera";
 import type { FlowchartShape } from "@osionos/draw-engine/types";
-import { worldToScreen, type Box } from "./camera.ts";
+import type { Box } from "./camera.ts";
 
 export type SwitchKey = "open" | "forward" | "back" | "close";
 
@@ -48,6 +49,6 @@ export function switchPanelAt(
   bounds: Box,
   camera: { x: number; y: number; scale: number },
 ): { x: number; y: number } {
-  const { sx, sy } = worldToScreen(camera, bounds.x, bounds.y + bounds.height);
-  return { x: sx - 8, y: sy + 18 * camera.scale };
+  const { x, y } = worldToScreen(camera, bounds.x, bounds.y + bounds.height);
+  return { x: x - 8, y: y + 18 * camera.scale };
 }

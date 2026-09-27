@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { screenToWorld, worldToScreen } from "@osionos/draw-engine/camera";
+import { MAX_ZOOM, MIN_ZOOM } from "@osionos/draw-engine/types";
 import {
   animateCamera,
   boundsOf,
@@ -10,7 +12,6 @@ import {
   persistFocusModePreference,
   readFocusModePreference,
   setCameraExact,
-  worldToScreen,
   zoomPercent,
   type CameraSetter,
 } from "./camera.ts";
@@ -27,16 +28,19 @@ describe("zoomPercent", () => {
 });
 
 describe("worldToScreen", () => {
-  it("matches the engine: wx * scale + camera.x", () => {
-    expect(worldToScreen({ x: 100, y: 50, scale: 2 }, 10, 20)).toEqual({ sx: 120, sy: 90 });
+  it("is the engine's own world_to_screen: wx * scale + camera.x", () => {
+    // The host used to carry a second copy of this formula, returning `{sx, sy}`. It
+    // reads the engine's instead, so the numbers the five call sites place chrome with
+    // are the engine's own — a camera change cannot move them out from under us.
+    expect(worldToScreen({ x: 100, y: 50, scale: 2 }, 10, 20)).toEqual({ x: 120, y: 90 });
   });
 
-  it("is the inverse of the cursor send path (sx - cam) / scale", () => {
+  it("is the inverse of the engine's screen_to_world, which the cursor send path uses", () => {
     const camera = { x: -40, y: 12, scale: 1.5 };
     const world = { x: 200, y: -30 };
     const screen = worldToScreen(camera, world.x, world.y);
-    expect((screen.sx - camera.x) / camera.scale).toBeCloseTo(world.x);
-    expect((screen.sy - camera.y) / camera.scale).toBeCloseTo(world.y);
+    expect(screenToWorld(camera, screen.x, screen.y).x).toBeCloseTo(world.x);
+    expect(screenToWorld(camera, screen.x, screen.y).y).toBeCloseTo(world.y);
   });
 });
 
@@ -61,13 +65,16 @@ describe("fitCamera", () => {
   });
 
   it("clamps to the engine's own zoom limits", () => {
+    // Asserted against the engine's exported limits rather than 0.1/30 written out
+    // again here: a host that re-declared its own pair would drift silently, because
+    // `setCameraExact` re-clamps through the engine's own `zoomAt` and hides it.
     const tiny = fitCamera({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, { width: 1000, height: 1000 });
-    expect(tiny.scale).toBeLessThanOrEqual(30);
+    expect(tiny.scale).toBe(MAX_ZOOM);
     const huge = fitCamera(
       { minX: 0, minY: 0, maxX: 1_000_000, maxY: 1_000_000 },
       { width: 100, height: 100 },
     );
-    expect(huge.scale).toBeGreaterThanOrEqual(0.1);
+    expect(huge.scale).toBe(MIN_ZOOM);
   });
 });
 
