@@ -32,8 +32,16 @@
 export type ChromeSurface =
   /** The top bar: the menu trigger, the title, Share, the shortcuts button. */
   | "header"
-  /** The tool strip. Zen mode takes its key hints, not the tools. */
+  /** The tool strip. */
   | "toolbar"
+  /**
+   * The key hints printed on the tools — the badge under each icon and the `<kbd>` in the
+   * More tools menu. Not a surface of its own on the page; the part of `toolbar` that zen
+   * mode takes, so it is a row here rather than a bare `{#if !zenMode}` in the component.
+   * The tools themselves stay. The `aria-label` and `title` keep their chord, because the
+   * oracle hides the badge with CSS and leaves the accessible name alone.
+   */
+  | "toolbarKeyHints"
   /** The style panel that slides out of the top left. */
   | "inspector"
   /** The zoom controls along the bottom. */
@@ -75,6 +83,13 @@ export const ZEN_CHROME: readonly ZenChromeRow[] = [
     // "zen-mode" lands on the toolbar *container* and hides two things inside it — the
     // keybinding badges and the hint viewer — and nothing else.
     oracle: "Toolbar.tsx@1118751f:250",
+  },
+  {
+    surface: "toolbarKeyHints",
+    hidden: true,
+    // The two selectors the oracle's `.App-toolbar-container.zen-mode` rule hides: the
+    // keybinding badge under each tool, and the hint viewer.
+    oracle: "Toolbar.scss@1118751f:5-10",
   },
   {
     surface: "inspector",
@@ -139,6 +154,19 @@ export const ZEN_CHROME: readonly ZenChromeRow[] = [
     oracle: "Actions.tsx@1118751f:915-931",
   },
 ];
+
+/**
+ * ponytail: the oracle also *withholds* the action on a phone, and this app does not.
+ *
+ * `actionToggleZenMode.tsx@1118751f:28-33` gates the whole action on
+ * `app.editorInterface.formFactor !== "phone"` (and on the embedder not having pinned
+ * `zenModeEnabled` itself), so on a phone Excalidraw's context menu has no Zen mode item and
+ * the chord does nothing. This app has one layout for every form factor and no
+ * `formFactor` anywhere, so `Alt+Z` and the palette's "Toggle zen mode" are offered on a
+ * phone too. Unrecorded before this note: a real divergence, and a deliberate one to leave
+ * standing only if the owner wants a phone layout, which is a design decision rather than a
+ * parity bug.
+ */
 
 function rowFor(surface: ChromeSurface): ZenChromeRow {
   const row = ZEN_CHROME.find((candidate) => candidate.surface === surface);

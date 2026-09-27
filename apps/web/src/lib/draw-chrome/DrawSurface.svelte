@@ -133,6 +133,7 @@
     insideOverlay,
     isTextField,
     styleShortcut,
+    type AppShortcut,
     type KeyTarget,
   } from "./shortcuts.ts";
   import { chromeVisible } from "./zen.ts";
@@ -1805,8 +1806,7 @@
     // Snap, grid, Present, zen mode and the palette's own toggle chord are decided by the
     // pure, tested `appShortcut` (`shortcuts.ts`) — the registry's proof runs real events
     // through it, which an inline condition here could not offer. `keyTarget` is the same
-    // question `onStyleShortcut` asks, and it is what keeps a chord out of a field and out
-    // of an open overlay.
+    // question `onStyleShortcut` asks, and it is what keeps a chord out of a field.
     const shortcut = appShortcut(event, presenting, keyTarget(event.target));
 
     if (event.key === "Escape") {
@@ -1828,35 +1828,52 @@
     } else if (mod && key === "s") {
       event.preventDefault();
       saveAsFile();
-    } else if (shortcut === "snap") {
-      // Excalidraw's `Alt+S` (`actionToggleObjectsSnapMode.tsx`).
-      event.preventDefault();
-      flipObjectsSnap();
-    } else if (shortcut === "grid") {
-      // Excalidraw's grid shortcut.
-      event.preventDefault();
-      pickGrid({ enabled: !grid.enabled });
-    } else if (shortcut === "zen") {
-      // Excalidraw's `Alt+Z` (`actionToggleZenMode.tsx@1118751f:34-35`). Host-only: it
-      // hides chrome and leaves the canvas, the camera and the scene alone.
-      event.preventDefault();
-      toggleZenMode();
+    } else if (shortcut) {
+      runAppShortcut(shortcut, event);
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
-    } else if (shortcut === "present") {
-      // Was Ctrl/Cmd+Shift+P; the palette (Track B, Part 1) takes that chord now, matching
-      // the oracle (`CommandPalette.tsx@1118751f:145-146`). Ctrl/Cmd+Alt+P is unused in the
-      // oracle's own keymap and not reserved by Chrome or Firefox — the same kind of chord
-      // this project already trusts for copy/paste styles (Ctrl/Cmd+Alt+C/V).
-      event.preventDefault();
-      void enterPresent();
-    } else if (shortcut === "palette") {
-      // Ctrl/Cmd+/ and Ctrl/Cmd+Shift+P open the command palette — the oracle's own
-      // toggle chord (`CommandPalette.tsx@1118751f:145-146`), free for this once Present
-      // moved to Ctrl/Cmd+Alt+P above.
-      event.preventDefault();
-      showPalette = true;
+    }
+  }
+
+  /**
+   * What each of `appShortcut`'s verdicts does. Split out of `onAppShortcut` because that
+   * chain had outgrown the line budget, and because this is the whole of the mapping from
+   * a name to an action — total, so that adding a verdict to `AppShortcut` fails to compile
+   * here rather than falling through to whichever branch happens to be last.
+   *
+   * The chords that are not in the registry stay inline in `onAppShortcut`, because they
+   * touch the filesystem or open a dialog this registry does not describe.
+   */
+  function runAppShortcut(shortcut: AppShortcut, event: KeyboardEvent): void {
+    event.preventDefault();
+    switch (shortcut) {
+      case "snap":
+        // Excalidraw's `Alt+S` (`actionToggleObjectsSnapMode.tsx`).
+        flipObjectsSnap();
+        break;
+      case "grid":
+        // Excalidraw's grid shortcut.
+        pickGrid({ enabled: !grid.enabled });
+        break;
+      case "zen":
+        // Excalidraw's `Alt+Z` (`actionToggleZenMode.tsx@1118751f:34-35`). Host-only: it hides
+        // chrome and leaves the canvas, the camera and the scene alone.
+        toggleZenMode();
+        break;
+      case "present":
+        // Was Ctrl/Cmd+Shift+P; the palette (Track B, Part 1) takes that chord now, matching
+        // the oracle (`CommandPalette.tsx@1118751f:145-146`). Ctrl/Cmd+Alt+P is unused in the
+        // oracle's own keymap and not reserved by Chrome or Firefox — the same kind of chord
+        // this project already trusts for copy/paste styles (Ctrl/Cmd+Alt+C/V).
+        void enterPresent();
+        break;
+      case "palette":
+        // Ctrl/Cmd+/ and Ctrl/Cmd+Shift+P, the oracle's own toggle chord
+        // (`CommandPalette.tsx@1118751f:145-146`), free for this once Present moved to
+        // Ctrl/Cmd+Alt+P.
+        showPalette = true;
+        break;
     }
   }
 
@@ -2283,8 +2300,14 @@
     here. The oracle answers it the same way (`Actions.tsx@1118751f:915-931`,
     `LayerUI.scss@1118751f:68-90`): a button that exists only while the flag is on, in the
     corner the hidden panels came from.
+
+    Hidden while presenting, and paired with `!presenting` on the chord in `appShortcut`.
+    Presenting hides the exit button, the palette and the main menu, so a flag that could
+    be set from in there would have no way out at all; refusing the chord while presenting
+    is what makes the gap harmless. Zen mode entered *before* Present survives it and the
+    button is back on leaving, which is coherent: the chrome comes back, still in zen.
   -->
-  {#if zenMode && chromeVisible("exitZenMode", zenMode) && !presenting}
+  {#if zenMode && !presenting && chromeVisible("exitZenMode", zenMode)}
     <button
       type="button"
       class="exit-zen-mode"
