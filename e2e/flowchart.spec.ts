@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import {
   OPEN_CANVAS,
+  camera,
   focusBoard,
   openBoard,
   sceneElements,
@@ -328,6 +329,83 @@ test("the shape strip swaps the pending node's shape by click, and letting go of
   const after = await sceneElements(page);
   expect(after, "the node and its arrow committed").toHaveLength(before.length + 2);
   onlyNewOf(before, after, "diamond");
+});
+
+// The strip hangs above the node being created, at that node's **top** edge. A start node
+// whose own width and height are negative — a resize drag that crossed the anchor leaves it
+// so, and the pending nodes copy the start node's extents verbatim
+// (`flowchart.rs:356-357`) — used to put the strip a whole node-height too low, on top of
+// the preview instead of above it. `camera.test.ts` pins the maths;
+// `docs/reference/camera.md`.
+test("the shape strip sits above a mirrored pending node, not on it", async ({
+  page,
+}, testInfo) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await page.evaluate(() => {
+    const engine = window.__drawEngine!;
+    engine.loadScene(
+      JSON.stringify({
+        type: "osidraw",
+        version: 1,
+        source: "e2e",
+        elements: [
+          {
+            id: "shape",
+            type: "rectangle",
+            x: 600,
+            y: 400,
+            width: -160,
+            height: -100,
+            angle: 0,
+            strokeColor: "#1e1e1e",
+            backgroundColor: "#a5d8ff",
+            fillStyle: "solid",
+            strokeWidth: 2,
+            strokeStyle: "solid",
+            roughness: 0,
+            opacity: 100,
+            roundness: null,
+            seed: 1,
+            version: 1,
+            versionNonce: 1,
+            updated: 0,
+            isDeleted: false,
+          },
+        ],
+      }),
+    );
+    (engine as unknown as SelectHandle).select(["shape"]);
+  });
+
+  await page.keyboard.down("Control");
+  await page.keyboard.press("ArrowRight");
+  const strip = page.getByRole("toolbar", { name: "Flowchart node shape" });
+  await expect(strip).toBeVisible();
+
+  // The pending cluster's own top edge, from its two corners rather than `y`, and where the
+  // camera puts it on screen. The strip sits above that point (`transform: translate(-50%,
+  // calc(-100% - 8px))`, `ShapeStrip.svelte`), so its foot is the edge less its own 8px
+  // gap — and nowhere near the cluster's bottom edge, which is what an unnormalised box
+  // would have handed it.
+  const pending = await pendingElements(page);
+  expect(pending.length, "a node and its arrow are pending").toBeGreaterThan(0);
+  const top = Math.min(
+    ...pending.map((element) => Math.min(element.y, element.y + element.height)),
+  );
+  const bottom = Math.max(
+    ...pending.map((element) => Math.max(element.y, element.y + element.height)),
+  );
+  const view = await camera(page);
+  const screenTop = top * view.scale + view.y + board.box.y;
+  const at = (await strip.boundingBox())!;
+  const foot = at.y + at.height;
+  expect(foot, "the strip sits above the cluster's top edge").toBeLessThan(screenTop);
+  expect(foot, "…right against it, bar its own 8px gap").toBeGreaterThan(screenTop - 16);
+  expect(foot, "and nowhere near its bottom edge").toBeLessThan(bottom * view.scale + view.y);
+
+  await page.screenshot({ path: testInfo.outputPath("mirrored-strip.png") });
+  await page.keyboard.up("Control");
 });
 
 test("the preview is painted faded while Ctrl is held, and at full strength once released", async ({
