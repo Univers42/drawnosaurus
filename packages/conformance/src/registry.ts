@@ -654,7 +654,34 @@ export const RULES: readonly Rule[] = [
     section: "🧱 Web embeds",
     text: /^Paste supported embed URLs$/,
     status: "gap",
-    why: "implemented, untested — the host allow-list and URL resolution are thoroughly tested (ci_embed.rs), but nothing pastes a URL through the modal or onto the canvas to trigger creation; every test calls insertEmbed directly.",
+    // NOT earned as `covered` even though the modal arm is now tested, because the line
+    // names two arms and the second is a measured divergence rather than a hole.
+    //
+    // ARM 1 — through the modal: covered by e2e/embedModal.spec.ts. Six cases, each made
+    // red once by mutating the product: accepted (one element, type 'embed', the *resolved*
+    // player URL, 560x315, roughness 0, transparent, arrives selected and centred), placement
+    // determinism (two spellings of one link land on the same pixel; a 0.5x zoom keeps the
+    // board size and centres the frame), refusal (host off the allow-list, `javascript:`, and
+    // a junk host: aria-invalid, the allow-list named, the Embed button disabled, Enter
+    // guarded, and 0 elements / 0 frames / 0 iframes), a control test that retypes in the same
+    // dialog so the refusals cannot pass by being refused forever, the blank case ("" , "   ",
+    // "\t", " \t ") which must place nothing and must NOT claim refusal, and Cancel.
+    //
+    // ARM 2 — onto the canvas: a real divergence, measured. With the board focused, a real
+    // Ctrl+V of a supported embed URL leaves ["text"] — onChromePaste (DrawSurface.svelte:
+    // 781-803) handles files, Mermaid and legacy sticky JSON only, so the URL falls through to
+    // the plain-text paste. The oracle frames an embed from a pasted link it will not render
+    // as text (App.tsx@1118751f:4711-4757, addTextFromPaste at :4757). So this is not "untested"
+    // any more — it is *tested and wrong*, and the honest status for a line with one working arm
+    // and one divergent arm is a gap with a reason, not a closure.
+    //
+    // Also open under the same feature, found while writing arm 1: the embed dialog cannot be
+    // dismissed with Escape. DrawModals.svelte:73-87 is the single Escape handler and does not
+    // list the embed dialog, which is rendered outside it (DrawSurface.svelte:2246-2268); the
+    // oracle closes every modal on Escape (Modal.tsx@1118751f:39-47), and our own
+    // docs/reference/shortcuts.md:261-264 claims one handler covers all eleven role="dialog"
+    // sites. Filed as a Phase 1 task; the e2e never presses Escape.
+    why: "one arm tested, one arm divergent — e2e/embedModal.spec.ts now covers pasting through the modal (accept, refuse, blank, cancel, deterministic placement), but pasting a supported URL onto the canvas leaves a text element where the oracle frames an embed (App.tsx@1118751f:4711-4757), so the line is not closed. Separate defect: the embed dialog has no Escape handler.",
   },
   {
     section: "🧱 Web embeds",
@@ -2508,19 +2535,64 @@ export const RULES: readonly Rule[] = [
   },
   // The share modal renders one (DrawShareModal.svelte) but no unit test or e2e spec
   // asserts it — the section rule below never names a file that mentions "avatar" at all.
+  //
+  // FLIPPED to covered by e2e/collabPeople.spec.ts. Worth knowing what "covered" means here,
+  // because it is not the usual thing: **the oracle has no collaborator people-list UI at this
+  // pin.** Grepping the pinned Excalidraw for a collaborator list finds only the `Collaborator`
+  // *type* in its own tests — no component, no avatars, no "N online". So this line is our
+  // design.md's feature, not an oracle behaviour, and covered means "we have tests for what we
+  // built" rather than "we match the reference".
+  //
+  // The claim these two lines made was "implemented, untested — no test asserts it renders or
+  // updates", and that is now false. Five cases, each proved able to fail by a six-mutation
+  // battery, two of which red exactly one test each — M3 (folding past the first peer into a
+  // "+2 more" row) reds only the four-people test, and M6 (the server's `gone` no longer
+  // deleting a peer) reds only the leave test. That is the evidence the tests are specific
+  // rather than merely present. Every assertion goes through one reader scoped to
+  // [role="dialog"] .peers-section, and count and name are asserted together, so a list of the
+  // right length missing a name cannot read as a pass.
+  //
+  // Two defects the same round surfaced, both left unfixed and both filed as Phase 1 work:
+  // DrawShareModal.svelte:268-270 labels the first row "You (Host)" for *whoever* has the
+  // dialog open, so a guest who opened a shared link is told they are the host while the real
+  // host sits below them — pinned as a characterization test, which records today's behaviour
+  // bug included, and that is why it is called out here rather than left to be discovered.
+  // And nobody can type a name at all: realtimeClient.ts:157-171 is the only writer of
+  // drawnosaurus:userName anywhere in the repo and it generates `Dino ${100-999}`. There is no
+  // name field, no rename, no prompt. "the name the sharer typed" describes software that does
+  // not exist yet; the test asserts the announced name is shown verbatim instead.
   {
     section: "40. Collaboration",
     text: /^Collaborator avatars$/,
-    status: "gap",
-    why: "implemented, untested — rendered by DrawShareModal.svelte; no test asserts it.",
+    status: "covered",
+    tests: ["e2e/collabPeople.spec.ts"],
   },
   // The peers-list DrawShareModal renders (avatars, "N online") is the same untested
   // surface as Collaborator avatars just above — nothing asserts it renders or updates.
+  //
+  // Same spec, same battery. The boundary is worth naming because it is not the one a reader
+  // would guess: there is no "+N" anywhere in DrawShareModal.svelte, every peer is rendered
+  // unconditionally, and the only boundary is `max-height: 150px` with a scroll. Four people
+  // give four rows and four avatars, with the fourth clipped by the dialog's own bottom edge.
+  //
+  // The stale-peer question is only half answered, and the gap is deliberate rather than
+  // overlooked. The `gone` path is covered: the product already deleted correctly, and what
+  // was missing was both a test and a *reachable* way for a test to announce a departure —
+  // e2e/board.ts:248-251's `gone`-on-close is dead code under Playwright, because
+  // WebSocketRoute.onClose does not fire when the page closes (measured: guest tab closed, 8s
+  // waited, onClose never fired, the host still showed the guest's cursor; the same frame
+  // handed over by hand took it to 0). The spec therefore hands the frame over itself, and
+  // e2e/peers.spec.ts:223-231's comment claiming a closed tab is announced "the same way a
+  // real connection loss does" is false — that test passes on the engine's local
+  // LASER_DECAY_TIME_MS timer instead. The silent-peer path (crash, network drop) is
+  // PEER_STALE_MS = 45_000 on a 10s timer and is NOT exported, so the earliest honest check is
+  // 55s against this config's 30s timeout, and a spec that waits out a wall clock on a shared
+  // machine is a flaky spec. Left open on purpose and said so in the spec's own header.
   {
     section: "40. Collaboration",
     text: /^User list$/,
-    status: "gap",
-    why: "implemented, untested — DrawShareModal.svelte renders a peers-list with a live count; no test asserts it.",
+    status: "covered",
+    tests: ["e2e/collabPeople.spec.ts"],
   },
   // Presence's other half — what a peer has selected, not just where their cursor is —
   // lives in peerClaims.ts and is asserted there, a file the section rule never names.
