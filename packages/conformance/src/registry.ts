@@ -713,8 +713,19 @@ export const RULES: readonly Rule[] = [
   {
     section: "⚡ Command Palette",
     text: /recently used/i,
-    status: "gap",
-    why: "The registry ranks by fuzzy match alone; there is no usage history to give a recently-run command a boost the way the oracle's own palette does.",
+    status: "covered",
+    // prompt/shortkey.md:361. The oracle's palette remembers the *one* command it last
+    // ran — `lastUsedPaletteItem` holds a single item, not a list
+    // (`CommandPalette.tsx@1118751f:85`) — and lifts it into a "Recents" group above
+    // the list, out of the category it was declared in (`:844-857`). It does not boost
+    // anything and keeps no history, and ours matches: `paletteGroups` takes one id, so
+    // a list cannot be handed to it, and no other row moves.
+    // Deliberately *not* claimed: the query does not rank recent commands. The oracle
+    // hides the recents group the moment there is a query (`:844-845`) and so do we.
+    // The e2e is what pins the round trip: the memory lives above the dialog, so it
+    // surviving close/reopen — and holding one row rather than a list — is only
+    // reachable in a browser.
+    tests: [`${WEB}/draw-chrome/commandPalette.test.ts`, "e2e/paletteRecents.spec.ts"],
   },
   {
     section: "⚡ Command Palette",

@@ -18,7 +18,8 @@ import {
   TEXT_ALIGNS,
   VERTICAL_ALIGNS,
 } from "./inspector.ts";
-import type { MenuElementInfo } from "./menu.ts";
+import { FONT_CHOICES } from "./fonts.ts";
+import { vectorizeAction, type MenuElementInfo } from "./menu.ts";
 import type { ShapeActions } from "./shapeActions.ts";
 import type { ThemePreference } from "./theme.ts";
 
@@ -103,15 +104,55 @@ export function groupCommands(commands: readonly Command[]): CommandGroup[] {
 }
 
 /**
+ * The oracle's own name for the group the command it remembers sits in
+ * (`t("commandPalette.recents")`, `CommandPalette.tsx@1118751f:918`).
+ */
+export const RECENT_CATEGORY = "Recents";
+
+/**
  * What the palette renders: grouped by category with an empty query (browsing), or one
  * ranked group while searching — Excalidraw's own palette collapses categories the same
  * way once there is a query to rank against. `[]`, not a group with nothing in it, when
  * the query matches nothing.
+ *
+ * `lastUsedId` is the one command last **run**, and the oracle's palette is not a
+ * most-recently-used *list* — it remembers a single item (`lastUsedPaletteItem`,
+ * `CommandPalette.tsx@1118751f:85`) and lifts it into a group of its own above the rest,
+ * having taken it out of the category it was declared in (`:844-857`, rendered `:915-938`).
+ * So no other row moves: a command that was never run is never demoted, which is the
+ * whole point — a sort by usage would push exactly the commands a new user is looking for
+ * down the list. The memory is filled when a command is performed (`:665`), never by
+ * hovering or arrowing onto one (`:933`, `:951`), and it is not shown at all while a query
+ * is being typed (`:844`).
+ *
+ * Matched by `id` where the oracle matches by `label` (`:622-624`, `:852`): its commands
+ * are rebuilt on every open and it has nothing else to hold, while ours carry an id that
+ * is unique (a `buildCommands` test holds that) and stable, so two commands cannot share a
+ * label and have the wrong one lifted.
  */
-export function paletteGroups(commands: readonly Command[], query: string): CommandGroup[] {
-  if (query.trim() === "") return groupCommands(commands);
-  const filtered = filterCommands(commands, query);
-  return filtered.length === 0 ? [] : [{ category: "Results", commands: filtered }];
+export function paletteGroups(
+  commands: readonly Command[],
+  query: string,
+  /** Required, and no default: a caller who forgets it should be told, not silently given a
+   *  palette with no recents. Pass `null` for "nothing has been run". */
+  lastUsedId: string | null,
+): CommandGroup[] {
+  if (query.trim() !== "") {
+    const filtered = filterCommands(commands, query);
+    return filtered.length === 0 ? [] : [{ category: "Results", commands: filtered }];
+  }
+  if (lastUsedId === null || !commands.some((command) => command.id === lastUsedId)) {
+    return groupCommands(commands);
+  }
+  // Group what is left, so a category the run command emptied has no heading of its own —
+  // the oracle's `getNextCommandsByCategory` (`:819-830`) cannot leave an empty one either.
+  return [
+    {
+      category: RECENT_CATEGORY,
+      commands: commands.filter((command) => command.id === lastUsedId),
+    },
+    ...groupCommands(commands.filter((command) => command.id !== lastUsedId)),
+  ];
 }
 
 /** The saved style presets the palette offers, named minimally to stay decoupled from
@@ -125,7 +166,7 @@ export interface PresetSummary {
  *  (`menuElementFromSelection`) already read it — the palette asks nothing of its own. */
 export interface PaletteSelection {
   can: ShapeActions;
-  element: Pick<MenuElementInfo, "locked" | "multi" | "grouped">;
+  element: Pick<MenuElementInfo, "locked" | "multi" | "grouped" | "vectorizeId">;
   /** Tab's shape switch has something to switch. */
   switchable: boolean;
 }
@@ -163,6 +204,9 @@ export interface PaletteHost {
   openShapeSwitch: () => void;
   copyStyles: () => void;
   stepFontSize: (increase: boolean) => void;
+  /** Opens the Vectorize dialog on the image the context menu names — the same row, the
+   *  same id (`menu.ts` › `vectorizeAction`). */
+  vectorize: (id: string) => void;
 }
 
 type Offer = Omit<Command, "category"> & { when?: boolean };
@@ -185,6 +229,10 @@ function offered(category: string, offers: Offer[]): Command[] {
  * panel or the context menu would offer it.
  */
 function elementCommands(host: PaletteHost, { can, element, switchable }: PaletteSelection) {
+  // The canvas menu's own Vectorize row, offered on the same rule and built from the same
+  // declaration — the label and the target id come from `vectorizeAction`, never from a
+  // second copy here, so the palette entry cannot stop matching the menu item.
+  const vectorize = vectorizeAction(element);
   return offered("Elements", [
     {
       id: "element:group",
@@ -323,6 +371,16 @@ function elementCommands(host: PaletteHost, { can, element, switchable }: Palett
       shortcut: shortcutFor("editor.toggleLock"),
       run: engineRun(host, (e) => e.toggleLockSelection()),
     },
+    ...(vectorize
+      ? [
+          {
+            id: "element:vectorize",
+            label: vectorize.label,
+            keywords: ["image", "bitmap", "trace", "convert", "png", "jpg"],
+            run: () => host.vectorize(vectorize.elementId),
+          },
+        ]
+      : []),
   ]);
 }
 
@@ -402,6 +460,7 @@ function styleCommands(host: PaletteHost, { can }: PaletteSelection): Command[] 
   // The rows the panel sets through the engine rather than a style patch.
   return [
     ...commands,
+    ...fontFamilyCommands(can.text, host),
     ...offered(
       "Style",
       TEXT_ALIGNS.map(({ label, value }) => ({
@@ -430,6 +489,25 @@ function styleCommands(host: PaletteHost, { can }: PaletteSelection): Command[] 
       })),
     ),
   ];
+}
+
+/**
+ * The font family row, one command per family: the same `FONT_CHOICES` the picker lists
+ * and the same `can.text` that shows the row (`shapeActions.ts:143-144`), applied through
+ * the same style patch the panel's own pick applies. Beyond the oracle, which leaves the
+ * row to its properties panel and has no font command in its palette at `@1118751f` — this
+ * is the palette being reachable where the panel is not.
+ */
+function fontFamilyCommands(canText: boolean, host: PaletteHost): Command[] {
+  return offered(
+    "Style",
+    FONT_CHOICES.map((font) => ({
+      id: `style:fontFamily:${font.id}`,
+      label: `Font: ${font.label}`,
+      when: canText,
+      run: () => host.applyStyle({ fontFamily: font.id }),
+    })),
+  );
 }
 
 const REGISTRY_IDS = new Set(SHORTCUT_REGISTRY.map((entry) => entry.id));

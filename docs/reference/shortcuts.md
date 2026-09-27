@@ -77,20 +77,20 @@ is the oracle's own pair — `document.activeElement` captured on mount and `.fo
 
 Fourteen overlays in this app. Twelve focus themselves on open and hand it back:
 
-| overlay                | takes the focus on | the hand-back lands on                                |
-| ---------------------- | ------------------ | ----------------------------------------------------- |
-| `DrawMainMenu`         | the menu root      | the trigger button that opened it — see Known limits  |
-| `DrawContextMenu`      | the menu root      | the board                                             |
-| `DrawCommandPalette`   | the combobox       | the board, unless a command opened a dialog           |
-| `DrawExportModal`      | the card           | where it came from — the board, opened from the board |
-| `DrawShortcutsDialog`  | the card           | the board                                             |
-| `DrawTemplatesModal`   | the card           | the board or the menu's trigger — see below           |
-| `DrawShareModal`       | the card           | the board                                             |
-| `DrawMermaidModal`     | the textarea       | the board                                             |
-| `VectorizeDialog`      | the card           | the board — the canvas menu is gone by then           |
-| `DrawPathPanel`        | the first stop     | the board or the menu's trigger — see below           |
-| `InspectorColorPicker` | the picker         | the text being typed, else the board                  |
-| `InspectorFontPicker`  | the search field   | the text being typed, else the board                  |
+| overlay                | takes the focus on | the hand-back lands on                                                          |
+| ---------------------- | ------------------ | ------------------------------------------------------------------------------- |
+| `DrawMainMenu`         | the menu root      | the trigger button that opened it — see Known limits                            |
+| `DrawContextMenu`      | the menu root      | the board                                                                       |
+| `DrawCommandPalette`   | the combobox       | the board, unless a command opened a dialog                                     |
+| `DrawExportModal`      | the card           | where it came from — the board, opened from the board                           |
+| `DrawShortcutsDialog`  | the card           | the board                                                                       |
+| `DrawTemplatesModal`   | the card           | the board or the menu's trigger — see below                                     |
+| `DrawShareModal`       | the card           | the board                                                                       |
+| `DrawMermaidModal`     | the textarea       | the board                                                                       |
+| `VectorizeDialog`      | the card           | the board — whatever opened it (the canvas menu or the palette) is gone by then |
+| `DrawPathPanel`        | the first stop     | the board or the menu's trigger — see below                                     |
+| `InspectorColorPicker` | the picker         | the text being typed, else the board                                            |
+| `InspectorFontPicker`  | the search field   | the text being typed, else the board                                            |
 
 The export, templates, share, mermaid and path overlays are opened from the main menu by
 `pick`, which runs the action and _then_ closes the menu (`:91-95`), so the menu is on its

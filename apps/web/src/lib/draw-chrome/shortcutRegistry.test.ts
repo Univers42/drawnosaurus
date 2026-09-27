@@ -533,7 +533,7 @@ describe("the command palette prints this registry's own text", () => {
     // Everything selected and every panel row shown, so every element command is printed.
     selection: {
       can: new Proxy({} as ShapeActions, { get: () => true }),
-      element: { locked: false, multi: true, grouped: false },
+      element: { locked: false, multi: true, grouped: false, vectorizeId: null },
       switchable: true,
     },
     run: () => {},
@@ -542,6 +542,7 @@ describe("the command palette prints this registry's own text", () => {
     openShapeSwitch: () => {},
     copyStyles: () => {},
     stepFontSize: () => {},
+    vectorize: () => {},
   };
   const commands = buildCommands(host);
 
