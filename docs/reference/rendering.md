@@ -69,6 +69,43 @@ and between passes. Chrome that does not set what it needs inherits whatever the
 element wanted: selection frames were once drawn in the dash of the last shape painted,
 which reads as no frame at all.
 
+## Arrowheads: the modern six, the legacy four
+
+**VERIFIED.** `Arrowhead` carries **eleven** modern values — the eight ordinary heads plus the
+**six** cardinality marks of ER diagrams' crow's-foot notation — and the oracle's legacy four
+(`dot`, `crowfoot_one`, `crowfoot_many`, `crowfoot_one_or_many`, `types.ts@1118751f:350-355`)
+are **not** a second set of values. They are read-only compatibility:
+
+- the engine's enum has no legacy variant; the four are `#[serde(alias)]`s on their modern
+  names (`engine/crates/draw-engine/src/scene/element.rs:77,84,86,88`);
+- nothing on the writing side can produce one, so `ARROWHEADS` in three places
+  (`scene/element.rs:112`, `engine/src/types.ts:66`, `packages/contract/src/element.ts:48`)
+  lists the modern values only, and the four appear solely in
+  `LEGACY_ARROWHEADS` / `WIRE_ARROWHEADS` (`element.ts:72,83`) — what the wire _accepts_;
+- the oracle does exactly this, in `normalizeArrowhead` (`arrowheads.ts@1118751f:3-21`) called
+  from `restore.ts@1118751f:616-617,657-661`.
+
+So a board saved holding `crowfoot_one` **loads as `cardinality_one`** — the modern mark, drawn
+with the modern geometry — and the next save spells it the modern way. Pinned through
+`load_scene`/`export_json` in
+`engine/crates/draw-engine/tests/ci_cardinality_props.rs`.
+
+A mark is **not** half-circle symmetric between the two ends of a line, and the property suite
+deliberately does not claim it is: `getArrowheadPoints` measures its "just behind the tip" point
+from `B(0.3)` _into_ the curve it reads (`bounds.ts@1118751f:790-812`), so both ends of a
+two-point line measure from the same origin, and the two tips sit at angles opposite only on a
+straight body. What is asserted instead is that the mark is **anchored on and oriented by its own
+end** — the base on the line's own axis, and the whole drawing equivariant under translating or
+turning the line. See `docs/reference/export.md` for the SVG side and
+`e2e/arrowheads.spec.ts` for the canvas.
+
+**KNOWN GAP:** an arrowhead value the engine does not know at all — one from a _newer_
+Excalidraw — fails the whole document. `elements_from_json` (`export/json.rs:32-34`) deserializes
+the entire `elements` array in one `serde_json::from_value`, so a single unknown variant returns
+`None` and `load_scene` keeps the previous scene; the oracle loads the board and draws the head
+as a plain arrow (`shape.ts@1118751f:567-576`, the `default:` arm). A data-compatibility bug, not
+a format one; it needs its own task, because the load path is shared by every element.
+
 ## Open
 
 **UNKNOWN** — what `scrolls` costs relative to `redraws` in practice. The strip path is
