@@ -1996,28 +1996,51 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_geometry.rs`],
   },
-  // The `why` this replaces said `rotate_element` takes only the pointer position and that a
-  // rotation is never quantised. 5.2 established that the two halves are in *different places* and
-  // that the brief placing the divergence in the rotation path was wrong:
+  // 6.2. The two divergences this rule used to name are both closed, and the interesting one was
+  // not the one the `why` said. The 15 degree constant is `math::SHIFT_LOCKING_ANGLE` (`math.rs:35`),
+  // used by one quantiser, and the drag keeps its length by intersecting the locked ray with the
+  // perpendicular through the cursor (`sizeHelpers.ts:236-250`) rather than by rotating the delta.
   //
-  // - `SHIFT_LOCKING_ANGLE = Math.PI / 12` — **15°** (`constants.ts@1118751f:31`), used by
-  //   `sizeHelpers.ts:196-197`. Ours steps by `PI/4` (`interaction/linear_drag.rs:17`) and has
-  //   **four** call sites, all line gestures: `pointer_move.rs:399`, `multi_linear.rs:279`,
-  //   `linear_drag.rs:32`, `elbow.rs:87`. `selection/transform.rs` calls none of them.
-  // - and there is a second divergence beside it: the oracle keeps the length by intersecting
-  //   the locked ray with the perpendicular through the cursor (`sizeHelpers.ts:236-250`) and
-  //   zeroes one component for horizontal and vertical (`:229-234`); we rotate the delta. They
-  //   agree only when already locked.
+  // What the `why` did not know is that the CONSTANT was never the bug. The oracle's rotation
+  // rounding is `angle += step/2; angle -= angle % step` (`resizeElements.ts@1118751f:230-231`), and
+  // `%` truncating toward zero only behaves like a floor BECAUSE the raw angle is built
+  // `5*PI/2 + atan2(..)` and is therefore never negative (`:227`). Ours was built a whole turn
+  // smaller, so it is negative, and the truncation opened a cell TWICE AS WIDE around zero: a locked
+  // turn snapped the entire lower-left quadrant to 0 instead of 345/330/315.
+  // `math::shift_locked_angle` normalises with `rem_euclid(TAU)` first and then rounds, so the input
+  // range stops mattering -- better than adopting the oracle's `5*PI/2`, which would make the
+  // quantiser correct for the one caller the oracle has rather than for every caller.
   //
-  // Both are left standing deliberately and no test depends on either. 5.2's own first angle test
-  // asserted "a multiple of 45°" and would have pinned the divergence as the reference; it was
-  // replaced with 15°, which every 45 is a multiple of, so the test survives the eventual fix and
-  // fails on an unquantised angle.
+  // The rotation path turned out to be a SEPARATE gap over the same constant: `rotate_element` and
+  // `rotate_group` took no quantisation at all, and `square` was arriving from the pointer input
+  // (`pointerInput.ts:27`) and going unread in both branches (`pointer_move.rs:282`, `:155`).
+  //
+  // The flat and square branches are NOT the projection: the oracle keeps the raw surviving component
+  // and discards the other (`:229-234`), so a 100x10 drag comes out exactly 100, not the 99.52 a
+  // projection gives. It branches on the step COUNT (`k = 0 mod 12`, `k = 6 mod 12`) rather than
+  // comparing angles, because `6*(PI/12)` is not reliably `FRAC_PI_2` in binary and the oracle's own
+  // `lockedAngle === Math.PI/2` can miss.
+  //
+  // TRAP, so a later cleanup does not unify them: `hover.rs:67`'s `FRAC_PI_4` is CORRECT and is not a
+  // duplicate of this constant. It is the cursor step -- `rotateResizeCursor` uses
+  // `Math.round(angle / (Math.PI/4))` over four cursors (`resizeTest.ts:223`). Two 45s in this
+  // codebase, two different concerns, and a "find the duplicated angle constant" pass breaks one.
+  //
+  // Still open, and NOT this rule: `selection/linear.rs:79-82` returns an empty `world_points` when
+  // `points` is None, so a line loaded from JSON without points has no endpoint handles at all. And
+  // `text/layout.rs:97` is a third inline copy of `round_half_up`, a duplication candidate rather than
+  // a duplicate of `hover.rs:67`.
   {
     section: "15. Transform engine",
     text: /^(Angle snapping|Shift angle locking)$/,
-    status: "gap",
-    why: "45° where the oracle has 15° (SHIFT_LOCKING_ANGLE = PI/12, constants.ts@1118751f:31) — in interaction/linear_drag.rs for the four line gestures, not in selection/transform.rs, which calls none of them. Beside it, the oracle keeps the length by projecting onto the locked ray (sizeHelpers.ts:236-250) where we rotate the delta. Two divergences, both owned by the owner.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_rotate_lock.rs`,
+      `${ENGINE}/ci_lock.rs`,
+      `${ENGINE}/ci_end_snap.rs`,
+      `${ENGINE}/ci_group_locks_frames.rs`,
+      "e2e/angleLock.spec.ts",
+    ],
   },
   // Rotating a multi-element selection together — the concrete case is bound arrows staying
   // attached through the turn, which needs every member to have turned, not just one shape.
