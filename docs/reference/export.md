@@ -16,14 +16,17 @@ them — a scale and whether there is a background — and is handed a **`Blob`*
 rasteriser here, and it has to be: a PNG encoder written in Rust is a new dependency, and
 §3.2's library-first rule says no. So the engine makes an offscreen canvas, paints into it,
 and hands _that_ to `canvas.toBlob`, resolving a promise with the `Blob` the browser builds
-(`wasm/export.rs:48-66`). The front then does nothing but save it or hand it on — the
-clipboard 4.3 wants is a browser API the front is allowed, so `Blob` → `ClipboardItem`
-needs no engine change at all.
+(`wasm/export.rs`). The front then does nothing but save it or hand it on — the clipboard
+4.3 wants is a browser API the front is allowed, so `Blob` → `ClipboardItem` needs no engine
+change at all.
 
-The consequence for **4.4** is worth writing down here rather than discovering halfway
-through it: a `toBlob` result cannot be modified, so the `tEXt` chunk holding the scene JSON
-cannot be added to _this_ Blob. 4.4 needs a different hand-off — `toDataURL`, whose base64
-the engine can read, parse the chunk table of, and re-emit.
+A `toBlob` result is immutable, so the `tEXt` chunk cannot be added to _that_ `Blob`. 4.4
+reads the bytes back out with `Blob.arrayBuffer`, splices the chunk in Rust, and hands the
+front a **new** `Blob` typed `image/png` — the same three steps the oracle takes
+(`blobToArrayBuffer` → `encodePngMetadata` → `new Blob([encodePng(chunks)], {type})`,
+`data/image.ts@1118751f:32-46`). `toDataURL`, which this page once suggested, is worse: it is
+synchronous, it blocks on a large canvas, and it would push a base64 round trip through the
+front for no reason.
 
 | number            | where it comes from                                     | oracle                       |
 | ----------------- | ------------------------------------------------------- | ---------------------------- |
@@ -285,13 +288,122 @@ does nothing.
   `appState` through, so it honours whatever the export dialog was last set to — which for a
   person who never opened it is the same default.
 
+## Round trip: the scene inside the file, and what we cannot read
+
+**VERIFIED.** A saved PNG carries the scene in a `tEXt` chunk and a saved SVG in its
+`<metadata>` element, and both restore on `openDrawing` → `engine.restoreFromImage`. The
+oracle is `packages/excalidraw/data/image.ts@1118751f` (71 lines) for the raster and
+`export.ts@1118751f:510-563` for the vector, and this is the whole of it:
+
+- the chunk is **spliced in immediately before `IEND`** — `chunks.splice(-1, 0,
+metadataChunk)`, commented "insert metadata before last chunk (iEND)"
+  (`image.ts@1118751f:44`);
+- the chunk is found with `chunks.find(chunk => chunk.name === "tEXt")` (`:18`) and then
+  `tEXt.decode`, so **the first one wins** and a second is invisible;
+- `decodePngMetadata` (`:49-71`) is a three-way decision: the keyword must match or it
+  throws `INVALID` (`:70`); inside the match it `JSON.parse`s and asks
+  `!("encoded" in encodedData)` (`:54`) — **no `encoded` means the payload is legacy,
+  un-encoded scene JSON**, accepted only when `type === "excalidraw"`
+  (`:57-58`, `constants.ts@1118751f:342`) — and anything that throws becomes `FAILED`
+  (`:62, 67`).
+
+### The three payload generations, and the one we cannot read
+
+| generation | payload                                                               | the oracle                                                               | ours                                                 |
+| ---------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------- |
+| 1          | scene JSON, plain                                                     | `image.ts:111`… `:54-63`, the "legacy, un-encoded scene JSON" arm        | **what we write** — base64 of the JSON, uncompressed |
+| 2          | `encode({compress: true})`: a **zlib** byte string in a JSON envelope | `image.ts:111`… `:37-41`, `data/encode.ts@1118751f:99-121`, `pako@2.0.3` | **not written, and not readable**                    |
+| —          | no payload                                                            | `INVALID` (`:70`)                                                        | `RestoreRefusal::NotOurs`                            |
+
+**Generation 2 is a named limitation, not a missing feature.** Reading it needs an
+inflater; `crates/draw-engine/Cargo.toml` has no compressor and no base64 or PNG crate, and
+BUNNY.md §3.2 does not allow adding one. The crate that would close it, measured:
+
+| crate         | version | licence                     | `.crate` | unpacked | lines of Rust | released   |
+| ------------- | ------- | --------------------------- | -------- | -------- | ------------- | ---------- |
+| `miniz_oxide` | 0.9.1   | `MIT OR Zlib OR Apache-2.0` | 70,519 B | 360 KB   | 7,299         | 2026-03-13 |
+| `flate2`      | 1.1.10  | `MIT OR Apache-2.0`         | 80,244 B | —        | —             | 2026-08-28 |
+
+`miniz_oxide` is the smaller of the two and does both directions in one crate; `flate2` is
+the familiar name and wraps it. **The wasm size delta is UNKNOWN by construction** — it
+cannot be measured without adding the crate, which is the owner's call. The way to measure
+it: add it, `make wasm`, and diff `engine/pkg/draw_engine_bg.wasm` against the current
+build. Both are past §11's seven-day `minimumReleaseAge`; the gate is approval, not age.
+
+**What parity would actually buy, stated precisely.** Not much, today: an Excalidraw PNG
+reaches us with its scene JSON _inside_ the zlib envelope we cannot open, so the
+best case is a scene that still needs 4.7's schema mapping — which is deferred as RISK — to
+become a board. **What it would cost is a scene we cannot read, silently**: an
+`osidraw` scene in a file that looked like a drawing. The refusal below is louder.
+
+### The key is `osidraw`, and not the oracle's
+
+The oracle keys its chunk with `MIME_TYPES.excalidraw` = `application/vnd.excalidraw+json`
+(`constants.ts@1118751f:310`). **Ours is `osidraw`** (`export/roundtrip.rs`,
+`SCENE_FORMAT`), and the reason is that a key is a claim about what is inside: what is
+inside is an `osidraw` scene — the word our own scene JSON already says in its `type` — and
+the oracle's own reader would reject it three lines later for exactly that reason
+(`image.ts@1118751f:57-58` asks for `type === "excalidraw"`). Borrowing the key would buy
+nothing and cost a clean "this file is not mine" for a claim we cannot keep. It is also 7
+bytes against 40, and it is not a MIME type, so nothing that sniffs types reaches for it.
+
+### Why base64, which is not the oracle's shape
+
+Two reachable constraints, neither decoration:
+
+- a `tEXt` chunk is **Latin-1 with no NUL** (`png-chunk-text@1.0.0`, `encode.js:7-13, 15-41`
+  writes `keyword ++ 0x00 ++ text`; `decode.js:25` throws on a NUL inside the text), and
+  scene text is UTF-8 — so an emoji written raw comes back as four Latin-1 characters, and a
+  text element holding a NUL makes the chunk unreadable to any conforming reader;
+- the SVG's payload lives inside an XML comment, and `--` closes a comment, and a text
+  element may well hold `--`.
+
+The base64 alphabet is ASCII with no `-` and no NUL, so one encoding satisfies both and one
+function (`scene_payload`) serves both containers. That is also the oracle's own
+`payload-version:1` shape — base64 of the scene JSON — so an uncompressed payload is a
+generation the oracle's reader already knows how to _reach_ before it rejects it at the
+`type` test.
+
+### The failure matrix, pinned
+
+| a file that is…                                                      | answered     | why                                                                                                                                                                                  |
+| -------------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| a PNG with **no** `tEXt` chunk                                       | `NotOurs`    | `getTEXtChunk` answers `null` (`image.ts:111`… `:19-22`)                                                                                                                             |
+| a `tEXt` chunk under **another key**                                 | `NotOurs`    | the keyword test at `:51` fails the same way — the oracle cannot tell these two apart either, and neither do we                                                                      |
+| a chunk with **our key** and garbage text                            | `Unreadable` | the oracle's `FAILED` (`:62, 67`)                                                                                                                                                    |
+| a payload of a **generation we do not know**                         | `Unreadable` | refused, never misread                                                                                                                                                               |
+| a payload of **our generation** with no elements                     | `Unreadable` | **the silent failure** — a restore that yields nothing looks exactly like a fresh board, and the oracle refuses to export one for the same reason (`data/index.ts@1118751f:120-122`) |
+| **not a file we can walk** (no PNG signature, no `IEND`, not an SVG) | `Malformed`  | the oracle lets `png-chunks-extract`'s throw escape uncaught (`getTEXtChunk` is awaited outside its `try`, `:50`) and a person is told a library's name                              |
+| a scene's own `version: 99`                                          | **restores** | not a gate: `OsidrawFile.version` is metadata (`export/json.rs`), which is what keeps the oracle's promise keepable — every generation ever written stays readable                   |
+
+**The scene is loaded inside the binding**, not handed back for the host to load. A result
+object the host then fed to `loadScene` would put the whole thing at risk in one line of
+the front: a host that forgot the second call would open a file and see the board it already
+had, which is the same silence as a blank board. A refusal cannot touch the scene, because
+the scene is replaced on the one path that succeeded.
+
+### What is deliberate and differs from the oracle
+
+- **The embed is always on for a file export** (`ExportOptions::embed_scene`, default
+  `true`), where the oracle's `appState.exportEmbedScene` defaults to `false` and is a
+  checkbox (`actionExport.tsx@1118751f:99-105`). A picture that carries nothing is a lossy
+  format wearing a `.png` name, and `design.md:1352` asks for a round trip. **The checkbox
+  is not built** — a host may not grow a decision, and a person who wants a bare picture
+  can save the `.png` and strip the chunk, or the owner can ask for the checkbox.
+- **A clipboard copy embeds nothing**, which is the oracle's own line rather than ours:
+  `exportEmbedScene: appState.exportEmbedScene && type === "svg"`
+  (`data/index.ts@1118751f:132`) is false for `type === "clipboard-svg"`. Pinned in
+  `ci_export_clipboard.rs`, and the `<metadata>` element and `svg-source` comment are in
+  **both** — `exportToSvg` appends them unconditionally (`export.ts@1118751f:363-370`).
+
 ## What is not here yet
 
 Phase 4's other export tasks, and what each would need:
 
-- **4.4, the round trip.** A `tEXt` chunk holding the scene JSON. Not started, and it needs
-  a different hand-off than 4.1's — see above, the `Blob` a `toBlob` returns cannot be
-  modified.
+- **4.4's two halves that are not.** The **reading** of a zlib payload (the oracle's
+  generation 2) needs a crate, and the **schema** of an Excalidraw scene is 4.7's and
+  deferred as RISK. Neither is a gap in the container; both are written down above with
+  their cause.
 - **4.5, background and theme.** A _chosen_ background colour. Today the export paints
   `view.theme.background` or nothing; there is no option anywhere that picks one, for
   either format.
@@ -322,6 +434,27 @@ Phase 4's other export tasks, and what each would need:
   that decided its own scope, a frame reported as the scene, bounds measured unrotated and a
   declined copy claiming success each fail one, and one of those two failures is what
   changed the scope assertion in this list.
+- `crates/draw-engine/tests/ci_export_roundtrip.rs` — the round trip's **decisions**: the key,
+  the generation prefix, and the six failure answers, one case each. Includes the five
+  families the brief named — no chunk, another key, corrupt text, an unknown generation, an
+  empty scene — plus every truncation of a good file at every length, and the clipboard's
+  own `exportEmbedScene` difference.
+- `crates/draw-engine/tests/ci_export_roundtrip_bytes.rs` — the **bytes**, against three
+  things that are not the code under test: `tests/common/png.rs` (a second implementation of
+  the PNG container, which walks the table, verifies every CRC and decodes the keyword split
+  itself), RFC 4648 §10's published base64 vectors, and two committed fixtures written by a
+  third implementation in another language. The strongest case in it is
+  `the_engine_writes_the_fixture_back_byte_for_byte`: the engine re-writes the fixture's own
+  picture and payload and the two files are compared byte for byte. A round trip cannot check
+  that, because a round trip only ever sees one implementation twice.
+- `crates/draw-engine/tests/ci_export_roundtrip_props.rs` — the two invariants over 240
+  seeded corpora: **no byte sequence ever restores to an empty scene**, and every scene comes
+  back field for field with every id and every text (accents, an emoji, an em dash, a `--`,
+  a NUL). Reproducible from the seed alone; no `proptest`, which is not installed.
+- `crates/draw-engine/tests/fixtures/embedded-scene.png` and `.svg` — a 1×1 picture carrying a
+  hand-written two-element scene. `file(1)` reads the PNG as "PNG image data, 1 x 1, 8-bit/
+  color RGBA", Python's `zlib` inflates its `IDAT`, and the scene inside was written by hand
+  rather than printed by `scene_to_json`.
 - `apps/web/src/lib/draw-chrome/exportParity.test.ts` — that the front holds none of it.
 - `apps/web/src/lib/draw-chrome/clipboard.test.ts` — the host's side, including every
   failure: a refused write, a browser with no clipboard, an empty board and a canvas too
