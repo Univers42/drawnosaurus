@@ -176,6 +176,80 @@ because duplicating and pasting grid-snap with no modifier test at all
 away from zero. On a 20-unit grid that is every negative half-cell: a point at x = -10
 belongs on 0.
 
+## Dragging a label along its arrow
+
+An arrow's label can be moved along the arrow, and the number that records it is a
+**fraction of the arrow's own path length**. Both halves of that sentence are load-bearing.
+
+The gesture is a plain primary press on the label and a drag, and it needs the line
+editor's own selection. The oracle's chain is `App.tsx@1118751f:8445` (hover, `GRAB`) →
+`:9406-9442` (the box handles are taken first) → `linearElementEditor.ts@1118751f:1150-1183`
+(the label is grabbed only when `!clickedPointIsHandle && !segmentMidpoint &&
+boundTextElement && isArrowElement`, the grab measured from the label's **centre**) →
+`App.tsx@1118751f:10766` (the move, past `DRAGGING_THRESHOLD / zoom`) →
+`linearElementEditor.ts@1118751f:1963-2030` (`handleBoundTextDragging`, which writes
+`labelPosition` and the label's `x`/`y` on every move).
+
+Two things follow that are easy to get wrong. A **line's** label does not move —
+`isArrowElement` is inside the guard. And the handles keep precedence: the point handles
+and the segment-midpoint knob are tested first, "so a labeled arrow can still be bent at
+its middle" (`App.tsx@1118751f:1149-1151`). At the default the label sits under the
+midpoint knob, so a press dead on its centre is a point drag — grab it from the side.
+
+The unit is a fraction and not an offset, an index into slots, or a fraction of the box:
+
+```ts
+const labelPosition = clamp(
+  (prefixSums[bestSegmentIndex] + lengthWithinSegment) / totalLength,
+  0,
+  1,
+); // :2011
+const targetLength = clamp(pathParameter, 0, 1) * totalLength; // :2050
+```
+
+A fraction and a world-unit offset are indistinguishable on a straight horizontal line and
+disagree on everything else, which is why the test that settles it is built on a right
+angle. The path is `getLinearElementPathSegments` (`utils.ts@1118751f:206-233`): the drawn
+curve for a rounded arrow, its chords for a sharp one, and — an elbow arrow being the
+exception — its unrounded logical polyline whatever `roundness` says, because its corners
+are the router's right angles. Pieces are measured by arc length, so `0.5` is half the
+ground covered, not half the parameter.
+
+`0` and `1` are legal and reachable, clamped on write (`:2011`), on read (`:2050`) and on
+load (`restore.ts@1118751f:573-575`, which drops a non-finite one to `null`). `0` is the
+path's first point and `1` its last; there is no dead zone.
+
+**A labelled arrow is not convertible, and dragging cannot change that.** 5.5's guard is
+`isEligibleLinearElement` (`ConvertElementTypePopup.tsx@1118751f:666-672`), which refuses
+an arrow with `hasBoundTextElement` — on the label's _existence_, not on where it sits.
+The two features share the label and nothing else.
+
+Two precisions, and they are not interchangeable. A label _told_ a fraction is placed
+exactly: locating it interpolates inside a straight walk, so the hand-computed fixture in
+`ci_label_position.rs` is asserted at 1e-9. A fraction that came from a **drag** carries the
+resolution of the bisection that projected the pointer, about 1e-6 of the path. Excalidraw
+is looser still — its `curvePointAtLength` stops within `totalLength * 0.0001`
+(`curve.ts@1118751f:534-541`).
+
+### Where it lives
+
+`text/layout.rs` › `linear_label_center` is the placement, extended rather than duplicated:
+the one function every bind, re-layout and text edit already goes through
+(`bound_text_position`), so a dragged label follows the arrow when the arrow is bent and
+there is no second answer to keep in step. `selection/linear.rs` › `path_cubics`,
+`path_metrics`, `path_point_at_fraction` and `path_fraction_at_point` are the path's
+arc-length model; `math.rs` › `bezier_length`, `bezier_length_to`, `arc_table` and
+`cubic_closest_parameter` are the one walk they share, factored out of the
+`bezier_point_at_fraction` that 5.1′'s midpoint handles already used. `engine/pointer.rs` ›
+`label_grab` is the press, `engine/pointer_move.rs` › `move_label` the move, and it reads
+the arrow and never writes it — no points, no extent, no bindings, no `apply_bindings`.
+`engine/hover.rs` › `hover_cursor` gives `GRAB` and `Grabbing`. The scene field is
+`DrawElement::label_position`, read clamped through `label_fraction`; the contract takes it
+as any **finite** number rather than bounding it to `[0, 1]`, because a drag really does
+produce `0.2500000018` and a schema that rejected a float overshoot would throw a whole
+board away. `ci_label_position.rs` is the behaviour, and `fixtures/label-position.json` is
+the hand-computed side of it.
+
 ## Where it lives
 
 `render/paint.rs` › `GridSettings::snap_point` is the round; `engine/mod.rs` ›
