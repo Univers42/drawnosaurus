@@ -125,22 +125,60 @@ have manufactured a divergence. The oracle's three branches, in order, are at
 `None` and an empty list are different here, which is why
 `DrawEngine::selected_points` is `Option<Vec<usize>>` and never `Some(vec![])`.
 
-**VERIFIED, and the reason this is written down** — the oracle's _marquee_ over a point
-editor, `LinearElementEditor.handleBoxSelection`
-(`linearElementEditor.ts@1118751f:248-309`), **cannot run at that SHA**. Its only call
-site is `App.tsx:11275`, guarded by `this.state.selectedLinearElement?.isEditing`
-(`:11274`); its own first guard (`:255-259`) needs `appState.selectionElement` non-null;
-and `selectionElement` is written in exactly one place, `App.tsx:10497`, which
-`maybeDragNewGenericElement` reaches from the **sibling** branch at `App.tsx:11282` — the
-regular box select, behind the same `!isEditing` test. So whenever it is offered a chance
-to run, `selectionElement` is still null and it returns at `:258`. Excalidraw at `1118751f`
-has no marquee for points; clicking a point is the whole gesture. Do not "fix" this by
-adding one.
+**VERIFIED** — holding points is **Shift+click** (one at a time, accumulating) and
+**Shift+drag** over the line you are editing (a box, several at once). The marquee is
+`LinearElementEditor.handleBoxSelection` (`linearElementEditor.ts@1118751f:248-309`) and
+**its reachability is not obvious**: a careful reading of it says the code is dead, and that
+reading is wrong. Do not repeat it. The call graph:
+
+- `handleBoxSelection` needs `isEditing` **and** `selectionElement` (`:255-259`); its only
+  call site is `App.tsx:11275`, behind
+  `:11274 if (this.state.selectedLinearElement?.isEditing)`.
+- `selectionElement` is assigned in exactly one place, `App.tsx:10497`, inside
+  `createGenericElementOnPointerDown` (`:10439`) under `if (element.type === "selection")`
+  (`:10495`) — **not** in `maybeDragNewGenericElement` (`:13330`), which only _reads_ it
+  (`:13335`). `createGenericElementOnPointerDown` has two call sites: `:8985` on
+  pointer-down with `this.state.activeTool.type`, so the selection tool makes the band on
+  every press, and `:11158` with the literal `"selection"` in the lasso branch.
+- so on a _plain_ box-drag the band and `isEditing` both exist, but
+  `handleSelectionOnPointerDown` (`:9427-9448`) and then `:9591-9607` turn `isEditing`
+  **off** on any press that misses the element, and a press that hits it starts a drag of
+  the element at `:10901-11132`, which `return`s at `:11132` before `:11268`. Neither
+  reaches `:11274` with both true.
+- the branch that _is_ skipped is `:10901-10904`, whose guard reads
+  `!isSelectingPointsInLineEditor` (`:10895-10899`):
+
+  ```ts
+  const isSelectingPointsInLineEditor =
+    this.state.selectedLinearElement?.isEditing &&
+    event.shiftKey &&
+    this.state.selectedLinearElement.elementId === pointerDownState.hit.element?.id;
+  ```
+
+  With **shift held on a press that lands on the line being edited**, the
+  drag-the-element branch is skipped, `:11136`'s `if (this.state.selectionElement)` is
+  true, `:11154` grows the band, and control reaches `:11274`. The marquee runs.
+
+So the press only has to land **on the line** — `:10898` compares the element id, not a
+handle, so a press on the stroke works as well as one on a vertex. The `:11155-11158`
+lasso round-trip is a real path to a recreated band but is not the way in: `:11140` sits
+inside `:11136`, which is only reached when the `:10901` branch was skipped, which needs
+shift. `isSelectionLikeTool` covers both `selection` and `lasso`
+(`common/src/utils.ts:272-274`), which is what lets `:11157`'s tool flip preserve the open
+editor.
+
+**VERIFIED** — `:283`'s `event.shiftKey && selectedPointsIndices?.includes(index)` is a
+**latch**: the set is rebuilt from the previous set on every move, so once a point is held
+it stays held for the rest of that drag. A shift-drag can only ever grow. A held point is
+released by a press that names no point and holds no shift (`:1204`, whose
+`clickedPointIndex > -1` guard sits _outside_ the ternary), which is how `:304-306`'s
+`null` is reachable at all.
 
 **VERIFIED** — `isPointHandle` (`:1424-1431`) is the elbow filter and it _is_ live: for an
 elbow arrow only index `0` and `points.length - 1` are handles, because the middle points
-are the router's corners. The identical predicate appears a second time in the dead
-marquee (`:290-299`).
+are the router's corners. The identical predicate appears a second time in the marquee
+(`:290-299`), where it runs on the **built** set — so a corner the shift latch had kept is
+dropped too.
 
 **IMPLEMENTATION DETAIL** — the five conditions on `handleSelectionOnPointerDown`
 (`App.tsx@1118751f:9351-9364`) gate the _transform handles_, not the per-point selection.
@@ -162,11 +200,21 @@ Deleting one point of a two-point line leaves a one-point line, drawn as a dot. 
 rule is the obvious invariant and it is the wrong one; `ci_point_delete.rs` ›
 `a_two_point_line_can_be_reduced_to_one` records what the oracle actually does.
 
-**OPEN** — the held points are **not painted differently**. The oracle fills a held point
-`rgba(134, 131, 226, 0.9)` instead of `rgba(255, 255, 255, 0.9)`
-(`interactiveScene.ts@1118751f:253-289`), and lights a polygon's last point when its first
-is held (`:1135-1144`). `wasm/paint.rs`'s `paint_linear_handles` has no test harness, so
-this was not changed blind. `DrawEngine::selected_points` is exposed for it.
+**OPEN, and the marquee makes it worse** — the held points are **not painted
+differently**. The oracle fills a held point `rgba(134, 131, 226, 0.9)` instead of
+`rgba(255, 255, 255, 0.9)` (`interactiveScene.ts@1118751f:253-289`), and lights a polygon's
+last point when its first is held (`:1135-1144`). `wasm/paint.rs`'s `paint_linear_handles`
+has no test harness, so this was not changed blind. `DrawEngine::selected_points` is
+exposed for it.
+
+Worse, and it is worth saying plainly rather than leaving to be discovered: with only
+Shift+click there was **one** held point, so a wrong highlight hid a wrong action. The
+marquee holds **several at once**, and the latch means a drag that sweeps the whole line
+leaves every point highlighted with an empty band. So the feedback gap is now the difference
+between "I pressed delete and a dot went" and "I swept a box and I cannot see what it
+caught" — the most confusing version of this bug, and the one a user will hit first. This
+is the next thing to build, and it needs a paint harness or a host-side chrome module, not
+another blind edit to `paint.rs`.
 
 ## Open
 
