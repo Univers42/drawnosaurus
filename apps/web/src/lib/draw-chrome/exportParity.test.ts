@@ -20,12 +20,20 @@ import { describe, expect, it } from "vitest";
  * for the numbers and then goes looking for them in `apps/web/src`, `.svelte` included,
  * because the only file that should mention an export at all is a Svelte component.
  *
- * Three parts, and they are not equally strong, so:
+ * Four parts, and they are not equally strong, so:
  *
- * - **the path-anchored check is the load-bearing one.** Every line in the app that calls
- *   `exportPng` must be a forward: no arithmetic, no canvas, no device pixel ratio. That
- *   cannot false-positive, because a line naming the export and multiplying something is
- *   wrong whatever it was going to multiply.
+ * - **the path-anchored check is the load-bearing one.** Every call to `exportPng` must be a
+ *   forward: no arithmetic, no canvas, no device pixel ratio. That cannot false-positive,
+ *   because a line naming the export and multiplying something is wrong whatever it was
+ *   going to multiply.
+ * - **it reads a window, not a line**, and it has to: a mutation that hoisted the copy one
+ *   line up — `const chosen = scale * 2;` then `exportPng({ scale: chosen })` — passed a
+ *   single-statement scan with all nine tests green. So each call is checked together with
+ *   the statement before it, and a copy three lines up is still missed; that limit is the
+ *   tree-wide check's job and is written down there.
+ * - **it scans the engine's own TS host too**, because the host is TypeScript and the
+ *   arithmetic is just as much a second truth there. A private `deviceRatio()` method next
+ *   to `exportPng` was green before this: the host was checked at one line of one file.
  * - **the tree-wide checks are narrow**, and each says what it does and does not catch. A
  *   pattern that only recognises one spelling of the arithmetic is a guard that misses the
  *   next spelling; pretending otherwise is worse than the gap, so the gaps are written down
@@ -46,11 +54,17 @@ const PNG_RS = new URL("engine/crates/draw-engine/src/export/png.rs", REPO_ROOT)
 /** The host's wrapper, which must call WASM rather than compute. */
 const ENGINE_TS = new URL("engine/src/engine.ts", REPO_ROOT);
 
+/** The host's own source. Scanned like the app, because it is TypeScript too. */
+const ENGINE_SRC = new URL("engine/src/", REPO_ROOT);
+
 /** The dialog with the two controls this task is about. */
 const EXPORT_MODAL = new URL("apps/web/src/lib/draw-chrome/DrawExportModal.svelte", REPO_ROOT);
 
 /** The app — where a copy of the sizing would be written to get it wrong. */
 const WEB_SRC = new URL("apps/web/src/", REPO_ROOT);
+
+/** Both trees, so one loop checks the app and the host and neither can be forgotten. */
+const SHIPPED = [WEB_SRC, ENGINE_SRC];
 
 /**
  * The engine's own values, pinned. A move is a deliberate edit here, not a surprise: the
@@ -63,8 +77,8 @@ const PINNED: ReadonlyArray<{ what: string; pattern: RegExp; line: number }> = [
     pattern: /^pub const DEFAULT_EXPORT_PADDING: f64 = /,
     line: 18,
   },
-  { what: "pixel_width", pattern: /\(self\.width \* self\.scale\)\.trunc\(\) as u32/, line: 73 },
-  { what: "pixel_height", pattern: /\(self\.height \* self\.scale\)\.trunc\(\) as u32/, line: 78 },
+  { what: "pixel_width", pattern: /\(self\.width \* self\.scale\)\.trunc\(\) as u32/, line: 129 },
+  { what: "pixel_height", pattern: /\(self\.height \* self\.scale\)\.trunc\(\) as u32/, line: 134 },
 ];
 
 /**
@@ -82,6 +96,26 @@ const ON_A_FORWARD: ReadonlyArray<{ what: string; pattern: RegExp }> = [
   { what: "its own canvas", pattern: /createElement|getContext|toBlob|toDataURL/ },
   { what: "the device pixel ratio", pattern: /devicePixelRatio/ },
   { what: "a padding of its own", pattern: /padding/i },
+];
+
+/**
+ * What a file that hands the export to WASM may not contain anywhere.
+ *
+ * This is the rule that catches a copy hidden in a **method**, which a statement window
+ * cannot: a mutation that moved the sizing into a private `deviceRatio()` beside the call
+ * left the calling line clean, and read `globalThis.devicePixelRatio` and a `*` three lines
+ * down. No window reaches that. Banning the two ingredients a copy needs — the device pixel
+ * ratio, and a canvas of the file's own — at file granularity does.
+ *
+ * It holds today for every file that exports: `engine/src/host/bindCanvas.ts` does read
+ * `devicePixelRatio`, and it does not call the export, so the on-screen canvas keeps its
+ * own. What it does **not** catch is a copy written without either ingredient — a `scale * 2`
+ * against a stored constant is still a second truth, and nothing here sees it. That is the
+ * honest limit of a source scan, and `TREE_WIDE` below is where the rest of it is written.
+ */
+const IN_A_FILE_THAT_EXPORTS: ReadonlyArray<{ what: string; pattern: RegExp }> = [
+  { what: "the device pixel ratio", pattern: /devicePixelRatio/ },
+  { what: "a canvas of its own", pattern: /createElement|getContext|toBlob|toDataURL/ },
 ];
 
 /**
@@ -159,12 +193,65 @@ function codeOf(path: string, lines: string[]): string {
   return script?.[1] ?? "";
 }
 
-/** One statement, which is what a `;` ends — and never ends inside a call's arguments. */
-function statementsOf(path: string, lines: string[]): string[] {
-  return codeOf(path, lines)
+/**
+ * Every `exportPng` call, with the statement in front of it glued on.
+ *
+ * Two statements, not one, and the second is not decoration: a copy of the sizing hoisted
+ * a line up reads `const chosen = scale * 2;` on its own, which mentions neither the export
+ * nor an operator the patterns look for, and a one-statement window waves it through. The
+ * window is still a window — a copy three statements up, or in the function above, is
+ * missed, which is what the tree-wide check below is for.
+ */
+function callsOf(path: string, lines: string[], call: string): string[] {
+  const statements = codeOf(path, lines)
     .split(";")
     .map((statement) => statement.trim())
-    .filter((statement) => statement.includes("exportPng("));
+    .filter(Boolean);
+  return statements.flatMap((statement, index) =>
+    statement.includes(call) ? [statements[index - 1] ?? "", statement] : [],
+  );
+}
+
+/**
+ * Every number the front still chooses about an export, and who owns removing it.
+ *
+ * Both are the same padding — the oracle's is 10 (`constants.ts@1118751f:398`) and the SVG
+ * path uses 16, six pixels apart per side — in the two places it is written down: the
+ * dialog passes one, and the host's wrapper defaults to the other. §2 allows the front to
+ * pass a user's intent, not to invent a margin, so both are the same violation at two
+ * depths. Moving either is 4.5's: it changes the SVG export's output and its tests.
+ *
+ * So they are named here rather than fixed, and this list is the ratchet — the forward
+ * check skips exactly these and no more, and the ratchet test fails on a *third*. 4.5
+ * cannot add one on its way past the two it is there to remove.
+ */
+const KNOWN_FRONT_NUMBERS: readonly { path: string; find: RegExp; owner: string }[] = [
+  { path: "draw-chrome/DrawExportModal.svelte", find: /exportSvg\(\s*-?\d/, owner: "4.5" },
+  { path: "engine/src/engine.ts", find: /exportSvg\(\s*padding\s*=\s*-?\d/, owner: "4.5" },
+];
+
+/** The one known-debt site a statement belongs to, if it is one. */
+function knownOwner(path: string, statement: string): string | null {
+  return (
+    KNOWN_FRONT_NUMBERS.find(
+      ({ path: wanted, find }) => path.endsWith(wanted) && find.test(statement),
+    )?.owner ?? null
+  );
+}
+
+/** Every known-debt site in the tree, found rather than assumed. */
+function foundFrontNumbers(shipped: Iterable<[string, string[]]>): string[] {
+  const found: string[] = [];
+  for (const [path, lines] of shipped) {
+    for (const { find, owner } of KNOWN_FRONT_NUMBERS) {
+      if (!path.endsWith(path)) continue;
+      for (const statement of codeOf(path, lines).split(";")) {
+        const text = statement.trim();
+        if (find.test(text)) found.push(`${owner}: ${path} — ${text.replace(/\s+/g, " ")}`);
+      }
+    }
+  }
+  return found;
 }
 
 describe("the engine's export framing", () => {
@@ -190,20 +277,30 @@ describe("the engine's export framing", () => {
   });
 });
 
-describe("the host's TypeScript", () => {
-  const web = [...shippedSourceLines(WEB_SRC)];
+describe("the app and the engine's host", () => {
+  const shipped = SHIPPED.flatMap((dir) => [...shippedSourceLines(dir)]);
 
-  it("has files to check, and sees the dialog — so a `.ts`-only scan cannot pass this", () => {
-    expect(web.length).toBeGreaterThan(50);
-    const svelte = web.filter(([path]) => path.endsWith(".svelte"));
+  it("has files to check, and sees both the dialog and the host's own source", () => {
+    // The count and the `.svelte` count are here to stop a scan quietly narrowing to one
+    // tree or to `.ts` only; the two named files are here to stop it quietly narrowing to
+    // a subset of either.
+    expect(shipped.length).toBeGreaterThan(50);
+    const svelte = shipped.filter(([path]) => path.endsWith(".svelte"));
     expect(svelte.length).toBeGreaterThan(10);
-    expect(web.some(([path]) => path.endsWith("draw-chrome/DrawExportModal.svelte"))).toBe(true);
+    expect(shipped.some(([path]) => path.endsWith("draw-chrome/DrawExportModal.svelte"))).toBe(
+      true,
+    );
+    expect(shipped.some(([path]) => path.endsWith("engine.ts"))).toBe(true);
   });
 
   it("calls the export without touching a number on the way", () => {
     const found: string[] = [];
-    for (const [path, lines] of web) {
-      for (const statement of statementsOf(path, lines)) {
+    for (const [path, lines] of shipped) {
+      for (const statement of callsOf(path, lines, "exportPng(")) {
+        // The two known-debt sites are the SVG path's padding, which the statement before
+        // an `exportSvg` call carries; the ratchet test below counts them, so skipping
+        // them here cannot hide a third.
+        if (knownOwner(path, statement)) continue;
         for (const { what, pattern } of ON_A_FORWARD) {
           if (pattern.test(statement)) {
             found.push(`${path} — ${what} in \`${statement.replace(/\s+/g, " ")}\``);
@@ -217,9 +314,25 @@ describe("the host's TypeScript", () => {
     ).toEqual([]);
   });
 
-  it("carries none of the export's arithmetic anywhere in the app", () => {
+  it("gives no file that exports a canvas or a device ratio of its own", () => {
     const found: string[] = [];
-    for (const [path, lines] of web) {
+    for (const [path, lines] of shipped) {
+      if (!codeOf(path, lines).includes("exportPng(")) continue;
+      lines.forEach((line, index) => {
+        for (const { what, pattern } of IN_A_FILE_THAT_EXPORTS) {
+          if (pattern.test(line)) found.push(`${path}:${index + 1} — ${what}`);
+        }
+      });
+    }
+    expect(
+      found,
+      "a file that hands the export to WASM does not decide what the export is (BUNNY.md §2)",
+    ).toEqual([]);
+  });
+
+  it("carries none of the export's arithmetic anywhere in either tree", () => {
+    const found: string[] = [];
+    for (const [path, lines] of shipped) {
       lines.forEach((line, index) => {
         for (const { what, pattern } of TREE_WIDE) {
           if (pattern.test(line)) found.push(`${path}:${index + 1} — ${what}`);
@@ -231,6 +344,19 @@ describe("the host's TypeScript", () => {
       "the export's framing and size are the engine's (ExportFrame, png.rs). " +
         TREE_WIDE.map((r) => `does not catch: ${r.misses}`).join("; "),
     ).toEqual([]);
+  });
+
+  it("finds exactly the front-chosen numbers it already knows about", () => {
+    // A ratchet, not a gap: both of the numbers the front still owns are named above with
+    // the task that owns removing them, so a third — or one of these somewhere else — is a
+    // failure here rather than a note nobody reads.
+    const found = foundFrontNumbers(shipped);
+    expect(
+      found.length,
+      `every number the front still chooses about an export, and who owns it: ${
+        found.length ? found.join("; ") : "none — a known one has moved or gone"
+      }`,
+    ).toBe(KNOWN_FRONT_NUMBERS.length);
   });
 });
 
@@ -257,12 +383,18 @@ describe("the dialog the two controls belong to", () => {
 
 describe("the wrapper the front calls", () => {
   const wrapper = withoutComments(sourceOf(ENGINE_TS));
-  const call = wrapper.split("\n").find((line) => line.includes("this.inner.exportPng("));
+  const lines = wrapper.split("\n");
+  /** Every call, not the first: one that forwards cleanly says nothing about a second. */
+  const calls = lines.filter((line) => line.includes("this.inner.exportPng("));
 
   it("forwards to WASM without computing anything on the way", () => {
-    expect(call, "engine/src/engine.ts should call the exportPng binding").toBeDefined();
+    expect(calls.length, "engine/src/engine.ts should call the exportPng binding").toBeGreaterThan(
+      0,
+    );
     for (const { what, pattern } of ON_A_FORWARD) {
-      expect(call, `the wrapper does ${what} itself`).not.toMatch(pattern);
+      for (const call of calls) {
+        expect(call, `the wrapper does ${what} itself`).not.toMatch(pattern);
+      }
     }
   });
 
@@ -270,7 +402,7 @@ describe("the wrapper the front calls", () => {
     // `exportBackground` true and an `exportScale` of the device pixel ratio when that is
     // one of the three, 1 otherwise (`appState.ts@1118751f:20-22, 70`). A `?? 2` here would
     // be a second answer to a question the engine already answers.
-    expect(call).toMatch(/options\.scale/);
-    expect(call).toMatch(/options\.transparent/);
+    expect(calls.join("\n")).toMatch(/options\.scale/);
+    expect(calls.join("\n")).toMatch(/options\.transparent/);
   });
 });

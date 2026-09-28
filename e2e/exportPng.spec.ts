@@ -123,14 +123,47 @@ function pngSize(bytes: Buffer): { width: number; height: number } {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-/** The channels of one pixel, for a top-down, 8-bit-per-channel PNG. */
-function decodeTopLeftPixel(bytes: Buffer): { r: number; g: number; b: number; a: number } {
+/** One pixel of a decoded PNG, top-down and 8 bits per channel. */
+interface Pixel {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
+/** Undo one PNG row filter. All five are needed: an encoder picks per row, and Chrome
+ *  picks 2 (Up) on the first scanline of these files. */
+function unfilter(
+  kind: number,
+  value: number,
+  left: number,
+  above: number,
+  corner: number,
+): number {
+  if (kind === 0) return value;
+  if (kind === 1) return value + left;
+  if (kind === 2) return value + above;
+  if (kind === 3) return value + ((left + above) >> 1);
+  const p = left + above - corner;
+  const dl = Math.abs(p - left);
+  const da = Math.abs(p - above);
+  const dc = Math.abs(p - corner);
+  return value + (dl <= da && dl <= dc ? left : da <= dc ? above : corner);
+}
+
+/**
+ * A decoded PNG: every pixel, filters undone.
+ *
+ * The corner alone would not need this — every filter predicts the first pixel of the
+ * first row from pixels that are off the image and count as zero, so all five reconstruct
+ * to the stored byte — but a pixel in the *middle* of the picture does need them, and
+ * "the drawing fills the file" is the thing worth measuring.
+ */
+function raster(bytes: Buffer): { width: number; height: number; stride: number; pixels: Buffer } {
   // IHDR: width(4) height(4) bitDepth(1) colourType(1) compression(1) filter(1) interlace(1).
-  const bitDepth = bytes[24];
-  const colourType = bytes[25];
-  expect(bitDepth, "expected 8 bits per channel").toBe(8);
-  expect([2, 6], "expected truecolour, with or without an alpha channel").toContain(colourType);
-  const channels = colourType === 6 ? 4 : 3;
+  expect(bytes[24], "expected 8 bits per channel").toBe(8);
+  expect([2, 6], "expected truecolour, with or without an alpha channel").toContain(bytes[25]);
+  const channels = bytes[25] === 6 ? 4 : 3;
   expect(bytes[28], "expected a single non-interlaced image").toBe(0);
 
   // The pixels, in order: every IDAT chunk's payload, inflated.
@@ -146,20 +179,48 @@ function decodeTopLeftPixel(bytes: Buffer): { r: number; g: number; b: number; a
   expect(idat.length, "the PNG carries no image data").toBeGreaterThan(0);
   const raw = inflateSync(Buffer.concat(idat));
 
-  // A filter byte, then the first scanline's pixels. **The filter byte is read and not
-  // needed**: all five PNG filters predict the first pixel of the first row from pixels
-  // that do not exist — the one to the left, the one above, and the one above-left are all
-  // off the image and count as zero — so every one of them reconstructs to the stored byte.
-  // That is why the corner is readable without implementing the other four filters, and it
-  // is why this must not assert the filter is 0: an encoder may pick any of the five, and
-  // Chrome picks 2 (Up) here.
-  const first = 1;
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  const stride = width * channels;
+  const pixels = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y++) {
+    const kind = raw[y * (stride + 1)]!;
+    for (let i = 0; i < stride; i++) {
+      const at2 = y * stride + i;
+      pixels[at2] =
+        unfilter(
+          kind,
+          raw[y * (stride + 1) + 1 + i]!,
+          i >= channels ? pixels[at2 - channels]! : 0,
+          y > 0 ? pixels[at2 - stride]! : 0,
+          i >= channels && y > 0 ? pixels[at2 - stride - channels]! : 0,
+        ) & 0xff;
+    }
+  }
+  return { width, height, stride, pixels };
+}
+
+/** One pixel of a decoded PNG. */
+function pixelAt(image: ReturnType<typeof raster>, x: number, y: number): Pixel {
+  const channels = image.stride / image.width;
+  const at = y * image.stride + x * channels;
   return {
-    r: raw[first]!,
-    g: raw[first + 1]!,
-    b: raw[first + 2]!,
-    a: channels === 4 ? raw[first + 3]! : 255,
+    r: image.pixels[at]!,
+    g: image.pixels[at + 1]!,
+    b: image.pixels[at + 2]!,
+    a: channels === 4 ? image.pixels[at + 3]! : 255,
   };
+}
+
+/** The top-left pixel: the padding, which is the paper or nothing and never ink. */
+function decodeTopLeftPixel(bytes: Buffer): Pixel {
+  return pixelAt(raster(bytes), 0, 0);
+}
+
+/** The middle of the picture, which for this scene is the rectangle's solid fill. */
+function middlePixel(bytes: Buffer): Pixel {
+  const image = raster(bytes);
+  return pixelAt(image, Math.floor(image.width / 2), Math.floor(image.height / 2));
 }
 
 test.describe("the whole-scene PNG export", () => {
@@ -176,7 +237,8 @@ test.describe("the whole-scene PNG export", () => {
     // The dialog opens on 2x, so this case picks its own chip rather than reading whatever
     // the default is — and clicking the chip is the behaviour under test.
     await exportDialog(board).getByRole("button", { name: "1x", exact: true }).click();
-    const atOne = pngSize(await exportPngFromDialog(board));
+    const oneBytes = await exportPngFromDialog(board);
+    const atOne = pngSize(oneBytes);
     expect(atOne, "at 1x the export is the scene's bounds plus the padding on every side").toEqual({
       width: SCENE_WIDTH + PADDING * 2,
       height: SCENE_HEIGHT + PADDING * 2,
@@ -186,12 +248,31 @@ test.describe("the whole-scene PNG export", () => {
     // The defect, as a person meets it: the chip is clicked and the file changes.
     await openExportDialog(board);
     await exportDialog(board).getByRole("button", { name: "3x", exact: true }).click();
-    const atThree = pngSize(await exportPngFromDialog(board));
+    const threeBytes = await exportPngFromDialog(board);
+    const atThree = pngSize(threeBytes);
     expect(atThree, "at 3x the same scene is three times the size each way").toEqual({
       width: (SCENE_WIDTH + PADDING * 2) * 3,
       height: (SCENE_HEIGHT + PADDING * 2) * 3,
     });
     expect(atThree.width).toBeGreaterThan(atOne.width);
+
+    // The size is the half that is easy, and it is the half the IHDR already said. The
+    // other half is the drawing *inside* the file: a 3x export whose transform forgot the
+    // scale is a 660x360 canvas with a 220x120 picture in its top-left corner, so its
+    // middle is bare canvas rather than the rectangle's fill. Nothing else in this file
+    // can see that, and neither can any Rust test — the scale reaches the canvas as a
+    // context transform (`helpers.ts@1118751f:92-93`), which only exists in a browser.
+    expect(
+      middlePixel(oneBytes).a,
+      "the 1x picture's middle is the rectangle's fill, not bare canvas",
+    ).toBe(255);
+    expect(
+      middlePixel(threeBytes).a,
+      "the 3x file's middle is the drawing, drawn at 3x — not bare canvas",
+    ).toBe(255);
+    expect(middlePixel(threeBytes), "and it is the same drawing, at another scale").toEqual(
+      middlePixel(oneBytes),
+    );
   });
 
   test("leaves out the background when the toggle is on", async ({ page }) => {
