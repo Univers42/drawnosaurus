@@ -851,9 +851,31 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "💾 Files",
-    text: /PNG|read-only link/,
+    text: /^Export PNG$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_png.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
+  },
+  {
+    section: "💾 Files",
+    text: /read-only link/,
     status: "gap",
-    why: "PNG export is the visible canvas as it stands (engine.ts exportPng, canvas.toBlob()), not the whole scene, and nothing copies it to the clipboard. No read-only share link. SVG and JSON are done.",
+    why: "No read-only share link. The Share dialog (share.ts) makes a room, not a published board.",
+  },
+  // Still a gap, and still this task's own subject: the PNG export produces a Blob the host
+  // could hand to a clipboard write and nothing does. It needs its own rule because the
+  // `^Export PNG$` rule above no longer matches it, and without one it would fall through
+  // to the section's covered catch-all below — which names the JSON pipeline as its tests
+  // and has nothing to do with the clipboard. (It was already a gap before this change, via
+  // the old `/PNG|read-only link/` rule; nothing moved down here.)
+  {
+    section: "💾 Files",
+    text: /Copy PNG to clipboard/,
+    status: "gap",
+    why: "Copy as PNG to the clipboard (4.3). engine.exportPng resolves a Blob and no menu entry or chord ever writes one to the clipboard — `clipboard.ts` handles text and the internal scene JSON, not images.",
   },
   // The binding is real; the chord is now pressed, and only the load behind it is
   // unexercised — Save/export and Import are covered through their underlying JSON
@@ -875,11 +897,20 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_export.rs`, `${ENGINE}/ci_persistence.rs`],
   },
+  // "Export entire canvas" and "Export PNG" are the same sentence after this change: the
+  // PNG export is framed by the scene's own bounds, not by the viewport, which is what
+  // shortkey.md:444 and :446 were each asking for.
   {
     section: "🔍 Export tricks",
-    text: /PNG/,
+    text: /^(Export entire canvas|Export PNG)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
+  },
+  {
+    section: "🔍 Export tricks",
+    text: /Copy selection as PNG/,
     status: "gap",
-    why: "PNG export is the visible canvas as it stands (engine.ts exportPng, canvas.toBlob()): not the whole scene or the selection, and never on the clipboard.",
+    why: "Copy-as-image (4.3): nothing writes a PNG to the clipboard. The PNG export produces a Blob the host can hand to a download or a clipboard write — the engine never touches the clipboard itself — but no menu entry asks for it.",
   },
   {
     section: "🔍 Export tricks",
@@ -899,11 +930,13 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "SVG export exists (ci_export.rs) but nothing wires it to the clipboard — same missing plumbing as the Clipboard tricks section's 'copy as image' gap.",
   },
+  // Half of this line is now true and half is not, so it stays a gap and says which is
+  // which rather than claiming the whole sentence.
   {
     section: "🔍 Export tricks",
     text: /^Include\/exclude background depending on export settings$/,
     status: "gap",
-    why: "scene_to_svg always renders a background rect; no option anywhere omits it.",
+    why: "Half. The PNG export honours it: the dialog's transparent toggle reaches engine.exportPng, which passes `background: false` to the painter and leaves the canvas as transparent as a fresh one already is (e2e/exportPng.spec.ts reads the exported file's corner alpha). scene_to_svg still always renders its background rect with no option to omit it, and still takes its padding from the front — `DrawExportModal.svelte` calls `exportSvg(16)` and `engine/src/engine.ts:918` defaults to 16, where the oracle's is 10 (`constants.ts:398`), so the two formats' margins are 6px apart per side. Both are 4.5's; both are named as known debt in exportParity.test.ts so a third would fail.",
   },
   { section: "🔍 Export tricks", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
   {
@@ -2334,21 +2367,31 @@ export const RULES: readonly Rule[] = [
       `${WEB}/autosave/sceneDiff.merges.test.ts`,
     ],
   },
-  // Both are Canvas→PNG-only options, and Canvas→PNG is canvas.toBlob() on the on-screen
-  // canvas as-is (engine.ts's exportPng) — no transparent-background toggle and no
-  // chosen-background-color option, unlike the SVG path's explicit background parameter.
-  // Slips past the PNG carve-out above since neither line contains the word "PNG".
+  // Transparent background and Scale are the two dialog controls the PNG export now answers
+  // (design.md:1331,1335). Background color is a different line and stays a gap: the
+  // export paints the theme's own background, and nothing anywhere chooses one — that is
+  // 4.5, and the SVG path's background rect is fixed for the same reason.
   {
     section: "32. Export",
-    text: /^(Transparent background|Background color)$/,
+    text: /^(Transparent background|Scale)$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_png.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
+  },
+  {
+    section: "32. Export",
+    text: /^Background color$/,
     status: "gap",
-    why: "The export dialog shows a transparent-background toggle and a scale picker (DrawExportModal.svelte), but neither reaches engine.exportPng(), which is canvas.toBlob() of the visible canvas. There is no background-colour option.",
+    why: "No background-colour option anywhere. The PNG export paints the theme's own background when it is asked for one (export::png frames the picture; the painter fills view.theme.background), and scene_to_svg always draws its <rect> with the same theme colour. Only *whether* there is a background is a choice — 4.5.",
   },
   {
     section: "32. Export",
     text: /^Selection export$/,
     status: "gap",
-    why: "The export dialog and both engine.exportSvg/exportPng always export the whole scene; nothing threads the current selection through to either path.",
+    why: "The export dialog and all three engine.exportSvg/exportPng/exportPng paths still export the whole scene; nothing threads the current selection through to any of them. That is 4.2, and the PNG framing is built so it can be pointed at a selection rather than the scene.",
   },
   // scene_to_svg's <image> arm is exercised directly: a real embedded data URL, a flipped
   // image, and the no-picture-yet fallback.
@@ -2370,13 +2413,31 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "The exported .osidraw JSON (OsidrawFile in export/json.rs) carries only type, version and elements — no files map and no appState, so neither round-trips.",
   },
+  // Canvas → PNG (design.md:1329) is whole-scene and at a chosen scale, so the PNG and
+  // Scale lines close here. What is left in this block is everything about *which* elements
+  // and *where* the bytes end up: a frame, a font, the clipboard.
   {
     section: "32. Export",
-    text: /PNG|Clipboard image|Selection → image|Whole canvas → image|Scale|[Ff]rame export|Frame export|Fonts/,
-    status: "gap",
-    why: "PNG export (engine.ts exportPng) is the visible canvas as it stands, canvas.toBlob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the Export tricks rule.",
+    text: /^Canvas → PNG$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
   },
-  { section: "32. Export", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
+  {
+    section: "32. Export",
+    text: /Clipboard image|Selection → image|Whole canvas → image|[Ff]rame export|Fonts/,
+    status: "gap",
+    why: "The PNG export is the whole scene at a scale and nothing more: no per-frame export (4.2), no clipboard path for either format (4.3), and scene_to_svg names the font families without embedding an @font-face (4.6, export/svg.rs).",
+  },
+  {
+    section: "32. Export",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export.rs`,
+      `${ENGINE}/ci_export_png.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
+  },
   {
     section: "33. Libraries",
     status: "gap",
