@@ -828,12 +828,17 @@ export const RULES: readonly Rule[] = [
     section: "📚 Library",
     status: "gap",
     why: "No library. Needs item storage, preview rendering, id regeneration on insert and group preservation.",
+  // Was /PNG|SVG|Google Docs|single element/, and it matched ELEVEN lines across two
+  // features and three tasks: Google's rich paste and paste-as-single-element (4.8, still
+  // gaps), the four copy-as-image lines (4.3, now covered below) and four export lines the
+  // 32. Export rules already own. A gap pattern broad enough to catch its neighbours' lines
+  // is a claim about work nobody did, and it sat ABOVE those rules, so it shadowed them.
+  // Narrowed to what it is actually about.
   },
   {
     section: "📋 Clipboard tricks",
-    text: /PNG|SVG|Google Docs|single element/,
-    status: "gap",
-    why: "Copy-as-image and rich external paste. SVG export exists (ci_export.rs) but is not wired to the clipboard.",
+    text: /Google Docs|single element/,
+    why: "Rich external paste: pasting from Google Docs, and paste-as-single-element (design.md:1279, shortkey.md:421,423). Ctrl+V of a paragraph becomes text elements, one per line, which is the oracle behaviour - see the ^Paste text directly$ rule. 4.8."
   },
   // e2e/clipboard.spec.ts dispatches real Ctrl+C and Ctrl+X and checks both against the
   // actual OS clipboard (Ctrl+X deletes but a following Ctrl+V proves the cut landed there).
@@ -890,10 +895,28 @@ export const RULES: readonly Rule[] = [
   // and has nothing to do with the clipboard. (It was already a gap before this change, via
   // the old `/PNG|read-only link/` rule; nothing moved down here.)
   {
+  // 4.3. A copy is the export, unchanged: actionCopyAsPng
+  // (`actionClipboard.tsx@1118751f:192`) and actionCopyAsSvg (`:124`) both call
+  // `prepareElementsForExport(elements, appState, true)` -- the literal `true` in both,
+  // at `:139` and `:212`. So an empty selection copies the whole scene and a lone
+  // selected frame copies that frame's contents, and neither is decided a second time.
+  // The `why` this replaces named 4.3 and was false the moment this merged.
+  // shortkey.md:424/425 -- the same feature in the checklist's own words rather than the
+  // rules' "Copy ... to clipboard". One claim, closed together, because one spec covers it.
+  {
+    section: "📋 Clipboard tricks",
+    text: /^Copy selected content as (PNG|SVG)$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_clipboard.rs`,
+      `${ENGINE}/ci_export_clipboard_props.rs`,
+      "e2e/copyAsImage.spec.ts",
+    ],
+  },
     section: "💾 Files",
     text: /Copy PNG to clipboard/,
-    status: "gap",
-    why: "Copy as PNG to the clipboard (4.3). engine.exportPng resolves a Blob and no menu entry or chord ever writes one to the clipboard — `clipboard.ts` handles text and the internal scene JSON, not images.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_clipboard.rs`, `${ENGINE}/ci_export_clipboard_props.rs`, "e2e/copyAsImage.spec.ts"],
   },
   // The binding is real; the chord is now pressed, and only the load behind it is
   // unexercised — Save/export and Import are covered through their underlying JSON
@@ -926,9 +949,9 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🔍 Export tricks",
-    text: /Copy selection as PNG/,
-    status: "gap",
-    why: "Copy-as-image (4.3): nothing writes a PNG to the clipboard. The PNG export produces a Blob the host can hand to a download or a clipboard write — the engine never touches the clipboard itself — but no menu entry asks for it.",
+    text: /^Copy selection as PNG$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_clipboard.rs`, `${ENGINE}/ci_export_clipboard_props.rs`, "e2e/copyAsImage.spec.ts"],
   },
   {
     // Was `/frames/` with the why "No per-frame export mode" -- which is still *true*, and is
@@ -958,10 +981,13 @@ export const RULES: readonly Rule[] = [
     tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
   },
   {
+  // 4.3. Already anchored, and it is the path the oracle gives no chord to at all:
+  // `actionCopyAsSvg` declares no `keyTest` (`actionClipboard.tsx:124-190` ends at
+  // `keywords`), so Alt+Shift+C copies a raster and the SVG has no shortcut.
     section: "🔍 Export tricks",
     text: /^Copy selection as SVG$/,
-    status: "gap",
-    why: "SVG export exists (ci_export.rs) but nothing wires it to the clipboard — same missing plumbing as the Clipboard tricks section's 'copy as image' gap.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_clipboard.rs`, "e2e/copyAsImage.spec.ts"],
   },
   // Half of this line is now true and half is not, so it stays a gap and says which is
   // which rather than claiming the whole sentence.
