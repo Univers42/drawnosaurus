@@ -228,6 +228,11 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_selection.rs`,
       `${ENGINE}/ci_edit.rs`,
       `${ENGINE}/ci_history.rs`,
+      // `shortkey.md:77` "Delete selected point" was claimed covered by this blanket rule with
+      // no test that exercised it -- the rule names files, and none of these deleted a point of
+      // a line. `ci_point_delete.rs` is the one that does. See the `^Remove point$` rule for
+      // what the oracle's three branches are.
+      `${ENGINE}/ci_point_delete.rs`,
       "engine/src/host/keys.test.ts",
       "e2e/shortcuts.spec.ts",
     ],
@@ -1268,8 +1273,32 @@ export const RULES: readonly Rule[] = [
   {
     section: "6. Line",
     text: /^Remove point$/,
-    status: "gap",
-    why: "Not implemented — no backspace/undo-last-point exists while placing a multi-point line (multi_linear.rs).",
+    status: "covered",
+    // The `why` this replaces was false, and false in a way that pointed at the wrong file.
+    // It read: "Not implemented -- no backspace/undo-last-point exists while placing a
+    // multi-point line (multi_linear.rs)." Every clause is wrong. The oracle has no Backspace
+    // handler on the line editor at all -- BACKSPACE appears in exactly three places in it,
+    // and `linearElementEditor.ts` contains none of them -- so there was nothing to implement
+    // *during placement* to match. And what "Remove point" actually is, in
+    // `actionDeleteSelected.tsx@1118751f:228-273`, is Backspace on the *selected* points of a
+    // line already placed. The prerequisite is per-point selection, which did not exist in any
+    // layer; `design.md:276` "Move individual points" is still unbuilt and depends on it.
+    //
+    // Three branches, in this order, because the order is the spec: no selection => fall
+    // through to deleting whole elements; every point selected => delete the element;
+    // otherwise remove the selected points and re-map the selection to `[first - 1]`, or `[0]`.
+    // `deletePoints` (linearElementEditor.ts:1576-1618) then has a polygon rule -- removing the
+    // start, the end or the uncommitted point rewrites nextPoints[0] from the last -- and
+    // normalises through the point reseat `multi_linear.rs` already had, so there is one
+    // normaliser and not two.
+    //
+    // Points are held by a click, or by shift-dragging a box over the line being edited. The
+    // second is the oracle's `isSelectingPointsInLineEditor`
+    // (`App.tsx@1118751f:10895-10899`), named there and requiring `event.shiftKey`; a press
+    // that misses the line clears `isEditing` at `:9591-9607`, which is why a plain box-drag
+    // cannot reach `handleBoxSelection` at all. The box only ever grows, because `:283`'s latch
+    // reads the previous set.
+    tests: [`${ENGINE}/ci_point_delete.rs`],
   },
   {
     section: "6. Line",
