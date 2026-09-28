@@ -288,6 +288,100 @@ does nothing.
   `appState` through, so it honours whatever the export dialog was last set to — which for a
   person who never opened it is the same default.
 
+## Fonts: the SVG carries them, or it is a claim to a program that is not us
+
+**VERIFIED.** An exported SVG has an `@font-face` declaration for every family its text
+uses, and the face is the woff2 file itself, base64'd into the document. Before this the file
+named the family and hoped; a `font-family` attribute is an address written for a renderer
+that will never see the app it was exported from, and nothing in it is checked by anything.
+
+The oracle inlines them too, which is the finding that decided the shape of the task:
+`exportToSvg` awaits `Fonts.generateFontFaceDeclarations(elements)`
+(`packages/excalidraw/scene/export.ts@1118751f:439-441`), puts the result in a
+`<style class="style-fonts">` inside the `<defs>` (`:443-451`), and each declaration is
+`` `@font-face { font-family: ${family}; src: url(${content}); }` ``
+(`fonts/ExcalidrawFontFace.ts@1118751f:49`). **The plan line was right and the brief's grep
+was too narrow** — it found no `@font-face` in `scene/export.ts` because the string lives in
+`fonts/`, and Excalidraw's own committed snapshot carries 39 of them
+(`tests/scene/__snapshots__/export.test.ts.snap@1118751f:18-42`).
+
+Ours is in `engine/crates/draw-engine/src/export/font_face.rs`, and the whole decision is
+there: which families, in which order, and which file each one is. **The host is given no
+part in it and is not asked for anything** — the bytes are compiled into the crate, so
+`exportSvg` stays synchronous, takes no new argument and has no new way to fail.
+
+### What the document says, exactly
+
+```
+<defs><style class="style-fonts">
+      @font-face { font-family: Excalifont; src: url(data:font/woff2;base64,d09GMgAB…); }
+      @font-face { font-family: Excalifont; src: url(data:font/woff2;base64,d09GMgAB…); }</style></defs>
+```
+
+The newline and the six spaces are the oracle's own separator — `const delimiter =
+"\n      ";` at `export.ts@1118751f:443` — and they are **character data** that travel in
+the file. Three things in there are decisions and each one has a near-miss that renders the
+same and reads differently:
+
+- **One name, no fallback, no descriptor.** The stack's fallbacks belong on the `<text>`,
+  where `getFontFamilyString` puts them (`packages/common/src/utils.ts@1118751f:130-132`), and
+  a `font-weight` belongs nowhere: `fonts.css:45-54` declares Nunito at 500 for the app, and
+  `toCSS` writes neither weight nor style. A family with a space (`Lilita One`,
+  `Comic Shanns`) is written unquoted and unescaped, as the oracle interpolates it.
+- **The families the exported text uses, once each, in first-appearance order** — the
+  oracle's `getUniqueFamilies` is a `Set` filled while walking the elements
+  (`fonts/Fonts.ts@1118751f:421-432`). Shapes do not pull a face in, and neither does a
+  deleted element.
+- **Every id the contract accepts, named as the oracle names it.** For the eight families
+  this app can produce our stack is the oracle's **character for character**; the six
+  published-vector rows and the four that differ are in `ci_svg_fonts_props.rs`.
+
+The `<defs>` is written **whether or not it holds anything**, because `exportToSvg` appends
+the `<style>` unconditionally: a shapes-only drawing has a `<defs>` with an empty `<style>`,
+and giving it no `<defs>` at all would be a second shape of document.
+
+### Where we differ from the oracle, and what each one costs
+
+- **A whole shard, not a subset.** The oracle subsets each face to the scene's codepoints
+  through a WASM harfbuzz build (`subset/subset-main.ts`); harfbuzz is a dependency this
+  crate may not take (§3.2), so a declaration here is the entire file. Same glyphs, same
+  sizes, same rendering. **One Virgil text costs 75KB of base64 where the oracle's costs
+  about 2KB**, and the ten files are 230,452 bytes of the 2,363,483-byte WASM module — 9.8% of
+  it, for every user including those who never export. That is the price of
+  `design.md:1348` being delivered at all without a `needs <package>`, and it is the one
+  number the owner may want to overrule.
+- **Liberation Sans (9) declares nothing.** The file Excalidraw ships is Liberation 1.05,
+  whose own ID 13 points at the 1.x EULA, and that project's OFL covers 2.00 and later only
+  (`apps/web/static/fonts/LICENSES.md:30`). The oracle inlines this family; we do not.
+- **Helvetica (2) declares nothing** — and neither does the oracle: it registers
+  `LOCAL_FONT_PROTOCOL` (`fonts/Helvetica/index.ts:6-8`) and `fontFacesStylesGenerator` skips
+  a local font (`Fonts.ts@1118751f:301-304`).
+- **No `unicode-range`, exactly as the oracle.** `toCSS` writes three properties, so a
+  family shipped in two shards emits two bare rules of the same family and the browser unions
+  their coverage — which is the situation the oracle is in with its per-codepoint subsets.
+  `SHIPPED_FONT_FACES` copies `fonts.css`'s per-family shard order so the two agree on which
+  shard is which.
+- **Ids 4, 10 and 11..=64 draw the legacy system stack.** The contract accepts 1..=64
+  (`packages/contract/src/element.ts:226`); `getFontFamilyString` answers `Segoe UI Emoji` for
+  an id its table does not name and `Assistant, …` for id 10, and we answer
+  `system-ui, -apple-system, Segoe UI, Roboto, sans-serif`. In the one case that can actually
+  arrive — a board from Obsidian carries `fontFamily: 4` — the oracle's answer is the worse
+  one, because `Segoe UI Emoji` is an emoji font. Changing it would move measurement for
+  those elements and the element schema is a public format, so it is a decision and not an
+  oversight: `the_ids_we_answer_differently_from_the_oracle_are_named_and_deliberate`.
+
+### The two copies of the files, and why
+
+The woff2 files are in `apps/web/static/fonts` and in
+`engine/crates/draw-engine/assets/fonts`, the same bytes kept twice: the app needs a face to
+draw with and an exported file needs one to _be_ the drawing after it leaves. One copy would
+mean the engine reaching into `apps/web` at build time, which the submodule cannot do.
+`assets/fonts/LICENSES.md` records where each file came from and what it may be shipped
+under, and does not repeat the licence reasoning — that is one argument in
+`static/fonts/LICENSES.md`, and two copies of an argument is how they come to disagree.
+**Nothing in either build stops them drifting**, which is what the cross-tree test in
+`fonts.test.ts` is for.
+
 ## Round trip: the scene inside the file, and what we cannot read
 
 **VERIFIED.** A saved PNG carries the scene in a `tEXt` chunk and a saved SVG in its
@@ -407,7 +501,9 @@ Phase 4's other export tasks, and what each would need:
 - **4.5, background and theme.** A _chosen_ background colour. Today the export paints
   `view.theme.background` or nothing; there is no option anywhere that picks one, for
   either format.
-- **4.6, fonts.** `export/svg.rs` names the families and embeds no `@font-face`.
+- **4.6's subsetting.** The faces are embedded whole, not subset to the scene's codepoints as
+  the oracle subsets them, and the ten files cost 9.8% of the WASM module. That is the trade
+  written down above, not a gap.
 - **4.2's leftovers, both small.** `frame_labels` now has one consumer that can act on it
   (`export_view_of` withdraws the names), but the two formats still disagree: a PNG draws a
   frame's name and `scene_to_svg` draws none, where the oracle adds the label to both
@@ -455,6 +551,27 @@ Phase 4's other export tasks, and what each would need:
   hand-written two-element scene. `file(1)` reads the PNG as "PNG image data, 1 x 1, 8-bit/
   color RGBA", Python's `zlib` inflates its `IDAT`, and the scene inside was written by hand
   rather than printed by `scene_to_json`.
+- `crates/draw-engine/tests/ci_svg_fonts.rs` — the **decisions**, character for character: the
+  declaration's whole text, its place between the `<metadata>` and the paper, the empty
+  `<style>` in a shapes-only drawing, a family with a space, the absence of every descriptor
+  and fallback, the two families with no file, an unresolved family, both size paths, and the
+  first-appearance order. Nothing asserts that an attribute _exists_; every assertion is the
+  whole string.
+- `crates/draw-engine/tests/ci_svg_fonts_bytes.rs` — the **bytes**, against four things that
+  are not the code under test: `tests/common/svg.rs` (a second implementation of the document,
+  with its own base64 decoder written as a bit list rather than a shift-accumulator), **the
+  oracle's own committed `@font-face` payload** from `export.test.ts.snap`, RFC 4648 §10, and
+  the WOFF2 §4.1 signature and `length` field. Its CRC-32 is checked against the published
+  `0xCBF43926` for `123456789` _before_ it is trusted to check anything else.
+- `crates/draw-engine/tests/ci_svg_fonts_props.rs` — every one of the 64 ids the contract
+  accepts, both size paths, against a **second transcription** of the oracle's
+  `FONT_FAMILY`/`getFontFamilyFallbacks`; plus 200 seeded corpora over the whole domain for
+  four properties (declarations are exactly the used shipped families in first-appearance
+  order; each family carries its own shards in that order; the output is a function of the
+  elements; reversing the elements does not change the family set). The four ids that differ
+  are named as a decision in their own test.
+- `apps/web/src/lib/draw-chrome/fonts.test.ts` — that the engine's table and `static/fonts`
+  hold **the same ten files with the same bytes**, which neither build can check alone.
 - `apps/web/src/lib/draw-chrome/exportParity.test.ts` — that the front holds none of it.
 - `apps/web/src/lib/draw-chrome/clipboard.test.ts` — the host's side, including every
   failure: a refused write, a browser with no clipboard, an empty board and a canvas too
