@@ -16,6 +16,29 @@
   let scale = $state(2);
   let exporting = $state(false);
 
+  /**
+   * Whether anything is selected, read from the engine's own snapshot.
+   *
+   * A function rather than an inline read so that the `$state` initialiser does not capture
+   * the `engine` prop by value — which is the reading anyway, since the selection cannot
+   * change while a modal is up, and which `svelte-check` warns about for exactly that
+   * reason.
+   */
+  function hasSelection(): boolean {
+    return (engine?.debugSnapshot().scene.selectedCount ?? 0) > 0;
+  }
+
+  /**
+   * The dialog's "selection only" checkbox, and the oracle's `exportSelectionOnly`
+   * (`ImageExportDialog.tsx@1118751f:227`).
+   *
+   * Starts on when something is selected, as the oracle's does
+   * (`useState(hasSelection)`, `ImageExportDialog.tsx@1118751f:80`): a person who selected
+   * something and then opened the export dialog is usually exporting that, and the oracle
+   * takes that as the answer rather than making them tick a box to get it.
+   */
+  let selectionOnly = $state(hasSelection());
+
   let card: HTMLDivElement | undefined;
 
   /**
@@ -31,10 +54,13 @@
     if (!engine) return;
     exporting = true;
     try {
-      // The two controls above, handed straight to the engine. The framing, the size and
-      // the background are its arithmetic — see `ExportFrame` in the engine, ported from
-      // `exportToCanvas` (`scene/export.ts@1118751f:180-284`).
-      const blob = await engine.exportPng({ scale, transparent });
+      // The controls above, handed straight to the engine. The framing, the size, the
+      // background and the choice of what to export are its arithmetic — see `ExportFrame`
+      // and `ExportScope` in the engine, ported from `exportToCanvas`
+      // (`scene/export.ts@1118751f:180-284`) and from `prepareElementsForExport`
+      // (`data/index.ts@1118751f:48-96`). The checkbox says whether to narrow, never to
+      // what: with nothing selected it is still the whole scene.
+      const blob = await engine.exportPng({ scale, transparent, selectionOnly });
       if (blob) downloadBlob("drawing.png", blob);
       onClose();
     } finally {
@@ -44,7 +70,9 @@
 
   function handleExportSvg(): void {
     if (!engine) return;
-    const svg = engine.exportSvg(16);
+    // No margin here either. It used to be a `16` picked in this file, six pixels a side
+    // wider than the PNG on the same drawing.
+    const svg = engine.exportSvg({ selectionOnly });
     if (svg) downloadBlob("drawing.svg", new Blob([svg], { type: "image/svg+xml" }));
     onClose();
   }
@@ -68,6 +96,10 @@
       <label class="option-row">
         <span>Transparent background</span>
         <input type="checkbox" bind:checked={transparent} />
+      </label>
+      <label class="option-row">
+        <span>Selection only</span>
+        <input type="checkbox" bind:checked={selectionOnly} />
       </label>
       <div class="option-row">
         <span>Export Scale</span>
