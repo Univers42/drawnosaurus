@@ -127,6 +127,24 @@ entries, in this order:
    point dragged. It replaces the free branch rather than composing with it, but it
    grid-snaps the pointer first (`:1916`), so grid then angle.
 
+**The angle lock carries two open divergences, and neither belongs to the rotation path.**
+`SHIFT_LOCKING_ANGLE` is `Math.PI / 12` — **15°** (`constants.ts@1118751f:31`) — used by
+`getLockedLinearCursorAlignSize` (`sizeHelpers.ts@1118751f:196-197`) and by the creation
+path's `getPerfectElementSize` (`:171-172`). `constrain_to_angle`
+(`interaction/linear_drag.rs:17`) steps by `PI / 4`, and it has four call sites here: a
+dragged endpoint (`pointer_move.rs:399`), a preview point (`multi_linear.rs:279`), a
+drag-drawn line (`linear_drag.rs:32`) and an elbow end (`elbow.rs:87`).
+`selection/transform.rs` calls none of them; its open rule is a different defect, that
+`rotate_element` takes only the pointer position so a rotation is not quantised at all.
+
+Second, the length is kept by different geometry. This engine rotates the delta onto the
+locked angle; the oracle intersects the locked ray with the line through the cursor
+perpendicular to it (`sizeHelpers.ts@1118751f:236-250`) and zeroes one component outright
+for the horizontal and vertical cases (`:229-234`). They agree only when the angle is
+already locked. `ci_end_snap.rs` asserts the oracle's floor — a multiple of **15°** — so it
+stays true if the step is corrected, rather than pinning this engine's 45° as if it were
+the reference.
+
 What is _not_ in the list, each with the line that keeps it out:
 
 - another element's points, midpoints or edges — `maybeCacheReferenceSnapPoints`, the only
