@@ -70,7 +70,7 @@ makes an arrow, and the gesture is unchanged by it
 (`ci_alt_centre.rs` › `alt_leaves_an_arrow_alone`).
 
 **VERIFIED** — a dragged-out text, and this one is a **known divergence, pinned on purpose**.
-The oracle *does* read Alt for a text, but as an anchor ratio rather than a centre:
+The oracle _does_ read Alt for a text, but as an anchor ratio rather than a centre:
 `anchorRatio: shouldResizeFromCenter ? 0.5 : …` and `x: anchorX - width * 0.5`
 (`dragElements.ts@1118751f:358`, `:278`), with `y` left at the origin (`:360`) and the width
 floored at one line (`:263-273`). So the oracle's Alt-text grows to both sides of the press
