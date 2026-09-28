@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readChecklists } from "../src/checklist.ts";
-import { RULES, ruleFor, type Status } from "../src/registry.ts";
+import { ruleFor, type Status } from "../src/registry.ts";
 
 /**
  * The export lines p4.1 claims, one by one, where a reader can check them.
@@ -69,7 +69,6 @@ const CLOSED_BY_P41: ReadonlyArray<[string, number, string]> = [
  */
 const STILL_GAPS: ReadonlyArray<[string, number, string]> = [
   // design.md:1333 — a *chosen* background colour. The export has the theme's or none (4.5).
-  ["design.md", 1333, "Background color"],
   // design.md:1364,1366, shortkey.md:436,448,449 — the clipboard (4.3). 1363 is "Clipboard
   // image", a group label like 1328's "PNG", and the parser drops it: it is a heading for
   // the two lines under it, not a requirement of its own.
@@ -77,7 +76,6 @@ const STILL_GAPS: ReadonlyArray<[string, number, string]> = [
   // shortkey.md:437 — a published board. Unrelated to exporting.
   ["shortkey.md", 437, "Export/share read-only link"],
   // shortkey.md:450 — half of it, and the half that is not is the SVG's.
-  ["shortkey.md", 450, "Include/exclude background depending on export settings"],
 ];
 
 /**
@@ -123,6 +121,29 @@ const CLOSED_AFTER_P41: ReadonlyArray<[string, number, string]> = [
   ["design.md", 1364, "Selection → image"],
   ["design.md", 1366, "Whole canvas → image"],
   ["design.md", 1348, "Fonts"],
+];
+
+/**
+ * Two more lines 4.1 left as gaps, both closed by 4.5 — and one of them is the line whose test
+ * this file used to guard.
+ *
+ * `design.md:1333` "Background color" was recorded **half done**, and the half that was missing
+ * was never the colour. The oracle's export dialog has **no colour picker**
+ * (`ImageExportDialog.tsx@1118751f:220-275` offers only-selected, with-background, dark-mode,
+ * embed-scene, scale) — the colour is `viewBackgroundColor`, app state the canvas picker writes
+ * (`actionCanvas.tsx:73-74`) and the export only reads. What could not be done was turning the
+ * SVG's `<rect>` off.
+ *
+ * And the hard half of that was not the rect. The background is also what an **outline
+ * arrowhead is punched through with** and what the PNG's canvas is filled with — three reads
+ * of one string, and the oracle reads one value three times (`export.ts:466`,
+ * `helpers.ts:115-119`, and the arrowhead fills inherit it). Making the rect optional without
+ * noticing the other two would have shipped **a white hole in an arrowhead on every
+ * transparent export**, and a test asking "does the rect disappear" passes straight over that.
+ */
+const CLOSED_BY_P45: ReadonlyArray<[string, number, string]> = [
+  ["design.md", 1333, "Background color"],
+  ["shortkey.md", 450, "Include/exclude background depending on export settings"],
 ];
 
 /**
@@ -191,18 +212,28 @@ describe("the export lines p4.1 moved", () => {
     }
   });
 
-  it("records the background line as half done rather than claiming it", () => {
-    // shortkey.md:450 — "Include/exclude background depending on export settings". The PNG
-    // half is real; the SVG half is not (scene_to_svg always draws its <rect>). A rule
-    // either closes the sentence or says which half is open, and this one says so.
-    const rule = RULES.find(
-      (candidate) =>
-        candidate.text instanceof RegExp &&
-        candidate.text.test("Include/exclude background depending on export settings"),
-    );
-    expect(rule, "the background line should still be a rule").toBeDefined();
-    expect(rule?.status, "and it should still be a gap").toBe("gap");
-    expect(rule?.why, "which should name the half that is done").toMatch(/PNG export honours it/);
-    expect(rule?.why, "and the half that is not").toMatch(/scene_to_svg still always renders/);
+  // This test used to read: "records the background line as half done rather than claiming
+  // it" — and it asserted the rule was a `gap` whose `why` named the done half and the open
+  // half. **Both halves are now closed**, so the test's premise is gone and keeping it would
+  // have kept a gap open that no longer exists.
+  //
+  // It also GREPPED the `why` for two strings it expected to find there. That is a rule I
+  // should not have shipped: a test that asserts on the wording of a reason is a test that
+  // fails when the reason is corrected, which is exactly backwards — the two `why`s it pinned
+  // were false (`scene_to_svg still always renders`, and `DrawExportModal.svelte calls
+  // exportSvg(16)`, false since 4.2 took the front's number), and the test kept passing
+  // because it read the REGISTRY rather than the CODE. So the ledger and the engine
+  // disagreed, loudly, and `make conformance` was green the whole time.
+  //
+  // What replaced it asserts the STATUS, which is the thing the checklist actually claims, and
+  // nothing about the prose. A `why` should be free to be rewritten whenever it stops being
+  // true; a status should need evidence.
+  it("closes the background lines, by 4.5", () => {
+    for (const [source, line, text] of CLOSED_BY_P45) {
+      expect(
+        statusOf(source, line),
+        `${source}:${line} "${text}" was 4.5's to close, and 4.5 did`,
+      ).toBe("covered");
+    }
   });
 });
