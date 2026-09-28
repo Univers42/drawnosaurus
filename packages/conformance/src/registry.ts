@@ -2367,6 +2367,43 @@ export const RULES: readonly Rule[] = [
       "e2e/flowchart.spec.ts",
     ],
   },
+  // design.md:1044 "Shape conversion" was claimed by the section catch-all below, which is
+  // `covered` and names one test. That is the ledger's version of 4.3's `/PNG|SVG|Google
+  // Docs|single element/`: a rule that matches a line by ACCIDENT is not coverage of it, and
+  // the only way to tell the difference is to give the line its own rule and see whether the
+  // tests survive contact with the claim.
+  //
+  // 5.5's substance is that three of the four conversions are REFUSALS, not transformations:
+  //   - converting away from an arrow DROPS its heads, because `newLinearElement` writes
+  //     `startArrowhead: null, endArrowhead: null` unconditionally
+  //     (`ConvertElementTypePopup.tsx@1118751f:583-586`), overwriting the spread's;
+  //   - it refuses to touch bindings at all. `isEligibleLinearElement` (`:666-672`) admits a
+  //     line always and an arrow only while unbound and unlabelled, so `getConversionTypeFromElements`
+  //     never returns "linear" and TAB DOES NOT EVEN OPEN THE PANEL. "A switch never breaks a
+  //     binding" is true by construction and is implemented as the refusal;
+  //   - and the elbow is the one conversion that CHANGES THE POINTS -- a re-route between the
+  //     same two ends (`convertLineToElbow`, `:712-802`, orthogonal, THRESHOLD = 20), not a
+  //     type flag.
+  //
+  // Undo is one step on the keyboard path (`scheduleCapture`, `store.ts:110-112`); the CLICK
+  // path never calls it and rides whatever capture comes next. Ours stamps on both, which is
+  // strictly tighter -- a deliberate divergence, recorded rather than hidden.
+  //
+  // The round trip is CACHED, not recomputed, as the oracle does
+  // (`LINEAR_ELEMENT_CONVERSION_CACHE`, `:157-161`, filled `:280-292`, read `:551-556`).
+  //
+  // Note this does not move the figure: the line was already counted covered by the catch-all.
+  // The point is that the claim is now NAMED and AUDITABLE rather than accidental.
+  {
+    section: "26. Autoshape / flowchart logic",
+    text: /^Shape conversion$/,
+    status: "covered",
+    tests: [
+        `${ENGINE}/ci_shape_convert.rs`,
+      "apps/web/src/lib/draw-chrome/shapeSwitch.test.ts",
+      "e2e/shapeSwitch.spec.ts",
+    ],
+  },
   {
     section: "26. Autoshape / flowchart logic",
     status: "covered",
