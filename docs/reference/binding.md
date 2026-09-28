@@ -157,6 +157,31 @@ press. Excalidraw's check for an arrow with no length (`utils.ts@1118751f:834-83
 snap off at the press while its hover still draws the midpoint dot, a promise the press
 then breaks. Only the projection, which needs a direction, waits for one.
 
+**Divergence, a figure's midpoints** (owner's decision, 2026-09-28) — a figure's snap points
+are where the line from its centre to each middle of its box leaves the outline. Excalidraw
+has no figures and snaps to the box's middles (`getAllMidpoints`, `utils.ts@1118751f:743-767`),
+which are off a triangle's slanted sides and between a star's arms: a snapped arrow ended in
+the air (`ci_figure.rs` › `the_side_midpoint_snaps_sit_on_a_figures_outline`,
+`an_arrow_dropped_by_a_triangles_side_dot_stops_a_gap_from_it`). An elbow arrow still snaps
+to the box's middles, its router taking a figure for its box, and its dot marks those
+(`the_dot_by_a_figure_marks_the_snap_the_arrow_being_drawn_makes`).
+
+## An elbow route round its shapes
+
+**Divergence** (owner's decision, 2026-09-28) — an elbow arrow never runs through a shape it
+is bound to. The oracle's route can, and turning the shape is how it happens: the heading an
+end leaves by is picked from the cones of the shape's box (`getBindPointHeading`), which can
+face back across the shape itself — an end on a diamond's point, the diamond turned 225° —
+and a segment the person moved is kept while the legs beside it are redrawn with nothing in
+their way considered (`handleEndpointDrag`). When the oracle's route crosses a bound shape,
+the ends leave by the headings whose run inside their shapes is shortest, the moved segments
+are let go, and that route is taken if it is clear; otherwise the oracle's stands
+(`elbow::clear_of_shapes`; `ci_elbow.rs` › `an_end_on_a_turned_diamonds_point_leaves_it_outward`,
+`a_moved_segment_gives_way_rather_than_cross_a_turned_shape`,
+`turning_a_bound_shape_never_routes_the_arrow_through_it`). The replay of the oracle's own
+routes counts the steps this changes (`ci_elbow_oracle.rs`): 76 of 11,176, each one where the
+oracle's route crosses a bound shape and this one keeps clear.
+
 ## At any depth
 
 **IMPLEMENTATION DETAIL, deliberate divergence** — Excalidraw's gap is `5 + strokeWidth/2`

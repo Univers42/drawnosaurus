@@ -121,6 +121,9 @@ world  = (screen - (x, y)) / scale     screen_to_world
 - An end let go or pressed inside a shape orbits, aimed at that point and stopped at the
   outline, so an arrow never runs through its own shape, turned or not; only Alt binds
   inside (the ray rule, a divergence: `docs/reference/binding.md`).
+- An elbow route never runs through a shape it is bound to (`elbow::clear_of_shapes`), the one
+  divergence `tests/ci_elbow_oracle.rs` allows: it counts the steps it changes, so a router
+  change that moves the count must say why. The router takes a figure for its box.
 - A flowchart link (Ctrl+Arrow) is an elbow arrow 6px off the side middles
   (`src/engine/flowchart.rs`, `ARROW_PADDING`).
 - Replayed against the oracle's own output by `tests/ci_flowchart_oracle.rs`. The fixtures
