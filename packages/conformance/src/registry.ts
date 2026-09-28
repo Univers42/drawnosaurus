@@ -2685,11 +2685,56 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_image.rs`],
   },
+  // 4.4, and the `why` this replaces ("Neither exportSvg nor exportPng embeds the .osidraw
+  // JSON into the file for round-trip re-import") is false.
+  //
+  // The KEY is `osidraw`, not the oracle's `application/vnd.excalidraw+json`
+  // (`constants.ts:310`), and that is not a preference — it is the difference between two clean
+  // answers. Borrowing their key turns a clean "not mine" into "I thought this was one of mine
+  // and it is broken". Verified by running the oracle's `decodePngMetadata` transcribed
+  // verbatim: `osidraw` -> INVALID, their key with our payload -> FAILED, their key with a real
+  // Excalidraw payload -> ok. Also 7 bytes against 40, and not a MIME type.
+  //
+  // We write generation 1: plain scene JSON, uncompressed, base64'd. The oracle's generation 1
+  // is plain JSON in a BST RING and its generation 2 is zlib (`data/encode.ts:99-121`,
+  // pako@2.0.3); we neither write nor read generation 2. The label is the same and the bytes
+  // are not, which is why ours carries a prefix and the table is written down in the module.
+  //
+  // PARITY IS NOT REACHABLE, and the crate that would be needed is not worth spending yet. An
+  // Excalidraw payload is an *Excalidraw schema*, and mapping that is 4.7 — deferred as RISK.
+  // Our PNG will never open in Excalidraw either, because ours is `osidraw` and its legacy arm
+  // demands `type === "excalidraw"`. So `miniz_oxide` buys ONE STEP of a two-step journey and
+  // step two is 4.7. The failure avoided today is not mojibake; it is a scene that cannot be
+  // read *silently*, and the three refusals already avoid it.
+  //
+  // The refusals, all pinned: no `tEXt` chunk -> NotOurs; a chunk under another key -> NotOurs,
+  // which the oracle cannot tell apart either (`image.ts:51`); our key with garbage text ->
+  // Unreadable; a generation we do not know -> Unreadable, never misread; **our own generation
+  // with `elements: []` -> Unreadable**, which is the silent failure the task exists to prevent;
+  // a scene whose own `version` is 99 -> **restores**, because the version is not the gate and
+  // the gate has to stay keepable; not walkable -> Malformed. First `tEXt` wins, both
+  // directions — the oracle's `find`, not a `filter`.
+  //
+  // THE "IF DESIRED" HALF IS NOT BUILT, and it cannot be split off here. There is no checkbox
+  // for it — `prompt/design.md:1352` is one line containing both halves, and `ruleFor` is
+  // first-match-wins, so a line resolves to exactly one rule. Two rules for one sentence is not
+  // expressible in this ledger, and writing the gap as a second pattern here would claim the
+  // line twice rather than split it. The missing checkbox is the owner's to schedule, because
+  // adding one to `design.md` renumbers the citations after it. Until then the honest statement
+  // is: **embedding is unconditional**, the oracle's `exportEmbedScene` defaults to `false`,
+  // and a picture carrying nothing is a lossy format wearing a `.png` name — so this is a
+  // deliberate divergence and not an oversight.
   {
     section: "32. Export",
     text: /^Embedded scene data if desired$/,
-    status: "gap",
-    why: "Neither exportSvg nor exportPng embeds the .osidraw JSON into the file for round-trip re-import; OsidrawFile (export/json.rs) has no such provision.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_roundtrip.rs`,
+      `${ENGINE}/ci_export_roundtrip_bytes.rs`,
+      `${ENGINE}/ci_export_roundtrip_props.rs`,
+      `${WEB}/draw-chrome/openFile.test.ts`,
+      "e2e/roundTrip.spec.ts",
+    ],
   },
   {
     section: "32. Export",
