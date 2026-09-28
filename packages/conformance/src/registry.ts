@@ -2285,11 +2285,57 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_binding_dense.rs`,
     ],
   },
+  // Split four ways. One rule said
+  // `/Equal spacing|Configurable increments|Configurable grid|Connection points/` and was a
+  // `gap`, so it could not be flipped for the one part that shipped. **A rule that covers four
+  // features across two tasks is a rule that can never be flipped**, because the tasks land at
+  // different times. FOURTH instance — after `/PNG|SVG|Google Docs|single element/`, the Grid
+  // rule's `custom grid spacing|disable snapping`, and the Export rule's three-way split. All
+  // four mine, all the same shape, and the fix is always the same: one rule, one feature.
+  //
+  // 6.5 answered the other two thirds of Phase 6.5, and both answers are "not in the oracle":
+  //
+  // SNAP INCREMENTS: `design.md:832` is a **child of "Angle snapping"** (`:825`), not a linear
+  // step. `SHIFT_LOCKING_ANGLE` is a module constant (`constants.ts@1118751f:31`) and `appState`
+  // has no angle-increment field. **No UI was built** — a brief that offers a feature the
+  // reference does not have is offering an invention.
+  //
+  // CONNECTION POINTS: the term is ABSENT from the oracle. The real thing is `getAllMidpoints`
+  // (`utils.ts:743-767`) — four sites per shape, shapes from `isBindableElement`
+  // (`typeChecks.ts:184-202`: rectangle, stickynote, diamond, ellipse, image, iframe,
+  // embeddable, frame, magicframe, and a container-less text; **not** `line`, **not** `freedraw`,
+  // **not** a selection).
   {
     section: "19. Snapping",
-    text: /Equal spacing|Configurable increments|Configurable grid|Connection points/,
+    text: /^Equal spacing$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_equal_spacing.rs`,
+      `${ENGINE}/ci_equal_spacing_props.rs`,
+      `${ENGINE}/ci_snapping.rs`,
+      `${ENGINE}/ci_draw_object_snap.rs`,
+    ],
+  },
+  // Deliberately left narrow, because the whole of 6.5's answer is that it does not exist.
+  {
+    section: "19. Snapping",
+    text: /^Configurable increments$/,
     status: "gap",
-    why: "Equal-spacing guides and configurable increments. Edge, centre, midpoint and 45° snapping are done.",
+    why: 'deferred: not in the oracle. 6.5 read the line it came from: design.md:832 is a CHILD of "Angle snapping" (:825), not a linear step. `SHIFT_LOCKING_ANGLE` is a module constant (constants.ts@1118751f:31) and `appState` carries no angle-increment field, so there is no setting to port and no UI was built.',
+  },
+  {
+    section: "19. Snapping",
+    text: /^Configurable grid$/,
+    status: "gap",
+    why: "6.6, and untouched by 6.5 — it was in this rule's pattern by accident, which is the reason the rule had to be split.",
+  },
+  // The machinery EXISTS — `midpoint_snap_radius`, `bindable_at` and `is_bindable_element` are
+  // all in the motor — and it is still a gap, because 6.5 found a real divergence in it.
+  {
+    section: "19. Snapping",
+    text: /^Connection points$/,
+    status: "gap",
+    why: "The machinery is there (`midpoint_snap_radius` in scene/binding.rs, `bindable_at`, `is_bindable_element`) and it is still a gap because 6.5 found a real divergence in it: **a diamond's connection sites are its four VERTICES here and its four EDGE MIDPOINTS in the oracle** — a 25% inset — and the doc comment at scene/binding.rs:370-383 asserts the wrong answer, which is worse than no comment. Phase 1. The oracle's rule is `getAllMidpoints` (utils.ts@1118751f:743-767), four sites per shape, over `isBindableElement` (typeChecks.ts:184-202), where the term \"connection points\" appears nowhere.",
   },
   // constrain_to_angle (interaction/linear_drag.rs) rounds a drag to the nearest 45° step.
   // draw_binding.rs's shift_snaps_to_45 exercises the horizontal case (dy rounds to 0 for
