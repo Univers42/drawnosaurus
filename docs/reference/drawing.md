@@ -166,6 +166,98 @@ this.
   refuses both branches, which is the move path's rule from before this task, now shared by
   all three so they cannot disagree.
 
+## Equal spacing, and the one rule that decides it
+
+`design.md:821` asks for "Equal spacing". The oracle calls it **gap snapping** and it is a
+**move-only** feature — a fact about the call graph, not an inference: `getGapSnaps` is
+called from exactly two places, `snapping.ts@1118751f:738` and `:783`, and both are inside
+`snapDraggedElements`. `snapNewElement` (`:1246`) and `snapResizingElements` (`:1108`) never
+reach it, so a box being drawn and an edge being dragged are never offered a gap.
+
+**The candidates are its own.** This is the first thing to settle and it is the opposite of
+what the rest of this page says. `getVisibleGaps` (`:328-444`) re-runs the _same_ gatherer —
+`getReferenceElements` → `getMaximumGroups` → the bound-to-container filter, `:341-351` — but
+maps each group to its **rounded common bounds** and then forms a candidate per **pair** of
+boxes that are separated on one axis and overlapping on the other (`:359-438`). A gap is a
+derived offset, not a point, so it cannot be fed to `nearest_axis`: this is the second
+candidate maths in the engine and the reason for it is in the type. One gatherer
+(`snap_targets`), one gate (`objects_snap_gesture`), one winner discipline (`Nearest`).
+
+**The three candidates per gap**, in the oracle's own order per axis:
+
+| candidate | the offset it wants             | refused when             |
+| --------- | ------------------------------- | ------------------------ |
+| centre    | `start.max + L/2 − our centre`  | `L ≤ our width` (`:483`) |
+| ahead     | `L − (our near edge − end.max)` | never                    |
+| behind    | `start.min − our far edge − L`  | never                    |
+
+The centre's guard is the only one, and when it does not fire the control **falls through**
+to the two sides rather than skipping the gap — a narrow gap has two landings, not none.
+x tries centre, ahead, behind (`:485`, `:502`, `:523`); y tries centre, **behind, ahead**
+(`:554`, `:571`, `:592`). The order is unobservable: `both_ends_of_one_gap_are_never_in_
+reach_together` sweeps 81,920 boards and never finds both ends of one gap in reach at once,
+because the point pass runs first and shrinks the reach to the nearest stop.
+
+**The tie-break is the whole task, and it is two rules, not one.**
+
+1. _Within reach_ keeps, _strictly nearer_ discards (`nearest_axis` and `gap_axis` both go
+   through `Nearest::offer`, `snapping.ts:660-672` and `:485-489` are the same three lines).
+   So a **tie keeps both** and the incumbent — the one found first — wins the offset, because
+   the oracle lands on `nearestSnapsX[0]` (`:752`).
+2. The discard is **shared across the two passes**, which is what `Nearest::epoch` is for.
+   `nearestSnapsX.length = 0` empties one list that the point pass and the gap pass have both
+   been pushing into, so a gap nearer than a point snap takes its place rather than joining
+   it. A per-pass list gets this wrong with no single-pass test able to see it, and the first
+   version of this did.
+
+`ci_equal_spacing.rs` › `tie_board` is the board that discriminates: three boxes where a point
+candidate and a gap candidate both want `±2`, so the landing is **74** and the two plausible
+wrong rules both give **70**. The same drag on two of the three boxes lands at 70 and agrees
+with both — which is exactly why it looks right on a quiet board.
+
+**One divergence, deliberate and in one place.** The oracle's `createPointSnapLines`
+(`:828-896`) groups by coordinate and draws **every** tied _point_ snap, so a row of three
+aligned boxes gets one guide spanning all three. Ours draws one point guide per axis
+(`point_guides`). A gap snap does draw both of its segments. Changing the point half is a
+change to the alignment-guides feature (`design.md:823`, already `covered`) and it would move
+a 6.3-green assertion — `ci_snapping.rs:144` expects two guides for a board whose x axis is
+itself a two-way tie.
+
+**Cost, stated rather than hidden.** `visible_gaps` is O(n²) in the _visible_ elements, on
+every frame of a drag, where the oracle computes it once per gesture (`SnapCache`, `:463`,
+filled at `App.tsx@1118751f:10576-10579`). The oracle's own cap is carried over at the same
+number (`VISIBLE_GAPS_LIMIT_PER_AXIS`, `:45` — 99,999, annotated there as a TODO to remove),
+which bounds it but does not make it cheap. The upgrade path is to gather the gaps in
+`begin_move` beside `static_bounds`; it is not done here because it changes
+`Interaction::Move` and every test that constructs one, and this task's subject is the rule.
+
+**`design.md:832` "Configurable increments" is `deferred: not in the oracle`.** It is a child
+of **"Angle snapping"** in the `design.md` tree (`:825`), not of object snapping, and the
+oracle has no setting for it: `SHIFT_LOCKING_ANGLE` is a module constant
+(`packages/common/src/constants.ts@1118751f:31`, `Math.PI / 12`), and `appState` carries no
+angle-increment field — the only snap-adjacent settings in it are `gridSize` and `gridStep`
+(`types.ts:1118751f:505-506`, which is `design.md:802`'s "Configurable grid"). The 15° lock
+itself is ours since 6.2. **No settings UI was invented.**
+
+**`design.md:839` "Connection points" is `deferred: not in the oracle`, under another name
+and already built.** The term does not occur in the oracle at all — `rg -i "connection
+point"` over `packages/` finds nothing. The real thing is `getAllMidpoints`
+(`packages/element/src/utils.ts@1118751f:743-767`): **four sites per bindable shape**,
+rotated by `angle` — a diamond's four **edge midpoints** (the quarter points, from
+`bezierEquation(curve, 0.5)` on the base-corner curves, spelled out literally at `:686-692`),
+and for everything else the four **axis midpoints** `(w, h/2), (w/2, h), (0, h/2), (w/2, 0)`.
+The shapes are `isBindableElement` (`typeChecks.ts@1118751f:184-202`): rectangle, stickynote,
+diamond, ellipse, image, iframe, embeddable, frame, magicframe and unbound text — **`line` is
+not among them**, nor `freedraw`, nor a selection. It is reached by both binding paths
+(`getElbowArrowSnapMidPoint`, `utils.ts:769-786`, and `getSnappedMidpointIndexForSimpleArrow`,
+`:717-741`), and gated on the `isMidpointSnappingEnabled` preference
+(`types.ts@1118751f:368`). Ours is `scene/binding.rs` › `side_midpoints`, and it has the same
+four sites and the same rotation. **One divergence: for a diamond it uses the four vertices
+where the oracle uses the four edge midpoints** — a real gap, a 25% inset on a 100×100
+diamond, and the file's own doc comment asserts the wrong answer rather than admitting a
+choice. Not fixed here: it is the _binding_ feature, not this one, and it is reported as a
+Phase 1 task.
+
 `design.md:288` is unaffected and stays `deferred: not in the oracle`: a line's endpoint
 still snaps to the grid and then to the angle lock, and to nothing else. Nothing above puts
 a line in the object-snap set — `isActiveToolNonLinearSnappable` excludes it,

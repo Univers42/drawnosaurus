@@ -1066,11 +1066,69 @@ export const RULES: readonly Rule[] = [
   },
   // Half of this line is now true and half is not, so it stays a gap and says which is
   // which rather than claiming the whole sentence.
+  // 4.5. The `why` this replaces said "Half. The PNG export honours it … while the SVG still
+  // always renders one", and it also claimed the SVG "still takes its padding from the front" and
+  // that "`DrawExportModal.svelte` calls `exportSvg(16)`". **All three clauses are false**, and the
+  // third has been false since 4.2 took the front's number.
+  //
+  // THE DEFAULT IS INCLUDE, and one line decides it: `appState.ts@1118751f:69`
+  // `exportBackground: true`, with `scene/export.ts@1118751f:458` a TWO-PART `&&` —
+  // `if (appState.exportBackground && viewBackgroundColor)`. **Both halves matter: an empty colour
+  // is not a colour.** Asserted on its own (`the_defaults_are_paper_on_and_dark_off`), because a
+  // default that differs is the whole feature.
+  //
+  // AND THE HARD HALF WAS NOT THE RECT. The background is also what an OUTLINE ARROWHEAD IS
+  // PUNCHED THROUGH WITH, and what the PNG's canvas is filled with — **three reads of one string**,
+  // and the oracle reads one value three times (`export.ts:466`, `helpers.ts:115-119`, and the
+  // arrowhead fills inherit it). Making the rect optional without noticing the other two would have
+  // shipped **a white hole in an arrowhead on every transparent export**, and a test asking "does
+  // the rect disappear" passes straight over that.
+  // `an_outline_arrowhead_is_punched_with_the_chosen_paper` is the test that would not.
+  //
+  // "Background color" never meant a missing colour. The oracle's export dialog has **no colour
+  // picker** (`ImageExportDialog.tsx:220-275` offers only-selected, with-background, dark-mode,
+  // embed-scene, scale) — the colour is `viewBackgroundColor`, app state the canvas picker writes
+  // (`actionCanvas.tsx:73-74`) and the export only reads.
   {
     section: "🔍 Export tricks",
     text: /^Include\/exclude background depending on export settings$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_background.rs`,
+      `${ENGINE}/ci_export.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
+  },
+  // 4.5. `design.md:1333` "Background color" was recorded as half done, and the half that was
+  // missing was never the colour — it was that the SVG could not be talked out of its `<rect>`.
+  // That is now done, and the oracle's own dialog having no colour picker is why: there is one
+  // colour, the theme's, and the front has no second one to disagree with.
+  {
+    section: "32. Export",
+    text: /^Background color$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_background.rs`,
+      `${ENGINE}/ci_export.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+    ],
+  },
+  // 4.5, and the `why` this replaces said "Export always uses the light palette" — which is the
+  // opposite of what shipped. Dark mode is not a second palette; it is ONE colour filter over
+  // every colour the renderer writes.
+  {
+    section: "39. Dark mode / themes",
+    text: /^Export theme$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_background.rs`, "e2e/exportPng.spec.ts"],
+  },
+  // Kept narrow so it can carry the reason 4.5 established, which is the interesting part.
+  {
+    section: "39. Dark mode / themes",
+    text: /^Collaboration colors$/,
     status: "gap",
-    why: "Half. The PNG export honours it: the dialog's transparent toggle reaches engine.exportPng, which passes `background: false` to the painter and leaves the canvas as transparent as a fresh one already is (e2e/exportPng.spec.ts reads the exported file's corner alpha). scene_to_svg still always renders its background rect with no option to omit it, and still takes its padding from the front — `DrawExportModal.svelte` calls `exportSvg(16)` and `engine/src/engine.ts:918` defaults to 16, where the oracle's is 10 (`constants.ts:398`), so the two formats' margins are 6px apart per side. Both are 4.5's; both are named as known debt in exportParity.test.ts so a third would fail.",
+    why: 'deferred: not in the oracle, and the reason is a design one rather than a port. `getClientColor` (packages/excalidraw/clients.ts@1118751f:29-44) hashes the peer id to a hue and returns a FIXED `hsl(hue, 100%, 83%)`; it takes no theme, reads none, and `clients.ts` does not contain the string "theme" anywhere. Ours is a front literal (apps/web/src/lib/realtime/realtimeClient.ts:104, CURSOR_COLORS) and it is SENT OVER THE WIRE in every presence message, which is the part that makes a local fix wrong: **a theme-following collaborator colour cannot be a local decision**, because two people in a room must see the same person in the same colour and each client\'s theme is its own. That points at the server, or at a derivation from the shared peer id. Written down in docs/reference/export.md, not built.',
   },
   { section: "🔍 Export tricks", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
   {
@@ -2285,11 +2343,57 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_binding_dense.rs`,
     ],
   },
+  // Split four ways. One rule said
+  // `/Equal spacing|Configurable increments|Configurable grid|Connection points/` and was a
+  // `gap`, so it could not be flipped for the one part that shipped. **A rule that covers four
+  // features across two tasks is a rule that can never be flipped**, because the tasks land at
+  // different times. FOURTH instance — after `/PNG|SVG|Google Docs|single element/`, the Grid
+  // rule's `custom grid spacing|disable snapping`, and the Export rule's three-way split. All
+  // four mine, all the same shape, and the fix is always the same: one rule, one feature.
+  //
+  // 6.5 answered the other two thirds of Phase 6.5, and both answers are "not in the oracle":
+  //
+  // SNAP INCREMENTS: `design.md:832` is a **child of "Angle snapping"** (`:825`), not a linear
+  // step. `SHIFT_LOCKING_ANGLE` is a module constant (`constants.ts@1118751f:31`) and `appState`
+  // has no angle-increment field. **No UI was built** — a brief that offers a feature the
+  // reference does not have is offering an invention.
+  //
+  // CONNECTION POINTS: the term is ABSENT from the oracle. The real thing is `getAllMidpoints`
+  // (`utils.ts:743-767`) — four sites per shape, shapes from `isBindableElement`
+  // (`typeChecks.ts:184-202`: rectangle, stickynote, diamond, ellipse, image, iframe,
+  // embeddable, frame, magicframe, and a container-less text; **not** `line`, **not** `freedraw`,
+  // **not** a selection).
   {
     section: "19. Snapping",
-    text: /Equal spacing|Configurable increments|Configurable grid|Connection points/,
+    text: /^Equal spacing$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_equal_spacing.rs`,
+      `${ENGINE}/ci_equal_spacing_props.rs`,
+      `${ENGINE}/ci_snapping.rs`,
+      `${ENGINE}/ci_draw_object_snap.rs`,
+    ],
+  },
+  // Deliberately left narrow, because the whole of 6.5's answer is that it does not exist.
+  {
+    section: "19. Snapping",
+    text: /^Configurable increments$/,
     status: "gap",
-    why: "Equal-spacing guides and configurable increments. Edge, centre, midpoint and 45° snapping are done.",
+    why: 'deferred: not in the oracle. 6.5 read the line it came from: design.md:832 is a CHILD of "Angle snapping" (:825), not a linear step. `SHIFT_LOCKING_ANGLE` is a module constant (constants.ts@1118751f:31) and `appState` carries no angle-increment field, so there is no setting to port and no UI was built.',
+  },
+  {
+    section: "19. Snapping",
+    text: /^Configurable grid$/,
+    status: "gap",
+    why: "6.6, and untouched by 6.5 — it was in this rule's pattern by accident, which is the reason the rule had to be split.",
+  },
+  // The machinery EXISTS — `midpoint_snap_radius`, `bindable_at` and `is_bindable_element` are
+  // all in the motor — and it is still a gap, because 6.5 found a real divergence in it.
+  {
+    section: "19. Snapping",
+    text: /^Connection points$/,
+    status: "gap",
+    why: "The machinery is there (`midpoint_snap_radius` in scene/binding.rs, `bindable_at`, `is_bindable_element`) and it is still a gap because 6.5 found a real divergence in it: **a diamond's connection sites are its four VERTICES here and its four EDGE MIDPOINTS in the oracle** — a 25% inset — and the doc comment at scene/binding.rs:370-383 asserts the wrong answer, which is worse than no comment. Phase 1. The oracle's rule is `getAllMidpoints` (utils.ts@1118751f:743-767), four sites per shape, over `isBindableElement` (typeChecks.ts:184-202), where the term \"connection points\" appears nowhere.",
   },
   // constrain_to_angle (interaction/linear_drag.rs) rounds a drag to the nearest 45° step.
   // draw_binding.rs's shift_snaps_to_45 exercises the horizontal case (dy rounds to 0 for
@@ -2727,12 +2831,6 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "32. Export",
-    text: /^Background color$/,
-    status: "gap",
-    why: "No background-colour option anywhere. The PNG export paints the theme's own background when it is asked for one (export::png frames the picture; the painter fills view.theme.background), and scene_to_svg always draws its <rect> with the same theme colour. Only *whether* there is a background is a choice — 4.5.",
-  },
-  {
-    section: "32. Export",
     // `^Selection export$` alone matches design.md:1337 and misses shortkey.md:445
     // "Export selection", the same reversal as the frame rule above.
     text: /Selection export|Export selection/,
@@ -3031,12 +3129,6 @@ export const RULES: readonly Rule[] = [
     tests: [`${WEB}/draw-chrome/theme.test.ts`],
   },
   { section: "38. Grid", status: "covered", tests: [`${ENGINE}/ci_grid.rs`] },
-  {
-    section: "39. Dark mode / themes",
-    text: /Export theme|Collaboration colors/,
-    status: "gap",
-    why: "Export always uses the light palette, and collaborator colours are assigned but not themed.",
-  },
   {
     section: "39. Dark mode / themes",
     status: "covered",

@@ -14,6 +14,16 @@
 
   let transparent = $state(false);
   let scale = $state(2);
+  /**
+   * The dialog's "Dark mode" switch, and the oracle's `exportWithDarkMode`
+   * (`ImageExportDialog.tsx@1118751f:249-262`).
+   *
+   * **Off to start**, as the oracle's is (`appState.ts@1118751f:72`): an export somebody has
+   * not asked to be dark is the drawing as the board shows it, and the board's own theme says
+   * nothing about what a saved file should look like. It is a per-export choice, not a
+   * setting, which is why it is a switch here and not a preference in `theme.ts`.
+   */
+  let darkMode = $state(false);
   let exporting = $state(false);
 
   /**
@@ -60,7 +70,7 @@
       // (`scene/export.ts@1118751f:180-284`) and from `prepareElementsForExport`
       // (`data/index.ts@1118751f:48-96`). The checkbox says whether to narrow, never to
       // what: with nothing selected it is still the whole scene.
-      const blob = await engine.exportPng({ scale, transparent, selectionOnly });
+      const blob = await engine.exportPng({ scale, transparent, selectionOnly, darkMode });
       if (blob) downloadBlob("drawing.png", blob);
       onClose();
     } finally {
@@ -72,7 +82,13 @@
     if (!engine) return;
     // No margin here either. It used to be a `16` picked in this file, six pixels a side
     // wider than the PNG on the same drawing.
-    const svg = engine.exportSvg({ selectionOnly });
+    //
+    // **The two switches go to the vector path too**, which they did not until 4.5: the SVG
+    // exporter always wrote its paper `<rect>` in the theme's colour, so "transparent
+    // background" was a control that quietly did nothing for half this dialog's formats —
+    // and a colour that is not the theme's, or a dark rendering, had no route at all. The
+    // oracle's exportToSvg takes both (`export.ts@1118751f:296-305`, `:458-468`).
+    const svg = engine.exportSvg({ selectionOnly, transparent, darkMode });
     if (svg) downloadBlob("drawing.svg", new Blob([svg], { type: "image/svg+xml" }));
     onClose();
   }
@@ -100,6 +116,10 @@
       <label class="option-row">
         <span>Selection only</span>
         <input type="checkbox" bind:checked={selectionOnly} />
+      </label>
+      <label class="option-row">
+        <span>Dark mode</span>
+        <input type="checkbox" bind:checked={darkMode} />
       </label>
       <div class="option-row">
         <span>Export Scale</span>

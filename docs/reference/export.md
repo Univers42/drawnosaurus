@@ -83,27 +83,102 @@ no-op, and the oracle clears too for any background it is not certain is opaque
 | a zero-width rectangle | 20 × (its height + 20) | same sum over whatever the bounds came out as (`export.ts:571-572`)                                                                                                  |
 | everything in a frame  | the frames' box + 20   | `getRootElements`; see above                                                                                                                                         |
 
-## One options struct, and what it does not yet reach
+## One options struct, and both formats read it
 
-**IMPLEMENTATION DETAIL.** `ExportOptions` (`export/png.rs`) is the one thing an export is
-asked: `padding`, `scale`, `background`, `frame_labels`. The oracle asks the same four
-questions of a canvas and an SVG under the same names, so the type exists once and both
-formats will read it.
+**IMPLEMENTATION DETAIL, since 4.5.** `ExportOptions` (`export/png.rs`) is the one thing an
+export is asked: `padding`, `scale`, `background`, `dark_mode`, `frame_labels`,
+`embed_scene`. The oracle asks the same questions of a canvas and an SVG under the same
+names, so the type exists once and both formats read it.
 
-**What it does not reach: `scene_to_svg`.** That still takes a bare `padding: f64` and
-always draws its `<rect>`, and moving it is 4.5's — it changes the SVG export's output and
-`ci_export.rs`'s pinned widths. Until then this struct is the PNG path's, and a reader
-should assume the SVG path has not been converted. What 4.1 did do is put the struct in
-`export/` rather than in the painter, so 4.2 and 4.5 add fields to it instead of inventing
-a second one.
+**`scene_to_svg` reads it now.** It used to take a bare `background: &str` a caller chose
+and always wrote its `<rect>`; it takes `(elements, frame, options, theme)` and the paper is
+`ExportPalette::paper()` — `options.background` over `theme.background`, the oracle's
+`exportBackground && viewBackgroundColor` (`export.ts@1118751f:458`). **The colour argument
+is gone rather than defaulted**, because a fourth argument carrying a colour is a way for a
+background to be decided outside the engine's own theme, and there was exactly one caller
+passing `self.theme.background` to it.
 
-**`frame_labels` is the one field the PNG path honours and nothing plumbs yet.** The
+**`frame_labels` is still honoured by the PNG path and plumbed to nothing else.** The
 painter reads it off the frame, and `ci_export_png.rs` pins both settings. It is not a
-parameter of the `exportPng` binding on purpose: its only consumer is the painter, and the
-format that would let a person choose it is 4.5's. **The two formats disagree today** — a
-PNG draws a frame's name, and `scene_to_svg` draws none at all, where the oracle adds the
-label to both (`export.ts:169-172`). That disagreement is 4.5's to close; what 4.1 owes
-4.5 is the flag, and the flag is there.
+parameter of either binding on purpose: nothing offers a person the choice. **The two
+formats still disagree** — a PNG draws a frame's name and `scene_to_svg` draws none, where
+the oracle adds the label to both (`export.ts:169-172`). Not closed by 4.5; see "What is
+not here yet".
+
+## The background: include, exclude, and the one colour there is
+
+**VERIFIED.** Three questions, one answer each, and all three in
+`export/palette.rs` — which is the **only** place an export's colours are resolved.
+
+| question               | where                                             | oracle                    |
+| ---------------------- | ------------------------------------------------- | ------------------------- |
+| is there paper at all? | `ExportOptions::background`, default **true**     | `appState.ts@1118751f:69` |
+| what colour is it?     | `DrawTheme::background` — the canvas's own choice | `export.ts@1118751f:466`  |
+| is the export dark?    | `ExportOptions::dark_mode`, default **false**     | `appState.ts@1118751f:72` |
+
+**The default is to include the paper, and that is the feature.** A default of "omit" would
+make "does an export have a background" a thing nobody chose, and every test placed on the
+wrong side of it would pass for a broken implementation. So `the_defaults_are_paper_on_and_dark_off`
+asserts the two booleans on their own, and every behaviour test is a pair whose halves are
+compared on the same point of the same document.
+
+**A colour is never passed in.** The oracle's is `viewBackgroundColor` — app state the
+canvas picker writes (`actionCanvas.tsx@1118751f:73-74`) and the export only reads, and ours
+is `DrawTheme::background`, which `DrawSurface.svelte` already sets from the main menu's
+"Canvas background" swatches. `design.md:1333` ("Background color") is therefore **the
+engine's theme reaching both formats**, not a new colour picker: the oracle's export dialog
+has no colour control either (`ImageExportDialog.tsx@1118751f:220-275` offers only-selected,
+with-background, dark-mode, embed-scene and scale), and adding one would be inventing UX
+(law 4).
+
+**One colour, three reads, and all three are the same string.** The paper `<rect>`'s fill, the
+PNG's fill behind everything (`renderer/helpers.ts@1118751f:115-119`), and the colour an
+outline arrowhead is punched through with. The third is the one that fails if the export keeps
+a copy of its own: a head punched with white on a red board is a visible hole, and
+`an_outline_arrowhead_is_punched_with_the_chosen_paper` is the test for it.
+
+### The dark export is one filter, not a second palette
+
+**VERIFIED.** Excalidraw used to invert a dark canvas with a CSS `filter: invert(93%)
+hue-rotate(180deg)` and moved the arithmetic into JavaScript, because a browser compositing
+in software cannot afford the filter (`renderer/interactiveScene.ts@1118751f:116-120`).
+`exportWithDarkMode` is that same filter, put over **every colour the export writes** — the
+paper (`export.ts@1118751f:466`), the elements on the vector path
+(`staticSvgScene.ts@1118751f:207-212, 528-534, 764-769, 821-826`) and on the canvas
+(`renderElement.ts@1118751f:447-450, 462-465`). So there is one function to port, and one
+place: `dark_mode_filter` in `export/palette.rs`.
+
+**The normalisation is load-bearing.** `cssHueRotate` divides by 255 _before_ the matrix and
+clamps to `[0, 1]` after it (`colors.ts@1118751f:25-28, 47-56`). Feeding 0–255 into the
+matrix and clamping afterwards saturates every channel above 1 to 255, and `#ff0000` comes
+out `#ffffff` instead of the `#ff9090` the oracle's own test pins
+(`colors.test.ts@1118751f:30-32`). A mutation that drops the normalisation fails four of the
+twelve cases in `ci_export_background.rs`; that was measured, not assumed.
+
+**Where it goes on the canvas, and why not everywhere.** At `set_fill`/`set_stroke`, the one
+place a colour becomes a paint style, in a `thread_local` next to the eraser fade that is
+already set per element and read in the same way. There are ~35 of those calls; a filter at
+each is 35 chances for one element to be filtered and its neighbour not, which is the failure
+the oracle moved away from. A sticky note's shadow and its edge shadow are written **raw** and
+stay unfiltered, because the oracle leaves both unfiltered too
+(`staticSvgScene.ts@1118751f:199-203, 222-224`) — a shadow of the same darkness on a dark
+sheet is a shadow. The on-screen canvas never sees the flag: it is set for the length of one
+export paint and cleared immediately after.
+
+**The colour cache keys on the colour written, not the colour asked for.** Deduplicating on
+the input would let a render whose flag changed between two elements keep a stale style. The
+flag cannot change inside one render today, and the cache key is the line that keeps the two
+agreeing if it ever does.
+
+### The property, and why a screenshot cannot find it
+
+**`the_background_never_changes_the_geometry_of_what_is_drawn`**, over eight scenes (empty,
+one, many, turned, transparent, text, an arrow, and all of them together). The same scene
+exported with and without a paper has a **byte-identical body** and the same `viewBox`; the
+only difference is the paper. `the_dark_filter_moves_colours_and_nothing_else` is the same
+claim for the filter, read as "strip every colour value and the two documents are the same
+string". A leak shows up as one element of one scene being wrong, and one screenshot cannot
+see it.
 
 ## The scale the dialog starts on is 2×, and the oracle's is the device's
 
@@ -498,17 +573,31 @@ Phase 4's other export tasks, and what each would need:
   generation 2) needs a crate, and the **schema** of an Excalidraw scene is 4.7's and
   deferred as RISK. Neither is a gap in the container; both are written down above with
   their cause.
-- **4.5, background and theme.** A _chosen_ background colour. Today the export paints
-  `view.theme.background` or nothing; there is no option anywhere that picks one, for
-  either format.
 - **4.6's subsetting.** The faces are embedded whole, not subset to the scene's codepoints as
   the oracle subsets them, and the ten files cost 9.8% of the WASM module. That is the trade
   written down above, not a gap.
-- **4.2's leftovers, both small.** `frame_labels` now has one consumer that can act on it
-  (`export_view_of` withdraws the names), but the two formats still disagree: a PNG draws a
-  frame's name and `scene_to_svg` draws none, where the oracle adds the label to both
-  (`export.ts@1118751f:169-172`). And `ExportOptions::background` still does not reach the
-  SVG's `<rect>`, which is drawn unconditionally — 4.5's, as above.
+- **4.5's third line, `design.md:1578` "Collaboration colors": not in the oracle, and it is
+  not a port.** The oracle's collaborator colour is `getClientColor`
+  (`packages/excalidraw/clients.ts@1118751f:29-44`): a hash of the peer id, a hue of
+  `(hash % 37) * 10`, and a **fixed** `hsl(hue, 100%, 83%)`. It takes no theme and reads
+  none, and nothing in the oracle adjusts it — `clients.ts` mentions no theme at all. So the
+  checklist line is our wish and not the oracle's behaviour, and §0 says defer it.
+  **Where ours is decided, for whoever picks it up: it is a front literal, not a motor
+  palette** — `apps/web/src/lib/realtime/realtimeClient.ts:104`'s `CURSOR_COLORS`, six hex
+  strings, picked by `getCollaboratorProfile` at `:168-170` from a sum of the client id's
+  char codes, and then _sent over the wire_ in every `presence` message
+  (`realtimeClient.ts:341, 435, 465, 494`). The engine takes it as a string
+  (`engine/peers.rs:36-40`, `Peer::color`) and paints it as given, for a peer's outline
+  (`wasm/paint.rs` `peer_lasers`) and their laser trail. **A theme-following collaborator
+  colour cannot be a local decision**, because two people in one room must see the same
+  person in the same colour, and each client's theme is its own. That is an argument for
+  settling it once on the server or deriving it from a peer id both sides already share — and
+  it is a design question, which is why it is written down and not built.
+- **4.2's leftover, and it is 4.5's other half.** `frame_labels` has one consumer that can
+  act on it (`export_view_of` withdraws the names), but the two formats still disagree: a PNG
+  draws a frame's name and `scene_to_svg` draws none, where the oracle adds the label to both
+  (`export.ts@1118751f:169-172`). `exportBackground` and the dark filter now reach the SVG;
+  the frame label does not.
 
 ## Where the tests are
 
@@ -589,3 +678,12 @@ Phase 4's other export tasks, and what each would need:
   background, and its own middle pixel for the scale — a 3x export that is a 3x canvas
   holding a 1x drawing has the right IHDR and a blank middle, and nothing in Rust can see
   the difference.
+- `crates/draw-engine/tests/ci_export_background.rs` — the three background questions, the
+  dark filter's **oracle literals** (`colors.test.ts@1118751f:19, 25, 31, 37, 43, 69, 75,
+81, 89, 94, 98, 106`), and the two properties over eight scenes.
+- `e2e/exportBackground.spec.ts` — that the two switches reach **both** formats, and that the
+  filter reaches the **pixels**: `#121212` in the corner, `#154162` in the middle, and
+  `#d3d3d3`/`#121212` in the SVG's text, read off files the browser encoded.
+- `apps/web/src/lib/draw-chrome/exportParity.test.ts` — that the dialog hands both switches to
+  the **vector** card as well as the raster one, which is the defect 4.5 exists to fix and the
+  one place it can come back.
