@@ -117,32 +117,93 @@ what the oracle's expression answers. The disagreement is on a dpr-2 machine, wh
 oracle would also pick 2 and the chips look the same. Recorded here because the registry's
 `Scale` line reads as a flat `covered` and would not tell the next agent.
 
-## Where the two exports disagree on padding, and who owns it
+## The two exports no longer disagree on padding
 
-**IMPLEMENTATION DETAIL, and a law-3 smell left in place on purpose.** `export_svg` takes
-its padding from the host, which passes `16` (`engine/src/engine.ts:918`), while the PNG
-export uses the oracle's `10` (`export/png.rs:18`). They are 6px apart per side. The PNG
-side follows the oracle because the PNG path is this task's; the SVG side was not touched.
+**OBSERVED, 4.2.** They were 6px apart per side and now are not. `exportSvg` used to take a
+bare `padding: f64` that the front supplied, and the front supplied `16`, in two places:
+the dialog's own call and the host wrapper's default. The oracle's is 10
+(`constants.ts@1118751f:398`), which is what the PNG path used.
 
-That `16` is a number the _front_ chose about an export, which §2 does not allow, and it is
-written in two places: the dialog passes one and the host's wrapper defaults to the other.
-Changing either changes the SVG export's output and its tests, which is 4.5's business.
+`export_svg` now takes an `ExportOptions` and the margin is the same `10` for both formats.
+The signature had nowhere left to pass a number, which is the point: §2 does not allow the
+front to pick a margin, and a parameter that exists is a parameter someone will fill in.
 
-**It is not just a note.** `exportParity.test.ts` names both sites in
-`KNOWN_FRONT_NUMBERS` with 4.5 as the owner, skips exactly those two, and fails on a
-third. So the debt is a ratchet rather than a sentence in a page nobody re-reads — the
-window it reads is two statements wide, which is how it reaches the wrapper's default at
-all.
+`scene_to_svg` was the deeper half of it. It took `(bounds, padding)` and did the framing sum
+itself — a second copy of `ExportFrame::for_bounds`'s arithmetic — so it could only ever be a
+second framing path. It now takes the `ExportFrame` and does no arithmetic of its own.
+
+**A ratchet that switched itself off, which is worth knowing about.** `exportParity.test.ts`
+held the two debt sites as _patterns_ inside `KNOWN_FRONT_NUMBERS`. Emptying the list to
+record that 4.2 paid the debt therefore also removed the detector, and putting
+`engine.exportSvg(16)` back into the dialog left all twelve tests green. The patterns are now
+`FRONT_NUMBER_PATTERNS` and the list is only the allow-list; the same mutation now fails with
+the site named and its owner reported as `unowned`. An allow-list is not a detector.
+
+## What a selection or one frame is, and the one thing this got wrong first
+
+**VERIFIED.** There is no selection-bounds function and no frame-bounds function. The oracle
+decides _which elements_ an export covers one layer above the framing, in
+`prepareElementsForExport` (`packages/excalidraw/data/index.ts@1118751f:48-96`), and
+`getCanvasSize` takes an element list. So `ExportScope` (`export/scope.rs`) is those two
+decisions and the framing is still `ExportFrame`'s — one path to a box, reached from three
+places.
+
+| what is selected     | what is painted                        | what it is measured by         | padding |
+| -------------------- | -------------------------------------- | ------------------------------ | ------- |
+| nothing              | the whole live scene                   | `getRootElements` of the scene | 10      |
+| one ordinary element | that element                           | its own **turned** box         | 10      |
+| one frame            | the frame's overlapping contents       | **the frame's own box**        | **0**   |
+| more than one        | the selection, plus a frame's children | `getRootElements` of the union | 10      |
+
+**A frame is measured by the frame, and that is the part that reads like a bug.**
+`exportingFrame ? [exportingFrame] : getRootElements(elementsForRender)` with
+`exportPadding = 0` set in front of it (`export.ts@1118751f:228-233`, and `:337-342` for the
+SVG, which is the same two lines twice). So the two halves diverge on purpose: the painted set
+is the frame's contents, the framing box is the frame element. A child poking past the frame's
+edge is **cropped**, because the box is the frame's and not the children's union.
+
+The same frame export also sets `frameRendering.clip = false` — "for canvas export, don't
+clip if exporting a specific frame as it would clip the corners of the content"
+(`:217-219`). Without it the frame's own clip box cuts the content at the frame's very edge.
+
+**An empty selection is the whole scene, and it is the oracle's deliberate answer.**
+`isExportingSelection` is `exportSelectionOnly && isSomeElementSelected(...)` (`:56-58`), and
+`isSomeElementSelected` is `elements.some(el => selectedElementIds[el.id])`
+(`selection.ts@1118751f:141-143`). With nothing selected the flag never becomes true, so the
+ternary at `:61-69` takes its `else` arm and `exportedElements = elements`. **What makes the
+competing branch not run is that no _live element_ is selected** — not that the checkbox is
+off, and not that the id list is empty in the abstract. The alternative is a 20×20 canvas of
+nothing, which is what an empty element list would measure, and it is the case most likely to
+be wrong and least likely to be noticed: it exports a picture and it downloads.
+
+**There is no separate "export this frame" call, and the oracle has none either.** A frame
+export is what a selection of exactly one frame _is_ (`data/index.ts@1118751f:73-79`). The
+front passes one boolean and the engine decides which of the three rows above it meant.
+
+## The bug this found: the two formats framed one drawing differently
+
+**VERIFIED, and it is the reason `scene_to_svg` changed shape rather than just gaining a
+field.** The SVG path measured with `scene_bounds` — the _unrotated_ union — while the PNG
+path measured with `scene_outline_bounds`, the turned box `getCommonBounds` actually returns.
+So one turned square exported as a diamond in PNG and as the box it was drawn in as SVG, from
+the same drawing at the same padding: `expected 100 ~= 141.4213562373095`.
+
+The oracle cannot do this, and the reason is structural rather than incidental: it builds one
+`getCanvasSize` call and hands it to both formats (`export.ts@1118751f:232-235` and
+`:341-344` are the same expression). A function taking `(bounds, padding)` can only ever be
+one framing path's private arithmetic, which is what ours was. Taking the `ExportFrame`
+instead is what makes the divergence unrepresentable.
+
+`Scene::bounds()` is still the unrotated union, and two camera paths still use it —
+`fit` (`engine/style.rs:688`) and `content_in_view` (`:898`) — while the oracle's
+`actionZoomToFit` measures with `getCommonBounds` (`actionCanvas.tsx@1118751f:307-311`). A fit
+that used a stored box would crop a turned element's corners. Not this task's; recorded here
+because it is the same mistake in a different place.
 
 ## What is not here yet
 
 Phase 4's other export tasks, and what each would need:
 
-- **4.2, the selection or one frame.** The seam is open and tested: `ExportFrame::for_bounds`
-  takes bounds rather than elements, and `DrawEngine::export_view_of` takes the subset to
-  paint, so 4.2 hands over elements and a box instead of writing a second framing path.
-  The frame export passes `exportPadding = 0` (`export.ts:228-230`). What is missing is the
-  selection, and a `only` field on `ExportOptions` if it is to reach both formats.
 - **4.3, the clipboard.** `exportPng` resolves a `Blob` and stops. The clipboard is the
   host's (§2), so this needs a menu entry and nothing in the engine changes.
 - **4.4, the round trip.** A `tEXt` chunk holding the scene JSON. Not started, and it needs
@@ -152,11 +213,22 @@ Phase 4's other export tasks, and what each would need:
   `view.theme.background` or nothing; there is no option anywhere that picks one, for
   either format.
 - **4.6, fonts.** `export/svg.rs` names the families and embeds no `@font-face`.
+- **4.2's leftovers, both small.** `frame_labels` now has one consumer that can act on it
+  (`export_view_of` withdraws the names), but the two formats still disagree: a PNG draws a
+  frame's name and `scene_to_svg` draws none, where the oracle adds the label to both
+  (`export.ts@1118751f:169-172`). And `ExportOptions::background` still does not reach the
+  SVG's `<rect>`, which is drawn unconditionally — 4.5's, as above.
 
 ## Where the tests are
 
 - `crates/draw-engine/tests/ci_export_png.rs` — the four numbers, and the edge cases, as
   arithmetic derived from the lines above. Natively; no browser needed.
+- `crates/draw-engine/tests/ci_export_scope.rs` — what an export is **of**: the three scopes,
+  the empty selection, the frame's own box at no padding, and two invariants over ten scene
+  shapes. Both invariants are mutation-checked — aiming the subset's cull at the editor
+  camera, framing a frame by its contents, dropping the `isSomeElementSelected` half of the
+  guard and reversing the `includeElementsInFrames` direction each fail them, and each of
+  those four was run.
 - `apps/web/src/lib/draw-chrome/exportParity.test.ts` — that the front holds none of it.
 - `e2e/exportPng.spec.ts` — that the numbers reach the pixels: the real dialog, the real
   chips, the downloaded file's own IHDR for the size, its own corner pixel for the
