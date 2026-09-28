@@ -37,6 +37,13 @@ const PADDING = 10;
 const SCENE_WIDTH = 200;
 const SCENE_HEIGHT = 100;
 
+/**
+ * The two shapes the selection cases load: a 50x20 rectangle at the origin and a 30x20 one
+ * at x=500, so the scene spans 530 wide and a selection of either is unmistakably its own
+ * box.
+ */
+const SCENE_SPAN = 530;
+
 const STYLE = {
   angle: 0,
   strokeColor: "#1e1e1e",
@@ -81,15 +88,114 @@ async function loadOneRectangle(page: Board["page"]): Promise<void> {
   );
 }
 
+/**
+ * A board of two rectangles far apart, for the selection cases.
+ *
+ * Loaded rather than drawn, for the reason the single-rectangle loader gives: the bounds are
+ * exactly the numbers written here, so every expected size below is arithmetic and not a
+ * tolerance. The ids are the ones the cases select by.
+ */
+async function loadTwoRectangles(page: Board["page"]): Promise<void> {
+  await page.evaluate(
+    ({ style }) => {
+      window.__drawEngine!.loadScene(
+        JSON.stringify({
+          type: "osidraw",
+          version: 1,
+          source: "e2e",
+          elements: [
+            { ...style, id: "export-left", type: "rectangle", x: 0, y: 0, width: 50, height: 20 },
+            {
+              ...style,
+              id: "export-right",
+              type: "rectangle",
+              x: 500,
+              y: 0,
+              width: 30,
+              height: 20,
+            },
+          ],
+        }),
+      );
+    },
+    { style: STYLE },
+  );
+}
+
+/**
+ * A 200x200 frame holding one shape, beside a loose shape at x=500.
+ *
+ * The frame export case needs three things the other scenes do not: a frame to select, a
+ * child inside it, and a shape far enough away that a whole-scene export is a visibly
+ * different size. The child pokes 10px past the frame's right edge on purpose — that is the
+ * crop the oracle's own-box framing produces, and 200 rather than 210 is the assertion.
+ */
+async function loadFramedScene(page: Board["page"]): Promise<void> {
+  await page.evaluate(
+    ({ style }) => {
+      window.__drawEngine!.loadScene(
+        JSON.stringify({
+          type: "osidraw",
+          version: 1,
+          source: "e2e",
+          elements: [
+            {
+              ...style,
+              id: "export-frame",
+              type: "frame",
+              name: "Frame 1",
+              x: 0,
+              y: 0,
+              width: 200,
+              height: 200,
+            },
+            {
+              ...style,
+              id: "export-inside",
+              type: "rectangle",
+              x: 20,
+              y: 20,
+              width: 190,
+              height: 60,
+              frameId: "export-frame",
+            },
+            {
+              ...style,
+              id: "export-loose",
+              type: "rectangle",
+              x: 500,
+              y: 0,
+              width: 30,
+              height: 20,
+            },
+          ],
+        }),
+      );
+    },
+    { style: STYLE },
+  );
+}
+
 /** The dialog's own locator — the one a person opens with Ctrl+Shift+E. */
 function exportDialog(board: Board) {
   return board.page.getByRole("dialog", { name: "Export Drawing" });
 }
 
-/** Opens the export dialog the way a person does, off the board. */
-async function openExportDialog(board: Board): Promise<void> {
-  await board.canvas.click({ position: { x: 5, y: 5 } });
-  await board.page.keyboard.press("Escape"); // drop whatever that click selected
+/**
+ * Opens the export dialog the way a person does, off the board.
+ *
+ * `keepSelection` skips the click-and-Escape that drops whatever was selected. The selection
+ * cases need it, because the dialog reads the selection **when it opens** — the checkbox
+ * starts on if something is selected (`ImageExportDialog.tsx@1118751f:80`), and a selection
+ * made after the dialog was already up cannot change it. A case that opened with a
+ * selection and then selected would be asserting about a checkbox that had already been
+ * decided, which is the mistake the case exists to catch.
+ */
+async function openExportDialog(board: Board, keepSelection = false): Promise<void> {
+  if (!keepSelection) {
+    await board.canvas.click({ position: { x: 5, y: 5 } });
+    await board.page.keyboard.press("Escape"); // drop whatever that click selected
+  }
   await board.page.keyboard.press("Control+Shift+E");
   await expect(exportDialog(board)).toBeVisible();
 }
@@ -222,6 +328,119 @@ function middlePixel(bytes: Buffer): Pixel {
   const image = raster(bytes);
   return pixelAt(image, Math.floor(image.width / 2), Math.floor(image.height / 2));
 }
+
+/**
+ * `select` on the debug handle, which is not part of the public type.
+ *
+ * The same cast `flowchart.spec.ts` and `focusMode.spec.ts` use, and for the same reason:
+ * the harness exposes the engine for tests and does not widen its type for a test-only
+ * method. Selecting by id rather than by clicking is deliberate — the box under test is a
+ * function of *which* elements are selected, and a click would make the expected number
+ * depend on where the shape happens to be on screen.
+ */
+interface SelectHandle {
+  select(ids: string[]): void;
+}
+
+/** Selects by id, and waits for the engine to have taken it. */
+async function selectById(page: Board["page"], ids: string[]): Promise<void> {
+  await page.evaluate((wanted) => {
+    (window.__drawEngine as unknown as SelectHandle).select(wanted);
+  }, ids);
+  await page.waitForTimeout(50);
+}
+
+/**
+ * The "selection only" checkbox, as a person finds it.
+ *
+ * Located by name rather than by position, because the point of these cases is that the
+ * control is *there* and works, and a positional selector would quietly keep passing if the
+ * label were mistyped.
+ */
+function selectionOnlyToggle(board: Board) {
+  return exportDialog(board).getByRole("checkbox", { name: "Selection only" });
+}
+
+/** Ticks or unticks it and waits for the check to land, since a click is async here. */
+async function setSelectionOnly(board: Board, on: boolean): Promise<void> {
+  const toggle = selectionOnlyToggle(board);
+  if ((await toggle.isChecked()) !== on) await toggle.setChecked(on);
+  expect(await toggle.isChecked(), "the selection-only toggle did not take").toBe(on);
+}
+
+test.describe("the selection and one-frame PNG export", () => {
+  test("exports the selection's own box, and the scene's when nothing is selected", async ({
+    page,
+  }) => {
+    const board = await openBoard(page);
+    await loadTwoRectangles(page);
+
+    // The checkbox is on, and nothing is selected: the oracle's
+    // `isExportingSelection = exportSelectionOnly && isSomeElementSelected(...)`
+    // (`data/index.ts@1118751f:56-58`) is false, so this is the whole scene. It exports a
+    // picture and downloads, which is exactly why it is the case nobody notices.
+    await openExportDialog(board);
+    await setSelectionOnly(board, true);
+    await exportDialog(board).getByRole("button", { name: "1x", exact: true }).click();
+    const emptySelection = pngSize(await exportPngFromDialog(board));
+    expect(emptySelection, "a selection export of nothing is the whole scene").toEqual({
+      width: SCENE_SPAN + PADDING * 2,
+      height: 20 + PADDING * 2,
+    });
+
+    // Now one of the two, and the box follows the selection rather than the scene.
+    await selectById(page, ["export-left"]);
+    await openExportDialog(board, true);
+    // The dialog opens on the checkbox when something is selected, as the oracle's does
+    // (`useState(hasSelection)`, `ImageExportDialog.tsx@1118751f:80`) — so this case reads the
+    // default rather than setting it, because the default is part of what is being pinned.
+    expect(
+      await selectionOnlyToggle(board).isChecked(),
+      "the dialog starts on the selection when something is selected",
+    ).toBe(true);
+    await exportDialog(board).getByRole("button", { name: "1x", exact: true }).click();
+    const oneSelected = pngSize(await exportPngFromDialog(board));
+    expect(oneSelected, "the export is the selected box, not the scene's").toEqual({
+      width: 50 + PADDING * 2,
+      height: 20 + PADDING * 2,
+    });
+
+    // Untick it and the same selection is ignored, which is the other half of the `&&`.
+    // `keepSelection` again: dropping the selection here would make the case pass for the
+    // wrong reason, since an empty selection is the scene whatever the checkbox says.
+    await openExportDialog(board, true);
+    await setSelectionOnly(board, false);
+    await exportDialog(board).getByRole("button", { name: "1x", exact: true }).click();
+    expect(pngSize(await exportPngFromDialog(board)), "an unset flag is the whole scene").toEqual(
+      emptySelection,
+    );
+  });
+
+  test("exports a selected frame at the frame's own box, with no padding", async ({ page }) => {
+    const board = await openBoard(page);
+    await loadFramedScene(page);
+
+    await selectById(page, ["export-frame"]);
+    await openExportDialog(board, true);
+    expect(await selectionOnlyToggle(board).isChecked()).toBe(true);
+    await exportDialog(board).getByRole("button", { name: "1x", exact: true }).click();
+    const bytes = await exportPngFromDialog(board);
+
+    // 200x200 and not 220x220: `exportingFrame ? [exportingFrame] : …` with
+    // `exportPadding = 0` in front of it (`export.ts@1118751f:228-233`). A frame export is
+    // measured by the frame, and the padding is gone.
+    expect(pngSize(bytes), "a frame export is the frame's box, unpadded").toEqual({
+      width: 200,
+      height: 200,
+    });
+    // The loose shape at x=500 is on the same board and is not in the picture: the export is
+    // 200 wide, and a whole-scene export would be 530.
+    expect(
+      middlePixel(bytes).a,
+      "the frame's contents are painted, so the middle is ink and not bare canvas",
+    ).toBe(255);
+  });
+});
 
 test.describe("the whole-scene PNG export", () => {
   test("is the scene's size at the scale the chips chose, not the viewport's", async ({ page }) => {

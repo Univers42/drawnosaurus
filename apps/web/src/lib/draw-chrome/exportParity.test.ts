@@ -77,8 +77,8 @@ const PINNED: ReadonlyArray<{ what: string; pattern: RegExp; line: number }> = [
     pattern: /^pub const DEFAULT_EXPORT_PADDING: f64 = /,
     line: 18,
   },
-  { what: "pixel_width", pattern: /\(self\.width \* self\.scale\)\.trunc\(\) as u32/, line: 129 },
-  { what: "pixel_height", pattern: /\(self\.height \* self\.scale\)\.trunc\(\) as u32/, line: 134 },
+  { what: "pixel_width", pattern: /\(self\.width \* self\.scale\)\.trunc\(\) as u32/, line: 174 },
+  { what: "pixel_height", pattern: /\(self\.height \* self\.scale\)\.trunc\(\) as u32/, line: 179 },
 ];
 
 /**
@@ -213,22 +213,41 @@ function callsOf(path: string, lines: string[], call: string): string[] {
 }
 
 /**
+ * The shapes a front-chosen number about an export has taken here.
+ *
+ * **These are the detector; [`KNOWN_FRONT_NUMBERS`] is only the allow-list.** Keeping them
+ * apart is the whole point, and getting it wrong is silent: the first version of this file
+ * held the two patterns *inside* the known-debt entries, so emptying the list to record that
+ * 4.2 paid the debt also switched the detector off. Reintroducing `engine.exportSvg(16)` in
+ * the dialog then left all twelve tests green — the check that exists to catch exactly that
+ * could no longer see the thing it looks for. An allow-list is not a detector.
+ *
+ * Each pattern is one spelling of "the front picked a number for an export", and the honest
+ * limit is that a new spelling is a new entry here. `ON_A_FORWARD` above is the other half of
+ * it and catches the arithmetic; this catches the bare number at the call.
+ */
+const FRONT_NUMBER_PATTERNS: ReadonlyArray<{ what: string; find: RegExp }> = [
+  { what: "a number passed to exportSvg", find: /exportSvg\(\s*-?\d/ },
+  { what: "a padding defaulted in the wrapper", find: /exportSvg\(\s*padding\s*=\s*-?\d/ },
+  { what: "a number passed to exportPng", find: /exportPng\(\s*-?\d/ },
+];
+
+/**
  * Every number the front still chooses about an export, and who owns removing it.
  *
- * Both are the same padding — the oracle's is 10 (`constants.ts@1118751f:398`) and the SVG
- * path uses 16, six pixels apart per side — in the two places it is written down: the
- * dialog passes one, and the host's wrapper defaults to the other. §2 allows the front to
- * pass a user's intent, not to invent a margin, so both are the same violation at two
- * depths. Moving either is 4.5's: it changes the SVG export's output and its tests.
+ * **Empty, and that is the point.** It held two entries — the dialog passing a padding of 16
+ * and the host's wrapper defaulting to the other 16, six pixels a side wider than the oracle's
+ * 10 (`constants.ts@1118751f:398`) — and 4.2 removed both. `exportSvg` takes an options
+ * object now and the margin comes from the engine's `ExportOptions`, the same struct and the
+ * same 10 the PNG path uses, so there is no longer a place in the front where a margin can be
+ * written.
  *
- * So they are named here rather than fixed, and this list is the ratchet — the forward
- * check skips exactly these and no more, and the ratchet test fails on a *third*. 4.5
- * cannot add one on its way past the two it is there to remove.
+ * It is kept as an empty list rather than deleted because a ratchet that only exists while it
+ * has entries is gone exactly when it would next be useful. With nothing in it the test below
+ * fails on the **first** number the front chooses about an export, which is the state worth
+ * being permanently on guard for.
  */
-const KNOWN_FRONT_NUMBERS: readonly { path: string; find: RegExp; owner: string }[] = [
-  { path: "draw-chrome/DrawExportModal.svelte", find: /exportSvg\(\s*-?\d/, owner: "4.5" },
-  { path: "engine/src/engine.ts", find: /exportSvg\(\s*padding\s*=\s*-?\d/, owner: "4.5" },
-];
+const KNOWN_FRONT_NUMBERS: readonly { path: string; find: RegExp; owner: string }[] = [];
 
 /** The one known-debt site a statement belongs to, if it is one. */
 function knownOwner(path: string, statement: string): string | null {
@@ -239,15 +258,29 @@ function knownOwner(path: string, statement: string): string | null {
   );
 }
 
-/** Every known-debt site in the tree, found rather than assumed. */
+/**
+ * Every front-chosen number in the tree, found rather than assumed, and each with the task
+ * that owns removing it.
+ *
+ * The `path` in a known entry is **not** applied as a filter here, deliberately: an entry says
+ * "this site, this owner", and a pattern matching somewhere *else* is a new debt rather than
+ * the known one. So a pattern found outside its declared file is reported under the detector's
+ * own wording, and the count check below fails on it.
+ */
 function foundFrontNumbers(shipped: Iterable<[string, string[]]>): string[] {
   const found: string[] = [];
   for (const [path, lines] of shipped) {
-    for (const { find, owner } of KNOWN_FRONT_NUMBERS) {
-      if (!path.endsWith(path)) continue;
-      for (const statement of codeOf(path, lines).split(";")) {
-        const text = statement.trim();
-        if (find.test(text)) found.push(`${owner}: ${path} — ${text.replace(/\s+/g, " ")}`);
+    const statements = codeOf(path, lines)
+      .split(";")
+      .map((text) => text.trim())
+      .filter(Boolean);
+    for (const { what, find } of FRONT_NUMBER_PATTERNS) {
+      for (const text of statements) {
+        if (find.test(text)) {
+          found.push(
+            `${knownOwner(path, text) ?? "unowned"}: ${path} — ${what} in \`${text.replace(/\s+/g, " ")}\``,
+          );
+        }
       }
     }
   }
@@ -296,21 +329,24 @@ describe("the app and the engine's host", () => {
   it("calls the export without touching a number on the way", () => {
     const found: string[] = [];
     for (const [path, lines] of shipped) {
-      for (const statement of callsOf(path, lines, "exportPng(")) {
-        // The two known-debt sites are the SVG path's padding, which the statement before
-        // an `exportSvg` call carries; the ratchet test below counts them, so skipping
-        // them here cannot hide a third.
-        if (knownOwner(path, statement)) continue;
-        for (const { what, pattern } of ON_A_FORWARD) {
-          if (pattern.test(statement)) {
-            found.push(`${path} — ${what} in \`${statement.replace(/\s+/g, " ")}\``);
+      // Both exports, because both take a caller's intent now and both had a front-chosen
+      // number in them. Checking only `exportPng` is what let the SVG path's 16 sit there
+      // through 4.1 — the check was green and the debt was real.
+      for (const call of ["exportPng(", "exportSvg("]) {
+        for (const statement of callsOf(path, lines, call)) {
+          if (knownOwner(path, statement)) continue;
+          for (const { what, pattern } of ON_A_FORWARD) {
+            if (pattern.test(statement)) {
+              found.push(`${path} — ${what} in \`${statement.replace(/\s+/g, " ")}\``);
+            }
           }
         }
       }
     }
     expect(
       found,
-      "the front must hand the engine the scale and the flag, not do the sizing (BUNNY.md §2)",
+      "the front must hand the engine the scale and the flags, not do the sizing " +
+        "(BUNNY.md §2)",
     ).toEqual([]);
   });
 
@@ -384,8 +420,16 @@ describe("the dialog the two controls belong to", () => {
 describe("the wrapper the front calls", () => {
   const wrapper = withoutComments(sourceOf(ENGINE_TS));
   const lines = wrapper.split("\n");
-  /** Every call, not the first: one that forwards cleanly says nothing about a second. */
-  const calls = lines.filter((line) => line.includes("this.inner.exportPng("));
+  /**
+   * Every call as a window, not as a line.
+   *
+   * Both exports are forwarded across several lines now that a third argument exists, and a
+   * line-filter saw only `this.inner.exportPng(` — which carries none of the arguments and
+   * so could not tell a forwarded call from one that dropped the caller's intent. From the
+   * first line naming the binding to the statement's closing `;`.
+   */
+  const calls = callWindows(lines, "this.inner.exportPng(");
+  const svgCalls = callWindows(lines, "this.inner.exportSvg(");
 
   it("forwards to WASM without computing anything on the way", () => {
     expect(calls.length, "engine/src/engine.ts should call the exportPng binding").toBeGreaterThan(
@@ -405,4 +449,44 @@ describe("the wrapper the front calls", () => {
     expect(calls.join("\n")).toMatch(/options\.scale/);
     expect(calls.join("\n")).toMatch(/options\.transparent/);
   });
+
+  it("hands the selection over rather than deciding what one is", () => {
+    // The one intent a host may pass (§2): the dialog's checkbox, the oracle's
+    // `exportSelectionOnly` (`data/index.ts@1118751f:56-58`). Which of the three it means —
+    // scene, selection, one frame — is the engine's, because an empty selection is the scene
+    // and a single selected frame is a frame export, and a front that picked either would be
+    // a second answer to a question with one right answer.
+    expect(svgCalls.length, "engine/src/engine.ts should call the exportSvg binding").toBe(1);
+    for (const call of svgCalls) {
+      // And no length argument at all: the old signature was `exportSvg(padding)` and the
+      // margin has no route through the front any more.
+      expect(call, "the SVG wrapper passes a number the engine did not ask for").not.toMatch(
+        /exportSvg\(\s*-?\d/,
+      );
+    }
+    expect(svgCalls.join("\n")).toMatch(/options\.selectionOnly/);
+    expect(calls.join("\n")).toMatch(/options\.selectionOnly/);
+  });
 });
+
+/**
+ * Every call to `needle` as the whole statement it belongs to, across line breaks.
+ *
+ * A `filter` on a single line is what this replaces, and it is a real weakness rather than a
+ * theoretical one: both exports are now forwarded over several lines, so a line-filter
+ * captured only the opening `this.inner.exportPng(` and every assertion about the arguments
+ * below it was asserting about a fragment. Ends at the statement's `;` or at the call's own
+ * `)`, whichever comes first, so two calls in one expression are still two windows.
+ */
+function callWindows(lines: string[], needle: string): string[] {
+  const found: string[] = [];
+  lines.forEach((line, index) => {
+    if (!line.includes(needle)) return;
+    let window = line;
+    for (let ahead = index + 1; !window.includes(";") && ahead < lines.length; ahead++) {
+      window += `\n${lines[ahead]}`;
+    }
+    found.push(window);
+  });
+  return found;
+}
