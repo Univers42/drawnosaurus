@@ -629,11 +629,14 @@ export async function exportPngAndSvg(board: Board): Promise<void> {
 }
 
 /**
- * Zooms to fit the whole board, waits for the engine's own rAF to paint it, then rasterises
- * the current view exactly as the Export dialog's PNG button does (`engine.exportPng()` —
- * `canvas.toBlob`) and downscales it to a ~360px-wide preview on an in-page canvas, over a
- * white fill so it reads the same in both themes regardless of what the story's own board
- * happened to be set to. Returns a `data:` URL; `null` if the browser produced no blob.
+ * Rasterises the whole scene exactly as the Export dialog's PNG button does
+ * (`engine.exportPng()`), and downscales it to a ~360px-wide preview on an in-page canvas,
+ * over a white fill so it reads the same in both themes regardless of what the story's own
+ * board happened to be set to. Returns a `data:` URL; `null` if the browser produced no blob.
+ *
+ * The camera is not consulted — the export is framed by the scene's own bounds — so the
+ * zoom-to-fit below is for the *page*, not for this. It is still the first thing a reader
+ * of a story sees, and it is what the other shots are taken at.
  */
 async function captureThumbnail(board: Board): Promise<string | null> {
   const { page } = board;

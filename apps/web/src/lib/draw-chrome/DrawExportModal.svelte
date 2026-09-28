@@ -31,7 +31,10 @@
     if (!engine) return;
     exporting = true;
     try {
-      const blob = await engine.exportPng();
+      // The two controls above, handed straight to the engine. The framing, the size and
+      // the background are its arithmetic — see `ExportFrame` in the engine, ported from
+      // `exportToCanvas` (`scene/export.ts@1118751f:180-284`).
+      const blob = await engine.exportPng({ scale, transparent });
       if (blob) downloadBlob("drawing.png", blob);
       onClose();
     } finally {
