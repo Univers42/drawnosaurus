@@ -94,9 +94,9 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "Shapes",
-    text: /disable snapping/,
+    text: /^`Ctrl\/Cmd` while snapping — Temporarily disable snapping$/,
     status: "gap",
-    why: "Half done. Ctrl/Cmd now inverts snapping to objects for a move (ci_objects_snap.rs, e2e/objectsSnap.spec.ts). It does not yet release the grid: Excalidraw passes a null grid size to getGridPoint while it is held, so drawing and resizing on a snapping grid go free, and ours stay on the grid.",
+    why: "6.4 closed the GRID half for every gesture — press, move, resize, the clicked sticky note, and the hover, which is not snapped at all rather than gated (ci_ctrl_grid.rs). What is NOT established is whether the oracle releases the ANGLE lock under Ctrl as well: `getLockedLinearCursorAlignSize` (sizeHelpers.ts:196-199) takes no modifier in the part of it that computes the step, and 5.2 established that a line snaps to exactly two things, the grid and the angle lock. One of two is proven, so the box stays shut rather than being flipped on half an answer.",
   },
   {
     section: "Shapes",
@@ -787,9 +787,50 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🔲 Grid",
-    text: /custom grid spacing|disable snapping/,
+    text: /custom grid spacing/,
     status: "gap",
-    why: "Spacing is offered as a fixed set of sizes in the menu, not a custom value. Ctrl/Cmd inverts snapping to objects but does not yet release the grid — see the Shapes rule above.",
+    why: "A fixed set of sizes in the menu, not a custom value. 6.6, and it owns the second half of the line this rule used to carry. The Ctrl half is real and is the rule below.",
+  },
+  // Split off from a rule that paired `custom grid spacing` with `disable snapping`, and so could
+  // be neither closed nor honestly described: one of the two is 6.6 and still a gap. **A rule that
+  // covers two tasks is a rule that can never be flipped**, because the tasks land at different
+  // times. The same failure as 4.3's broad pattern, one level up.
+  //
+  // shortkey.md:374 "Hold Ctrl/Cmd while dragging - Temporarily disable snapping" has BOTH halves
+  // now. The object half was already true and 5.2's own note says so (ci_objects_snap.rs,
+  // e2e/objectsSnap.spec.ts). The grid half is 6.4.
+  //
+  // And 6.4's finding is the part worth keeping: the oracle's hover is NOT Ctrl-gated, it is
+  // simply not grid-snapped. `App.tsx:7941-7979` reads the raw pointer -- `scenePointer` is a pure
+  // camera transform (`viewportCoordsToSceneCoords`, utils.ts:317-337), never re-assigned in that
+  // function, handed to `getHoveredElementForBinding` at `:7947-7954`, with no `getGridPoint`
+  // between and none in the callee (`getBindingCandidates`, collision.ts:432, reads no grid). Ours
+  // asked what was under the NEAREST INTERSECTION. Measured, not chosen: with a 10-grid, a shape
+  // whose right edge is at 405 and a pointer at (415, 345) lit nothing at all, because the grid's
+  // 420 is 15 out. Adding `snap_gesture` there -- which is what the brief asked for -- would have
+  // left every Ctrl-RELEASED hover reading the wrong point and the site looking fixed.
+  //
+  // The gate belongs to the SITE, not to the pointer-up: `App.tsx:13579` is in `maybeHandleResize`
+  // (`:13546`), reached from `onPointerMoveFromPointerDownHandler` under `resize.isResizing`
+  // (`:10725`, call at `:10731`) and from `onKeyDown`/`onKeyUpFromPointerDownHandler` (`:10593`,
+  // `:10606`).
+  //
+  // Duplicate keeps snapping under Ctrl because `App.duplicate.ts:95-99` passes the grid bare, and
+  // the branch proved that rather than asserting it.
+  //
+  // This rule has to sit ABOVE the section's catch-all, which is `covered` and would otherwise
+  // claim the line by accident. That is the whole of the 665/1112 lesson applied once more, in the
+  // same file, the same night.
+  {
+    section: "🔲 Grid",
+    text: /^Hold .Ctrl\/Cmd. while dragging/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_ctrl_grid.rs`,
+      `${ENGINE}/ci_end_snap.rs`,
+      `${ENGINE}/ci_objects_snap.rs`,
+      "e2e/objectsSnap.spec.ts",
+    ],
   },
   {
     section: "🔲 Grid",
