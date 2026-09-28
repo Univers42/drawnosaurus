@@ -106,6 +106,72 @@ to an exact zero, which would also let a one-pixel wobble of a click through as 
 (`App.tsx@1118751f:11857-11869`) fires for a centred draft, so the press ends up a note's
 east edge rather than its middle. That is the oracle's behaviour, reproduced.
 
+## Snapping to objects while drawing and resizing
+
+`design.md:163` asks for "Snap to nearby objects" under the shape tools, and until 6.3 it
+was a move-only gate: a drag stuck, a draw in the same place did not. The oracle has **four
+exported** entry points into `snapping.ts` and this engine had one. The three that matter
+here, and what each contributes:
+
+| entry point                     | call site                 | the moving points                             | the gate                                 |
+| ------------------------------- | ------------------------- | --------------------------------------------- | ---------------------------------------- |
+| `snapDraggedElements` `:692`    | `App.tsx:11097`           | the moved box's edges and centre              | `isSnappingEnabled`                      |
+| `snapNewElement` `:1246`        | `App.tsx:13383`           | **one**: the pointer                          | `isSnappingEnabled` only                 |
+| `snapResizingElements` `:1108`  | `App.tsx:13625`, `:13507` | a side handle's two endpoints, a corner's one | plus `length === 1 && angle ≠ 0` refuses |
+| `getSnapLinesAtPointer` `:1318` | `App.tsx:7870`            | the pointer, at hover                         | plus `isActiveToolNonLinearSnappable`    |
+
+**The candidates are boxes, not points.** `getReferenceSnapPoints` (`:616-634`) maps every
+reference group through `getElementsCorners` (`:198-313`): four corners and a centre. There
+is no outline point and no edge midpoint in that set. Ours is the same three stops per axis
+(`interaction/snapping.rs` › `stops_of`), so it carries the four edge midpoints as well — a
+superset, and the reason `ci_snapping.rs`'s move cases are stated in terms of edges and
+centres rather than of corner points. `ci_draw_object_snap.rs` ›
+`a_box_snaps_by_its_centre_as_well_as_by_its_edges` is the case that shows which set it is:
+the pointer is 3 from the centre stop and 47 from the nearest edge.
+
+**The reach is `SNAP_DISTANCE / zoom`** in screen pixels (`:48-50`), 6 world units at 1×
+here. The oracle's constant is **8**; ours is 6 — `engine/mod.rs` › `SNAP_PX`, which
+predates this task. Not changed here, because it is the move path's answer too and that is
+pinned. **It is a divergence and it is one number in one place.**
+
+**The press snaps only for the tools the oracle lists** — `isActiveToolNonLinearSnappable`
+(`:1402-1414`): rectangle, ellipse, diamond, frame, magicframe, image, text, and **not** a
+line, not the selection, not a sticky note. Worth being precise about what that gate _is_:
+it gates the **hover**, whose `originSnapOffset` the press then adds to the grid origin
+(`App.tsx@1118751f:13388-13394`, `dragElements.ts@1118751f:390-391`). It does **not** gate
+`snapNewElement`, which has no tool gate at all — so a sticky note's press does not snap
+while the corner you drag out of it does. `engine/pointer.rs` › `snaps_press_origin` is that
+tool list and `snap_press` is the offset. **The figure tool is ours and has no oracle at
+all** (`rg '"figure"'` over Excalidraw @1118751f finds nothing), so it is given the shape's
+answer because it drafts as one; `AutoShape` drafts as a stroke and takes the stroke's.
+
+**The hover preview is the part left out.** The oracle computes `originSnapOffset` on hover
+so the alignment is visible _before_ the press; the **rule** it applies is the press, and
+that is where it is applied here. Where the shape settles is the same; what is missing is
+that it settles without warning first. `hover_pointer` is an arrow-binding path gated on the
+arrow tool (`engine/hover.rs:102`), so the preview is separate work, not an extension of
+this.
+
+**Two divergences, both deliberate, each in one place:**
+
+- a **turned reference** offers its _unrotated_ box, because `element_bounds` reads
+  `x, y, width, height`. The oracle rotates the corners by `element.angle` (`:241-291`).
+  Ours does not, for all three paths equally, and
+  `ci_draw_object_snap.rs` › `a_turned_reference_still_offers_its_box` pins the unrotated
+  answer on the one axis where the two cannot be told apart — the test says so in its own
+  comment rather than implying more than it shows.
+- the **grid wins** over objects (`engine/mod.rs` › `objects_snap_gesture`). The oracle
+  composes the two — `getGridPoint` first, then the snap offset (`:13402-13403`) — and
+  consults the grid only in the inverted branch of `isSnappingEnabled` (`:178-184`). Ours
+  refuses both branches, which is the move path's rule from before this task, now shared by
+  all three so they cannot disagree.
+
+`design.md:288` is unaffected and stays `deferred: not in the oracle`: a line's endpoint
+still snaps to the grid and then to the angle lock, and to nothing else. Nothing above puts
+a line in the object-snap set — `isActiveToolNonLinearSnappable` excludes it,
+`handlePointDragging`'s closure never calls into `snapping.ts`, and `snapNewElement` is not
+on that path at all. The next section says so at length.
+
 ## Where a line's own endpoints land
 
 `design.md:288` asks for "Endpoint snapping" and reads as though an endpoint is pulled
@@ -165,11 +231,44 @@ So the first point of a placed line is `getGridPoint(origin.x, origin.y, ctrl ? 
 is right about the crate and wrong about the reason: it is not that nothing here computes
 it, it is that the oracle has none.
 
-**Ctrl is part of the answer.** All **fifteen** of the oracle's pointer call sites pass a
+**Ctrl is part of the answer.** All **sixteen** of the oracle's pointer call sites pass a
 `null` grid under Ctrl/Cmd, because Ctrl inverts snapping and the grid is what it switches
-off. `snap_gesture` is that gate; `snap` is the unconditional one, which paste keeps
-because duplicating and pasting grid-snap with no modifier test at all
+off. Fifteen of them, that is: the sixteenth is `App.tsx@1118751f:9899-9902`, which passes a
+bare `null` **regardless of Ctrl** — the freedraw press, which the next section is about.
+`snap_gesture` is the gate for the other fifteen; `snap` is the unconditional one, which
+paste keeps because duplicating and pasting grid-snap with no modifier test at all
 (`App.duplicate.ts@1118751f:97-101`).
+
+## A freedraw stroke is outside the grid entirely
+
+`App.tsx@1118751f:9899-9902` is the only one of the sixteen `getGridPoint` call sites that
+passes a bare `null`, and it is not a typo. A `null` grid returns the point unchanged
+(`packages/common/src/points.ts@1118751f:74-80`), and the reason is written a page above the
+function: `// TODO: Rounding this point causes some shake when free drawing` (`:68`).
+
+**It is one rule, not a press rule and a move rule.** The move half is the proof, and it is
+easy to miss because it is not a `getGridPoint` call at all: the freedraw branch of
+`onPointerMoveFromPointerDownHandler` appends `pointerCoords - newElement.x`
+(`App.tsx@1118751f:11179-11196`), where `pointerCoords` is the **raw** scene coordinate and
+`newElement.x` is the **unrounded** press origin. A stroke's local points are the difference
+between the raw pointer and the raw press, so the origin is unrounded _because_ the points
+are measured from it. Rounding only the press would shift every point by up to half a cell,
+and rounding only the move would do the same in the other direction. Either half alone is
+the shake, which is why the question "does the press inherit the move or the other way
+round" has no answer to give: there is one rule, and freedraw is outside the grid.
+
+This engine rounded **both** halves — `pointer.rs` snapped the press before `begin_freedraw`
+saw it, and `pointer_move.rs` snapped the pointer before the freedraw arm did — so it
+diverged in both at once. `ci_freedraw_origin.rs` pins each half separately, with the
+arithmetic written out: one move from (503, 300) to (563, 340) on a 20-grid ends at local
+(30, 20), where a rounded press gives (31.5, 20) and a rounded pointer gives (28.5, 20). A
+rectangle at the same press is still born on 500, and on a 20-grid x = −10 belongs on 0 — a
+stroke keeps −10.
+
+**What is not a rule here:** freedraw is the only tool that skips `getGridPoint` entirely,
+so `snap_gesture` — and with it Ctrl/Cmd — has nothing to say about it. Holding Ctrl during
+a stroke changes nothing, which is the cheapest way to show the press was never _routed
+through_ the grid gate and then opted out of.
 
 **The tie is a whole cell.** `getGridPoint` is `Math.round(v / size) * size`, and
 `Math.round` breaks a half towards +∞ — `Math.round(-0.5)` is `-0`. `f64::round` breaks it
