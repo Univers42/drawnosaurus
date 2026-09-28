@@ -70,6 +70,14 @@ const SHIPPED = [WEB_SRC, ENGINE_SRC];
  * The engine's own values, pinned. A move is a deliberate edit here, not a surprise: the
  * padding is quoted in `docs/reference/` and the truncation is the difference between a
  * 220- and a 221-pixel-wide export of the same drawing.
+ *
+ * **The two truncation lines move whenever `ExportOptions` grows a field**, because
+ * `pixel_width` and `pixel_height` sit below the struct and every doc line a new field
+ * brings with it pushes them down. 4.5 added `dark_mode` and moved them from 190/195 to
+ * 207/212; 4.4 hit the same thing and this ratchet caught it mid-edit. So the numbers are
+ * here to be *updated on purpose* — a move nobody meant is a bug report, and a move somebody
+ * meant is a deliberate edit to this table. A test that only asserted "the padding is 10"
+ * would have waved both through.
  */
 const PINNED: ReadonlyArray<{ what: string; pattern: RegExp; line: number }> = [
   {
@@ -77,8 +85,8 @@ const PINNED: ReadonlyArray<{ what: string; pattern: RegExp; line: number }> = [
     pattern: /^pub const DEFAULT_EXPORT_PADDING: f64 = /,
     line: 18,
   },
-  { what: "pixel_width", pattern: /\(self\.width \* self\.scale\)\.trunc\(\) as u32/, line: 190 },
-  { what: "pixel_height", pattern: /\(self\.height \* self\.scale\)\.trunc\(\) as u32/, line: 195 },
+  { what: "pixel_width", pattern: /\(self\.width \* self\.scale\)\.trunc\(\) as u32/, line: 207 },
+  { what: "pixel_height", pattern: /\(self\.height \* self\.scale\)\.trunc\(\) as u32/, line: 212 },
 ];
 
 /**
@@ -466,6 +474,37 @@ describe("the dialog the two controls belong to", () => {
     // engine's, and the engine takes whatever number it is given rather than clamping.
     expect(modal).toMatch(/#each \[1, 2, 3\] as s/);
   });
+
+  /**
+   * Both switches reach **both** formats — the defect 4.5 exists to fix.
+   *
+   * "Transparent background" and "Dark mode" are two rows in the same `<div>`, above three
+   * format cards, so a reader — and a person — has no way to tell that one of them meant
+   * "for the raster only". They did: the SVG exporter wrote its paper `<rect>` whatever the
+   * switch said, and the dialog's vector button passed `selectionOnly` alone. The oracle
+   * hands both to `exportToSvg` (`export.ts@1118751f:296-305`) and draws the rect under the
+   * same `exportBackground` (`:458`).
+   *
+   * Written as a call window rather than a line, because both calls are spread over
+   * several lines now, and a line-filter would only see `engine.exportSvg(` — which carries
+   * none of the arguments, and so could not tell a forwarded call from a dropped one. That
+   * is the same weakness `callWindows` exists below for the wrapper, and the same reason.
+   */
+  it("hands both switches to the vector export, not only to the raster one", () => {
+    const script = /<script[^>]*>([\s\S]*?)<\/script>/.exec(modal)?.[1] ?? "";
+    const calls = callWindows(script.split("\n"), "engine.exportSvg(");
+    expect(calls.length, "the dialog should call the SVG export once").toBe(1);
+    expect(calls[0], "the SVG export should carry the transparent switch").toMatch(
+      /\btransparent\b/,
+    );
+    expect(calls[0], "and the dark-mode one").toMatch(/\bdarkMode\b/);
+    expect(calls[0], "and still the selection checkbox").toMatch(/\bselectionOnly\b/);
+    // And the raster one, the same way, so the two cannot drift apart again.
+    const png = callWindows(script.split("\n"), "engine.exportPng(");
+    expect(png.length, "the dialog should call the PNG export once").toBe(1);
+    expect(png[0]).toMatch(/\btransparent\b/);
+    expect(png[0]).toMatch(/\bdarkMode\b/);
+  });
 });
 
 describe("the wrapper the front calls", () => {
@@ -499,6 +538,13 @@ describe("the wrapper the front calls", () => {
     // be a second answer to a question the engine already answers.
     expect(calls.join("\n")).toMatch(/options\.scale/);
     expect(calls.join("\n")).toMatch(/options\.transparent/);
+    // And the two that are booleans with a default, which a `?? true` here would also
+    // answer a second time: `exportBackground: true` (`appState.ts@1118751f:69`) and
+    // `exportWithDarkMode: false` (`:72`). Forwarded, not defaulted.
+    expect(calls.join("\n")).toMatch(/options\.darkMode/);
+    expect(svgCalls.join("\n"), "the vector path takes both switches too").toMatch(
+      /options\.transparent[\s\S]*options\.darkMode/,
+    );
   });
 
   it("hands the selection over rather than deciding what one is", () => {
