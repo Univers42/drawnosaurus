@@ -1,10 +1,9 @@
 ---
 name: canvas-engine
 description: >
-  How the drawing engine's camera, keyboard shortcuts, arrow bindings and their tests fit
-  together, and how to check a change to them against Excalidraw. Auto-triggers on:
-  "camera", "zoom", "pan", "fit", "shortcut", "keyboard", "binding", "arrow bound",
-  "flowchart", "frame time", "perf budget", "canvas engine"
+  Load only when changing the engine's camera maths, keyboard shortcuts, arrow binding or
+  elbow routing code, or its frame budget, and checking that change against Excalidraw.
+  Not for reading, reviewing or merging, and not for chrome-only (Svelte) work.
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob
 ---
 
