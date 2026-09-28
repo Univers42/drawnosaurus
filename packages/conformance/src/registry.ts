@@ -1294,11 +1294,48 @@ export const RULES: readonly Rule[] = [
       `${WEB}/draw-chrome/menu.test.ts`,
     ],
   },
+  // 6.3. The `why` this replaces said snapping "applies to moving a selection only", and it
+  // named `App.tsx:13375` and `:13499` as the two call sites. **Both are wrong** -- they are
+  // `maybeDragNewGenericElement` and `maybeHandleCrop`, not snapping entry points. The real
+  // ones are `:13383` and `:13625`.
+  //
+  // There are FOUR entry points, not two, and the third is this task's own headline verb:
+  //   `snapDraggedElements`   :692-807    from App.tsx:11097   the moved box's 9 stops
+  //   `snapNewElement`        :1246-1316  from App.tsx:13383   ONE point: origin+dragOffset
+  //   `snapResizingElements`  :1108-1244  from :13625, :13507  side handle 2, corner 1
+  //   `getSnapLinesAtPointer` :1318-1400  from App.tsx:7870    the pointer, at hover
+  //
+  // `snapNewElement` is gated on `isSnappingEnabled` ONLY -- **there is no tool gate on it.**
+  // `isActiveToolNonLinearSnappable` (:1402-1414) gates `getSnapLinesAtPointer`, the HOVER, and
+  // only that. Reading it as "decides whether a tool can snap at all" would gate the corner
+  // snap to seven tools and drop the sticky note's corner, which the oracle keeps.
+  //
+  // The ORDER is `getPointSnaps` (:636-690) being `for our point { for reference {`, kept on
+  // `<=` and replaced only on `<` -- **a tie keeps the first found.**
+  //
+  // The CANDIDATES are box corners and a centre, never outline points:
+  // `getReferenceSnapPoints` (:616-634) -> `getElementsCorners` (:198-313). The case that
+  // settles it -- a reference box (0,0,100,80) and a pointer x of 53, where the centre stop 50
+  // is 3 away and snaps, the edges are 53 and 47 away and are out of reach, and the nearest
+  // outline point is 53 away: **an outline-based snapper could not have answered at all.**
+  //
+  // NOT CLAIMED, and reported rather than fixed. `SNAP_PX` is **6** where the oracle's
+  // `SNAP_DISTANCE` is **8** (`snapping.ts:41`) -- and that is the number every Q/R pair here
+  // is stated against, so it is load-bearing rather than cosmetic. Ours also reads the
+  // UNROTATED box where the oracle rotates by `angle` (:241-291), and the grid WINS over
+  // objects where the oracle composes them (`snapping.ts:178-184`, `App.tsx:13402-13403`).
+  // Phase 1, all three, all pre-existing.
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
     text: /Snap to nearby objects/,
-    status: "gap",
-    why: "Snapping to objects, and its Ctrl/Cmd inversion, applies to moving a selection only (ci_objects_snap.rs). Drawing and resizing snap to the grid but not to other elements, where Excalidraw's snapNewElement and snapResizingElements (App.tsx:13375, :13499) do.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_draw_object_snap.rs`,
+      `${ENGINE}/ci_resize_object_snap.rs`,
+      `${ENGINE}/ci_object_snap_props.rs`,
+      `${ENGINE}/ci_freedraw_origin.rs`,
+      "e2e/objectsSnap.spec.ts",
+    ],
   },
   // The section rule below claimed a creation gesture that grows from the pointer-down
   // point, not from a centre, while nothing reads Alt (or any modifier) during a draft
@@ -1484,7 +1521,7 @@ export const RULES: readonly Rule[] = [
     section: "6. Line",
     text: /^Endpoint snapping$/,
     status: "gap",
-    why: "not in the oracle — a line's endpoint snaps to the grid and then to the angle lock, and to nothing else, so there is no endpoint-to-object snapping to port. The reach is a per-axis round(v/size)*size with no distance at all, so the diagonal is size/2·√2. Implemented as snap_gesture beside snap (engine/mod.rs), and pinned with a Q/R pair per case: same gesture, grid on, snapping without Ctrl and landing on the raw pointer with it.",
+    why: "not in the oracle - a line's endpoint snaps to the grid and then to the angle lock, and to nothing else. 6.3 STRENGTHENED this, and better evidence is better: there is now a SECOND oracle entry point that demonstrably does not apply to a line, where 5.2 could only cite the absence of one. `snapNewElement` (:1246-1316, from App.tsx:13383) snaps exactly ONE point, origin+dragOffset, and is gated on `isSnappingEnabled` with no tool gate at all - so nothing about it is line-shaped. The tool gate that WOULD exclude a line, `isActiveToolNonLinearSnappable` (:1402-1414), gates the hover and only the hover. Implemented for the grid half as snap_gesture beside snap (engine/mod.rs), with a Q/R pair per case: same gesture, grid on, snapping without Ctrl and landing on the raw pointer with it.",
   },
   {
     section: "6. Line",
