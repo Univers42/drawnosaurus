@@ -68,6 +68,8 @@ declare global {
       insertJson(json: string, at?: { x: number; y: number }): boolean;
       zoomToFitSelection(): void;
       clearSelection(): void;
+      /** Whether Tab has anything to switch in the current selection. */
+      canConvertSelection(): boolean;
     };
     /** The Mermaid dialog's converter, set beside `__drawEngine`. */
     __mermaidToElements?: (definition: string) => Promise<Record<string, unknown>[]>;
@@ -116,6 +118,8 @@ export interface SceneElement {
   /** Arrows only: the shape each end is attached to. */
   startBinding?: string | null;
   endBinding?: string | null;
+  /** Arrows only: the head at the end. Absent reads as "unset, fall back to the type". */
+  endArrowhead?: string | null;
   /** Rectangles: an explicit corner radius from the in-place handle. */
   cornerRadius?: number;
   roundness?: number | null;

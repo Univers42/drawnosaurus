@@ -207,3 +207,282 @@ test("a mirrored shape hangs the switch under its bottom-left corner", async ({
 
   await page.screenshot({ path: testInfo.outputPath("mirrored-panel.png") });
 });
+
+// ── The linear branch ────────────────────────────────────────────────────────
+//
+// `LINEAR_TYPES` and the linear half of `convertElementTypes`
+// (`ConvertElementTypePopup.tsx@1118751f:113-120`, `:519-639`). The specs above pin the
+// closed shapes; these pin lines and arrows, and they assert what *survived* — a spec that
+// only read the type back would pass against a switch that dropped the id and the points.
+
+/** The linear type an element is at, read off the two fields the oracle reads it from
+ *  (`packages/element/src/typeChecks.ts@1118751f:375-389`). */
+const linearType = (element: SceneElement): string => {
+  if (element.type === "line") return "line";
+  if (element.elbowed) return "elbowArrow";
+  return element.roundness != null ? "curvedArrow" : "sharpArrow";
+};
+
+/** The line, as the board holds it now. */
+const theLine = async (page: Page): Promise<SceneElement> =>
+  (await sceneElements(page)).find((element) => element.id === "line")!;
+
+/** A line, an arrow bound to a shape, and a rectangle, loaded straight in. */
+async function placeLinearBoard(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const engine = window.__drawEngine!;
+    const base = {
+      angle: 0,
+      strokeColor: "#1e1e1e",
+      backgroundColor: "transparent",
+      fillStyle: "solid",
+      strokeWidth: 2,
+      strokeStyle: "solid",
+      roughness: 0,
+      opacity: 100,
+      roundness: null,
+      seed: 1,
+      version: 1,
+      versionNonce: 1,
+      updated: 0,
+      isDeleted: false,
+    };
+    engine.loadScene(
+      JSON.stringify({
+        type: "osidraw",
+        version: 1,
+        source: "e2e",
+        elements: [
+          {
+            ...base,
+            id: "line",
+            type: "line",
+            x: 200,
+            y: 200,
+            width: 240,
+            height: 140,
+            points: [
+              [0, 0],
+              [240, 140],
+            ],
+            groupIds: ["g"],
+          },
+          {
+            ...base,
+            id: "box",
+            type: "rectangle",
+            x: 600,
+            y: 400,
+            width: 200,
+            height: 120,
+            boundElements: [{ id: "bound", type: "arrow" }],
+          },
+          {
+            ...base,
+            id: "bound",
+            type: "arrow",
+            x: 100,
+            y: 500,
+            width: 500,
+            height: -40,
+            roundness: 8,
+            endArrowhead: "arrow",
+            points: [
+              [0, 0],
+              [500, -40],
+            ],
+            endBinding: "box",
+          },
+        ],
+      }),
+    );
+    (engine as unknown as SelectHandle).select(["line"]);
+  });
+}
+
+test("Tab walks a line through the four linear types and back, keeping id, points and group", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeLinearBoard(page);
+  const before = (await sceneElements(page)).find((element) => element.id === "line")!;
+
+  await page.keyboard.press("Tab");
+  await expect(panel(page)).toBeVisible();
+  // Four buttons, and the line's own type pressed — the oracle's panel offers `SHAPES`
+  // for the family the selection is in and marks the shared one.
+  await expect(panel(page).getByRole("button")).toHaveCount(4);
+  await expect(panel(page).getByRole("button", { name: "Line" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(linearType(await theLine(page)), "the first Tab only opens it").toBe("line");
+
+  /** The two ends the line was drawn between, in world terms, wherever its points are. */
+  const ends = (element: SceneElement) => {
+    const points = element.points!;
+    const first = points.at(0)!;
+    const last = points.at(-1)!;
+    return [
+      [element.x + first[0], element.y + first[1]],
+      [element.x + last[0], element.y + last[1]],
+    ];
+  };
+  const drawnEnds = ends(before);
+
+  const seen: string[] = [];
+  for (let step = 0; step < 4; step += 1) {
+    await page.keyboard.press("Tab");
+    const now = await theLine(page);
+    const at = linearType(now);
+    seen.push(at);
+    // Every step: the same element, still between the same two ends, the same group, and
+    // still selected.
+    expect(now.id, "the id survives").toBe("line");
+    expect(ends(now), `step ${step}: the two ends survive`).toEqual(drawnEnds);
+    expect(now.groupIds, "its group survives").toEqual(["g"]);
+    expect(now.x, "its place survives").toBe(before.x);
+    expect(now.y).toBe(before.y);
+    expect(await selection(page), "and it stays selected").toEqual(["line"]);
+    // The points survive verbatim everywhere except the elbow, which is the one conversion
+    // that re-routes: `convertLineToElbow` builds an orthogonal path between the same ends
+    // (`ConvertElementTypePopup.tsx@1118751f:567-594`), and coming back off it restores the
+    // remembered points rather than un-routing the runs (`:551-556`).
+    if (at === "elbowArrow") {
+      expect(now.points!.length, "an orthogonal route has a corner").toBeGreaterThan(2);
+    } else {
+      expect(now.points, `step ${step}: the points are its own`).toEqual(before.points);
+    }
+  }
+  expect(seen, "LINEAR_TYPES, in the order the oracle walks them").toEqual([
+    "sharpArrow",
+    "curvedArrow",
+    "elbowArrow",
+    "line",
+  ]);
+  // And the round trip is exact: off the elbow and back, the line is the line.
+  const roundTripped = await theLine(page);
+  expect(roundTripped.points, "the whole walk came back to the drawn points").toEqual(
+    before.points,
+  );
+
+  // Shift+Tab goes back the other way, and the panel marks where it landed.
+  await page.keyboard.press("Shift+Tab");
+  const back = (await sceneElements(page)).find((element) => element.id === "line")!;
+  expect(linearType(back)).toBe("elbowArrow");
+  await expect(panel(page).getByRole("button", { name: "Elbow arrow" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toHaveCount(0);
+});
+
+test("a line switched to an arrow and back by click is the line it was", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeLinearBoard(page);
+  const before = (await sceneElements(page)).find((element) => element.id === "line")!;
+
+  await page.keyboard.press("Tab");
+  await panel(page).getByRole("button", { name: "Sharp arrow" }).click();
+  const arrow = (await sceneElements(page)).find((element) => element.id === "line")!;
+  expect(linearType(arrow)).toBe("sharpArrow");
+  expect(arrow.points, "the click kept the points").toEqual(before.points);
+
+  // A line has no heads; the oracle's `newLinearElement` writes both to null whatever the
+  // spread carried, and a *line* is what came out of the panel, not a sharp arrow with
+  // its heads taken away.
+  await panel(page).getByRole("button", { name: "Line" }).click();
+  const back = (await sceneElements(page)).find((element) => element.id === "line")!;
+  expect(linearType(back), "the round trip").toBe("line");
+  expect(back.points).toEqual(before.points);
+  expect(back.groupIds).toEqual(["g"]);
+  expect(back.x).toBe(before.x);
+  expect(back.endArrowhead ?? null, "a line has no head at either end").toBeNull();
+
+  // Escape ends the selection as well as the panel — the oracle's `actionDeselect` has the
+  // same keyTest (`actionDeselect.ts@1118751f:132-155`) — so the line is picked again
+  // before Tab, the way a person would.
+  await page.keyboard.press("Escape");
+  await expect(panel(page)).toHaveCount(0);
+  expect(await selection(page), "Escape deselected, as the oracle's does").toEqual([]);
+});
+
+test("one switch is one step of undo, not two and not none", async ({ page }) => {
+  // On a board whose only edit is the switch. Measured anywhere else it says nothing: the
+  // round trip above is three clicks and therefore three steps, and a second Ctrl+Z there
+  // is the step before it rather than a fork in this one.
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeLinearBoard(page);
+  const before = await theLine(page);
+
+  await page.keyboard.press("Tab");
+  await panel(page).getByRole("button", { name: "Curved arrow" }).click();
+  const switched = await theLine(page);
+  expect(linearType(switched)).toBe("curvedArrow");
+  expect(switched.points, "and it kept its points").toEqual(before.points);
+
+  // Not none: one undo is the whole switch, points and all.
+  await page.keyboard.press("Control+z");
+  const undone = await theLine(page);
+  expect(linearType(undone), "one undo took the whole switch back").toBe("line");
+  expect(undone.points, "and brought the points with it").toEqual(before.points);
+
+  // Not two: there was no second step, so a second undo takes nothing else off the board.
+  await page.keyboard.press("Control+z");
+  const still = await theLine(page);
+  expect(linearType(still), "and there was no second step").toBe("line");
+  expect(still.points, "nor did that take anything").toEqual(before.points);
+  expect((await sceneElements(page)).length, "nor anything else").toBe(3);
+});
+
+test("a bound arrow has nothing to switch, and Tab moves focus on", async ({ page }) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeLinearBoard(page);
+  await page.evaluate(() => {
+    (window.__drawEngine as unknown as SelectHandle).select(["bound"]);
+  });
+
+  // The oracle's `isEligibleLinearElement` (`ConvertElementTypePopup.tsx@1118751f:666-672`)
+  // refuses a bound arrow, so `actionToggleShapeSwitch`'s predicate is false and Tab does
+  // not even open the panel — it is focus moving on, as anywhere else on the page.
+  await expect
+    .poll(() => page.evaluate(() => window.__drawEngine!.canConvertSelection()))
+    .toBe(false);
+  await page.keyboard.press("Tab");
+  await expect(panel(page)).toHaveCount(0);
+
+  const arrow = (await sceneElements(page)).find((element) => element.id === "bound")!;
+  expect(arrow.type, "and it is still an arrow").toBe("arrow");
+  expect(arrow.endBinding, "still bound where it was").toBe("box");
+});
+
+test("a closed shape in the selection wins the switch, and the line is left alone", async ({
+  page,
+}) => {
+  const board = await openBoard(page);
+  await focusBoard(board);
+  await placeLinearBoard(page);
+  await page.evaluate(() => {
+    (window.__drawEngine as unknown as SelectHandle).select(["line", "box"]);
+  });
+
+  await page.keyboard.press("Tab");
+  await expect(panel(page)).toBeVisible();
+  // The generic branch has preference (`ConvertElementTypePopup.tsx@1118751f:648-653`),
+  // so three buttons, not four.
+  await expect(panel(page).getByRole("button")).toHaveCount(3);
+  await page.keyboard.press("Tab");
+
+  const scene = await sceneElements(page);
+  expect(
+    scene.find((element) => element.id === "box")!.type,
+    "the shape walked its own round",
+  ).toBe("diamond");
+  expect(linearType(scene.find((element) => element.id === "line")!), "the line held").toBe("line");
+});

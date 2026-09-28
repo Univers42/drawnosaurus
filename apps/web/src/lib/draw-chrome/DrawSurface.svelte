@@ -43,8 +43,8 @@
   import DrawPathPanel from "./DrawPathPanel.svelte";
   import DrawFollowNotice from "./DrawFollowNotice.svelte";
   import ShapeStrip from "./ShapeStrip.svelte";
-  import { sharedShape, switchKey, switchPanelAt } from "./shapeSwitch.ts";
-  import type { FlowchartShape } from "@osionos/draw-engine/types";
+  import { isLinearType, switchKey, switchPanelAt, switchTypes } from "./shapeSwitch.ts";
+  import type { ConversionType } from "@osionos/draw-engine/types";
   import {
     DEFAULT_GRID_PREFERENCE,
     persistCanvasBackground,
@@ -1122,7 +1122,11 @@
     flowchartStripPos = { x: centre.x, y: centre.y };
   }
 
-  function chooseFlowchartShape(shape: FlowchartShape): void {
+  function chooseFlowchartShape(shape: ConversionType): void {
+    // The strip is only ever given the three closed shapes, and a node has no arrow
+    // form; a linear type reaching here would be a binding that had drifted, and is
+    // dropped rather than cast into a shape the flowchart does not have.
+    if (isLinearType(shape)) return;
     engine?.flowchartSetShape(shape);
   }
 
@@ -1130,7 +1134,12 @@
   // Escape, a press on the canvas, or a selection left with nothing to switch — and kept
   // under the selection as the camera, the shapes and their type move.
   const SHAPE_SWITCH = "Switch shape";
-  let shapeSwitch = $state<{ x: number; y: number; current: FlowchartShape | null } | null>(null);
+  let shapeSwitch = $state<{
+    x: number;
+    y: number;
+    current: ConversionType | null;
+    types: readonly ConversionType[];
+  } | null>(null);
 
   function onShapeSwitchKey(event: KeyboardEvent): void {
     if (!engine || presenting) return;
@@ -1159,7 +1168,16 @@
       closeShapeSwitch();
       return;
     }
-    shapeSwitch = { ...switchPanelAt(bounds, currentCamera), current: sharedShape(selected) };
+    // The type and the types on offer are the engine's reading of the selection — see
+    // `shapeSwitch.ts`. A selection with nothing switchable closes the panel, as the
+    // oracle's does rather than offering a choice between two families.
+    const current = engine.sharedConversionType();
+    const types = switchTypes(current);
+    if (!types.length) {
+      closeShapeSwitch();
+      return;
+    }
+    shapeSwitch = { ...switchPanelAt(bounds, currentCamera), current, types };
   }
 
   function closeShapeSwitch(): void {
@@ -2183,6 +2201,7 @@
         x={shapeSwitch.x}
         y={shapeSwitch.y}
         current={shapeSwitch.current}
+        types={shapeSwitch.types}
         onChoose={(shape) => {
           engine?.convertSelection(shape);
           placeShapeSwitch();
