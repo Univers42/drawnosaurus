@@ -11,6 +11,7 @@
   import DrawShortcutsDialog from "./DrawShortcutsDialog.svelte";
   import DrawCommandPalette from "./DrawCommandPalette.svelte";
   import DrawContextMenu from "./DrawContextMenu.svelte";
+  import type { ClipboardFormatName } from "@osionos/draw-engine/types";
   import VectorizeDialog from "./VectorizeDialog.svelte";
 
   let {
@@ -27,11 +28,15 @@
     showShortcuts = $bindable(false),
     showPalette = $bindable(false),
     paletteCommands = [],
+    paletteRecentId = null,
+    vectorizeId = $bindable(null),
     onInsertMermaid,
     onInsertTemplate,
     onEditEmbedLink,
     onCopyStyles,
+    onCopyToClipboard,
     onFit,
+    onPaletteRun,
   }: {
     engine: DrawEngine | null;
     slug?: string;
@@ -46,16 +51,22 @@
     showShortcuts: boolean;
     showPalette: boolean;
     paletteCommands?: Command[];
+    /** The one command the palette remembers, owned by the surface so it survives this
+     *  dialog closing (`CommandPalette.tsx@1118751f:85` keeps it outside the dialog too). */
+    paletteRecentId?: string | null;
+    /** The image the Vectorize dialog is open for. Bound, like every other modal flag
+     *  here, so the palette's command can open it as well as the context menu's row. */
+    vectorizeId?: string | null;
     onInsertMermaid: (elements: DrawElementDto[]) => void;
     onInsertTemplate: (json: string) => void;
     onEditEmbedLink: (id: string) => void;
     onCopyStyles: () => void;
+    /** Copy as a picture to the clipboard; the engine decides what, this reports how. */
+    onCopyToClipboard: (format: ClipboardFormatName) => void;
     /** Shift+1, measured against the chrome where it is now. */
     onFit: () => void;
+    onPaletteRun: (id: string) => void;
   } = $props();
-
-  /** The image the Vectorize dialog is open for — opened from the context menu only. */
-  let vectorizeId = $state<string | null>(null);
 
   /**
    * One Escape handler for every layer instead of one inside each dialog. These stack
@@ -104,7 +115,12 @@
 {/if}
 
 {#if showPalette}
-  <DrawCommandPalette commands={paletteCommands} onClose={() => (showPalette = false)} />
+  <DrawCommandPalette
+    commands={paletteCommands}
+    recentId={paletteRecentId}
+    onRun={onPaletteRun}
+    onClose={() => (showPalette = false)}
+  />
 {/if}
 
 {#if vectorizeId}
@@ -130,6 +146,12 @@
     onCopyStyles={() => {
       menu = null;
       onCopyStyles();
+    }}
+    onCopyToClipboard={(format) => {
+      // The menu closes first, exactly as every other row does: a copy is asynchronous, and
+      // a menu that stayed up over the canvas would hide the notice the copy reports.
+      menu = null;
+      onCopyToClipboard(format);
     }}
     onFit={() => {
       menu = null;

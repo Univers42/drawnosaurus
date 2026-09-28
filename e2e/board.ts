@@ -57,14 +57,34 @@ declare global {
       embedFramesJson(): string;
       /** The selection, serialised as this scene's own clipboard JSON — Ctrl+C's write. */
       copySelection(): string | null;
-      /** Rasterises the current view exactly as the Export dialog's PNG button does. */
-      exportPng(): Promise<Blob | null>;
+      /**
+       * Rasterises the whole scene, exactly as the Export dialog's PNG button does. The
+       * camera is not consulted: the export is framed by the scene's own bounds.
+       */
+      exportPng(options?: { scale?: number; transparent?: boolean }): Promise<Blob | null>;
+      /** The vector export, as the Export dialog's SVG button produces it. */
+      exportSvg(options?: { selectionOnly?: boolean }): string | null;
+      /**
+       * Opens a saved picture, and says whether it did — 4.4's round trip.
+       *
+       * Typed here rather than only on `DrawEngine` because this is the surface a spec
+       * drives, and a global that does not name a method is a spec that will not compile the
+       * day someone reads the type and believes it. The `refused` values are the engine's
+       * three, spelled out rather than `string`, so a spec cannot assert against a name the
+       * engine never returns.
+       */
+      restoreFromImage(bytes: Uint8Array): {
+        restored?: true;
+        refused?: "malformed" | "not-ours" | "unreadable";
+      };
       /** Empties the board: no undo step, no autosave — a fuzzer's reset between cases. */
       clear(): void;
       /** Places a scene document's elements as the Mermaid dialog's Insert does. */
       insertJson(json: string, at?: { x: number; y: number }): boolean;
       zoomToFitSelection(): void;
       clearSelection(): void;
+      /** Whether Tab has anything to switch in the current selection. */
+      canConvertSelection(): boolean;
     };
     /** The Mermaid dialog's converter, set beside `__drawEngine`. */
     __mermaidToElements?: (definition: string) => Promise<Record<string, unknown>[]>;
@@ -113,8 +133,15 @@ export interface SceneElement {
   /** Arrows only: the shape each end is attached to. */
   startBinding?: string | null;
   endBinding?: string | null;
+  /** Arrows only: the head at the end. Absent reads as "unset, fall back to the type". */
+  endArrowhead?: string | null;
   /** Rectangles: an explicit corner radius from the in-place handle. */
   cornerRadius?: number;
+  /**
+   * A label's: how far along its arrow's drawn path it sits, as a fraction of that path's
+   * length. Absent means the middle, which is where a label nobody dragged is drawn.
+   */
+  labelPosition?: number;
   roundness?: number | null;
   /** The reconciliation stamp: every saved edit moves it. */
   version?: number;
@@ -591,6 +618,16 @@ export function activeTool(page: Page): Promise<string> {
 /** The ids the engine currently has selected. */
 export function selection(page: Page): Promise<string[]> {
   return page.evaluate(() => window.__drawEngine!.getSelection());
+}
+
+/**
+ * The debug handle's `select`, which the engine's own declaration leaves out — it is on the
+ * `__drawEngine` window object, not on `DrawEngine`, so a spec that drives it says so. It
+ * lives here rather than in each spec because three of them declare the same two lines;
+ * `flowchart.spec.ts` declares its own, wider handle for the calls only it makes.
+ */
+export interface SelectHandle {
+  select(ids: string[]): void;
 }
 
 /** The elements the engine currently holds, deleted ones excluded. */

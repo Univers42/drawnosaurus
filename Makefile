@@ -142,7 +142,12 @@ lint: ## eslint, zero warnings tolerated
 format: ## prettier --check
 	$(TOOLING) pnpm format
 
-test: ## Unit tests (contract, api, web)
+# $(ENGINE_PKG) for the same reason `typecheck` needs it: the web's tests now call the
+# engine's camera maths, which is a WASM call, and `apps/web/test/vitest.setup.ts`
+# instantiates it out of `engine/pkg`. Without the artifact they fail at that setup, not
+# at a case. Under `test/` rather than beside `vite.config.ts` because that is the one
+# directory SvelteKit's generated tsconfig already includes, so svelte-check sees it.
+test: $(ENGINE_PKG) ## Unit tests (contract, api, web)
 	$(TOOLING) pnpm test
 
 conformance: ## What prompt/*.md asks for, and what covers it

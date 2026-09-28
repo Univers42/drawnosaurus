@@ -46,6 +46,51 @@ export function isTextField(target: EventTarget | null): boolean {
   );
 }
 
+/** The `role` an overlay carries, as `closest` wants to be given it. */
+const DIALOG = '[role="dialog"]';
+const DIALOG_OR_MENU = `${DIALOG}, [role="menu"]`;
+
+function inside(target: EventTarget | null, selector: string): boolean {
+  const element = target as { closest?: (selector: string) => unknown } | null;
+  return element?.closest?.(selector) != null;
+}
+
+/**
+ * Whether a key pressed on `target` belongs to an open overlay — a dialog or a menu.
+ *
+ * An overlay takes the focus when it opens (`Dialog.tsx@1118751f:63-68`,
+ * `Popover.tsx@1118751f:44-50`), and that focus is what keeps a key off the board: both
+ * the engine's listener and the chrome's ride on a focused element, so a key only reaches
+ * them while nothing inside an overlay holds it. The walk is over the ancestors because
+ * the target is a control inside the overlay far more often than the overlay itself — a
+ * dialog focuses a card with no role of its own.
+ *
+ * What it answers is "is this key inside an overlay", not "is one open". A key pressed
+ * while the focus sits on a toolbar button still gets through, and closing that gap wants
+ * the state `DrawModals.svelte` already keeps for Escape, plus a focus trap to go with it.
+ */
+export function insideOverlay(target: EventTarget | null): boolean {
+  return inside(target, DIALOG_OR_MENU);
+}
+
+/**
+ * Whether a key pressed on `target` belongs to an open dialog — the narrower question the
+ * app chords ask, and the reason is `DrawMainMenu.svelte`: it is a `role="menu"` that takes
+ * the focus on open and prints `Ctrl+O` (`:193`), `Ctrl+S` (`:204`), `Ctrl+Shift+E`
+ * (`:215`), `Ctrl+Alt+P` (`:256`), `?` (`:277`) and `Alt+S` (`:314`) beside its own items.
+ * A guard that named menus here made the menu advertise chords it then ignored, which its
+ * own docstring calls worse than printing nothing.
+ *
+ * Naming menus is still the wrong move in a second place, and got there twice: `appShortcut`
+ * took a `KeyTarget` for zen mode and answered `"overlay"` with `null`, which silenced
+ * `Ctrl+Alt+P` and `Alt+S` — the two chords that route through it — while the menu went on
+ * printing all six. `insideOverlay` still *reports* a menu, because the style chords need
+ * that; what `appShortcut` does with the answer is a separate decision, and it is "carry on".
+ */
+export function insideDialog(target: EventTarget | null): boolean {
+  return inside(target, DIALOG);
+}
+
 export type StyleShortcut =
   | "copyStyles"
   | "pasteStyles"
@@ -65,11 +110,12 @@ export interface StyleShortcutKey {
 }
 
 /**
- * Where a key was pressed: on the board, in the text being edited on it, or in any other
- * field. A field takes every key as typing; the text editor takes every key but the font
- * size chords.
+ * Where a key was pressed: on the board, in the text being edited on it, in any other
+ * field, or inside an open overlay. A field takes every key as typing; the text editor
+ * takes every key but the font size chords; an overlay takes its own, because an open
+ * dialog or menu is holding the focus and a menu's keys are the menu's.
  */
-export type KeyTarget = "board" | "textEditor" | "field";
+export type KeyTarget = "board" | "textEditor" | "field" | "overlay";
 
 /**
  * Ctrl/Cmd+Shift+> and <: `actionIncreaseFontSize` / `actionDecreaseFontSize`, whose
@@ -111,7 +157,11 @@ export function styleShortcut(
   },
 ): StyleShortcut | null {
   const target = context.target ?? "board";
-  if (target === "field") return null;
+  // An overlay gets nothing: the colour picker's own S and G pick blue and pink, and the
+  // guard on the style chords named only dialogs, so with a menu open they reached the
+  // board. The canvas menu and the main menu are `role="menu"` (`DrawContextMenu.svelte`,
+  // `DrawMainMenu.svelte`) and are named in `insideOverlay`.
+  if (target === "field" || target === "overlay") return null;
   const fontSize = fontSizeShortcut(event);
   if (target === "textEditor" || fontSize) return fontSize;
   const mod = event.ctrlKey || event.metaKey;
@@ -127,7 +177,7 @@ export function styleShortcut(
   return null;
 }
 
-export type AppShortcut = "snap" | "grid" | "present" | "palette";
+export type AppShortcut = "snap" | "grid" | "present" | "palette" | "zen" | "copyAsPng";
 
 export interface AppShortcutKey {
   key: string;
@@ -149,10 +199,47 @@ export interface AppShortcutKey {
  * Snap, grid and Present match `code`, the physical key, as the oracle's grid does, not
  * `key`, the character it types: on AZERTY, QWERTZ or Dvorak the apostrophe is elsewhere
  * or nowhere, and on a Mac Option+S types "ß" and Option+P "π".
+ *
+ * `target` is the same question `styleShortcut` asks, and the guard is the oracle's:
+ * `App.tsx@1118751f:5516` wraps its whole key dispatch in `if (!isInputLike(event.target))`,
+ * so no chord of its own fires while a **field** holds the focus. A key typed into a text
+ * box or a title is not a shortcut, and Alt+Z least of all — toggling zen mode while a
+ * sentence is being typed would take the chrome away mid-word, and the guard on `target`
+ * is what stops it.
+ *
+ * **`overlay` is deliberately NOT guarded here, and naming it is a bug this function once
+ * committed.** Two of the chords below are printed beside the main menu's own items
+ * (`Alt+S` at `DrawMainMenu.svelte:314`, `Ctrl+Alt+P` at `:256`), the menu is a
+ * `role="menu"` rather than a `role="dialog"`, and so `insideOverlay` — which sees
+ * `[role="menu"]` — reported those presses as `"overlay"` and this guard returned `null`
+ * for them. Both chords were left printing on a key that did nothing, which is the exact
+ * failure this module's own `insideDialog` docstring calls worse than printing nothing.
+ * Dialogs are still stopped, one level down, by `insideDialog` in `onAppShortcut`; menus
+ * are not, on purpose. The guard belongs to fields, and only to fields.
  */
-export function appShortcut(event: AppShortcutKey, presenting: boolean): AppShortcut | null {
+export function appShortcut(
+  event: AppShortcutKey,
+  presenting: boolean,
+  target: KeyTarget = "board",
+): AppShortcut | null {
+  if (target === "field" || target === "textEditor") return null;
   const mod = event.ctrlKey || event.metaKey;
+  // `!presenting` for the same reason as the present chord below: every way out of zen
+  // mode is chrome, and presenting hides the chrome — the exit button, the palette, the
+  // main menu. A mode that latched on behind a hidden exit button and could only be
+  // cleared by the very key that could no longer reach it is a trap, and the house answer
+  // is the same as it is for entering presentation twice.
+  if (!mod && event.altKey && event.code === "KeyZ" && !presenting) return "zen";
   if (!mod && event.altKey && event.code === "KeyS") return "snap";
+  // `actionCopyAsPng`'s own `keyTest` (`actionClipboard.tsx@1118751f:250`): C with Alt and
+  // Shift. **`!mod` is ours and not the oracle's** — its test has no Ctrl/Cmd condition,
+  // and neither does copy styles' (`actionStyles.ts@1118751f:78-79`), so on
+  // Ctrl+Alt+Shift+C both match and the oracle's `handleKeyDown` refuses to choose
+  // (`actions/manager.tsx@1118751f:114-119`, "Canceling as multiple actions match this
+  // shortcut"). Our chain picks the first match instead of filtering, so `!mod` is what
+  // keeps Ctrl/Cmd+Alt+C with copy styles. The oracle's answer to the four-key chord is a
+  // no-op, and a chord that is printed and does nothing is worse than one that works.
+  if (!mod && event.altKey && event.shiftKey && event.code === "KeyC") return "copyAsPng";
   if (mod && event.code === "Quote") return "grid";
   if (mod && event.altKey && event.code === "KeyP" && !presenting) return "present";
   if (mod && (event.key === "/" || (event.shiftKey && event.key.toLowerCase() === "p"))) {

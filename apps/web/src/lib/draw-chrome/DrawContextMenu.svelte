@@ -1,10 +1,12 @@
 <script lang="ts">
-  import { tick } from "svelte";
+  import { onMount, tick } from "svelte";
   import type { Arrowhead } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
-  import { clampMenuPosition, type MenuElementInfo } from "./menu.ts";
+  import { clampMenuPosition, vectorizeAction, type MenuElementInfo } from "./menu.ts";
   import { shortcutLabel, zOrderShortcut } from "./shortcuts.ts";
+  import { takeFocus } from "./focusHandback.ts";
   import DrawMenuExtremity from "./DrawMenuExtremity.svelte";
+  import type { ClipboardFormatName } from "@osionos/draw-engine/types";
 
   let {
     x,
@@ -14,6 +16,7 @@
     onPickArrowhead,
     onRun,
     onCopyStyles,
+    onCopyToClipboard,
     onFit,
     onEditLink,
     onVectorize,
@@ -28,6 +31,12 @@
     onRun: (action: (engine: DrawEngine, at: { x: number; y: number }) => void) => void;
     /** The keyboard's copy, so both say "Copied styles." (`actionStyles.ts@1118751f:73`). */
     onCopyStyles: () => void;
+    /**
+     * Copy to the clipboard as a picture. Which elements, at what size, under which MIME
+     * type is the engine's answer (`clipboard.ts`); this only runs the browser's write and
+     * says what happened.
+     */
+    onCopyToClipboard: (format: ClipboardFormatName) => void;
     onFit: () => void;
     onEditLink: (id: string) => void;
     onVectorize: (id: string) => void;
@@ -36,6 +45,19 @@
 
   let menuEl: HTMLDivElement | undefined;
   let pos = $state({ left: 0, top: 0 });
+
+  /** The Vectorize row, from the declaration the palette reads too (`menu.ts`). */
+  const vectorize = $derived(vectorizeAction(element));
+
+  /**
+   * An open menu takes the focus and hands it back when it closes — `takeFocus`, and why
+   * that is two things and not one, in `focusHandback.ts`. Without the first, a right-click
+   * leaves the pointer on the board and the board keeps the focus, so every key reaches
+   * it: `R` changed the tool while the menu sat there offering Copy. Without the second,
+   * the board is unreachable from the keyboard once the menu is gone, and the next key
+   * draws nothing.
+   */
+  onMount(() => takeFocus(menuEl));
 
   $effect(() => {
     void x;
@@ -99,10 +121,9 @@
     <div class="rule" aria-hidden="true"></div>
   {/if}
 
-  {#if element?.vectorizeId}
-    {@const id = element.vectorizeId}
-    <button type="button" role="menuitem" onclick={() => onVectorize(id)}>
-      <span>Vectorize image…</span>
+  {#if vectorize}
+    <button type="button" role="menuitem" onclick={() => onVectorize(vectorize.elementId)}>
+      <span>{vectorize.label}</span>
     </button>
     <div class="rule" aria-hidden="true"></div>
   {/if}
@@ -117,6 +138,19 @@
     </button>
     <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.copySelection())}>
       <span>Copy</span><span class="hint">{shortcutLabel("CtrlOrCmd+C")}</span>
+    </button>
+    <div class="rule" aria-hidden="true"></div>
+    <!-- The oracle's copy-as pair, in its place: `actionCopyAsPng` and `actionCopyAsSvg`
+         arrive through the shared `options` array between the crop row and copy styles
+         (`components/App.tsx@1118751f:13702, 13764`), so they sit here — after Copy, before
+         Copy styles. The raster prints its chord and the vector does not, because
+         `actionCopyAsSvg` declares no `keyTest` (`actionClipboard.tsx@1118751f:124-190`)
+         while `actionCopyAsPng` does (`:250`). -->
+    <button type="button" role="menuitem" onclick={() => onCopyToClipboard("png")}>
+      <span>Copy to clipboard as PNG</span><span class="hint">{shortcutLabel("Alt+Shift+C")}</span>
+    </button>
+    <button type="button" role="menuitem" onclick={() => onCopyToClipboard("svg")}>
+      <span>Copy to clipboard as SVG</span>
     </button>
     <div class="rule" aria-hidden="true"></div>
     <!-- Excalidraw's copy/paste styles (`actions/actionStyles.ts@1118751f:51-236`). -->
@@ -241,6 +275,18 @@
       onclick={() => onRun((engine, at) => engine.pasteJson(null, at))}
     >
       <span>Paste</span><span class="hint">{shortcutLabel("CtrlOrCmd+V")}</span>
+    </button>
+    <!-- The oracle's canvas menu lists the same pair right here, after Paste and before
+         Select all (`components/App.tsx@1118751f:13718-13722`) — and it is the branch that
+         lists them **explicitly**, discarding the shared `options` array built at `:13702`.
+         Both branches offer them; only this one ignores the array. With nothing selected
+         these copy the whole scene, which is the oracle's `prepareElementsForExport` with
+         nothing selected (`data/index.ts@1118751f:56-58`). -->
+    <button type="button" role="menuitem" onclick={() => onCopyToClipboard("png")}>
+      <span>Copy to clipboard as PNG</span><span class="hint">{shortcutLabel("Alt+Shift+C")}</span>
+    </button>
+    <button type="button" role="menuitem" onclick={() => onCopyToClipboard("svg")}>
+      <span>Copy to clipboard as SVG</span>
     </button>
     <button type="button" role="menuitem" onclick={() => onRun((engine) => engine.selectAll())}>
       <span>Select all</span><span class="hint">{shortcutLabel("CtrlOrCmd+A")}</span>

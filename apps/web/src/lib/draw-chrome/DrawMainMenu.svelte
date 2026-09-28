@@ -3,9 +3,10 @@
   import { BUILD, describeBuild } from "../build.ts";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
+  import { takeFocus } from "./focusHandback.ts";
   import MainMenuIcon from "./MainMenuIcon.svelte";
   import { CANVAS_BACKGROUNDS, GRID_SIZES } from "./inspector.ts";
-  import { migrateLegacyStickyJson } from "../notes/stickyNotes.ts";
+  import { openDrawing } from "./openFile.ts";
   import type { GridPreference, ThemePreference } from "./theme.ts";
 
   /**
@@ -71,18 +72,21 @@
   let root: HTMLDivElement | undefined;
 
   /**
-   * Focus the menu when it opens, and hand focus back to the trigger when it closes.
+   * Focus the menu when it opens, and hand focus back when it closes — `takeFocus`, and
+   * why that is two things and not one, in `focusHandback.ts`.
    *
    * Without the first, the arrow keys do nothing: the keydown handler lives on the menu,
    * and with focus still on the page body the event never reaches it — so the menu reads
    * as keyboard-navigable and is not. Without the second, dismissing leaves focus
    * nowhere, and the next Tab restarts from the top of the document.
+   *
+   * Where it lands is the trigger button, and that is deliberate — it is where the menu
+   * came from, and the oracle's dialog hands the focus back to the element it captured on
+   * mount the same way (`Dialog.tsx@1118751f:52`, `:99-104`). The cost is that this app
+   * has no roving-focus model: the board then holds no focus, so `R` does not reach it
+   * until the board is clicked. `docs/reference/shortcuts.md` › Known limits.
    */
-  onMount(() => {
-    const returnTo = document.activeElement as HTMLElement | null;
-    root?.focus();
-    return () => returnTo?.focus?.();
-  });
+  onMount(() => takeFocus(root));
 
   /** Runs an action and dismisses, which is what selecting a menu item means. */
   function pick(run: () => void): void {
@@ -94,22 +98,27 @@
     fileInput?.click();
   }
 
-  function onFileSelected(event: Event): void {
+  /**
+   * Open whatever was picked, and say so if it was not a drawing.
+   *
+   * The bytes go to the engine and the engine decides: a saved `.png` or `.svg` carries its
+   * scene inside it (`export/roundtrip.rs`), a `.osidraw` is the text door, and this file
+   * only holds the picker and the two sentences. Everything else — the container, the
+   * chunk's key, what a corrupt one means — is Rust's (BUNNY.md §2). The alert is
+   * unchanged in wording and now also covers a picture with no scene in it, which is the
+   * case that matters: a round trip that "worked" by yielding nothing would look exactly
+   * like a fresh board.
+   */
+  async function onFileSelected(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file || !engine) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result);
-      // A file saved while a sticky note was four shapes opens with the note the engine
-      // draws — see `stickyNotes.ts`.
-      const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
-      if (!engine.loadScene(migrateLegacyStickyJson(text, Date.now(), nonce) ?? text)) {
-        alert("Could not load that file — it is not a drawing this app understands.");
-        return;
-      }
-      onClose();
-    };
-    reader.readAsText(file);
+    const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
+    const outcome = await openDrawing(file, engine, Date.now(), nonce);
+    if (outcome === "not-a-drawing") {
+      alert("Could not load that file — it is not a drawing this app understands.");
+      return;
+    }
+    onClose();
   }
 
   function saveToDisk(): void {

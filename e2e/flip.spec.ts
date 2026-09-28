@@ -139,6 +139,46 @@ async function settle(board: Board): Promise<void> {
   await board.page.keyboard.press("ArrowLeft");
 }
 
+/**
+ * A bar stood on its end beside a box, with a turned line of words inside them, in
+ * canvas pixels from `ORIGIN`.
+ *
+ * The bar's *turned* footprint reaches x:40..100, y:60..80 — a 20×60 box turned on its
+ * end stands 60 wide and 20 tall, not the width and height it has flat — so the frame
+ * drawn round the trio is (40,40)-(180,100), 140 wide, and its handles sit on that, as
+ * everywhere else (`docs/reference/resize.md` › the multi-selection frame).
+ *
+ * The words are here for the screenshot and not for the arithmetic: a rectangle turned by
+ * π/2 and by −π/2 is the same rectangle, so a picture of one proves nothing about which
+ * way it was turned. Words lean one way at 0.4 and the other at −0.4, and the oracle
+ * reverses a text's turn with everything else's (`resizeElements.ts@1118751f:1417-1419`).
+ * They sit well inside the frame so they cannot move it.
+ *
+ * The drag below takes the east handle 100px past the frame's own west edge at x=40,
+ * which is a scale of `(−60 − 40) / 140 = −0.714`: mirrored, at about seven tenths of its
+ * own size, and still readable. Any shorter and the crossing shrinks the group to a
+ * fraction of itself, which squashes the words to a few pixels and leaves a screenshot
+ * nobody can read.
+ */
+function groupWithATurnedMember(): Record<string, unknown>[] {
+  return [
+    { id: "bar", type: "rectangle", x: 60, y: 40, width: 20, height: 60, angle: Math.PI / 2 },
+    { id: "box", type: "rectangle", x: 120, y: 40, width: 60, height: 60 },
+    {
+      id: "word",
+      type: "text",
+      x: 100,
+      y: 55,
+      width: 50,
+      height: 20,
+      angle: 0.4,
+      text: "turns",
+      fontSize: 20,
+      backgroundColor: "transparent",
+    },
+  ];
+}
+
 test.describe("flip", () => {
   test("an image's pixels swap sides on Shift+H, and its band moves down on Shift+V", async ({
     page,
@@ -302,6 +342,86 @@ test.describe("flip", () => {
     expect(shrunkFlipped.width, "the same handle still grabs after the flip").toBeLessThan(
       beforeFlip.width,
     );
+  });
+
+  test("a turned member turns with the group when a drag crosses the anchor", async ({
+    page,
+  }, testInfo) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    // The drag path, not the Flip command: the two existing turns above go through
+    // Shift+H, and nothing here pressed a key.
+    await load(page, groupWithATurnedMember());
+    await select(page, ["bar", "box", "word"]);
+
+    // The frame is the union of the members' *turned* footprints: a 20×60 bar on its end
+    // stands at x:40..100, y:60..80, so the union is (40,40)-(180,100) and the east
+    // handle is drawn at (188, 70) — `max_x` + 8 out along that one axis, at the frame's
+    // own middle rather than at a corner.
+    const east = { x: ORIGIN.x + 188, y: ORIGIN.y + 70 };
+    await page.mouse.move(board.box.x + east.x, board.box.y + east.y);
+    await page.mouse.down();
+    // 100px past the frame's own west edge at x=40, on this axis only. The pointer lands
+    // on element x = −60, so the scale is `(−60 − 40) / 140 = −0.714`: mirrored, and still
+    // big enough to read.
+    await page.mouse.move(board.box.x + ORIGIN.x - 52, board.box.y + east.y, { steps: 4 });
+    await page.mouse.up();
+
+    const after = await elementById(page, "bar");
+    expect(
+      turn(after.angle ?? 0),
+      "a mirror reverses the direction of a turn, so π/2 came out as -π/2",
+    ).toBeCloseTo(turn(-Math.PI / 2), 9);
+    expect(
+      turn((await elementById(page, "word")).angle ?? 0),
+      "and the words lean the other way: a text turns with everything else",
+    ).toBeCloseTo(turn(-0.4), 9);
+    expect(
+      turn((await elementById(page, "box")).angle ?? 0),
+      "an unturned member is its own mirror image",
+    ).toBe(0);
+
+    const shot = testInfo.outputPath("group-flip.png");
+    await page.screenshot({ path: shot });
+    await testInfo.attach("group-flip", { path: shot, contentType: "image/png" });
+  });
+
+  test("a drag through the anchor on both axes leaves a turned member's turn alone", async ({
+    page,
+  }, testInfo) => {
+    const board = await openBoard(page);
+    await focusBoard(board);
+    await load(page, groupWithATurnedMember());
+    await select(page, ["bar", "box", "word"]);
+
+    // The same group, the same turns, dragged through its north-west corner on **both**
+    // axes. Two mirrors are a half turn about the anchor: the oracle's rule is a product
+    // (resizeElements.ts@1118751f:1392, :1417-1419), so the turns must survive it. A
+    // "negate the angle when the group flips" reading leans them the wrong way here, and
+    // a group of unturned boxes cannot tell the difference — -0.0 still looks like 0.
+    const southEast = { x: ORIGIN.x + 188, y: ORIGIN.y + 108 };
+    await page.mouse.move(board.box.x + southEast.x, board.box.y + southEast.y);
+    await page.mouse.down();
+    // Past the anchor at (40, 40) on both axes — 100 past it on x, a whole frame height
+    // past it on y.
+    await page.mouse.move(board.box.x + ORIGIN.x - 52, board.box.y + ORIGIN.y - 12, {
+      steps: 4,
+    });
+    await page.mouse.up();
+
+    const after = await elementById(page, "bar");
+    expect(
+      turn(after.angle ?? 0),
+      "a crossing on both axes is a half turn, which leaves the turn exactly as it was",
+    ).toBeCloseTo(turn(Math.PI / 2), 9);
+    expect(
+      turn((await elementById(page, "word")).angle ?? 0),
+      "and the words still lean the way they did",
+    ).toBeCloseTo(turn(0.4), 9);
+
+    const shot = testInfo.outputPath("group-flip-diagonal.png");
+    await page.screenshot({ path: shot });
+    await testInfo.attach("group-flip-diagonal", { path: shot, contentType: "image/png" });
   });
 
   test("a frame's name starts at the frame's left edge whatever text was drawn before it", async ({

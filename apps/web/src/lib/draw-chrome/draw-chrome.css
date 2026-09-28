@@ -55,6 +55,45 @@
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
+/*
+  The way out of zen mode, bottom right where the oracle puts it
+  (`LayerUI.scss@1118751f:68-90`). Quiet on purpose: it is furniture, not a call to
+  action, and it only exists while the flag is on — which is the whole of its job.
+
+  Scoped `.draw-chrome button.exit-zen-mode` at (0,2,1) because the reset above is
+  (0,1,1) and wins: a bare `.exit-zen-mode` loses `padding`, `background`, `border`,
+  `color`, and — through that rule's `font: inherit` shorthand — `font-size` and
+  `font-weight` as well, so the one control that has to be visible would have rendered
+  as bare body-size text with no panel and no padding. The hover is scoped for the same
+  reason, and by the same rule rather than by specificity: `.draw-chrome
+  button:hover:not(:disabled)` is also (0,3,1), so the two tie and the later one wins —
+  and scoping puts this rule later.
+*/
+.draw-chrome button.exit-zen-mode {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  z-index: 20;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(8px);
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+.draw-chrome button.exit-zen-mode:hover {
+  background: var(--bg-hover);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
 /* Modal and dialog backdrops */
 .draw-backdrop {
   position: fixed;

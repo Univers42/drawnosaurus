@@ -18,6 +18,7 @@
   } from "@osionos/draw-engine/vectorize";
   import InspectorSegmented from "./InspectorSegmented.svelte";
   import { scaledToFit } from "./imageFile.ts";
+  import { takeFocus } from "./focusHandback.ts";
   import {
     DIAL_RANGE,
     PRESETS,
@@ -80,9 +81,13 @@
   let closed = false;
 
   onMount(() => {
-    card?.focus();
+    // The card takes the focus and hands it back on close — `takeFocus`, and why it is
+    // two things and not one, in `focusHandback.ts`. Opened from the canvas menu, which is
+    // gone by the time this mounts, so the hand-back falls to the board.
+    const handBack = takeFocus(card);
     void start();
     return () => {
+      handBack();
       closed = true;
       clearTimeout(settle);
       tracer?.terminate();

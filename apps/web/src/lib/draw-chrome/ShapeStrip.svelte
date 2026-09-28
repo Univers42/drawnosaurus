@@ -1,17 +1,20 @@
 <script lang="ts">
   /**
-   * Rectangle, diamond and ellipse as a row of buttons, for the two places the chrome
-   * offers that choice by click:
+   * A row of type buttons, for the two places the chrome offers a type by click:
    *
    * - growing a flowchart with Ctrl/Cmd held — an extra the oracle lacks (task brief,
    *   "Better than Excalidraw"): it sits above the node being created and offers the
    *   1/2/3 choice `keys.ts` reads from the keyboard, so the choice is discoverable
    *   rather than a hidden chord;
    * - Tab's shape switch, which the oracle shows under the selection with the shared
-   *   type pressed (`ConvertElementTypePopup.tsx@1118751f`).
+   *   type pressed (`ConvertElementTypePopup.tsx@1118751f`). That one offers the three
+   *   closed shapes or the four linear types, whichever the selection is
+   *   (`shapeSwitch.ts` › `switchTypes`), so the row is given its types rather than
+   *   naming them itself.
    */
   import Icon from "./Icon.svelte";
-  import type { FlowchartShape } from "@osionos/draw-engine/types";
+  import type { ConversionType } from "@osionos/draw-engine/types";
+  import { typeIcon, typeLabel } from "./shapeSwitch.ts";
 
   let {
     x,
@@ -20,6 +23,7 @@
     below = false,
     keyHints = false,
     current,
+    types,
     onChoose,
   }: {
     x: number;
@@ -30,15 +34,22 @@
     /** Names each button with the key that picks it, `"Rectangle (1)"`. */
     keyHints?: boolean;
     /** The type shown pressed — none, when the shapes differ. Left out, no button toggles. */
-    current?: FlowchartShape | null;
-    onChoose: (shape: FlowchartShape) => void;
+    current?: ConversionType | null;
+    /** The types on offer. Left out, the three closed shapes with their 1/2/3 keys. */
+    types?: readonly ConversionType[];
+    onChoose: (shape: ConversionType) => void;
   } = $props();
 
-  const SHAPES: { shape: FlowchartShape; name: string; key: string }[] = [
-    { shape: "rectangle", name: "Rectangle", key: "1" },
-    { shape: "diamond", name: "Diamond", key: "2" },
-    { shape: "ellipse", name: "Ellipse", key: "3" },
-  ];
+  const KEYS = ["1", "2", "3", "4"];
+
+  const SHAPES = $derived(
+    (types ?? ["rectangle", "diamond", "ellipse"]).map((shape, index) => ({
+      shape,
+      name: typeLabel(shape),
+      icon: typeIcon(shape),
+      key: KEYS[index],
+    })),
+  );
 </script>
 
 <div
@@ -49,7 +60,7 @@
   style:left="{x}px"
   style:top="{y}px"
 >
-  {#each SHAPES as { shape, name, key } (shape)}
+  {#each SHAPES as { shape, name, icon, key } (shape)}
     <!-- Focus stays on the board: a flowchart's Ctrl is still held, and the release that
          commits the node is read by the board's own key listener; the switch's next Tab
          is the board's to read too. -->
@@ -60,7 +71,7 @@
       onmousedown={(event) => event.preventDefault()}
       onclick={() => onChoose(shape)}
     >
-      <Icon name={shape} size={16} />
+      <Icon name={icon} size={16} />
     </button>
   {/each}
 </div>

@@ -899,17 +899,25 @@
       </nav>
 
       <header id="top">
-        <span class="eyebrow">Drawnosaurus · work plan · 26 September 2026</span>
+        <span class="eyebrow">Drawnosaurus · work plan · refreshed 27 September 2026</span>
         <h1>Where the work picks back up</h1>
         <p class="lede">
-          The parity report says what is missing. This page turns it into work: four known bugs,
-          then fourteen milestones in the order we would take them, each with the files to start
-          from, the Excalidraw code to port, and the checklist lines it closes.
+          The parity report says what is missing. This page turns it into work: the known bugs, then
+          fourteen milestones in the order we would take them, each with the files to start from,
+          the Excalidraw code to port, and the checklist lines it closes.
+        </p>
+        <p class="note">
+          The state at the top of this page, the known bugs, and the phase and deferral tables were
+          re-read against the tree on 27 September. The fourteen milestones and their roadmap bars
+          are the 26 September audit, kept as they were: the live figures are
+          <b>650 / 931</b> in-scope checklist lines covered, and the per-line ledger is in the
+          parity report.
         </p>
         <div class="meta">
-          <span>main <b>a5e1271</b></span>
-          <span>engine <b>4c41948</b></span>
-          <span>covered <b>617 / 930</b></span>
+          <span>branch <b>bunny/night</b></span>
+          <span>root <b>9bbd718</b></span>
+          <span>engine <b>24d3aa6</b></span>
+          <span>covered <b>650 / 931</b></span>
           <span>oracle <b>Excalidraw 1118751f</b></span>
         </div>
       </header>
@@ -921,52 +929,293 @@
             <div class="kv">
               <span class="k">drawnosaurus</span
               ><span class="v"
-                ><code>develop</code> = <code>main</code> = <code>a5e1271</code>; CI green on both
-                (main run 36239287534)</span
+                ><code>bunny/night</code> = <code>9bbd718</code> — the integration branch every
+                finished task merges into. <code>develop</code> and <code>main</code> are the
+                owner's and are not touched at night.</span
               >
             </div>
             <div class="kv">
               <span class="k">draw-engine</span
               ><span class="v"
-                ><code>develop</code> = <code>main</code> = <code>4c41948</code>; CI green on both
-                (shellcheck, quality, WASM build)</span
+                ><code>bunny/night</code> = <code>24d3aa6</code>, which is the commit the root's
+                submodule pointer references. The engine merges <b>first</b>; a root that records a
+                SHA the engine does not have is a broken checkout.</span
               >
             </div>
             <div class="kv">
               <span class="k">coverage</span
               ><span class="v"
-                >617 of 930 in-scope checklist lines covered by a named test (66.3%); 74 built but
-                untested; 239 not built</span
+                ><b>650 of 931</b> in-scope checklist lines covered by a named test (69.8%); 281
+                open; 181 out of scope. Measured on <code>9bbd718</code> with
+                <code>make conformance</code> on 27 September — re-run it rather than repeat
+                it.</span
               >
             </div>
             <div class="kv">
               <span class="k">in flight</span
               ><span class="v"
-                >Nothing. Every branch from the last plan is merged and deleted.</span
+                >Phases 0–3 are done except 3.4(e) and 3.4(f), which are not started. Phase 4 is
+                unblocked; 4.1 has merged. Branches <code>bunny/p1.6-fillstyle</code>,
+                <code>bunny/p16.t1-zorder-props</code> and <code>bunny/p16.t2-nan-ingress</code> are
+                built or in review and not yet merged.</span
               >
             </div>
           </div>
           <h3>Next, in order</h3>
           <ol class="steps">
             <li>
-              <a href="#m-0">Fix the four known bugs</a>. The export dialog's dead controls first,
-              since anyone exporting meets them.
+              <a href="#m-6">Finish Phase 3.4</a> — (e) and (f) are the two groups still
+              outstanding. They are browser specs, which is why they queue behind the one serial
+              browser batch.
             </li>
             <li>
-              <a href="#m-1">Quick wins</a>: the 52 test-only lines, plain-text paste, Mermaid on
-              paste, and the small keys.
+              <a href="#m-2">Phase 4, export</a>: 4.2 and 4.3 generalise what 4.1 built, and 4.4–4.6
+              all touch the export path 4.1 rewrote, so they follow it in series rather than in
+              parallel.
             </li>
             <li>
-              <a href="#m-2">Export and files</a>: whole-scene PNG at a chosen scale, then the
-              options that depend on it.
+              <a href="#m-6">Phase 6.2</a>, shift-snap quantisation — the clearest single win left,
+              once the <a href="#ask">45°/15° question</a> is answered.
             </li>
           </ol>
           <h3>Start a session</h3>
-          <pre><code>git switch develop &amp;&amp; git pull --ff-only
-git submodule update --init engine   # not --recursive: the engine's own submodule is SSH-only
-make up &amp;&amp; make stale                # stale must print "current"
-make conformance                     # 617/930 when this page was written
+          <pre><code>git switch bunny/night &amp;&amp; git pull --ff-only
+git submodule update --init engine   # not --recursive
+make wasm &amp;&amp; make up &amp;&amp; make stale    # stale must print "current"
+make conformance                     # 650/931 when this page was written
 git switch -c fix/export-dialog-controls</code></pre>
+          <p class="note">
+            <code>make wasm</code> is in that line on purpose. The rebuild of
+            <code>engine/pkg</code> is decided by file mtime, and a checkout stamps mtimes at
+            checkout time — so a bundle built from different Rust can be mtime-newer than the
+            sources on disk, and every other target will serve it without noticing.
+            <code>make wasm</code> is the only target that rebuilds unconditionally. And
+            <code>make stale</code> before you debug: a container left up while commits land looks
+            exactly like a fix that did not work.
+          </p>
+        </div>
+      </section>
+
+      <section aria-labelledby="h-phases">
+        <h2 id="h-phases">Phases, and what is deferred</h2>
+        <p class="sub">
+          The milestones below are the 26 September audit, grouped by product area. The plan the
+          night actually works is phased, and the phases in order is the constraint: a half-finished
+          phase is what produces a branch that reads as complete and is not.
+        </p>
+        <div class="tbl two">
+          <div class="trow thead"><span>Phase</span><span>State, and what holds it up</span></div>
+          <div class="trow">
+            <span>0–2</span
+            ><span
+              ><b>Done and merged.</b> The baseline, the vectorise and text bindings, the dialog
+              keys, the group-flip angle, confirm-or-close, embed focus, fill style, the TypeScript
+              camera mirror deleted, the z-order invariant, the bounds normalisation.</span
+            >
+          </div>
+          <div class="trow">
+            <span>3</span
+            ><span
+              ><b>Done but for 3.4(e) and 3.4(f), which are not started.</b> 3.4(a)–(d) are merged:
+              the engine tests, the geometry, the text model, the keys. 3.4(e) and 3.4(f) are
+              browser specs, and the browser is the scarce resource — one serial batch — so they
+              wait for it rather than run beside it.</span
+            >
+          </div>
+          <div class="trow">
+            <span>4</span
+            ><span
+              ><b>4.1 merged; 4.2 and 4.3 are next, in series.</b> Phase 4 is serialised behind 4.1,
+              and 4.1 has now landed. 4.2, 4.3, 4.4, 4.5 and 4.6 all touch the export path 4.1
+              rewrote — <code>export/svg.rs</code>, the PNG byte path, the framing bounds — so five
+              tasks cannot go in parallel with one.</span
+            >
+          </div>
+          <div class="trow">
+            <span>5–18</span
+            ><span
+              ><b>Not started</b>, apart from the deferrals below. Phases in order means Phase 5
+              waits for Phase 4 to finish.</span
+            >
+          </div>
+        </div>
+
+        <h3>Deferred, with the reason</h3>
+        <p class="sub">
+          Each of these is a decision, not an oversight. <b>ASK FIRST</b> means the owner has to
+          answer before it is built — at night that means the <code>architect</code> writes the
+          design and it is not built.
+        </p>
+        <div class="tbl two">
+          <div class="trow thead"><span>Item</span><span>Why it is not built</span></div>
+          <div class="trow">
+            <span>4.7 <code>.excalidraw</code> import and export</span
+            ><span
+              ><b>RISK</b> — a public format. <code>elements_from_json</code> refuses anything that
+              is not <code>"osidraw"</code>, so mapping the schema both ways changes what a saved
+              board means. Design only.</span
+            >
+          </div>
+          <div class="trow">
+            <span>4.9 crash recovery</span
+            ><span
+              ><b>RISK + ASK FIRST</b> — an IndexedDB store, a recovery prompt, and preferences. At
+              night: write the design, do not build.</span
+            >
+          </div>
+          <div class="trow">
+            <span>5.6 right-button drag to pan</span
+            ><span
+              ><b>ASK FIRST</b> — the owner asked for it, but the oracle opens its context menu on
+              right-click. Both cannot own the same button, and which one wins is a design question,
+              not an implementation.</span
+            >
+          </div>
+          <div class="trow">
+            <span>8.2 links on elements</span
+            ><span
+              ><b>RISK (contract) + ASK FIRST</b> — a contract field first, then the engine, the
+              inspector, the popup, the export, in that order. <b>It gates 14.3</b>, Mermaid links,
+              so 14.3 cannot start until this lands.</span
+            >
+          </div>
+          <div class="trow">
+            <span>9.x the library</span
+            ><span
+              ><b>ASK FIRST</b> — per-browser IndexedDB, or per-owner through the API, which is a
+              new collection and new routes and therefore a RISK. Post both options, stop.</span
+            >
+          </div>
+          <div class="trow">
+            <span>10.3 picture file store</span
+            ><span
+              ><b>RISK + ASK FIRST</b> — pictures ride inline as data URLs today, and two or three
+              large ones hit <b>MongoDB's 16MB document limit</b>. That is a real production risk
+              and it is the strongest argument for the owner to answer this one.</span
+            >
+          </div>
+          <div class="trow">
+            <span>13.3 read-only link</span
+            ><span
+              ><b>RISK (security) + ASK FIRST</b> — a role that has to exist at the gateway, the API
+              and the engine, and a security mistake in it is a data leak rather than a rendering
+              bug.</span
+            >
+          </div>
+          <div class="trow">
+            <span>13.4 per-property undo</span
+            ><span
+              ><b>RISK + ASK FIRST</b> — it is a change to the operation model, not a feature added
+              to one.</span
+            >
+          </div>
+          <div class="trow">
+            <span>14.4 presentation revisits</span
+            ><span
+              ><b>ASK FIRST</b> — a contract change from <code>pathStep</code> to a path list.</span
+            >
+          </div>
+          <div class="trow">
+            <span>15.1 named actions</span
+            ><span
+              ><b>ASK FIRST</b> — one action table feeding shortcuts, menus, the palette and the
+              buttons, which is a real design decision about what the palette is.</span
+            >
+          </div>
+          <div class="trow">
+            <span>15.4 <code>customData</code></span
+            ><span><b>RISK (contract)</b></span>
+          </div>
+          <div class="trow">
+            <span>16.2 accessibility audit</span
+            ><span
+              ><b>ASK FIRST</b> — <code>axe-core</code> is a new dev dependency, and the 7-day
+              <code>minimumReleaseAge</code> rule applies on top. The audit itself can be done by
+              hand.</span
+            >
+          </div>
+          <div class="trow">
+            <span>18 beyond Excalidraw</span
+            ><span
+              ><b>Owner-gated</b> — only once the owner says parity is done. Both items in it are
+              opt-in extensions and must not change any oracle behaviour.</span
+            >
+          </div>
+        </div>
+
+        <h3 id="ask">Two questions that are decisions, not work</h3>
+        <p class="sub">
+          Neither is a bug and neither is implementable without an answer. Both are recorded here
+          because an agent that picks a side without asking has made the decision by accident.
+        </p>
+        <div class="rows">
+          <div class="row">
+            <span class="rid">45°</span>
+            <div>
+              <h3>Shift-snap: the plan asks for 45°, the oracle does 15°</h3>
+              <p>
+                The checklist line puts <b>45°</b> in the table for Horizontal, Vertical, 45°,
+                Configurable increments. The oracle does not do that. Its
+                <code>SHIFT_LOCKING_ANGLE</code> is <code>Math.PI / 12</code> — 15° — and it is
+                <i>applied</i> by
+                <code>getPerfectElementSize</code> (<code>sizeHelpers.ts:158</code>, using it at
+                <code>:172-173</code>) and by
+                <code>getLockedLinearCursorAlignSize</code> (<code>sizeHelpers.ts:187</code>, using
+                it at <code>:198-199</code>, <code>:205-206</code>, <code>:211</code>), and by
+                <code>resizeElements.ts</code> for rotation. So the divergence is ours:
+                <code>constrain_to_angle</code> in
+                <code>engine/crates/draw-engine/src/interaction/linear_drag.rs</code> steps by
+                <code>PI / 4.0</code> — 45°.
+              </p>
+              <p>
+                This is not a constant read in isolation. The claim is that the oracle's
+                <i>code path</i> quantises to 15°, and the two functions above are where it does it.
+                The registry already carries the rotation half as an honest <code>gap</code> at
+                <code>registry.ts:1793</code>:
+                <i
+                  >"rotate_element takes only the pointer position — no modifier or snap increment
+                  reaches it"</i
+                >.
+              </p>
+              <p class="where">
+                <code>prompt/design.md:828-830</code> ·
+                <code>sizeHelpers.ts@1118751f:158,187</code> ·
+                <code>constants.ts@1118751f:31</code> · <code>linear_drag.rs:12,17</code> ·
+                <code>registry.ts:1793</code>
+              </p>
+              <p>
+                <b>The question:</b> is 45° a deliberate product decision of ours, or an error in
+                the line? If the line is right, Phase 6.2 is a 15° task. If the oracle wins, 6.2 is
+                still worth doing and the line needs correcting.
+              </p>
+            </div>
+          </div>
+          <div class="row">
+            <span class="rid">NaN</span>
+            <div>
+              <h3>NaN ingress: fixing it changes what a saved board means</h3>
+              <p>
+                Phase 1 found that a non-finite number can reach an element, and the fix has to go
+                at
+                <code>elements_from_json</code>
+                (<code>engine/crates/draw-engine/src/export/json.rs:27</code>), which is the door
+                every <code>.osidraw</code> document comes through. That is a
+                <b>behaviour change on a public format</b>: a board that opens today would stop
+                opening.
+              </p>
+              <p class="where">
+                <code>export/json.rs:27</code> › <code>elements_from_json</code> ·
+                <code>~/bunny/briefs/</code> <code>p1.x</code> · task
+                <code>bunny/p16.t2-nan-ingress</code>, in review
+              </p>
+              <p>
+                <b>The question:</b> do we reject a document carrying a non-finite number, or repair
+                it and load it? Rejecting is the honest default and loses a board; repairing
+                silently invents geometry. The owner decides, because either answer is a change to
+                what a saved file is allowed to mean.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -974,8 +1223,12 @@ git switch -c fix/export-dialog-controls</code></pre>
         <h2 id="h-road">Roadmap</h2>
         <p class="sub">
           The bar is the number of open checklist lines each milestone closes, drawn to one scale.
-          Together they are all 313 open lines except the three that match Excalidraw already (see
-          Not planned).
+          <b>These bars and their counts are the 26 September audit and have not been recomputed</b>
+          — the per-milestone grouping is hand-kept and the registry keys on section and text, not
+          on milestone, so there is nothing to recompute them from. The live figure is
+          <b>650 / 931</b> covered; the per-line ledger is in the
+          <a href="parity-report.html">parity report</a>, and
+          <a href="#h-regen">Regenerating the numbers</a> at the bottom is how to re-derive it.
         </p>
         <div class="road">
           <a class="rrow" href="#m-0" aria-label="Milestone 0, Known bugs, S, four known bugs"
@@ -1136,41 +1389,56 @@ git switch -c fix/export-dialog-controls</code></pre>
         <ol class="steps">
           <li>
             <b>Branch</b> from <code>develop</code> as <code>feature/&lt;topic&gt;</code> or
-            <code>fix/&lt;topic&gt;</code>. Engine work gets a branch of the same name in
+            <code>fix/&lt;topic&gt;</code> by day.
+            <b
+              >On a night run, branch from <code>bunny/night</code> as
+              <code>bunny/&lt;task&gt;</code></b
+            >
+            — that branch is the integration point, and <code>develop</code> and
+            <code>main</code> are not touched. Engine work gets a branch of the same name in
             <code>engine/</code> and a submodule bump in the root.
+            <b>Merge the engine before the root</b>, or the root records a SHA the tree is not on.
           </li>
           <li>
             <b>Read the oracle first.</b> <code>make oracle</code> checks Excalidraw out at the pin
             into <code>third_party/excalidraw</code>. Cite what you port as
-            <code>path@1118751f:lines</code>.
+            <code>path@1118751f:lines</code>. If the oracle does not do what the line asks for, that
+            is a design decision for the owner, not something to invent.
           </li>
           <li>
-            <b>Red first.</b> Write the failing test, then the code. Unit tests target the
-            <code>.ts</code> modules beside <code>DrawSurface.svelte</code>; engine behaviour gets a
-            <code>tests/ci_*.rs</code>; anything a person does with a mouse or keyboard gets an
-            <code>e2e/*.spec.ts</code>.
+            <b>Red first, and show it was red.</b> Write the failing test, then the code. Unit tests
+            target the <code>.ts</code> modules beside <code>DrawSurface.svelte</code>; engine
+            behaviour gets a <code>tests/ci_*.rs</code>; anything a person does with a mouse or
+            keyboard gets an <code>e2e/*.spec.ts</code>. A test that passes before the change proves
+            nothing.
           </li>
           <li>
             <b>Update the registry.</b> In <code>packages/conformance/src/registry.ts</code>, turn
             the matching rules from <code>gap</code> to <code>covered</code> and name the new test
             files. Split a half-done rule; never overclaim.
+            <b>Check the rule is not shared with unbuilt work first</b> — one rule can match several
+            lines, and flipping it claims the ones nobody built. Five such rules are known in the
+            export area.
           </li>
           <li>
             <b>Run the gates yourself.</b> Engine <code>make quality</code> (set
-            <code>COMPOSE_PROJECT_NAME</code> per worktree), then <code>make wasm</code>,
-            <code>make quality</code>, <code>make conformance</code>,
+            <code>COMPOSE_PROJECT_NAME</code> per worktree — it rejects dots), then
+            <code>make wasm</code>, <code>make quality</code>, <code>make conformance</code>,
             <code>make test-integration</code> and the full Playwright suite. Warnings are errors.
+            Read the <code>wasm</code> exit before trusting anything after it: a failed WASM build
+            means every later step ran against an old engine.
           </li>
           <li>
-            <b>Release.</b> Engine branch, engine <code>develop</code>, engine <code>main</code>,
-            each with the engine CI green. Then root <code>develop</code> with CI green, then root
-            <code>main</code> with <em>main's own</em> CI run green. Rebuild the main checkout:
-            <code>make wasm</code>, <code>make up</code>, and <code>make stale</code> must say
-            current.
+            <b>Release</b> (by day, and the owner's call). Engine branch, engine
+            <code>develop</code>, engine <code>main</code>, each with the engine CI green. Then root
+            <code>develop</code> with CI green, then root <code>main</code> with
+            <em>main's own</em> CI run green. Rebuild the main checkout: <code>make wasm</code>,
+            <code>make up</code>, and <code>make stale</code> must say current.
           </li>
         </ol>
         <p class="note">
-          Sizes: <b>S</b> is under a day, <b>M</b> a few days, <b>L</b> a week or more.
+          Sizes: <b>S</b> is under a day, <b>M</b> a few days, <b>L</b> a week or more. These
+          describe the 26 September audit and have not been re-estimated.
         </p>
       </section>
 
@@ -1179,25 +1447,33 @@ git switch -c fix/export-dialog-controls</code></pre>
           <span class="msnum">0</span>
           <h2 id="h-m0">Known bugs</h2>
           <span class="chips"
-            ><span class="chip">4 bugs</span><span class="chip size">S each</span></span
+            ><span class="chip">1 open</span><span class="chip size">3 fixed</span></span
           >
         </div>
         <p class="sub">
-          Each one is something a person can hit today. Fix them before new features.
+          Each one was something a person could hit. Three of the four are fixed and merged; their
+          entries are kept, with what closed them, because the next reader needs to know they are
+          not still open. 0.1 is the one left.
         </p>
         <div class="rows">
           <div class="row">
             <span class="rid">0.1</span>
             <div>
-              <h3>The export dialog's Transparent background toggle and Scale chips do nothing</h3>
+              <h3>
+                The export dialog's Transparent background toggle and Scale chips do nothing
+                <span class="chip amber">open</span>
+              </h3>
               <p>
                 They are <code>$state</code> in the dialog and never reach
-                <code>engine.exportPng()</code>, which takes no arguments. Hide them until 2.1
-                lands, or land 2.1.
+                <code>engine.exportPng()</code>, which takes no arguments. Hide them until the
+                export options land, or land them.
               </p>
               <p class="where">
-                <code>apps/web/src/lib/draw-chrome/DrawExportModal.svelte:13-27</code> ·
-                <code>engine/src/engine.ts:801-803</code>
+                <code>apps/web/src/lib/draw-chrome/DrawExportModal.svelte</code> ›
+                <code>let scale = $state(2)</code>, and the <code>engine.exportPng()</code> call ·
+                <code>engine/src/engine.ts</code> › <code>exportPng()</code>, which takes no
+                parameters. Re-read the line numbers before quoting them: the 26 September
+                references have moved.
               </p>
             </div>
           </div>
@@ -1206,12 +1482,16 @@ git switch -c fix/export-dialog-controls</code></pre>
             <div>
               <h3>Vectorizing an image leaves its arrows bound to a deleted id</h3>
               <p>
-                The trace gets new ids and the image is tombstoned, but no arrow's binding is moved
-                to the trace or released.
+                <b>Fixed</b> and merged. Vectorising now calls
+                <code>release_bindings_to_removed</code> for the tombstoned image, so an arrow bound
+                to it is released instead of pointing at a dead id. It was silent before — nothing
+                on the canvas looked wrong.
               </p>
               <p class="where">
-                <code>engine/crates/draw-engine/src/engine/vectorize.rs:205-278</code>,
-                <code>commit_trace</code> at :365
+                <code>engine/crates/draw-engine/src/engine/vectorize.rs</code> ›
+                <code>release_bindings_to_removed</code>, called from the vectorise commit path ·
+                <code>docs/reference/binding.md</code> ·
+                <code>docs/reference/vectorize.md</code>
               </p>
             </div>
           </div>
@@ -1220,13 +1500,15 @@ git switch -c fix/export-dialog-controls</code></pre>
             <div>
               <h3>Board shortcuts fire while the vectorize dialog has focus</h3>
               <p>
-                <code>onAppShortcut</code> only skips text fields, and the modal layer only handles
-                Escape. <code>isOwnedElsewhere</code> already solves the same problem for paste and
-                drop.
+                <b>Fixed</b> and merged. <code>onAppShortcut</code> now asks <code>keyTarget</code>,
+                which returns <code>"overlay"</code> for anything inside an open overlay, and
+                returns early on <code>insideDialog</code>. The dialog is no longer a place where a
+                board chord still fires.
               </p>
               <p class="where">
-                <code>DrawSurface.svelte:1614</code> · <code>DrawModals.svelte:63-78</code> ·
-                <code>DrawSurface.svelte:643-648</code>
+                <code>apps/web/src/lib/draw-chrome/DrawSurface.svelte</code> ›
+                <code>keyTarget</code>, <code>onAppShortcut</code>, <code>isOwnedElsewhere</code> ·
+                <code>docs/reference/shortcuts.md</code>
               </p>
             </div>
           </div>
@@ -1236,10 +1518,16 @@ git switch -c fix/export-dialog-controls</code></pre>
               <h3>
                 A turned element in a flipped group keeps its angle when dragged through the anchor
               </h3>
-              <p>Excalidraw negates the angle.</p>
+              <p>
+                <b>Fixed</b> and merged, but the honest description is not "Excalidraw negates the
+                angle". A member's angle is its own times <code>flipFactorX * flipFactorY</code>:
+                <b>negated on one crossing of the anchor, left alone on two</b>, which is a half
+                turn about the anchor.
+              </p>
               <p class="where">
-                <code>docs/reference/resize.md:131</code> · oracle
-                <code>resizeElements.ts@1118751f:1417-1420</code>
+                <code>docs/reference/resize.md</code> › the anchor-crossing row, with the named
+                tests · oracle <code>resizeElements.ts@1118751f:1417-1419</code> and
+                <code>flipConditionsMap</code> at <code>:1177-1198</code>
               </p>
             </div>
           </div>
@@ -2166,9 +2454,18 @@ node --experimental-strip-types /tmp/dump.mts &gt; items.json</code></pre>
 
       <footer>
         <p>
-          Written from the registry at <code>cd01892</code> and a read-only check of the code at
-          <code>a5e1271</code>. File and line references were verified at that commit; they drift as
-          the code moves, so trust the function names over the line numbers.
+          The milestones and their file pointers were written from the registry at
+          <code>cd01892</code> and a read-only check of the code at <code>a5e1271</code> (26
+          September). The state at the top of this page, the known bugs, and the phase and deferral
+          tables were re-read against <code>bunny/night</code> at <code>9bbd718</code> / engine
+          <code>24d3aa6</code> on 27 September 2026.
+        </p>
+        <p>
+          File and line references drift as the code moves — some in this file have already, which
+          is why the entries fixed on the 27th name functions instead of lines. Trust the function
+          names over the line numbers, and re-read a file before quoting a number from it: a number
+          in a document is a claim about a past state, and this page is hand-kept, so nothing
+          generates it and nothing catches it going stale.
         </p>
       </footer>
     </div>

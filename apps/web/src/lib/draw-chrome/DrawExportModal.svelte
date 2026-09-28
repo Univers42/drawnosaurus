@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
+  import { takeFocus } from "./focusHandback.ts";
 
   let {
     engine,
@@ -14,11 +16,51 @@
   let scale = $state(2);
   let exporting = $state(false);
 
+  /**
+   * Whether anything is selected, read from the engine's own snapshot.
+   *
+   * A function rather than an inline read so that the `$state` initialiser does not capture
+   * the `engine` prop by value — which is the reading anyway, since the selection cannot
+   * change while a modal is up, and which `svelte-check` warns about for exactly that
+   * reason.
+   */
+  function hasSelection(): boolean {
+    return (engine?.debugSnapshot().scene.selectedCount ?? 0) > 0;
+  }
+
+  /**
+   * The dialog's "selection only" checkbox, and the oracle's `exportSelectionOnly`
+   * (`ImageExportDialog.tsx@1118751f:227`).
+   *
+   * Starts on when something is selected, as the oracle's does
+   * (`useState(hasSelection)`, `ImageExportDialog.tsx@1118751f:80`): a person who selected
+   * something and then opened the export dialog is usually exporting that, and the oracle
+   * takes that as the answer rather than making them tick a box to get it.
+   */
+  let selectionOnly = $state(hasSelection());
+
+  let card: HTMLDivElement | undefined;
+
+  /**
+   * An open dialog takes the focus and hands it back on close — `takeFocus`, and why it
+   * is two things and not one, in `focusHandback.ts`. Without the first, the board answers
+   * every key pressed over this one and the tool that comes back is not what a person
+   * asked for; without the second, closing leaves the focus on `<body>` and the board
+   * unreachable until it is clicked.
+   */
+  onMount(() => takeFocus(card));
+
   async function handleExportPng(): Promise<void> {
     if (!engine) return;
     exporting = true;
     try {
-      const blob = await engine.exportPng();
+      // The controls above, handed straight to the engine. The framing, the size, the
+      // background and the choice of what to export are its arithmetic — see `ExportFrame`
+      // and `ExportScope` in the engine, ported from `exportToCanvas`
+      // (`scene/export.ts@1118751f:180-284`) and from `prepareElementsForExport`
+      // (`data/index.ts@1118751f:48-96`). The checkbox says whether to narrow, never to
+      // what: with nothing selected it is still the whole scene.
+      const blob = await engine.exportPng({ scale, transparent, selectionOnly });
       if (blob) downloadBlob("drawing.png", blob);
       onClose();
     } finally {
@@ -28,7 +70,9 @@
 
   function handleExportSvg(): void {
     if (!engine) return;
-    const svg = engine.exportSvg(16);
+    // No margin here either. It used to be a `16` picked in this file, six pixels a side
+    // wider than the PNG on the same drawing.
+    const svg = engine.exportSvg({ selectionOnly });
     if (svg) downloadBlob("drawing.svg", new Blob([svg], { type: "image/svg+xml" }));
     onClose();
   }
@@ -42,7 +86,7 @@
 </script>
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="export-title">
-  <div class="modal-card pop-in">
+  <div class="modal-card pop-in" tabindex="-1" bind:this={card}>
     <div class="modal-header">
       <h3 id="export-title">Export Drawing</h3>
       <button type="button" class="close-btn" onclick={onClose} aria-label="Close dialog">✕</button>
@@ -52,6 +96,10 @@
       <label class="option-row">
         <span>Transparent background</span>
         <input type="checkbox" bind:checked={transparent} />
+      </label>
+      <label class="option-row">
+        <span>Selection only</span>
+        <input type="checkbox" bind:checked={selectionOnly} />
       </label>
       <div class="option-row">
         <span>Export Scale</span>
@@ -121,6 +169,12 @@
     width: 480px;
     max-width: 92vw;
     box-shadow: var(--shadow-lg);
+  }
+
+  /* The card is focused only so the dialog keeps the keys; a ring round the whole card
+     would say the dialog is a control, which it is not (`VectorizeDialog.svelte`). */
+  .modal-card:focus {
+    outline: none;
   }
 
   .modal-header {

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { focusBoard, openBoard, sceneElements, type Board } from "./board.ts";
+import { focusBoard, openBoard, pickTool, sceneElements, type Board } from "./board.ts";
 
 /**
  * Snapping to other elements: off unless asked for, as Excalidraw ships it.
@@ -214,4 +214,99 @@ test("turning it on hides the grid, and showing the grid turns it off", async ({
   await page.keyboard.press("Control+Quote");
   expect(await gridShown()).toBe(true);
   expect(await objectsSnap(page)).toBe(false);
+});
+
+/**
+ * 6.3: the gate is not move-only. Drawing and resizing snap to objects too, and the engine
+ * tests carry the arithmetic (`ci_draw_object_snap.rs`, `ci_resize_object_snap.rs`). What
+ * only a browser can say is that the reach survives the whole host path: the canvas
+ * offset, the camera, `Alt+S` and a real mouse.
+ *
+ * Each pair below is **the same gesture with the same pointer**, one inside the 6px reach
+ * and one past it, because a test that only asserts "a snap happened" is passed by a
+ * snapper that snaps always.
+ */
+
+/** Where a shape is drawn from, canvas-relative. The still box's right edge is at 640. */
+const DRAW_FROM = { x: 700, y: 420 };
+
+/** Drags a rectangle out to `cornerX`, with objects snapped on. */
+async function drawTo(board: Board, cornerX: number): Promise<void> {
+  const { page, box } = board;
+  await focusBoard(board);
+  await page.keyboard.press("Alt+KeyS");
+  await pickTool(page, "Rectangle");
+  await page.mouse.move(box.x + DRAW_FROM.x, box.y + DRAW_FROM.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + cornerX, box.y + 480, { steps: 8 });
+  await page.mouse.up();
+}
+
+/** How far short of the still box's right edge the drawn one ended, in screen pixels. */
+async function drawnGap(page: Page): Promise<number> {
+  const elements = await sceneElements(page);
+  const still = elements.find((el) => el.id === "still")!;
+  // The one that is neither fixture: `moving` is a rectangle too, and it comes first.
+  const drawn = elements.find((el) => el.id !== "still" && el.id !== "moving")!;
+  const { scale } = await page.evaluate(() => window.__drawEngine!.camera);
+  return (drawn.x - (still.x + still.width)) * scale;
+}
+
+test("a shape drawn within the reach lands on the edge beside it", async ({ page }) => {
+  const board = await openBoard(page);
+  await twoBoxes(page);
+
+  // 3px short of the still box's right edge at 640.
+  await drawTo(board, 637);
+
+  expect(await objectsSnap(page)).toBe(true);
+  expect(await drawnGap(page)).toBeCloseTo(0, 0);
+});
+
+test("the same shape drawn past the reach lands where it was let go", async ({ page }) => {
+  const board = await openBoard(page);
+  await twoBoxes(page);
+
+  // 7px short, a pixel past the reach, and the same gesture otherwise.
+  await drawTo(board, 633);
+
+  expect(await drawnGap(page)).toBeCloseTo(-7, 0);
+});
+
+/** Drags the moving box's east handle to `toX`, canvas-relative. */
+async function dragEastTo(board: Board, toX: number): Promise<void> {
+  const { page, box } = board;
+  await focusBoard(board);
+  await page.keyboard.press("Alt+KeyS");
+  const from = { x: box.x + MOVING.x + MOVING.w, y: box.y + MOVING.y + MOVING.h / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + toX, from.y, { steps: 8 });
+  await page.mouse.up();
+}
+
+test("an edge dragged within the reach lands on the edge beside it", async ({ page }) => {
+  const board = await openBoard(page);
+  await twoBoxes(page);
+
+  // 3px short of the still box's left edge at 520.
+  await dragEastTo(board, 523);
+
+  const elements = await sceneElements(page);
+  const moving = elements.find((el) => el.id === "moving")!;
+  // The dragged edge lands on 520, and the height is untouched: the reach is on the edge
+  // the handle holds, not on the box.
+  expect(moving.x + moving.width).toBeCloseTo(520, 0);
+  expect(moving.height).toBeCloseTo(MOVING.h, 0);
+});
+
+test("the same edge dragged past the reach lands where it was let go", async ({ page }) => {
+  const board = await openBoard(page);
+  await twoBoxes(page);
+
+  await dragEastTo(board, 513);
+
+  const elements = await sceneElements(page);
+  const moving = elements.find((el) => el.id === "moving")!;
+  expect(moving.x + moving.width).toBeCloseTo(513, 0);
 });

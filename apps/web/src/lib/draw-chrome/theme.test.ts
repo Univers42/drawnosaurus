@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIGHT_THEME } from "@osionos/draw-engine/types";
+import { DEFAULT_GRID, LIGHT_THEME } from "@osionos/draw-engine/types";
 import {
   DEFAULT_GRID_PREFERENCE,
   persistObjectsSnapPreference,
@@ -180,5 +180,33 @@ describe("snap modes exclude each other", () => {
     const modes = { objectsSnap: true, grid: gridOff };
     expect(pickGridMode(modes, { size: 40 }).objectsSnap).toBe(true);
     expect(pickGridMode(modes, { enabled: false }).objectsSnap).toBe(true);
+  });
+});
+
+describe("the grid default", () => {
+  it("is the engine's own DEFAULT_GRID, not a third copy of the numbers", () => {
+    // `DEFAULT_GRID_SIZE`/`DEFAULT_GRID_STEP` live in `render/paint.rs` and are
+    // exported to the host once. A separate literal here could offer a size the engine
+    // then silently refuses.
+    expect(DEFAULT_GRID_PREFERENCE).toEqual(DEFAULT_GRID);
+    // …pinned as the numbers themselves, so a change on the engine side cannot pass
+    // unnoticed by travelling with the import. House precedent: `inspector.test.ts`'s
+    // `mirrors the engine's SIDES_RANGE/RATIO_RANGE`.
+    expect(DEFAULT_GRID_PREFERENCE).toEqual({ enabled: false, size: 20, step: 5, snap: true });
+  });
+
+  it("is a copy of the engine's grid, never the same object", () => {
+    // Aliasing `DEFAULT_GRID` hands out the engine's own default: `readGridPreference`
+    // returns it on all three of its early returns and `DrawSurface` puts it straight
+    // into a `$state`, so one in-place `grid.size = …` anywhere in the front would
+    // rewrite `engine/src/types.ts`'s `DEFAULT_GRID` for every other reader. Nothing
+    // does that today; the copy is what keeps it true tomorrow.
+    expect(DEFAULT_GRID_PREFERENCE).not.toBe(DEFAULT_GRID);
+    try {
+      DEFAULT_GRID_PREFERENCE.size = 999;
+      expect(DEFAULT_GRID.size).toBe(20);
+    } finally {
+      DEFAULT_GRID_PREFERENCE.size = 20;
+    }
   });
 });

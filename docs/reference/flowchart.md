@@ -85,8 +85,10 @@ it. The toolbar is marked `top` and the inspector `side`, as the oracle marks it
 - **A floating shape-chooser strip** (`ShapeStrip.svelte`) appears beside the
   node being created, offering the same three shapes by click, each with an accessible
   name (`"Rectangle (1)"`, etc.). Shown only while a cluster is pending
-  (`onFlowchartCreatingChange`), positioned from the pending cluster's own bounds and kept
-  there as the reveal moves the camera.
+  (`onFlowchartCreatingChange`), positioned from the pending cluster's own bounds — read by
+  `boundsOf`, which normalises, so a start node whose own extents went negative hangs the
+  strip above the cluster rather than on it — and kept there as the reveal moves the camera.
+  `docs/reference/camera.md`.
 - **Enter starts typing in the new node** — no new code: the commit selects the first new
   node, and Enter already opens the text editor on whatever is selected
   (`keys.ts` › `handlePlainKeys`).

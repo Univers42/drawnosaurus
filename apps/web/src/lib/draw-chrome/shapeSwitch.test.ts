@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { sharedShape, switchKey, switchPanelAt } from "./shapeSwitch.ts";
+import {
+  CLOSED_SHAPES,
+  LINEAR_TYPES,
+  switchKey,
+  switchPanelAt,
+  switchTypes,
+  typeIcon,
+  typeLabel,
+} from "./shapeSwitch.ts";
 
 const key = (key: string, mods: Partial<KeyboardEvent> = {}) => ({
   key,
@@ -34,16 +42,46 @@ describe("switchKey", () => {
   });
 });
 
-describe("sharedShape", () => {
-  it("is the type the switchable shapes share", () => {
-    expect(sharedShape([{ type: "diamond" }, { type: "text" }, { type: "diamond" }])).toBe(
-      "diamond",
-    );
+describe("switchTypes", () => {
+  it("offers the three closed shapes for a closed shape", () => {
+    expect(switchTypes("rectangle")).toEqual(CLOSED_SHAPES);
+    expect(switchTypes("diamond")).toEqual(CLOSED_SHAPES);
+    expect(switchTypes("ellipse")).toEqual(CLOSED_SHAPES);
   });
 
-  it("is none when they differ or there are none", () => {
-    expect(sharedShape([{ type: "diamond" }, { type: "ellipse" }])).toBeNull();
-    expect(sharedShape([{ type: "arrow" }])).toBeNull();
+  it("offers the four linear types for any of them, in the order Tab walks them", () => {
+    // `LINEAR_TYPES`, `ConvertElementTypePopup.tsx@1118751f:113-120`.
+    expect(LINEAR_TYPES).toEqual(["line", "sharpArrow", "curvedArrow", "elbowArrow"]);
+    for (const linear of LINEAR_TYPES) {
+      expect(switchTypes(linear)).toEqual(LINEAR_TYPES);
+    }
+  });
+
+  it("offers nothing for nothing switchable, and the panel closes on it", () => {
+    // A selection of two kinds has no shared type, and the oracle's panel closes rather
+    // than offering a choice between two families (`ConvertElementTypePopup.tsx@1118751f:641-664`).
+    expect(switchTypes(null)).toEqual([]);
+  });
+});
+
+describe("typeLabel and typeIcon", () => {
+  it("names each of the seven and draws each of the seven", () => {
+    for (const type of [...CLOSED_SHAPES, ...LINEAR_TYPES]) {
+      expect(typeLabel(type)).not.toBe("");
+      expect(typeIcon(type)).not.toBe("");
+    }
+  });
+
+  it("reads the linear types the way the oracle's panel does, and spells the icons its way", () => {
+    // The conversion names and the icon names were chosen on different sides of the wire.
+    expect(typeLabel("line")).toBe("Line");
+    expect(typeLabel("sharpArrow")).toBe("Sharp arrow");
+    expect(typeLabel("curvedArrow")).toBe("Curved arrow");
+    expect(typeLabel("elbowArrow")).toBe("Elbow arrow");
+    expect(typeIcon("line")).toBe("line");
+    expect(typeIcon("sharpArrow")).toBe("arrowSharp");
+    expect(typeIcon("curvedArrow")).toBe("arrowRound");
+    expect(typeIcon("elbowArrow")).toBe("arrowElbow");
   });
 });
 

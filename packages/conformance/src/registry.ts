@@ -94,9 +94,9 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "Shapes",
-    text: /disable snapping/,
+    text: /^`Ctrl\/Cmd` while snapping — Temporarily disable snapping$/,
     status: "gap",
-    why: "Half done. Ctrl/Cmd now inverts snapping to objects for a move (ci_objects_snap.rs, e2e/objectsSnap.spec.ts). It does not yet release the grid: Excalidraw passes a null grid size to getGridPoint while it is held, so drawing and resizing on a snapping grid go free, and ours stay on the grid.",
+    why: "6.4 closed the GRID half for every gesture — press, move, resize, the clicked sticky note, and the hover, which is not snapped at all rather than gated (ci_ctrl_grid.rs). What is NOT established is whether the oracle releases the ANGLE lock under Ctrl as well: `getLockedLinearCursorAlignSize` (sizeHelpers.ts:196-199) takes no modifier in the part of it that computes the step, and 5.2 established that a line snaps to exactly two things, the grid and the angle lock. One of two is proven, so the box stays shut rather than being flipped on half an answer.",
   },
   {
     section: "Shapes",
@@ -228,6 +228,11 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_selection.rs`,
       `${ENGINE}/ci_edit.rs`,
       `${ENGINE}/ci_history.rs`,
+      // `shortkey.md:77` "Delete selected point" was claimed covered by this blanket rule with
+      // no test that exercised it -- the rule names files, and none of these deleted a point of
+      // a line. `ci_point_delete.rs` is the one that does. See the `^Remove point$` rule for
+      // what the oracle's three branches are.
+      `${ENGINE}/ci_point_delete.rs`,
       "engine/src/host/keys.test.ts",
       "e2e/shortcuts.spec.ts",
     ],
@@ -263,11 +268,16 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${WEB}/mermaid/mermaid.test.ts`, "e2e/mermaid.spec.ts"],
   },
+  // The paste itself is ported (`paste_text.rs`, `keyboardInput.ts`): one element per line,
+  // each wrapped to max(min(visible width / 2, 800), 200) and centred on the pointer. What
+  // the line asks for beyond that — pasting rich content from Google Docs, and
+  // "paste as single element" — is design.md:1279 and shortkey.md:421,423, which are
+  // Phase 4.8's, so the line stays a gap rather than being half-claimed.
   {
     section: "🔤 Text",
     text: /wrap text where appropriate/,
     status: "gap",
-    why: "Pasting plain text makes no text element: the host hands it to pasteJson, which takes only element JSON (engine/src/host/keyboardInput.ts). Excalidraw makes one per line and wraps any wider than max(min(visible width / 2, 800), 200) (App.tsx:4978-5030). The wrapping that needs is ported (ci_text_wrap_oracle.rs); the paste is not.",
+    why: "Plain text pasted now becomes text elements, one per line and wrapped to max(min(visible width / 2, 800), 200) as Excalidraw does (ci_paste_text.rs, paste_text.rs, App.tsx@1118751f:4979-5096). The rest of the line is the rich part this checklist asks for elsewhere and does not have: pasting from Google Docs, and 'paste as single element' (design.md:1279, shortkey.md:421,423) — Phase 4.8. Ctrl+V of a paragraph is split into one element per line, which is the oracle's behaviour, not the one a reader of the clipboard meant.",
   },
   // `T` activates the text tool: ci_shortcuts.rs' oracle table drives it generically
   // through every tool's letter, not one of the section rule's own named files.
@@ -456,6 +466,19 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [
       `${ENGINE}/ci_arrowhead_oracle.rs`,
+      // The line was already covered by ci_arrowhead_oracle.rs, which holds every head's
+      // numbers to 1e-9. That is a *picture* comparison: it says the rendering matches a
+      // fixture and says nothing about the relationships between the ten values.
+      // `ci_cardinality_props.rs` is the half that is not a picture -- distinctness across
+      // the set, equivariance under translating and under turning the line about its own
+      // endpoint, and the legacy fold.
+      //
+      // The fold is `dot` -> `circle`, `crowfoot_one` -> `cardinality_one`,
+      // `crowfoot_many` -> `cardinality_many`, `crowfoot_one_or_many` ->
+      // `cardinality_one_or_many`, pinned through `load_scene` and `export_json`. Two tests
+      // rather than one, because a fix handling only the `crowfoot_*` spellings passes one
+      // and silently loses `dot`.
+      `${ENGINE}/ci_cardinality_props.rs`,
       `${WEB}/draw-chrome/menu.test.ts`,
       "e2e/arrowheads.spec.ts",
     ],
@@ -649,11 +672,43 @@ export const RULES: readonly Rule[] = [
     section: "🧱 Web embeds",
     text: /^Paste supported embed URLs$/,
     status: "gap",
-    why: "implemented, untested — the host allow-list and URL resolution are thoroughly tested (ci_embed.rs), but nothing pastes a URL through the modal or onto the canvas to trigger creation; every test calls insertEmbed directly.",
+    // NOT earned as `covered` even though the modal arm is now tested, because the line
+    // names two arms and the second is a measured divergence rather than a hole.
+    //
+    // ARM 1 — through the modal: covered by e2e/embedModal.spec.ts. Six cases, each made
+    // red once by mutating the product: accepted (one element, type 'embed', the *resolved*
+    // player URL, 560x315, roughness 0, transparent, arrives selected and centred), placement
+    // determinism (two spellings of one link land on the same pixel; a 0.5x zoom keeps the
+    // board size and centres the frame), refusal (host off the allow-list, `javascript:`, and
+    // a junk host: aria-invalid, the allow-list named, the Embed button disabled, Enter
+    // guarded, and 0 elements / 0 frames / 0 iframes), a control test that retypes in the same
+    // dialog so the refusals cannot pass by being refused forever, the blank case ("" , "   ",
+    // "\t", " \t ") which must place nothing and must NOT claim refusal, and Cancel.
+    //
+    // ARM 2 — onto the canvas: a real divergence, measured. With the board focused, a real
+    // Ctrl+V of a supported embed URL leaves ["text"] — onChromePaste (DrawSurface.svelte:
+    // 781-803) handles files, Mermaid and legacy sticky JSON only, so the URL falls through to
+    // the plain-text paste. The oracle frames an embed from a pasted link it will not render
+    // as text (App.tsx@1118751f:4711-4757, addTextFromPaste at :4757). So this is not "untested"
+    // any more — it is *tested and wrong*, and the honest status for a line with one working arm
+    // and one divergent arm is a gap with a reason, not a closure.
+    //
+    // Also open under the same feature, found while writing arm 1: the embed dialog cannot be
+    // dismissed with Escape. DrawModals.svelte:73-87 is the single Escape handler and does not
+    // list the embed dialog, which is rendered outside it (DrawSurface.svelte:2246-2268); the
+    // oracle closes every modal on Escape (Modal.tsx@1118751f:39-47), and our own
+    // docs/reference/shortcuts.md:261-264 claims one handler covers all eleven role="dialog"
+    // sites. Filed as a Phase 1 task; the e2e never presses Escape.
+    why: "one arm tested, one arm divergent — e2e/embedModal.spec.ts now covers pasting through the modal (accept, refuse, blank, cancel, deterministic placement), but pasting a supported URL onto the canvas leaves a text element where the oracle frames an embed (App.tsx@1118751f:4711-4757), so the line is not closed. Separate defect: the embed dialog has no Escape handler.",
   },
   {
     section: "🧱 Web embeds",
     status: "covered",
+    // e2e/embed.spec.ts is also where the dialog itself is exercised: on the palette path
+    // the field takes no focus on the base and does after `onMount` focuses it. What sits
+    // behind it, the engine's placement, is asserted by that same file's tests, the ones
+    // that insert through the engine. `prompt/*.md` names no line for a dialog's focus, so
+    // nothing is claimed here beyond that.
     tests: [`${ENGINE}/ci_embed.rs`, `${WEB}/draw-chrome/embed.test.ts`, "e2e/embed.spec.ts"],
   },
   {
@@ -708,8 +763,19 @@ export const RULES: readonly Rule[] = [
   {
     section: "⚡ Command Palette",
     text: /recently used/i,
-    status: "gap",
-    why: "The registry ranks by fuzzy match alone; there is no usage history to give a recently-run command a boost the way the oracle's own palette does.",
+    status: "covered",
+    // prompt/shortkey.md:361. The oracle's palette remembers the *one* command it last
+    // ran — `lastUsedPaletteItem` holds a single item, not a list
+    // (`CommandPalette.tsx@1118751f:85`) — and lifts it into a "Recents" group above
+    // the list, out of the category it was declared in (`:844-857`). It does not boost
+    // anything and keeps no history, and ours matches: `paletteGroups` takes one id, so
+    // a list cannot be handed to it, and no other row moves.
+    // Deliberately *not* claimed: the query does not rank recent commands. The oracle
+    // hides the recents group the moment there is a query (`:844-845`) and so do we.
+    // The e2e is what pins the round trip: the memory lives above the dialog, so it
+    // surviving close/reopen — and holding one row rather than a list — is only
+    // reachable in a browser.
+    tests: [`${WEB}/draw-chrome/commandPalette.test.ts`, "e2e/paletteRecents.spec.ts"],
   },
   {
     section: "⚡ Command Palette",
@@ -721,9 +787,50 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "🔲 Grid",
-    text: /custom grid spacing|disable snapping/,
+    text: /custom grid spacing/,
     status: "gap",
-    why: "Spacing is offered as a fixed set of sizes in the menu, not a custom value. Ctrl/Cmd inverts snapping to objects but does not yet release the grid — see the Shapes rule above.",
+    why: "A fixed set of sizes in the menu, not a custom value. 6.6, and it owns the second half of the line this rule used to carry. The Ctrl half is real and is the rule below.",
+  },
+  // Split off from a rule that paired `custom grid spacing` with `disable snapping`, and so could
+  // be neither closed nor honestly described: one of the two is 6.6 and still a gap. **A rule that
+  // covers two tasks is a rule that can never be flipped**, because the tasks land at different
+  // times. The same failure as 4.3's broad pattern, one level up.
+  //
+  // shortkey.md:374 "Hold Ctrl/Cmd while dragging - Temporarily disable snapping" has BOTH halves
+  // now. The object half was already true and 5.2's own note says so (ci_objects_snap.rs,
+  // e2e/objectsSnap.spec.ts). The grid half is 6.4.
+  //
+  // And 6.4's finding is the part worth keeping: the oracle's hover is NOT Ctrl-gated, it is
+  // simply not grid-snapped. `App.tsx:7941-7979` reads the raw pointer -- `scenePointer` is a pure
+  // camera transform (`viewportCoordsToSceneCoords`, utils.ts:317-337), never re-assigned in that
+  // function, handed to `getHoveredElementForBinding` at `:7947-7954`, with no `getGridPoint`
+  // between and none in the callee (`getBindingCandidates`, collision.ts:432, reads no grid). Ours
+  // asked what was under the NEAREST INTERSECTION. Measured, not chosen: with a 10-grid, a shape
+  // whose right edge is at 405 and a pointer at (415, 345) lit nothing at all, because the grid's
+  // 420 is 15 out. Adding `snap_gesture` there -- which is what the brief asked for -- would have
+  // left every Ctrl-RELEASED hover reading the wrong point and the site looking fixed.
+  //
+  // The gate belongs to the SITE, not to the pointer-up: `App.tsx:13579` is in `maybeHandleResize`
+  // (`:13546`), reached from `onPointerMoveFromPointerDownHandler` under `resize.isResizing`
+  // (`:10725`, call at `:10731`) and from `onKeyDown`/`onKeyUpFromPointerDownHandler` (`:10593`,
+  // `:10606`).
+  //
+  // Duplicate keeps snapping under Ctrl because `App.duplicate.ts:95-99` passes the grid bare, and
+  // the branch proved that rather than asserting it.
+  //
+  // This rule has to sit ABOVE the section's catch-all, which is `covered` and would otherwise
+  // claim the line by accident. That is the whole of the 665/1112 lesson applied once more, in the
+  // same file, the same night.
+  {
+    section: "🔲 Grid",
+    text: /^Hold .Ctrl\/Cmd. while dragging/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_ctrl_grid.rs`,
+      `${ENGINE}/ci_end_snap.rs`,
+      `${ENGINE}/ci_objects_snap.rs`,
+      "e2e/objectsSnap.spec.ts",
+    ],
   },
   {
     section: "🔲 Grid",
@@ -733,8 +840,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "🌙 Interface modes",
     text: /Zen mode|zen/i,
-    status: "gap",
-    why: "No zen mode. It is a host concern — hide the chrome — and needs nothing from the engine.",
+    status: "covered",
+    tests: [`${WEB}/draw-chrome/zen.test.ts`, "e2e/zen.spec.ts"],
   },
   {
     section: "🌙 Interface modes",
@@ -762,12 +869,18 @@ export const RULES: readonly Rule[] = [
     section: "📚 Library",
     status: "gap",
     why: "No library. Needs item storage, preview rendering, id regeneration on insert and group preservation.",
+    // Was /PNG|SVG|Google Docs|single element/, and it matched ELEVEN lines across two
+    // features and three tasks: Google's rich paste and paste-as-single-element (4.8, still
+    // gaps), the four copy-as-image lines (4.3, now covered below) and four export lines the
+    // 32. Export rules already own. A gap pattern broad enough to catch its neighbours' lines
+    // is a claim about work nobody did, and it sat ABOVE those rules, so it shadowed them.
+    // Narrowed to what it is actually about.
   },
   {
     section: "📋 Clipboard tricks",
-    text: /PNG|SVG|Google Docs|single element/,
+    text: /Google Docs|single element/,
     status: "gap",
-    why: "Copy-as-image and rich external paste. SVG export exists (ci_export.rs) but is not wired to the clipboard.",
+    why: "Rich external paste: pasting from Google Docs, and paste-as-single-element (design.md:1279, shortkey.md:421,423). Ctrl+V of a paragraph becomes text elements, one per line, which is the oracle behaviour - see the ^Paste text directly$ rule. 4.8.",
   },
   // e2e/clipboard.spec.ts dispatches real Ctrl+C and Ctrl+X and checks both against the
   // actual OS clipboard (Ctrl+X deletes but a following Ctrl+V proves the cut landed there).
@@ -787,8 +900,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "📋 Clipboard tricks",
     text: /^Paste text directly$/,
-    status: "gap",
-    why: "not implemented — same gap as design.md's Text paste: arbitrary clipboard text never becomes a text element (engine/src/host/keyboardInput.ts falls back to re-pasting the internal clipboard, which fails to parse plain text).",
+    status: "covered",
+    tests: [`${ENGINE}/ci_paste_text.rs`, "e2e/clipboard.spec.ts"],
   },
   {
     section: "📋 Clipboard tricks",
@@ -796,24 +909,81 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: ["e2e/mermaid.spec.ts"],
   },
+  // shortkey.md:424/425 -- the same feature in the checklist's own words rather than the
+  // rules' "Copy ... to clipboard". One claim, closed together, because one spec covers it.
+  {
+    section: "📋 Clipboard tricks",
+    text: /^Copy selected content as (PNG|SVG)$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_clipboard.rs`,
+      `${ENGINE}/ci_export_clipboard_props.rs`,
+      "e2e/copyAsImage.spec.ts",
+    ],
+  },
   {
     section: "📋 Clipboard tricks",
     status: "covered",
     tests: [`${ENGINE}/ci_edit.rs`, "engine/src/host/keys.test.ts"],
   },
+  // "Export SVG" sat in this section with no rule of its own: /PNG|SVG|Google
+  // Docs|single element/ caught it, which is not the same as claiming it. Narrowing
+  // that pattern to what it was really about dropped these two lines out of the ledger
+  // altogether -- the denominator fell 931 -> 929 while the covered count went UP, which
+  // is the shape of a number that cannot be trusted on its own.
+  // **A pattern that matches a line by accident is not coverage of it**, and the only way
+  // to tell the difference is to narrow it and see what falls out.
   {
     section: "💾 Files",
-    text: /PNG|read-only link/,
-    status: "gap",
-    why: "PNG export is the visible canvas as it stands (engine.ts exportPng, canvas.toBlob()), not the whole scene, and nothing copies it to the clipboard. No read-only share link. SVG and JSON are done.",
+    text: /^Export SVG$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export.rs`, `${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
   },
-  // The binding is real; only the shortcut itself is unexercised — Save/export and
-  // Import are covered through their underlying JSON pipeline below.
+  {
+    section: "💾 Files",
+    text: /^Export PNG$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_png.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
+  },
+  {
+    section: "💾 Files",
+    text: /read-only link/,
+    status: "gap",
+    why: "No read-only share link. The Share dialog (share.ts) makes a room, not a published board.",
+  },
+  // It needed its own rule because the `^Export PNG$` rule above no longer matched it, and
+  // without one it would have fallen through to the section's covered catch-all below, which
+  // names the JSON pipeline as its tests and has nothing to do with the clipboard. (It was
+  // already a gap before 4.1, via the old `/PNG|read-only link/` rule; nothing moved down.)
+  // It was a gap until 4.3, which is the commit that closed it.
+  // 4.3. A copy is the export, unchanged: actionCopyAsPng
+  // (`actionClipboard.tsx@1118751f:192`) and actionCopyAsSvg (`:124`) both call
+  // `prepareElementsForExport(elements, appState, true)` -- the literal `true` in both,
+  // at `:139` and `:212`. So an empty selection copies the whole scene and a lone
+  // selected frame copies that frame's contents, and neither is decided a second time.
+  // The `why` this replaces named 4.3 and was false the moment this merged.
+  {
+    section: "💾 Files",
+    text: /Copy PNG to clipboard/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_clipboard.rs`,
+      `${ENGINE}/ci_export_clipboard_props.rs`,
+      "e2e/copyAsImage.spec.ts",
+    ],
+  },
+  // The binding is real; the chord is now pressed, and only the load behind it is
+  // unexercised — Save/export and Import are covered through their underlying JSON
+  // pipeline below.
   {
     section: "💾 Files",
     text: /Ctrl\/Cmd \+ O` — Open\/load a scene/,
     status: "gap",
-    why: "implemented, untested — DrawSurface.svelte's onAppShortcut binds mod+O to open the file picker (mainMenu.openFile()), but no test presses Ctrl/Cmd+O or drives the open flow.",
+    why: "half — `e2e/shortcuts.spec.ts` presses Ctrl+O with the main menu open and the file chooser opens, which is the half that was untested (`DrawSurface.svelte`'s `onAppShortcut` binds mod+O to `mainMenu.openFile()`). No test answers the picker: nothing loads a scene from a file through this chord.",
   },
   {
     section: "💾 Files",
@@ -826,35 +996,81 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_export.rs`, `${ENGINE}/ci_persistence.rs`],
   },
+  // "Export entire canvas" and "Export PNG" are the same sentence after this change: the
+  // PNG export is framed by the scene's own bounds, not by the viewport, which is what
+  // shortkey.md:444 and :446 were each asking for.
+  // And the same accident again in Export tricks, where `^Export PNG$` names the raster
+  // Docs|single element/ caught it, which is not the same as claiming it. Narrowing
+  // that pattern to what it was really about dropped these two lines out of the ledger
+  // altogether -- the denominator fell 931 -> 929 while the covered count went UP, which
+  // is the shape of a number that cannot be trusted on its own.
+  // **A pattern that matches a line by accident is not coverage of it**, and the only way
+  // to tell the difference is to narrow it and see what falls out.
   {
     section: "🔍 Export tricks",
-    text: /PNG/,
-    status: "gap",
-    why: "PNG export is the visible canvas as it stands (engine.ts exportPng, canvas.toBlob()): not the whole scene or the selection, and never on the clipboard.",
+    text: /^Export SVG$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export.rs`, `${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
   },
   {
     section: "🔍 Export tricks",
-    text: /frames/,
-    status: "gap",
-    why: "No per-frame export mode.",
+    text: /^(Export entire canvas|Export PNG)$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
   },
   {
+    section: "🔍 Export tricks",
+    text: /^Copy selection as PNG$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_clipboard.rs`,
+      `${ENGINE}/ci_export_clipboard_props.rs`,
+      "e2e/copyAsImage.spec.ts",
+    ],
+  },
+  {
+    // Was `/frames/` with the why "No per-frame export mode" -- which is still *true*, and is
+    // the interesting part, and no longer the reason this line is a gap. A frame export is a
+    // selection export of one frame: there is no frame-specific mode and 4.2 did not add one.
+    // What it did add is that the frame's own element is what gets measured
+    // (`exportToCanvas:228-233`, zero padding, its turned box) while its contents are what
+    // gets painted, with `frameRendering.clip = false` at `:217-219` so the frame's own clip
+    // does not cut the content at its edge. A child poking past the edge is cropped, and that
+    // is the oracle's answer.
+    //
+    // Narrowed from `/frames/` to the one line it ever matched, so it stops shadowing anything.
+    section: "🔍 Export tricks",
+    text: /^Export frames where appropriate$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
+  },
+  {
+    // This exact-match rule shadowed the broader `/Selection export|Export selection/` added
+    // for design.md:1337, because first match wins and this one is earlier. So the figure
+    // moved by three when four lines were closed and the fourth stayed a gap for a reason
+    // that had been false since 4.2 landed. **A count that moves is not evidence that the
+    // right line moved** -- which is why the coverage test asserts named lines, not a total.
     section: "🔍 Export tricks",
     text: /^Export selection$/,
-    status: "gap",
-    why: "No selection-scoped export anywhere: the export dialog and both engine.exportSvg/exportPng always export the whole scene.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
   },
   {
+    // 4.3. Already anchored, and it is the path the oracle gives no chord to at all:
+    // `actionCopyAsSvg` declares no `keyTest` (`actionClipboard.tsx:124-190` ends at
+    // `keywords`), so Alt+Shift+C copies a raster and the SVG has no shortcut.
     section: "🔍 Export tricks",
     text: /^Copy selection as SVG$/,
-    status: "gap",
-    why: "SVG export exists (ci_export.rs) but nothing wires it to the clipboard — same missing plumbing as the Clipboard tricks section's 'copy as image' gap.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_clipboard.rs`, "e2e/copyAsImage.spec.ts"],
   },
+  // Half of this line is now true and half is not, so it stays a gap and says which is
+  // which rather than claiming the whole sentence.
   {
     section: "🔍 Export tricks",
     text: /^Include\/exclude background depending on export settings$/,
     status: "gap",
-    why: "scene_to_svg always renders a background rect; no option anywhere omits it.",
+    why: "Half. The PNG export honours it: the dialog's transparent toggle reaches engine.exportPng, which passes `background: false` to the painter and leaves the canvas as transparent as a fresh one already is (e2e/exportPng.spec.ts reads the exported file's corner alpha). scene_to_svg still always renders its background rect with no option to omit it, and still takes its padding from the front — `DrawExportModal.svelte` calls `exportSvg(16)` and `engine/src/engine.ts:918` defaults to 16, where the oracle's is 10 (`constants.ts:398`), so the two formats' margins are 6px apart per side. Both are 4.5's; both are named as known debt in exportParity.test.ts so a third would fail.",
   },
   { section: "🔍 Export tricks", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
   {
@@ -1078,11 +1294,48 @@ export const RULES: readonly Rule[] = [
       `${WEB}/draw-chrome/menu.test.ts`,
     ],
   },
+  // 6.3. The `why` this replaces said snapping "applies to moving a selection only", and it
+  // named `App.tsx:13375` and `:13499` as the two call sites. **Both are wrong** -- they are
+  // `maybeDragNewGenericElement` and `maybeHandleCrop`, not snapping entry points. The real
+  // ones are `:13383` and `:13625`.
+  //
+  // There are FOUR entry points, not two, and the third is this task's own headline verb:
+  //   `snapDraggedElements`   :692-807    from App.tsx:11097   the moved box's 9 stops
+  //   `snapNewElement`        :1246-1316  from App.tsx:13383   ONE point: origin+dragOffset
+  //   `snapResizingElements`  :1108-1244  from :13625, :13507  side handle 2, corner 1
+  //   `getSnapLinesAtPointer` :1318-1400  from App.tsx:7870    the pointer, at hover
+  //
+  // `snapNewElement` is gated on `isSnappingEnabled` ONLY -- **there is no tool gate on it.**
+  // `isActiveToolNonLinearSnappable` (:1402-1414) gates `getSnapLinesAtPointer`, the HOVER, and
+  // only that. Reading it as "decides whether a tool can snap at all" would gate the corner
+  // snap to seven tools and drop the sticky note's corner, which the oracle keeps.
+  //
+  // The ORDER is `getPointSnaps` (:636-690) being `for our point { for reference {`, kept on
+  // `<=` and replaced only on `<` -- **a tie keeps the first found.**
+  //
+  // The CANDIDATES are box corners and a centre, never outline points:
+  // `getReferenceSnapPoints` (:616-634) -> `getElementsCorners` (:198-313). The case that
+  // settles it -- a reference box (0,0,100,80) and a pointer x of 53, where the centre stop 50
+  // is 3 away and snaps, the edges are 53 and 47 away and are out of reach, and the nearest
+  // outline point is 53 away: **an outline-based snapper could not have answered at all.**
+  //
+  // NOT CLAIMED, and reported rather than fixed. `SNAP_PX` is **6** where the oracle's
+  // `SNAP_DISTANCE` is **8** (`snapping.ts:41`) -- and that is the number every Q/R pair here
+  // is stated against, so it is load-bearing rather than cosmetic. Ours also reads the
+  // UNROTATED box where the oracle rotates by `angle` (:241-291), and the grid WINS over
+  // objects where the oracle composes them (`snapping.ts:178-184`, `App.tsx:13402-13403`).
+  // Phase 1, all three, all pre-existing.
   {
     section: /^(3\. Rectangle|4\. Ellipse|5\. Diamond)/,
     text: /Snap to nearby objects/,
-    status: "gap",
-    why: "Snapping to objects, and its Ctrl/Cmd inversion, applies to moving a selection only (ci_objects_snap.rs). Drawing and resizing snap to the grid but not to other elements, where Excalidraw's snapNewElement and snapResizingElements (App.tsx:13375, :13499) do.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_draw_object_snap.rs`,
+      `${ENGINE}/ci_resize_object_snap.rs`,
+      `${ENGINE}/ci_object_snap_props.rs`,
+      `${ENGINE}/ci_freedraw_origin.rs`,
+      "e2e/objectsSnap.spec.ts",
+    ],
   },
   // The section rule below claimed a creation gesture that grows from the pointer-down
   // point, not from a centre, while nothing reads Alt (or any modifier) during a draft
@@ -1186,14 +1439,38 @@ export const RULES: readonly Rule[] = [
   {
     section: "6. Line",
     text: /^Remove point$/,
-    status: "gap",
-    why: "Not implemented — no backspace/undo-last-point exists while placing a multi-point line (multi_linear.rs).",
+    status: "covered",
+    // The `why` this replaces was false, and false in a way that pointed at the wrong file.
+    // It read: "Not implemented -- no backspace/undo-last-point exists while placing a
+    // multi-point line (multi_linear.rs)." Every clause is wrong. The oracle has no Backspace
+    // handler on the line editor at all -- BACKSPACE appears in exactly three places in it,
+    // and `linearElementEditor.ts` contains none of them -- so there was nothing to implement
+    // *during placement* to match. And what "Remove point" actually is, in
+    // `actionDeleteSelected.tsx@1118751f:228-273`, is Backspace on the *selected* points of a
+    // line already placed. The prerequisite is per-point selection, which did not exist in any
+    // layer; `design.md:276` "Move individual points" is still unbuilt and depends on it.
+    //
+    // Three branches, in this order, because the order is the spec: no selection => fall
+    // through to deleting whole elements; every point selected => delete the element;
+    // otherwise remove the selected points and re-map the selection to `[first - 1]`, or `[0]`.
+    // `deletePoints` (linearElementEditor.ts:1576-1618) then has a polygon rule -- removing the
+    // start, the end or the uncommitted point rewrites nextPoints[0] from the last -- and
+    // normalises through the point reseat `multi_linear.rs` already had, so there is one
+    // normaliser and not two.
+    //
+    // Points are held by a click, or by shift-dragging a box over the line being edited. The
+    // second is the oracle's `isSelectingPointsInLineEditor`
+    // (`App.tsx@1118751f:10895-10899`), named there and requiring `event.shiftKey`; a press
+    // that misses the line clears `isEditing` at `:9591-9607`, which is why a plain box-drag
+    // cannot reach `handleBoxSelection` at all. The box only ever grows, because `:283`'s latch
+    // reads the previous set.
+    tests: [`${ENGINE}/ci_point_delete.rs`],
   },
   {
     section: "6. Line",
     text: /^Move entire line$|^Rotate$/,
-    status: "gap",
-    why: "Implemented, untested: no test moves or rotates a Line-kind (multi-point) element specifically and checks its points.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_line_multipoint.rs`],
   },
   // A polyline's corner-handle resize and its individual point handles, from the general
   // handle suite rather than this section's own files.
@@ -1223,15 +1500,28 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: ["engine/crates/draw-engine/src/selection/linear.rs"],
   },
-  // Not to be confused with the 45°-angle constrain the section rule below's ci_snapping.rs
-  // genuinely tests (constrain_to_angle) — this is a line's own endpoint snapping to a
-  // *nearby element*, and nothing in the crate computes that; a line does not even bind
-  // (see the rule above), let alone snap short of binding.
+  // The comment this replaces said "nothing in the crate computes that", which was true and was
+  // the wrong reason: it read as a missing feature here rather than an absent one in the oracle.
+  // 5.2 walked the call graph and the oracle has **no endpoint-to-element snapping at all**.
+  //
+  // Placing a line's preview point reaches `handlePointDragging` at `App.tsx@1118751f:11253` and
+  // dragging an existing endpoint reaches **the same function** at `:10853`, so the oracle does
+  // share the helper and both gestures answer alike. Its transitive closure — `createPointAt`,
+  // `_getShiftLockedDelta`, `pointDraggingUpdates`, `movePoints`, `_updatePoints` — contains
+  // **zero** calls into `snapping.ts`, and `maybeCacheReferenceSnapPoints`, the only writer of the
+  // snap cache, is called at `:11095`, `:13381`, `:13505` and `:13623`, none of them on this path.
+  //
+  // What it *does* snap to is two things, in order: the grid, per axis (`getGridPoint`,
+  // `linearElementEditor.ts:1468`), then the angle lock (`getLockedLinearCursorAlignSize`,
+  // `:1895-1935`, which grid-snaps first at `:1916`). `getSnapLinesAtPointer` is gated on
+  // `isActiveToolNonLinearSnappable` (`:1402-1414`) and lists rect/ellipse/diamond/frame/
+  // magicframe/image/text — not `line`, not `selection`. And the reachable candidate generators
+  // use bounding-box corners and centres (`snapping.ts:198-313`), not points or midpoints.
   {
     section: "6. Line",
     text: /^Endpoint snapping$/,
     status: "gap",
-    why: "No snap-to-object exists for a line's own endpoint while drawing or dragging it; only the move-selection alignment guides (ci_snapping.rs) and the 45° draw constraint (draw_binding.rs) exist.",
+    why: "not in the oracle - a line's endpoint snaps to the grid and then to the angle lock, and to nothing else. 6.3 STRENGTHENED this, and better evidence is better: there is now a SECOND oracle entry point that demonstrably does not apply to a line, where 5.2 could only cite the absence of one. `snapNewElement` (:1246-1316, from App.tsx:13383) snaps exactly ONE point, origin+dragOffset, and is gated on `isSnappingEnabled` with no tool gate at all - so nothing about it is line-shaped. The tool gate that WOULD exclude a line, `isActiveToolNonLinearSnappable` (:1402-1414), gates the hover and only the hover. Implemented for the grid half as snap_gesture beside snap (engine/mod.rs), with a Q/R pair per case: same gesture, grid on, snapping without Ctrl and landing on the raw pointer with it.",
   },
   {
     section: "6. Line",
@@ -1244,11 +1534,55 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_elbow.rs`, `${ENGINE}/ci_elbow_oracle.rs`, "e2e/elbowArrow.spec.ts"],
   },
+  // 5.3. The `why` this replaces said the label "cannot be dragged along it -- Excalidraw's
+  // labelPosition (linearElementEditor.ts@1118751f:1962-2030) is not ported". The function is at
+  // :1963-2030; :1962 is its `static` line.
+  //
+  // A plain primary-button drag on the label. The call graph, walked from the top: hover at
+  // `App.tsx:8445` gives `CURSOR_TYPE.GRAB` via `arrowText.isBoundTextGrabbable`; the
+  // bounding-box handles are taken FIRST (`:9406-9442`) and only a press that missed them
+  // enters `LinearElementEditor.handlePointerDown`; the grab is refused when
+  // `clickedPointIsHandle` or `segmentMidpoint` (`linearElementEditor.ts:1150-1183`) and the
+  // offset is measured from the label's CENTRE (`:1234-1242`); `App.tsx:10766`
+  // `arrowText.maybeDragLabel` owns the move past `DRAGGING_THRESHOLD / zoom`; and
+  // `handleBoundTextDragging` (`:1963-2030`) writes `labelPosition` and `x`/`y` on every move.
+  //
+  // THE UNIT is a fraction of the arrow's own PATH ARC LENGTH, in [0,1] -- written as
+  // `(prefixSums[i] + lengthWithinSegment) / totalLength` (`:2011-2018`), read as
+  // `clamp(f, 0, 1) * totalLength` (`:2050`). The path is `getLinearElementPathSegments`
+  // (`utils.ts:206-233`): the DRAWN curve for a rounded arrow, chords for a sharp one, and an
+  // elbow's unrounded logical polyline whatever `roundness` says. Pieces are measured by arc
+  // length, so 0.5 is half the ground covered, not half the parameter.
+  //
+  // The fixture in `tests/fixtures/label-position.json` is what settles it, and the shape of it
+  // is the point. A straight three-point arrow with perpendicular chords of 120 and 90 -- path
+  // 210 long. At fraction 0.25 the path says (52.5, 0), and the bounding-box reading, the
+  // one-segment reading and the world-offset reading **all say the same wrong thing**:
+  // (30, 0), (30, 0), (0.25, 0). **A discriminator that three wrong readings agree on is not
+  // a discriminator**, so 0.25 alone cannot decide between four of them. At 0.6 the answer is
+  // (120, 6) -- six units into the SECOND chord, which a per-segment reading can never reach.
+  //
+  // Two consequences that are easy to get wrong and are now tested: a LINE's label does not
+  // move (`isArrowElement` is in the guard), and at the default the label sits *under* the
+  // segment-midpoint knob, so a press dead on its centre is a POINT drag and the knob wins by
+  // design. A test that pressed the centre would have silently been testing the other feature.
+  //
+  // 0 and 1 are legal and reachable -- clamped on write, on read and on load
+  // (`restore.ts:573-575`). Dragging 5000 units past either end parks the label there.
+  //
+  // 5.5's non-convertibility is CONNECTED, through the label's EXISTENCE and not its position:
+  // `isEligibleLinearElement` (`ConvertElementTypePopup.tsx:666-672`) refuses on
+  // `hasBoundTextElement`, and `labelPosition` is a field on the label, so dragging can neither
+  // make a labelled arrow convertible nor an unlabelled one non-convertible.
   {
     section: "7. Arrow",
     text: /label positioning/,
-    status: "gap",
-    why: "A label sits on the middle of its arrow's path (linear_label_center, getBoundTextElementCenter), but cannot be dragged along it — Excalidraw's labelPosition (linearElementEditor.ts@1118751f:1962-2030) is not ported.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_label_position.rs`,
+      "packages/contract/tests/engineParity.test.ts",
+      "e2e/labelDrag.spec.ts",
+    ],
   },
   {
     section: "7. Arrow",
@@ -1529,14 +1863,14 @@ export const RULES: readonly Rule[] = [
   {
     section: "10. Images",
     text: /^Rotate$/,
-    status: "gap",
-    why: "Rotation is a generic transform-engine feature (ci_handles.rs), but no test rotates an inserted image specifically to confirm it behaves the same way.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_image.rs`],
   },
   {
     section: "10. Images",
     text: /^Copy\/paste$/,
-    status: "gap",
-    why: "implemented, untested — duplicating or copying an existing image element is never exercised with an image; ci_duplicate.rs and ci_persistence.rs's copy/paste tests use rectangles only, so the data URL is never checked to survive.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_image.rs`],
   },
   {
     section: "10. Images",
@@ -1557,14 +1891,14 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "not implemented — a note's stroke_color is the date footer's ink, not a border; nothing renders an outline in it.",
   },
-  // angle is a plain field a note shares with every element, and ci_sticky.rs's
-  // a_turned_note_grows_from_its_top_edge sets it directly to check the resize math
-  // around a pre-rotated note — no test drives the rotation handle on a sticky note.
+  // ci_sticky.rs now drives the rotation handle itself, in a new `mod turning_it`: the
+  // handle turns the note, a turned note turns its bound label with it as
+  // rotateSingleElement does, and a turn changes nothing about a note's size or its label.
   {
     section: "11. Sticky notes",
     text: /^Rotate$/,
-    status: "gap",
-    why: "implemented, untested — a note rotates like any element (angle field, resize math accounts for it), but no test drags its rotation handle.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_sticky.rs`],
   },
   {
     section: "11. Sticky notes",
@@ -1596,18 +1930,38 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "12. Frames",
-    text: /Export frame/,
-    status: "gap",
-    why: "See the Frames rule: export has no frame mode.",
+    // Both word orders, and the omission is worth naming: `/Export frame/` alone matches
+    // shortkey.md:451 "Export frames where appropriate" and misses design.md:1339 "Frame
+    // export", so the line 4.2 actually closed stayed a gap while the number moved anyway.
+    // A count that moves is not evidence that the right line moved -- which is why the
+    // coverage test asserts named lines rather than a total.
+    text: /Frame export|Export frame/,
+    status: "covered",
+    // The `why` this replaces said "See the Frames rule: export has no frame mode", and the
+    // second half is now false in an interesting way: a frame export is a *selection* export of
+    // one frame, and there is still no frame-specific mode. The distinction that matters is that
+    // a frame is measured by its own element while its contents are what gets painted.
+    //
+    // `exportToCanvas@1118751f:228-233` sets `exportPadding = 0` and measures `[exportingFrame]`
+    // -- the frame element's own turned box, not the union of what it holds -- and `:217-219`
+    // sets `frameRendering.clip = false`, without which the frame's own clip cuts the content
+    // off at its edge. So a child poking past the edge is cropped, and that is the answer rather
+    // than an accident. Framing by the contents would show the poking child and would not match.
+    tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
   },
-  // Resize handles are not excluded for DrawElementType::Frame, so dragging one works the
-  // same as any rectangle-shaped element — but no test drags a frame's own handle and
-  // checks its children re-clip against the new bounds.
+  // Three cases in ci_frame.rs now drag a frame's own handle: the grown bounds take in
+  // what they now hold, the shrunken bounds let go of what no longer fits, and the handles
+  // are its eight sides and corners. The rule stays a gap because the fourth thing is not
+  // true. Shrinking a frame RELEASES a child left straddling its new edge, where the oracle
+  // keeps and clips it (frame.ts@1118751f:312-316) — FrameOwners::of_bounds decides on
+  // containment alone, so a straddling child resolves to None and needs_frame_clip goes
+  // false. Filed as a Phase 1 task; flipping this rule before that is fixed would claim a
+  // behaviour the engine does not have.
   {
     section: "12. Frames",
     text: /^Resize frame$/,
     status: "gap",
-    why: "implemented, untested — a frame resizes through the generic handle path, but no test drags one and checks membership re-clips.",
+    why: "A frame grows and shrinks through the generic handle path and its membership follows (ci_frame.rs) — but a child left crossing the shrunken frame's new edge is released instead of kept and clipped, which is what the oracle does. Phase 1.",
   },
   // No action selects a frame's children as a set — clicking the frame's border selects
   // only the frame (a_frame_is_grabbed_by_its_border_and_not_through_its_middle).
@@ -1620,7 +1974,11 @@ export const RULES: readonly Rule[] = [
   {
     section: "12. Frames",
     // Frame ordering — what is drawn, pasted or dragged into a frame, or taken in by one
-    // drawn or resized, goes directly below it — is pinned in ci_zorder.rs.
+    // drawn or resized, goes directly below it — is pinned in ci_zorder.rs, through undo
+    // and redo (a new element's place is part of its creation, so the step records no
+    // reorder of its own) and through a peer's order patch, which cannot name a child the
+    // peer has never seen and now leaves it in the slot it was drawn in rather than on
+    // top (ci_zorder.rs › a_peers_order_leaves_a_new_frame_child_where_the_peer_never_saw_it).
     status: "covered",
     tests: [
       `${ENGINE}/ci_frame.rs`,
@@ -1760,11 +2118,51 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_geometry.rs`],
   },
+  // 6.2. The two divergences this rule used to name are both closed, and the interesting one was
+  // not the one the `why` said. The 15 degree constant is `math::SHIFT_LOCKING_ANGLE` (`math.rs:35`),
+  // used by one quantiser, and the drag keeps its length by intersecting the locked ray with the
+  // perpendicular through the cursor (`sizeHelpers.ts:236-250`) rather than by rotating the delta.
+  //
+  // What the `why` did not know is that the CONSTANT was never the bug. The oracle's rotation
+  // rounding is `angle += step/2; angle -= angle % step` (`resizeElements.ts@1118751f:230-231`), and
+  // `%` truncating toward zero only behaves like a floor BECAUSE the raw angle is built
+  // `5*PI/2 + atan2(..)` and is therefore never negative (`:227`). Ours was built a whole turn
+  // smaller, so it is negative, and the truncation opened a cell TWICE AS WIDE around zero: a locked
+  // turn snapped the entire lower-left quadrant to 0 instead of 345/330/315.
+  // `math::shift_locked_angle` normalises with `rem_euclid(TAU)` first and then rounds, so the input
+  // range stops mattering -- better than adopting the oracle's `5*PI/2`, which would make the
+  // quantiser correct for the one caller the oracle has rather than for every caller.
+  //
+  // The rotation path turned out to be a SEPARATE gap over the same constant: `rotate_element` and
+  // `rotate_group` took no quantisation at all, and `square` was arriving from the pointer input
+  // (`pointerInput.ts:27`) and going unread in both branches (`pointer_move.rs:282`, `:155`).
+  //
+  // The flat and square branches are NOT the projection: the oracle keeps the raw surviving component
+  // and discards the other (`:229-234`), so a 100x10 drag comes out exactly 100, not the 99.52 a
+  // projection gives. It branches on the step COUNT (`k = 0 mod 12`, `k = 6 mod 12`) rather than
+  // comparing angles, because `6*(PI/12)` is not reliably `FRAC_PI_2` in binary and the oracle's own
+  // `lockedAngle === Math.PI/2` can miss.
+  //
+  // TRAP, so a later cleanup does not unify them: `hover.rs:67`'s `FRAC_PI_4` is CORRECT and is not a
+  // duplicate of this constant. It is the cursor step -- `rotateResizeCursor` uses
+  // `Math.round(angle / (Math.PI/4))` over four cursors (`resizeTest.ts:223`). Two 45s in this
+  // codebase, two different concerns, and a "find the duplicated angle constant" pass breaks one.
+  //
+  // Still open, and NOT this rule: `selection/linear.rs:79-82` returns an empty `world_points` when
+  // `points` is None, so a line loaded from JSON without points has no endpoint handles at all. And
+  // `text/layout.rs:97` is a third inline copy of `round_half_up`, a duplication candidate rather than
+  // a duplicate of `hover.rs:67`.
   {
     section: "15. Transform engine",
     text: /^(Angle snapping|Shift angle locking)$/,
-    status: "gap",
-    why: "rotate_element (selection/transform.rs) takes only the pointer position — no modifier or snap increment reaches it, so a rotation is never quantised.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_rotate_lock.rs`,
+      `${ENGINE}/ci_lock.rs`,
+      `${ENGINE}/ci_end_snap.rs`,
+      `${ENGINE}/ci_group_locks_frames.rs`,
+      "e2e/angleLock.spec.ts",
+    ],
   },
   // Rotating a multi-element selection together — the concrete case is bound arrows staying
   // attached through the turn, which needs every member to have turned, not just one shape.
@@ -1828,13 +2226,18 @@ export const RULES: readonly Rule[] = [
     ],
   },
   // Deletion tombstones an element in place rather than removing it from the array
-  // (z-order is array position, CLAUDE.md), so the rest are stable by construction — but
-  // no test deletes from a stack and checks the survivors keep their relative order.
+  // (z-order is array position, CLAUDE.md), so the rest are stable by construction. The
+  // server keeps the slot over HTTP (boards.test.ts) and in the merge itself
+  // (reconcile.test.ts), the engine keeps it around a tombstone in a peer's order
+  // (ci_zorder.rs), and the client's own model of a delete now matches the real merge
+  // (sceneDiff.merges.test.ts). Not pinned: a LOCAL delete followed by another z-order
+  // command — `scene.remove` tombstones and keeps the array length (draw_engine.rs) but
+  // nothing asserts where the survivors stand afterwards.
   {
     section: "17. Z-order",
     text: /^Stable ordering after deletion$/,
     status: "gap",
-    why: "implemented, untested — deletion tombstones in place rather than reindexing, so order should be stable by construction, but no test asserts it.",
+    why: "partly pinned — the merge keeps the slot (reconcile.test.ts, boards.test.ts over HTTP), the engine keeps it around a tombstone in a peer's order (ci_zorder.rs), and the client's model of a delete matches the real merge (sceneDiff.merges.test.ts). Not pinned: a local delete followed by another z-order command, where nothing asserts where the survivors stand.",
   },
   {
     section: "17. Z-order",
@@ -2086,6 +2489,43 @@ export const RULES: readonly Rule[] = [
       "e2e/flowchart.spec.ts",
     ],
   },
+  // design.md:1044 "Shape conversion" was claimed by the section catch-all below, which is
+  // `covered` and names one test. That is the ledger's version of 4.3's `/PNG|SVG|Google
+  // Docs|single element/`: a rule that matches a line by ACCIDENT is not coverage of it, and
+  // the only way to tell the difference is to give the line its own rule and see whether the
+  // tests survive contact with the claim.
+  //
+  // 5.5's substance is that three of the four conversions are REFUSALS, not transformations:
+  //   - converting away from an arrow DROPS its heads, because `newLinearElement` writes
+  //     `startArrowhead: null, endArrowhead: null` unconditionally
+  //     (`ConvertElementTypePopup.tsx@1118751f:583-586`), overwriting the spread's;
+  //   - it refuses to touch bindings at all. `isEligibleLinearElement` (`:666-672`) admits a
+  //     line always and an arrow only while unbound and unlabelled, so `getConversionTypeFromElements`
+  //     never returns "linear" and TAB DOES NOT EVEN OPEN THE PANEL. "A switch never breaks a
+  //     binding" is true by construction and is implemented as the refusal;
+  //   - and the elbow is the one conversion that CHANGES THE POINTS -- a re-route between the
+  //     same two ends (`convertLineToElbow`, `:712-802`, orthogonal, THRESHOLD = 20), not a
+  //     type flag.
+  //
+  // Undo is one step on the keyboard path (`scheduleCapture`, `store.ts:110-112`); the CLICK
+  // path never calls it and rides whatever capture comes next. Ours stamps on both, which is
+  // strictly tighter -- a deliberate divergence, recorded rather than hidden.
+  //
+  // The round trip is CACHED, not recomputed, as the oracle does
+  // (`LINEAR_ELEMENT_CONVERSION_CACHE`, `:157-161`, filled `:280-292`, read `:551-556`).
+  //
+  // Note this does not move the figure: the line was already counted covered by the catch-all.
+  // The point is that the claim is now NAMED and AUDITABLE rather than accidental.
+  {
+    section: "26. Autoshape / flowchart logic",
+    text: /^Shape conversion$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_shape_convert.rs`,
+      "apps/web/src/lib/draw-chrome/shapeSwitch.test.ts",
+      "e2e/shapeSwitch.spec.ts",
+    ],
+  },
   {
     section: "26. Autoshape / flowchart logic",
     status: "covered",
@@ -2202,8 +2642,8 @@ export const RULES: readonly Rule[] = [
   {
     section: "30. Clipboard",
     text: /^Text paste$/,
-    status: "gap",
-    why: "not implemented — paste_json (engine/crates/draw-engine/src/engine/clipboard.rs) only accepts this app's own osidraw JSON; arbitrary clipboard text fails to parse and falls back to re-pasting the last internal copy (or nothing), never becoming a text element the way Excalidraw's paste does.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_paste_text.rs`, "e2e/clipboard.spec.ts"],
   },
   {
     section: "31. Persistence",
@@ -2246,6 +2686,21 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_text_model_compat.rs`, `${ENGINE}/ci_text_align.rs`],
   },
+  // The order half of autosave is NOT carried by sceneDiff.test.ts, which cannot: `diff`
+  // and `acknowledge` share `predictOrder` and read the same `this.order`, so a wrong
+  // prediction is wrong identically on both sides and every assertion there passes. What
+  // pins it is apps/web/src/lib/autosave/sceneDiff.merges.test.ts, which puts the
+  // tracker's model against `reconcileElements` — the merge the API actually runs — so
+  // the prediction has to agree with a module the client never calls.
+  //
+  // Three of its four cases are green and one is not, and the split IS the finding: the
+  // primitive is wrong for a resurrected id, while the production path is right anyway
+  // because `diffAll` notices the mismatch and sends an explicit order. The client is
+  // therefore still wrong, which is what zorder.md's cross-client row now says.
+  //
+  // Not a `gap`: nothing here is unwatched, and no §17 checklist line is a cross-client
+  // order merge — a rule placed there would match nothing and fail the registry's own
+  // dead-rule check, or hijack an unrelated item.
   {
     section: "31. Persistence",
     status: "covered",
@@ -2253,23 +2708,55 @@ export const RULES: readonly Rule[] = [
       `${ENGINE}/ci_persistence.rs`,
       `${WEB}/autosave/autosaver.test.ts`,
       `${WEB}/autosave/sceneDiff.test.ts`,
+      `${WEB}/autosave/sceneDiff.merges.test.ts`,
     ],
   },
-  // Both are Canvas→PNG-only options, and Canvas→PNG is canvas.toBlob() on the on-screen
-  // canvas as-is (engine.ts's exportPng) — no transparent-background toggle and no
-  // chosen-background-color option, unlike the SVG path's explicit background parameter.
-  // Slips past the PNG carve-out above since neither line contains the word "PNG".
+  // Transparent background and Scale are the two dialog controls the PNG export now answers
+  // (design.md:1331,1335). Background color is a different line and stays a gap: the
+  // export paints the theme's own background, and nothing anywhere chooses one — that is
+  // 4.5, and the SVG path's background rect is fixed for the same reason.
   {
     section: "32. Export",
-    text: /^(Transparent background|Background color)$/,
-    status: "gap",
-    why: "The export dialog shows a transparent-background toggle and a scale picker (DrawExportModal.svelte), but neither reaches engine.exportPng(), which is canvas.toBlob() of the visible canvas. There is no background-colour option.",
+    text: /^(Transparent background|Scale)$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_png.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
   },
   {
     section: "32. Export",
-    text: /^Selection export$/,
+    text: /^Background color$/,
     status: "gap",
-    why: "The export dialog and both engine.exportSvg/exportPng always export the whole scene; nothing threads the current selection through to either path.",
+    why: "No background-colour option anywhere. The PNG export paints the theme's own background when it is asked for one (export::png frames the picture; the painter fills view.theme.background), and scene_to_svg always draws its <rect> with the same theme colour. Only *whether* there is a background is a choice — 4.5.",
+  },
+  {
+    section: "32. Export",
+    // `^Selection export$` alone matches design.md:1337 and misses shortkey.md:445
+    // "Export selection", the same reversal as the frame rule above.
+    text: /Selection export|Export selection/,
+    status: "covered",
+    // The `why` this replaces ended "That is 4.2", which is now done. What decides the element
+    // list is a layer above the bounds function, in `prepareElementsForExport`
+    // (`data/index.ts@1118751f:48-96`): `:56-58` sets `isExportingSelection` from
+    // `exportSelectionOnly && isSomeElementSelected(...)`, asked about the *elements* rather than
+    // the ids, so ids that are not on the board do not count as a selection. There is no
+    // selection-bounds function and no frame-bounds function -- `getCanvasSize`
+    // (`export.ts@1118751f:566-575`) takes a list and `getCommonBounds` folds over it, and both
+    // formats hand it the same expression: `exportToCanvas:232-235` and `exportToSvg:341-344` are
+    // character-for-character the same call.
+    //
+    // An empty selection exports the **whole scene**, deliberately: `:56-58`'s flag never becomes
+    // true, so `:61-69` takes its else arm. Pinned, because it is the case most able to pass
+    // without being exercised.
+    //
+    // The property test is the one that matters: an export's world rect must *contain* every
+    // element it was asked to paint, over ten scene shapes including turned, nested, framed,
+    // child-poking-out, deleted and zero-sized. That is what catches a cull aimed at the editor's
+    // camera instead of the export's own rect -- the failure 4.1's acceptance list was written to
+    // prevent.
+    tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
   },
   // scene_to_svg's <image> arm is exercised directly: a real embedded data URL, a flipped
   // image, and the no-picture-yet fallback.
@@ -2279,11 +2766,56 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_image.rs`],
   },
+  // 4.4, and the `why` this replaces ("Neither exportSvg nor exportPng embeds the .osidraw
+  // JSON into the file for round-trip re-import") is false.
+  //
+  // The KEY is `osidraw`, not the oracle's `application/vnd.excalidraw+json`
+  // (`constants.ts:310`), and that is not a preference — it is the difference between two clean
+  // answers. Borrowing their key turns a clean "not mine" into "I thought this was one of mine
+  // and it is broken". Verified by running the oracle's `decodePngMetadata` transcribed
+  // verbatim: `osidraw` -> INVALID, their key with our payload -> FAILED, their key with a real
+  // Excalidraw payload -> ok. Also 7 bytes against 40, and not a MIME type.
+  //
+  // We write generation 1: plain scene JSON, uncompressed, base64'd. The oracle's generation 1
+  // is plain JSON in a BST RING and its generation 2 is zlib (`data/encode.ts:99-121`,
+  // pako@2.0.3); we neither write nor read generation 2. The label is the same and the bytes
+  // are not, which is why ours carries a prefix and the table is written down in the module.
+  //
+  // PARITY IS NOT REACHABLE, and the crate that would be needed is not worth spending yet. An
+  // Excalidraw payload is an *Excalidraw schema*, and mapping that is 4.7 — deferred as RISK.
+  // Our PNG will never open in Excalidraw either, because ours is `osidraw` and its legacy arm
+  // demands `type === "excalidraw"`. So `miniz_oxide` buys ONE STEP of a two-step journey and
+  // step two is 4.7. The failure avoided today is not mojibake; it is a scene that cannot be
+  // read *silently*, and the three refusals already avoid it.
+  //
+  // The refusals, all pinned: no `tEXt` chunk -> NotOurs; a chunk under another key -> NotOurs,
+  // which the oracle cannot tell apart either (`image.ts:51`); our key with garbage text ->
+  // Unreadable; a generation we do not know -> Unreadable, never misread; **our own generation
+  // with `elements: []` -> Unreadable**, which is the silent failure the task exists to prevent;
+  // a scene whose own `version` is 99 -> **restores**, because the version is not the gate and
+  // the gate has to stay keepable; not walkable -> Malformed. First `tEXt` wins, both
+  // directions — the oracle's `find`, not a `filter`.
+  //
+  // THE "IF DESIRED" HALF IS NOT BUILT, and it cannot be split off here. There is no checkbox
+  // for it — `prompt/design.md:1352` is one line containing both halves, and `ruleFor` is
+  // first-match-wins, so a line resolves to exactly one rule. Two rules for one sentence is not
+  // expressible in this ledger, and writing the gap as a second pattern here would claim the
+  // line twice rather than split it. The missing checkbox is the owner's to schedule, because
+  // adding one to `design.md` renumbers the citations after it. Until then the honest statement
+  // is: **embedding is unconditional**, the oracle's `exportEmbedScene` defaults to `false`,
+  // and a picture carrying nothing is a lossy format wearing a `.png` name — so this is a
+  // deliberate divergence and not an oversight.
   {
     section: "32. Export",
     text: /^Embedded scene data if desired$/,
-    status: "gap",
-    why: "Neither exportSvg nor exportPng embeds the .osidraw JSON into the file for round-trip re-import; OsidrawFile (export/json.rs) has no such provision.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_roundtrip.rs`,
+      `${ENGINE}/ci_export_roundtrip_bytes.rs`,
+      `${ENGINE}/ci_export_roundtrip_props.rs`,
+      `${WEB}/draw-chrome/openFile.test.ts`,
+      "e2e/roundTrip.spec.ts",
+    ],
   },
   {
     section: "32. Export",
@@ -2291,13 +2823,85 @@ export const RULES: readonly Rule[] = [
     status: "gap",
     why: "The exported .osidraw JSON (OsidrawFile in export/json.rs) carries only type, version and elements — no files map and no appState, so neither round-trips.",
   },
+  // Canvas → PNG (design.md:1329) is whole-scene and at a chosen scale, so the PNG and
+  // Scale lines close here. What is left in this block is everything about *which* elements
+  // and *where* the bytes end up: a frame, a font, the clipboard.
   {
     section: "32. Export",
-    text: /PNG|Clipboard image|Selection → image|Whole canvas → image|Scale|[Ff]rame export|Frame export|Fonts/,
-    status: "gap",
-    why: "PNG export (engine.ts exportPng) is the visible canvas as it stands, canvas.toBlob(): not the whole scene, a selection or a frame, with no scale and nothing on the clipboard — see the Export tricks rule.",
+    text: /^Canvas → PNG$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
   },
-  { section: "32. Export", status: "covered", tests: [`${ENGINE}/ci_export.rs`] },
+  // `[Ff]rame export` came out of this pattern when 4.2 landed: a frame export exists now, and
+  // it is covered by the "12. Frames" rule above. What is left is genuinely still open, and the
+  // clause naming 4.2 went with it -- a reason that says "that is 4.2" stops being true the day
+  // 4.2 merges, and nothing catches it.
+  // Split three ways. One rule said `Clipboard image|Selection → image|Whole canvas → image|
+  // ^Fonts$` and was a `gap` with a `why` naming 4.3 as unfinished, so it could not be flipped
+  // for the one part that had shipped. **A rule that covers three features is a rule that
+  // cannot be flipped, because the features land at different times** — the same failure as the
+  // Grid rule's `custom grid spacing|disable snapping` and 4.3's `/PNG|SVG|Google Docs|
+  // single element/`. Three instances now, all mine, all the same shape.
+  //
+  // `^Fonts$` — 4.6. The SVG carries the faces: `scene/export.ts@1118751f:439-441` calls
+  // `Fonts.generateFontFaceDeclarations(elements)` and `:443-451` joins it into
+  // `<style class="style-fonts">` inside the defs. **The `why` this replaces said the export
+  // "names the font families without embedding an @font-face", which was the opposite of what
+  // shipped** — and which came from a grep I ran against `scene/export.ts` alone and reported
+  // as a statement about the oracle. A zero in one file is not a zero.
+  //
+  // Our family strings MATCH theirs for the eight families this app can produce, pinned for
+  // all 64 ids the contract accepts. They differ for ids 4, 10 and 11..=64, deliberately: the
+  // oracle names `Segoe UI Emoji`, and in the only case that can arrive (an Obsidian board
+  // carrying `fontFamily: 4`) the oracle's answer is the WORSE one, because it is an emoji font.
+  // A test fails loudly if anyone "fixes" it.
+  {
+    section: "32. Export",
+    text: /^Fonts$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_svg_fonts.rs`,
+      `${ENGINE}/ci_svg_fonts_bytes.rs`,
+      `${ENGINE}/ci_svg_fonts_props.rs`,
+      `${WEB}/draw-chrome/fonts.test.ts`,
+    ],
+  },
+  // `Selection → image` — 4.2, and the DIALOG's choice rather than the clipboard's.
+  // `exportParity.test.ts:504-519` is the test that matters and it asserts the host *hands the
+  // decision over*: `options.selectionOnly` reaches the engine for both raster and vector.
+  // `:540-543` asserts the opposite for the clipboard, because the oracle's two copy actions
+  // pass the literal `true` (`actionClipboard.tsx:139`, `:212`) and have no such option at all.
+  // **The same word on both sides means two different things, and one test holds both.**
+  {
+    section: "32. Export",
+    text: /Selection → image/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_scope.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
+  },
+  // `Whole canvas → image` — 4.1. `e2e/exportPng.spec.ts:525` is "exports the whole scene even
+  // when the camera is looking at part of it", and `:386` and `:414` pin the rule 4.2 recorded:
+  // an empty selection IS the whole scene (`data/index.ts:56-58`, the `else` arm at `:69`), so
+  // "an unset flag is the whole scene".
+  {
+    section: "32. Export",
+    text: /Whole canvas → image/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export.rs`, `${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
+  },
+  {
+    section: "32. Export",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export.rs`,
+      `${ENGINE}/ci_export_png.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
+  },
   {
     section: "33. Libraries",
     status: "gap",
@@ -2456,19 +3060,64 @@ export const RULES: readonly Rule[] = [
   },
   // The share modal renders one (DrawShareModal.svelte) but no unit test or e2e spec
   // asserts it — the section rule below never names a file that mentions "avatar" at all.
+  //
+  // FLIPPED to covered by e2e/collabPeople.spec.ts. Worth knowing what "covered" means here,
+  // because it is not the usual thing: **the oracle has no collaborator people-list UI at this
+  // pin.** Grepping the pinned Excalidraw for a collaborator list finds only the `Collaborator`
+  // *type* in its own tests — no component, no avatars, no "N online". So this line is our
+  // design.md's feature, not an oracle behaviour, and covered means "we have tests for what we
+  // built" rather than "we match the reference".
+  //
+  // The claim these two lines made was "implemented, untested — no test asserts it renders or
+  // updates", and that is now false. Five cases, each proved able to fail by a six-mutation
+  // battery, two of which red exactly one test each — M3 (folding past the first peer into a
+  // "+2 more" row) reds only the four-people test, and M6 (the server's `gone` no longer
+  // deleting a peer) reds only the leave test. That is the evidence the tests are specific
+  // rather than merely present. Every assertion goes through one reader scoped to
+  // [role="dialog"] .peers-section, and count and name are asserted together, so a list of the
+  // right length missing a name cannot read as a pass.
+  //
+  // Two defects the same round surfaced, both left unfixed and both filed as Phase 1 work:
+  // DrawShareModal.svelte:268-270 labels the first row "You (Host)" for *whoever* has the
+  // dialog open, so a guest who opened a shared link is told they are the host while the real
+  // host sits below them — pinned as a characterization test, which records today's behaviour
+  // bug included, and that is why it is called out here rather than left to be discovered.
+  // And nobody can type a name at all: realtimeClient.ts:157-171 is the only writer of
+  // drawnosaurus:userName anywhere in the repo and it generates `Dino ${100-999}`. There is no
+  // name field, no rename, no prompt. "the name the sharer typed" describes software that does
+  // not exist yet; the test asserts the announced name is shown verbatim instead.
   {
     section: "40. Collaboration",
     text: /^Collaborator avatars$/,
-    status: "gap",
-    why: "implemented, untested — rendered by DrawShareModal.svelte; no test asserts it.",
+    status: "covered",
+    tests: ["e2e/collabPeople.spec.ts"],
   },
   // The peers-list DrawShareModal renders (avatars, "N online") is the same untested
   // surface as Collaborator avatars just above — nothing asserts it renders or updates.
+  //
+  // Same spec, same battery. The boundary is worth naming because it is not the one a reader
+  // would guess: there is no "+N" anywhere in DrawShareModal.svelte, every peer is rendered
+  // unconditionally, and the only boundary is `max-height: 150px` with a scroll. Four people
+  // give four rows and four avatars, with the fourth clipped by the dialog's own bottom edge.
+  //
+  // The stale-peer question is only half answered, and the gap is deliberate rather than
+  // overlooked. The `gone` path is covered: the product already deleted correctly, and what
+  // was missing was both a test and a *reachable* way for a test to announce a departure —
+  // e2e/board.ts:248-251's `gone`-on-close is dead code under Playwright, because
+  // WebSocketRoute.onClose does not fire when the page closes (measured: guest tab closed, 8s
+  // waited, onClose never fired, the host still showed the guest's cursor; the same frame
+  // handed over by hand took it to 0). The spec therefore hands the frame over itself, and
+  // e2e/peers.spec.ts:223-231's comment claiming a closed tab is announced "the same way a
+  // real connection loss does" is false — that test passes on the engine's local
+  // LASER_DECAY_TIME_MS timer instead. The silent-peer path (crash, network drop) is
+  // PEER_STALE_MS = 45_000 on a 10s timer and is NOT exported, so the earliest honest check is
+  // 55s against this config's 30s timeout, and a spec that waits out a wall clock on a shared
+  // machine is a flaky spec. Left open on purpose and said so in the spec's own header.
   {
     section: "40. Collaboration",
     text: /^User list$/,
-    status: "gap",
-    why: "implemented, untested — DrawShareModal.svelte renders a peers-list with a live count; no test asserts it.",
+    status: "covered",
+    tests: ["e2e/collabPeople.spec.ts"],
   },
   // Presence's other half — what a peer has selected, not just where their cursor is —
   // lives in peerClaims.ts and is asserted there, a file the section rule never names.
@@ -2628,24 +3277,28 @@ export const RULES: readonly Rule[] = [
     section: "48. Accessibility",
     text: /High contrast|Reduced motion|Screen-reader|focus trap|Focus management/,
     status: "gap",
-    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs; the rest is unaudited.",
+    why: "Toolbar and menu roles and labels are in place and asserted by the browser specs, and every overlay that takes the focus on open hands it back on close — `takeFocus` in `focusHandback.ts`, which is the oracle's own pair (`Dialog.tsx@1118751f:52`, `:99-104`), asserted for the export, shortcuts and canvas-menu overlays in `e2e/shortcuts.spec.ts` and for the share and templates dialogs in their own specs. Two of the fourteen overlays take no focus on open, named rather than rounded up: the More tools menu keeps the focus on the board on purpose, so its chords still reach the board (`DrawToolbar.svelte:42-44`, `:112-127`), and the embed dialog focuses nothing, which is the open Phase 1.5. The main menu's hand-back lands on its trigger button, not on the board, which is correct for a menu and leaves the board without the focus until it is clicked — a design decision, not a bug, and `docs/reference/shortcuts.md` › Known limits carries the inventory. But there is still no focus trap: Tab walks out of an overlay, where the oracle cycles inside it (`Dialog.tsx@1118751f:69-95`, `Popover.tsx@1118751f:52-80`). High contrast and screen-reader labels are unaudited.",
   },
   // DrawMainMenu.svelte's onKeyDown answers ArrowDown/ArrowUp by stepping the highlighted
-  // item, and DrawContextMenu.svelte has its own handler — but no test presses either key
-  // with a menu open.
+  // One of the two does. The main menu answers ArrowDown/ArrowUp and e2e/keysMenus.spec.ts
+  // now drives it; the canvas menu's onkeydown handles Escape and nothing else
+  // (DrawContextMenu.svelte:90-92), so focus never leaves its own box. The old why here
+  // said "both menus answer ArrowDown/ArrowUp" — that was false, and 3.4(d) is what found it.
   {
     section: "48. Accessibility",
     text: /^Menu keyboard navigation$/,
     status: "gap",
-    why: "implemented, untested — both menus answer ArrowDown/ArrowUp, but no test opens one and presses an arrow key.",
+    why: "Half done, and the half that is missing is a feature rather than a test. The main menu answers ArrowDown/ArrowUp and keysMenus.spec.ts drives it; the canvas menu's onkeydown handles Escape only (DrawContextMenu.svelte:90-92), so it answers no arrow key at all. Phase 1.",
   },
   // Every menu item shows its own chord inline (dropdown-menu-item__shortcut) and `?`
-  // opens the shortcuts help — but nothing asserts the hint text or opens that dialog.
+  // opens the shortcuts help. Read *and* pressed: the canvas menu's z-order hints, and
+  // the main menu's. The two style hints and the palette's `<kbd>` are not read by
+  // anything.
   {
     section: "48. Accessibility",
     text: /^Shortcut discoverability$/,
     status: "gap",
-    why: "implemented, untested — menu items render their shortcut inline and `?` opens the help dialog, but no test checks either.",
+    why: "half — `?` opens the shortcuts dialog and `e2e/shortcuts.spec.ts` presses it; the canvas menu's front and back z-order hints are read and the chord each names is then pressed (`e2e/console.spec.ts:305-326`), and the main menu's `dropdown-menu-item__shortcut` is read and pressed by `e2e/shortcuts.spec.ts`. Not read: the canvas menu's Copy-styles and Paste-styles hints — their chords are pressed (`e2e/console.spec.ts:268`, `:271`) and the items themselves clicked (`:284`, `:287`), but no test reads those two hints — and the `<kbd>` the command palette prints beside each command (`DrawCommandPalette.svelte:105`).",
   },
   {
     section: "48. Accessibility",

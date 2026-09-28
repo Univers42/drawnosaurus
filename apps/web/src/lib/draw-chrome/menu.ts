@@ -132,6 +132,33 @@ export function clampMenuPosition(
   };
 }
 
+/**
+ * "Vectorize image…", written **once** here because two menus offer it: the canvas menu's
+ * own row (`DrawContextMenu.svelte`) and the palette's command (`commandPalette.ts`). A
+ * second copy of the string is how a palette entry quietly stops matching the menu item
+ * beside it — `menu.test.ts` scans both files for this literal to keep that from coming
+ * back.
+ *
+ * The oracle has nothing to copy here: it has no vectorize command at all, at any
+ * category, in `CommandPalette.tsx@1118751f`. The dialog and this row are this project's
+ * own (`docs/reference/vectorize.md`).
+ */
+export const VECTORIZE_LABEL = "Vectorize image…";
+
+/**
+ * What the Vectorize dialog is opened on: the id of the one unlocked image, or `null` when
+ * the selection is not one — which is the same rule the row's own `when` was, so the two
+ * menus cannot drift apart on when they offer it.
+ *
+ * Takes only the field it reads, so both callers can pass what they hold: the context menu
+ * its whole `MenuElementInfo`, the palette the `Pick` of it in `PaletteSelection`.
+ */
+export function vectorizeAction(
+  element: Pick<MenuElementInfo, "vectorizeId"> | null,
+): { label: string; elementId: string } | null {
+  return element?.vectorizeId ? { label: VECTORIZE_LABEL, elementId: element.vectorizeId } : null;
+}
+
 export function menuElementFromSelection(
   selected: readonly DrawElement[],
   locked: boolean,

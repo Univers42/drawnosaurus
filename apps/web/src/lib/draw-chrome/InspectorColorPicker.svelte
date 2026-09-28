@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import Icon from "./Icon.svelte";
-  import { giveKeysBack } from "./textEditor.ts";
+  import { takeFocus } from "./focusHandback.ts";
   import {
     COLOR_HOTKEYS,
     COLOR_LABELS,
@@ -63,6 +63,8 @@
   let custom = $state<string[]>([]);
   let hexText = $state("");
   let hexError = $state<string | null>(null);
+  /** The hand-back for this open, set once the popover is up. See `focusHandback.ts`. */
+  let handBack: (() => void) | null = null;
 
   const current = $derived(colorNameAndShade(value));
   /** The native eyedropper, where there is one (Chromium). See `docs/reference/console.md`. */
@@ -88,9 +90,16 @@
       }
       void tick().then(() => {
         dialog?.showPopover();
-        dialog?.focus();
+        handBack = takeFocus(dialog);
       });
     });
+    // Whichever way the picker closes — Escape or a press outside it — the keys go back
+    // where they came from, and the trigger never took them (see `holdFocus`), so that is
+    // the text being typed or the board.
+    return () => {
+      handBack?.();
+      handBack = null;
+    };
   });
 
   // The grid follows the shade of whatever was picked (`Picker.tsx@1118751f:111-116`),
@@ -110,10 +119,9 @@
     onPick(color);
   }
 
-  /** Back to the text being typed, or to the board. */
+  /** Out. The hand-back is the effect's teardown, so a press outside lands the same way. */
   function close(): void {
     onToggle(false);
-    giveKeysBack(document);
   }
 
   async function eyeDrop(): Promise<void> {

@@ -1,6 +1,15 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { OPEN_CANVAS, openBoard, pickTool, relay, sceneElements, type Board } from "./board.ts";
+import {
+  activeTool,
+  focusBoard,
+  OPEN_CANVAS,
+  openBoard,
+  pickTool,
+  relay,
+  sceneElements,
+  type Board,
+} from "./board.ts";
 
 /**
  * Drawing together from another computer: the Share dialog's links, and the live link
@@ -58,6 +67,26 @@ const links = (page: Page) =>
 const primary = (page: Page) => page.locator(".link-row--primary input");
 
 test.describe("the Share dialog", () => {
+  test("it takes the focus, so the board's tool keys stay on the board", async ({ page }) => {
+    // The card is focused on open, as the oracle's dialogs do (`Dialog.tsx@1118751f:63-68`).
+    // Without it the board kept the focus behind the dialog and answered every key pressed
+    // over it — `R` changed the tool while the links sat there to be copied.
+    const board = await openBoard(page);
+    await focusBoard(board);
+    expect(await activeTool(page)).toBe("select");
+
+    await stubShare(page, { lan: [BY_ADDRESS], public: null });
+    await openShare(page);
+    await expect(
+      page.locator('[role="dialog"] .modal-card'),
+      "the dialog took the focus",
+    ).toBeFocused();
+
+    await page.keyboard.press("r");
+
+    expect(await activeTool(page)).toBe("select");
+  });
+
   test("puts the computer's name first, and says it is for the wired network", async ({ page }) => {
     await openBoard(page);
     await stubShare(page, { lan: [BY_NAME, BY_ADDRESS], public: null });

@@ -120,6 +120,51 @@ describe("coverage", () => {
   const tally = (predicate: (item: ChecklistItem) => boolean) => items.filter(predicate).length;
   const withStatus = (status: Status) => tally((item) => ruleFor(item)?.status === status);
 
+  // A rule with a `status` and no `text` claims every remaining line in its section, so a
+  // section that has one carries a single per-SECTION verdict rather than a per-line one. That is
+  // a legitimate design, and it was the right one for most of the sections. But it has two costs
+  // that only become visible when you measure:
+  //
+  //   1. **No task can move the figure in a section that has a covered catch-all.** 5.5 landed a
+  //      real feature and `design.md:1044` stayed exactly where it was, claimed by section 26's
+  //      catch-all, which names one unrelated test. The work was invisible to the ledger.
+  //   2. **A line claimed by a catch-all has no named pattern and no named test**, which is the
+  //      same failure as 4.3's `/PNG|SVG|Google Docs|single element/` -- a rule that matches a
+  //      line by accident is not coverage of it. The difference is that a text pattern is
+  //      auditable on sight and a catch-all is not.
+  //
+  // This ratchet does not forbid catch-alls. De-catch-alling 600+ lines is a deliberate, large
+  // change whose effect on the figure cannot be predicted in advance, and guessing at it would be
+  // worse than measuring it. What it forbids is the number going UP silently -- which is how a
+  // section becomes per-section-verdicted without anybody deciding that.
+  it("does not let more lines fall to a section catch-all than it did", () => {
+    const caught = items.filter((item) => ruleFor(item)?.text === undefined);
+    const bySection = new Map<string, number>();
+    for (const item of caught) {
+      // A section may be a RegExp as well as a string — section 26's catch-all uses one —
+      // so the key is stringified. The ratchet is about the COUNT, not about the label.
+      const section = String(ruleFor(item)!.section);
+      bySection.set(section, (bySection.get(section) ?? 0) + 1);
+    }
+    // Printed, not just asserted: the shape of the ledger is the point, and a test that merely
+    // passes tells nobody whether it moved.
+    const top = [...bySection.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([section, n]) => `${section}=${n}`)
+      .join("  ");
+    console.log(
+      `      ${caught.length} of ${items.length} lines (${((caught.length / items.length) * 100).toFixed(1)}%) are claimed by a section catch-all`,
+    );
+    console.log(`      widest: ${top}`);
+
+    expect(
+      caught.length,
+      "more lines are falling to a section catch-all than before. Give the ones a task just " +
+        "closed a rule of their own, or write down why the section is per-section on purpose.",
+    ).toBeLessThanOrEqual(666);
+  });
+
   it("reports where the project stands", () => {
     const covered = withStatus("covered");
     const gap = withStatus("gap");

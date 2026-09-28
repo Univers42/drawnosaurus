@@ -15,16 +15,16 @@ and gives the image back. Confidence markers as in the other references: **VERIF
 
 ## Where each part lives
 
-| part                | where                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------- |
-| the tracer          | `engine/crates/draw-trace` — its own WASM, `engine/pkg/draw_trace*`                    |
-| its thread          | `engine/src/vectorize.worker.ts`, driven by `TraceWorker` in `engine/src/vectorize.ts` |
-| the insert          | `engine/crates/draw-engine/src/engine/vectorize.rs`, bound in `wasm/vectorize_api.rs`  |
-| the insert, from TS | `DrawEngine.vectorizeImage` (`engine/src/engine.ts`)                                   |
-| presets, caps, copy | `apps/web/src/lib/draw-chrome/vectorize.ts`                                            |
-| the dialog          | `VectorizeDialog.svelte`, opened from `DrawModals.svelte`                              |
-| the menu entry      | `menu.ts` › `vectorizeId` (one selected, unlocked image), `DrawContextMenu.svelte`     |
-| the benchmark       | `perf/vectorize/` — not a test, nothing gates on it                                    |
+| part                | where                                                                                                                                                                                |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| the tracer          | `engine/crates/draw-trace` — its own WASM, `engine/pkg/draw_trace*`                                                                                                                  |
+| its thread          | `engine/src/vectorize.worker.ts`, driven by `TraceWorker` in `engine/src/vectorize.ts`                                                                                               |
+| the insert          | `engine/crates/draw-engine/src/engine/vectorize.rs`, bound in `wasm/vectorize_api.rs`                                                                                                |
+| the insert, from TS | `DrawEngine.vectorizeImage` (`engine/src/engine.ts`)                                                                                                                                 |
+| presets, caps, copy | `apps/web/src/lib/draw-chrome/vectorize.ts`                                                                                                                                          |
+| the dialog          | `VectorizeDialog.svelte`, opened from `DrawModals.svelte`                                                                                                                            |
+| the menu entry      | `menu.ts` › `vectorizeId` (one selected, unlocked image) and `vectorizeAction`, the one declaration both menus read — `DrawContextMenu.svelte` and the palette's `commandPalette.ts` |
+| the benchmark       | `perf/vectorize/` — not a test, nothing gates on it                                                                                                                                  |
 
 The boundary rule holds: the tracer runs in the browser, the server never sees anything
 but the elements the insert makes.
@@ -215,26 +215,41 @@ reported: it can paint before the SVG has decoded.
 
 ## Tests
 
-| suite                                             | what                                                             |
-| ------------------------------------------------- | ---------------------------------------------------------------- |
-| `engine/crates/draw-trace/tests/trace.rs`         | flattening, holes, caps, flat rings, stats (+ config unit tests) |
-| `engine/crates/draw-engine/tests/ci_vectorize.rs` | mapping, elements, stacking, groups, history, every refusal      |
-| `apps/web/.../vectorize.test.ts`, `menu.test.ts`  | presets, slider maps, caps, messages, the menu entry             |
-| `e2e/vectorize.spec.ts`                           | both modes end to end, autosave, undo, the zoom sharpness        |
+| suite                                             | what                                                                                                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `engine/crates/draw-trace/tests/trace.rs`         | flattening, holes, caps, flat rings, stats (+ config unit tests)                                                                             |
+| `engine/crates/draw-engine/tests/ci_vectorize.rs` | mapping, elements, stacking, groups, history, bindings, every refusal                                                                        |
+| `apps/web/.../vectorize.test.ts`, `menu.test.ts`  | presets, slider maps, caps, messages, the one menu/palette declaration, and the scan that fails on a second copy of the label                |
+| `apps/web/.../commandPalette.test.ts:509`         | that the palette's Vectorize command is that same row — same label, same image id, offered in the five selection cases the menu offers it in |
+| `e2e/vectorize.spec.ts`                           | both modes end to end, autosave, undo, the zoom sharpness                                                                                    |
 
 ## Known limits
 
-- **Arrows bound to the image are not bound to the trace.** The image is removed exactly
-  as a delete removes it, and its arrows are left as a delete leaves them.
+- **An arrow bound to the image is let go of it, not carried onto the trace.** The image
+  is removed exactly as a delete removes it, and the delete releases the arrows bound to
+  what it takes — the trace arrives under new ids, and the oracle has no way to move a
+  binding onto them on a deletion: nothing `fixBindingsAfterDeletion` reaches rewrites a
+  bound id, and it substitutes one only when the shape was copied too
+  (`fixDuplicatedBindingsAfterDuplication`, `binding.ts@1118751f:2256-2281`).
+  A vectorize is not a duplication — the arrow is not part of what was replaced. With
+  **Keep original** the image is still on the board, so its arrows stay bound to it. See
+  [`binding.md` › When the shape is deleted](binding.md#when-the-shape-is-deleted).
 - **A stroke added to a traced shape shows its keyhole bridges**, the zero-width cuts that
   carry its holes. Traced shapes have none, and without one the cuts are invisible.
-- **Only the context menu offers it**, for exactly one unlocked image; there is no inspector
-  entry or shortcut.
+- **Only the context menu and the command palette offer it**, both from the one declaration
+  (`menu.ts` › `vectorizeAction`), for exactly one unlocked image; there is no inspector
+  entry and no shortcut. The oracle has no vectorize command at all, in any category, at
+  `@1118751f`, so the palette row is this project's own.
 - **`MAX_GROUP_DEPTH` is written twice**: the contract does not export it, so `vectorize.ts`
   repeats 32 and `vectorize.test.ts` pins the two together through the element schema.
 - **A picture that has not arrived yet** (a peer's image whose bytes are still on their way)
   cannot be read; the dialog says so and offers to try again.
-- **The board's window-level shortcuts** (Ctrl+S, Ctrl+O, N, …) still fire while the dialog
-  has focus, as under the other dialogs in `DrawModals.svelte`.
+- **The board's window-level shortcuts** (Ctrl+S, Ctrl+O, `?`, …) stop at this dialog: it
+  takes the focus on open and hands it back on close (`takeFocus`), and a key that lands
+  inside it is left to the dialog — `onAppShortcut` at a dialog (`shortcuts.ts` ›
+  `insideDialog`), the style chords at a dialog or a menu (› `insideOverlay`). Escape is
+  the one that still passes, because it is how the topmost overlay closes
+  (`DrawModals.svelte`). The rules, and what they do not cover, are in
+  `docs/reference/shortcuts.md`.
 - **Zoomed far past the size it was traced at**, an editable trace shows the facets of its
   flattened curves; the picture keeps the curves.

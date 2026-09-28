@@ -239,6 +239,19 @@ export const drawElementSchema = z.object({
   // saved before this field existed sized itself to its glyphs, and stamping `true` onto
   // them on the way through the server would write a choice nobody made.
   autoResize: z.boolean().optional(),
+  // Only a label's: how far along its arrow's drawn path it sits, as a **fraction of that
+  // path's length** (Excalidraw's `labelPosition`,
+  // `packages/element/src/types.ts@1118751f:290`). A fraction and not a world-unit offset,
+  // so a label stays where it was put when the arrow is lengthened.
+  //
+  // Any finite number, **not** bounded to [0, 1], because the engine reads it clamped
+  // (`isFiniteNumber(x) ? clamp(x, 0, 1) : null`, `restore.ts@1118751f:573-575`) and so
+  // should the boundary. Refusing one here would throw a whole board away over a float
+  // overshoot — and a drag genuinely produces `0.2500000018`, so an overshoot is a value
+  // this schema has to carry, not a value to reject. `finite` still turns away the NaN and
+  // the infinities, which are the ones that cannot be read as a position at all. Absent —
+  // every label saved before this existed — is the middle, where it was always drawn.
+  labelPosition: finite.optional(),
   containerId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   boundTextId: z.string().max(MAX_ID_LENGTH).nullable().optional(),
   // The groups this element is in, **innermost first**. The array *is* the nesting:

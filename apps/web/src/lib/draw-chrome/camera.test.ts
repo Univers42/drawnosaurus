@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { sceneBounds, type WorldBounds } from "@drawnosaurus/contract";
+import { maxZoom, minZoom, screenToWorld, worldToScreen } from "@osionos/draw-engine/cameraMath";
 import {
   animateCamera,
   boundsOf,
@@ -10,8 +12,8 @@ import {
   persistFocusModePreference,
   readFocusModePreference,
   setCameraExact,
-  worldToScreen,
   zoomPercent,
+  type Box,
   type CameraSetter,
 } from "./camera.ts";
 
@@ -27,16 +29,22 @@ describe("zoomPercent", () => {
 });
 
 describe("worldToScreen", () => {
-  it("matches the engine: wx * scale + camera.x", () => {
-    expect(worldToScreen({ x: 100, y: 50, scale: 2 }, 10, 20)).toEqual({ sx: 120, sy: 90 });
+  it("is the engine's own world_to_screen: wx * scale + camera.x", () => {
+    // The four values below are WASM exports of `camera.rs` now — the host's own mirror
+    // of them is gone — so these cases are the front's half of the contract: the numbers
+    // the five call sites place chrome with are the engine's, not a TypeScript copy of
+    // them. The arithmetic is pinned in Rust, in
+    // `engine/crates/draw-engine/tests/ci_camera.rs`; `cameraParity.test.ts` is what
+    // stops the copy coming back.
+    expect(worldToScreen({ x: 100, y: 50, scale: 2 }, 10, 20)).toEqual({ x: 120, y: 90 });
   });
 
-  it("is the inverse of the cursor send path (sx - cam) / scale", () => {
+  it("is the inverse of the engine's screen_to_world, which the cursor send path uses", () => {
     const camera = { x: -40, y: 12, scale: 1.5 };
     const world = { x: 200, y: -30 };
     const screen = worldToScreen(camera, world.x, world.y);
-    expect((screen.sx - camera.x) / camera.scale).toBeCloseTo(world.x);
-    expect((screen.sy - camera.y) / camera.scale).toBeCloseTo(world.y);
+    expect(screenToWorld(camera, screen.x, screen.y).x).toBeCloseTo(world.x);
+    expect(screenToWorld(camera, screen.x, screen.y).y).toBeCloseTo(world.y);
   });
 });
 
@@ -61,13 +69,16 @@ describe("fitCamera", () => {
   });
 
   it("clamps to the engine's own zoom limits", () => {
+    // Asserted against what the engine answers rather than 0.1/30 written out
+    // again here: a host that re-declared its own pair would drift silently, because
+    // `setCameraExact` re-clamps through the engine's own `zoomAt` and hides it.
     const tiny = fitCamera({ minX: 0, minY: 0, maxX: 1, maxY: 1 }, { width: 1000, height: 1000 });
-    expect(tiny.scale).toBeLessThanOrEqual(30);
+    expect(tiny.scale).toBe(maxZoom());
     const huge = fitCamera(
       { minX: 0, minY: 0, maxX: 1_000_000, maxY: 1_000_000 },
       { width: 100, height: 100 },
     );
-    expect(huge.scale).toBeGreaterThanOrEqual(0.1);
+    expect(huge.scale).toBe(minZoom());
   });
 });
 
@@ -372,6 +383,36 @@ describe("flight", () => {
   });
 });
 
+/**
+ * The world bounds `sceneBounds` says a set of elements occupies — the contract package's
+ * sanctioned mirror of the engine's `element_bounds`/`normalize_rect`
+ * (`scene/geometry.rs:14-21,113-131`), pinned to the Rust by `packages/contract/tests/
+ * bounds.test.ts`. Every mirrored case below is asserted against it rather than against a
+ * number written here: a hand-typed `-67` is a second copy of the answer, and it drifts.
+ */
+function referenceBounds(elements: Box[]): WorldBounds {
+  const bounds = sceneBounds(elements.map((el) => ({ ...el, isDeleted: false })));
+  if (!bounds) throw new Error("sceneBounds of a non-empty set is never null");
+  return bounds;
+}
+
+/** The same world bounds in `boundsOf`'s own `x/y/width/height` form. */
+function asBox(bounds: WorldBounds): Box {
+  return {
+    x: bounds.minX,
+    y: bounds.minY,
+    width: bounds.maxX - bounds.minX,
+    height: bounds.maxY - bounds.minY,
+  };
+}
+
+/** `boundsOf` for a set that always has bounds, without a non-null assertion. */
+function unionBounds(elements: Box[]): Box {
+  const bounds = boundsOf(elements);
+  if (!bounds) throw new Error("a non-empty set of elements has bounds");
+  return bounds;
+}
+
 describe("boundsOf", () => {
   it("is null for no elements", () => {
     expect(boundsOf([])).toBeNull();
@@ -392,6 +433,98 @@ describe("boundsOf", () => {
       { x: 100, y: -50, width: 20, height: 5 },
     ]);
     expect(bounds).toEqual({ x: 0, y: -50, width: 120, height: 60 });
+  });
+
+  it("leaves a non-mirrored rect exactly as it was", () => {
+    // The proof that normalising is invisible for an ordinary element: these are the
+    // numbers the pre-fix union produced — a fractional width and height among them, so
+    // it is not just the two plain literals above — and they agree with the reference.
+    const upright = [
+      { x: -30, y: 70, width: 12.5, height: 0.25 },
+      { x: 0, y: 0, width: 10, height: 10 },
+    ];
+    expect(boundsOf(upright)).toEqual({ x: -30, y: 0, width: 40, height: 70.25 });
+    expect(boundsOf(upright)).toEqual(asBox(referenceBounds(upright)));
+  });
+
+  // A **mirrored** element — one whose width or height went negative, which is what a
+  // drag across an edge leaves behind — still occupies a box: the engine normalises it
+  // (`normalize_rect`, `scene/geometry.rs:14-21`) and the contract's mirror does the
+  // same (`elementBounds`, `packages/contract/src/bounds.ts:35-44`). Reading `x + width`
+  // instead leaves `min_x > max_x`, which every consumer then reads as an empty or
+  // inverted box. These four cases are the fix; the literals above are what must not move.
+  it("normalises an element mirrored on both axes", () => {
+    const mirrored = [{ x: 100, y: 100, width: -60, height: -40 }];
+    expect(boundsOf(mirrored)).toEqual(asBox(referenceBounds(mirrored)));
+  });
+
+  it("normalises an element mirrored on one axis only", () => {
+    const mirrored = [{ x: 100, y: 100, width: -60, height: 40 }];
+    expect(boundsOf(mirrored)).toEqual(asBox(referenceBounds(mirrored)));
+  });
+
+  it("keeps a mirrored element's far corner in a union with a positive sibling", () => {
+    // The case that frames empty space: the mirrored element reaches further right and
+    // further down than `x + width` says, so a union that drops that corner loses it.
+    const sibling = { x: 0, y: 0, width: 400, height: 300 };
+    const mirrored = { x: 1000, y: 600, width: -200, height: -100 };
+    const elements = [sibling, mirrored];
+
+    expect(boundsOf(elements)).toEqual(asBox(referenceBounds(elements)));
+
+    // Stated on its own too, so the failure names the missing corner rather than a diff.
+    const union = referenceBounds(elements);
+    const alone = referenceBounds([mirrored]);
+    expect(union.maxX).toBe(alone.maxX);
+    expect(union.maxY).toBe(alone.maxY);
+  });
+
+  it("frames the mirrored element, not the space beside it", () => {
+    // What the camera does with that union. The frame is wider than the viewport asks
+    // for, so the 2x cap does not hide the mistake: an inverted box asks for a zoom the
+    // element does not need, and the mirrored element ends up outside the viewport.
+    const sibling = { x: 0, y: 0, width: 400, height: 300 };
+    const mirrored = { x: 1000, y: 600, width: -200, height: -100 };
+    const viewport = { width: 1280, height: 800 };
+    const camera = focusCamera(unionBounds([sibling, mirrored]), viewport, {
+      x: 0,
+      y: 0,
+      scale: 1,
+    });
+    const box = referenceBounds([mirrored]);
+    const screen = (world: number) => world * camera.scale + camera.x;
+    const screenY = (world: number) => world * camera.scale + camera.y;
+
+    expect(
+      screen(box.minX),
+      "the mirrored element's left edge is on screen",
+    ).toBeGreaterThanOrEqual(0);
+    expect(screen(box.maxX), "…and its right edge").toBeLessThanOrEqual(viewport.width);
+    expect(screenY(box.minY), "its top edge is on screen").toBeGreaterThanOrEqual(0);
+    expect(screenY(box.maxY), "…and its bottom edge").toBeLessThanOrEqual(viewport.height);
+  });
+
+  // What a *selected text element* is when Enter frames it, and the reason the width the
+  // camera reads has to be the normalised one. `focusCamera` divides by
+  // `Math.max(bounds.width, 1)`, so an unnormalised negative width made the fit come from
+  // 1 world pixel and pinned the scale at the 2x cap. Wide enough here that the cap cannot
+  // hide the difference: `1280 × 0.8 / 512` is where a fit stops being capped.
+  it("frames a selected text element that has been mirrored, rather than capping the zoom", () => {
+    const text = [{ x: 1400, y: 400, width: -900, height: -40 }];
+    const viewport = { width: 1280, height: 800 };
+    const camera = focusCamera(unionBounds(text), viewport, { x: 0, y: 0, scale: 1 });
+    const box = referenceBounds(text);
+
+    expect(camera.scale, "the text's own width asked for the fit, not 1 world pixel").toBeCloseTo(
+      (viewport.width * 0.8) / (box.maxX - box.minX),
+      5,
+    );
+    expect(camera.scale, "…which is below the 2x cap for an element this wide").toBeLessThan(2);
+    // And the whole line is on screen, which at the cap it would not have been.
+    expect(box.maxX * camera.scale + camera.x, "its right edge is on screen").toBeLessThanOrEqual(
+      viewport.width,
+    );
+    expect(box.minX * camera.scale + camera.x, "…and its left edge").toBeGreaterThanOrEqual(0);
   });
 });
 

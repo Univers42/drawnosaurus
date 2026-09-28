@@ -111,6 +111,10 @@ world  = (screen - (x, y)) / scale     screen_to_world
   panel is out of the keyboard's reach then: every panel choice is also a palette command,
   gated on the same `getShapeActions`. Proof without a pointer event:
   `e2e/keyboardFlowchart.spec.ts`, `e2e/paletteStyle.spec.ts` (`locator.focus()` the board).
+- The switch has two families — the three closed shapes and the four linear types — and the
+  **closed one wins** a mixed selection; a bound arrow is not switchable at all. The shared
+  type and the list of types the panel offers are the engine's (`sharedConversionType`); the
+  host must not read `roundness`/`elbowed` to work them out. `docs/reference/shapeSwitch.md`.
 - A middle-button pan drops the paste Linux fires on its release (`host/pointerInput.ts`,
   window capture phase); the engine would paste its own clipboard for any unparsed text.
 

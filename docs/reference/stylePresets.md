@@ -18,18 +18,41 @@ font is laid out again the same way `set_font_size`/`set_font_family`/`set_text_
 do, reusing that relayout write rather than a second one (`apply_style_font`,
 `selection_style.rs`).
 
+## The default is not a preset
+
+**VERIFIED** against the oracle. A new element's fill style is **solid**, the oracle's
+`DEFAULT_ELEMENT_PROPS.fillStyle` (`packages/common/src/constants.ts@1118751f:522`), read
+into `currentItemFillStyle` (`appState.ts@1118751f:34`) and handed to every new element
+(`App.tsx@1118751f:10467`, `newElement.ts@1118751f:94`). It is
+`DrawElementStyle::default()` in `scene/element.rs`, with the TS copy of the same seed in
+`DEFAULT_ELEMENT_STYLE` (`engine/src/types.ts`) kept in step for the panel's placeholder.
+
+It was hachure here, and **nothing showed it**: a transparent background paints no fill
+under any style, and the inspector's Fill style row is not on the panel until a background
+exists. So the first colour a person picked turned every shape into that colour _and_ a
+diagonal hatch over it, where the oracle paints it flat. A default that only becomes
+visible under a later action is a default worth pinning in a test — the shape-only path is
+the one that shows it, because the sticky-note, bucket-fill and vectorize paths each force
+solid for themselves (`begin_sticky` in `pointer.rs`, `normalize_sticky_style` in
+`selection_style.rs`, `bucket_fill_style`/`paint_fill_style` in `engine/bucket.rs` and
+`trace_line` in `engine/vectorize.rs`), which is why testing the bucket alone concludes
+nothing is wrong.
+
+Stored elements are unaffected: `fill_style` has no serde default, so a board written
+before this change reloads byte for byte as it was saved. Only newly minted elements differ.
+
 ## Built-ins
 
 Five, distinct enough to tell apart at a glance — not a port, the oracle ships no
 equivalent at `@1118751f` — each with its own font too:
 
-| Preset     | Look                                               | Font       |
-| ---------- | -------------------------------------------------- | ---------- |
-| Sketch     | Hachure fill, visible roughness — the default feel | Virgil     |
-| Clean      | Solid fill, no roughness, thin stroke              | Helvetica  |
-| Blueprint  | Blue stroke, transparent fill, sharp corners       | Cascadia   |
-| Highlight  | Orange stroke, solid warm fill                     | Lilita One |
-| Muted note | Grey, dashed, slightly translucent                 | Nunito     |
+| Preset     | Look                                                  | Font       |
+| ---------- | ----------------------------------------------------- | ---------- |
+| Sketch     | Hachure fill, visible roughness — the sketchbook look | Virgil     |
+| Clean      | Solid fill, no roughness, thin stroke                 | Helvetica  |
+| Blueprint  | Blue stroke, transparent fill, sharp corners          | Cascadia   |
+| Highlight  | Orange stroke, solid warm fill                        | Lilita One |
+| Muted note | Grey, dashed, slightly translucent                    | Nunito     |
 
 ## User presets
 

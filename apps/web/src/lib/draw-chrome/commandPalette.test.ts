@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  RECENT_CATEGORY,
   buildCommands,
   filterCommands,
   groupCommands,
@@ -9,9 +10,13 @@ import {
   type PaletteHost,
   type PaletteSelection,
 } from "./commandPalette.ts";
+import { VECTORIZE_LABEL, menuElementFromSelection, vectorizeAction } from "./menu.ts";
+import { FONT_CHOICES } from "./fonts.ts";
 import type { DrawEngine } from "@osionos/draw-engine/engine";
+import type { DrawElement } from "@osionos/draw-engine/types";
 import type { ShapeActions } from "./shapeActions.ts";
 import { ALL_TOOL_DEFS } from "./tools.ts";
+import { shortcutFor } from "./shortcutRegistry.ts";
 import { FIGURE_KIND_OPTIONS } from "./inspector.ts";
 
 function cmd(id: string, label: string, category: string, shortcut?: string): Command {
@@ -105,17 +110,149 @@ describe("paletteGroups", () => {
   ];
 
   it("groups by category with no query", () => {
-    expect(paletteGroups(commands, "  ").map((g) => g.category)).toEqual(["Tools", "View"]);
+    expect(paletteGroups(commands, "  ", null).map((g) => g.category)).toEqual(["Tools", "View"]);
   });
 
   it("collapses to one ranked group while searching", () => {
-    const groups = paletteGroups(commands, "rect");
+    const groups = paletteGroups(commands, "rect", null);
     expect(groups).toHaveLength(1);
     expect(groups[0]?.commands.map((c) => c.id)).toEqual(["tool:rectangle"]);
   });
 
   it("is empty, not a group with nothing in it, when nothing matches", () => {
-    expect(paletteGroups(commands, "zzz")).toEqual([]);
+    expect(paletteGroups(commands, "zzz", null)).toEqual([]);
+  });
+});
+
+describe("palette recency", () => {
+  // Three categories, several rows each: enough that a ranking which reshuffles shows it.
+  const commands = [
+    cmd("editor:undo", "Undo", "Editor"),
+    cmd("editor:redo", "Redo", "Editor"),
+    cmd("editor:selectAll", "Select all", "Editor"),
+    cmd("tool:rectangle", "Rectangle", "Tools"),
+    cmd("tool:ellipse", "Ellipse", "Tools"),
+    cmd("tool:line", "Line", "Tools"),
+    cmd("view:present", "Present", "View"),
+    cmd("view:grid", "Toggle grid", "View"),
+  ];
+  /** The rows as the dialog lists them, top to bottom. */
+  const rows = (lastUsedId: string | null) =>
+    paletteGroups(commands, "", lastUsedId).flatMap((group) => group.commands.map((c) => c.id));
+
+  it("leaves the list alone when nothing has been run", () => {
+    expect(rows(null)).toEqual(commands.map((c) => c.id));
+  });
+
+  it("lifts the run command to its own group and moves no other row", () => {
+    // The case a "sort by lastUsed descending" ranking gets wrong, twice over. Such a
+    // sort puts every run command above every command that was never run, so the rows a
+    // new user is looking for slide down the list; and it leaves the run command in its
+    // own category as well, so it shows twice. The oracle lifts one row out of the list
+    // and puts it in a group of its own above the rest (`CommandPalette.tsx@1118751f:844-857`).
+    const before = rows(null);
+    const after = rows("view:present");
+    expect(after[0]).toBe("view:present");
+    expect(after).toHaveLength(before.length);
+    expect(after.slice(1)).toEqual(before.filter((id) => id !== "view:present"));
+  });
+
+  it("never demotes a command that was never run, however late it was declared", () => {
+    // Declared last, in a category of its own, so a sort that used usage as its first key
+    // would sink it under the earlier Tools rows.
+    const text: Command = cmd("style:fontFamily:6", "Font: Nunito", "Style");
+    const list = [...commands, text];
+    const flat = (id: string | null) =>
+      paletteGroups(list, "", id).flatMap((g) => g.commands.map((c) => c.id));
+    expect(flat("editor:undo")).toEqual([
+      "editor:undo",
+      ...flat(null).filter((c) => c !== "editor:undo"),
+    ]);
+    expect(flat(null).at(-1)).toBe("style:fontFamily:6");
+  });
+
+  it("remembers one command, not a history", () => {
+    // `lastUsedPaletteItem` holds a single item, so the second run replaces the first and
+    // the first is back among its own (`CommandPalette.tsx@1118751f:85`).
+    expect(rows("view:present")[0]).toBe("view:present");
+    const afterTwoRuns = rows("tool:ellipse");
+    expect(afterTwoRuns[0]).toBe("tool:ellipse");
+    expect(afterTwoRuns).toHaveLength(commands.length);
+    expect(afterTwoRuns.filter((id) => id === "tool:ellipse")).toEqual(["tool:ellipse"]);
+    expect(afterTwoRuns.slice(1)).toEqual(rows(null).filter((id) => id !== "tool:ellipse"));
+  });
+
+  it("gives the recents group one row, whatever ran before it", () => {
+    // The cap is one, and it is structural rather than enforced: `paletteGroups` takes a
+    // single id, so there is no way to hand it a history to rank. A palette that remembered
+    // several would have to promote all of them, and every row they displaced would be a
+    // never-run command pushed down — the exact failure the oracle's single item avoids.
+    for (const lastUsedId of ["editor:undo", "view:grid", "tool:line"]) {
+      const groups = paletteGroups(commands, "", lastUsedId);
+      expect(groups[0]?.category).toBe(RECENT_CATEGORY);
+      expect(
+        groups[0]?.commands.map((c) => c.id),
+        lastUsedId,
+      ).toEqual([lastUsedId]);
+      expect(
+        groups.flatMap((g) => g.commands),
+        lastUsedId,
+      ).toHaveLength(commands.length);
+    }
+  });
+
+  it("drops a category that held only the run command", () => {
+    // The oracle groups what is left (`getNextCommandsByCategory`,
+    // `CommandPalette.tsx@1118751f:819-830`), so a category nothing is left in has no
+    // heading — an empty one would print a bare label over nothing.
+    const lonely = [cmd("view:grid", "Toggle grid", "View"), ...commands];
+    const groups = paletteGroups(lonely, "", "view:grid");
+    expect(groups.map((g) => g.category)).toEqual([RECENT_CATEGORY, "Editor", "Tools", "View"]);
+    expect(groups.at(-1)?.commands.map((c) => c.id)).toEqual(["view:present"]);
+  });
+
+  it("ignores a run id the current list does not have", () => {
+    // Commands come and go with the selection: the run command may be gone next time.
+    expect(rows("element:vectorize")).toEqual(rows(null));
+  });
+
+  it("shows no recent group once a query is typed", () => {
+    // `showLastUsed` needs an empty search (`CommandPalette.tsx@1118751f:844-845`): the
+    // ranked results are the answer, and a recents heading above them would be a
+    // category the search did not match.
+    const groups = paletteGroups(commands, "ellipse", "view:present");
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.category).toBe("Results");
+    expect(groups[0]?.commands.map((c) => c.id)).toEqual(["tool:ellipse"]);
+  });
+
+  it("gives the same order every time, and after the same run twice", () => {
+    expect(rows("tool:line")).toEqual(rows("tool:line"));
+    // A run command that is the only one in the list is still not a duplicate of itself.
+    const one = [cmd("only:one", "Only", "Editor")];
+    const groups = paletteGroups(one, "", "only:one");
+    expect(groups.flatMap((g) => g.commands.map((c) => c.id))).toEqual(["only:one"]);
+  });
+
+  it("is the run command, and only the run command, that is remembered", () => {
+    // The oracle's palette keeps the run and the highlight apart: `executeCommand` fills
+    // the memory after `perform` (`CommandPalette.tsx@1118751f:665`), while hovering a row
+    // (`:933`, `:951`) and arrowing onto one (`:710-778`) move the highlight and never reach
+    // it. Here that split is the ranking's *signature*: the only thing it is told is one run
+    // id, so there is no channel by which a highlight could promote a row — and the
+    // argument is required, so a caller cannot leave it out and be handed a palette that
+    // quietly shows no recents. Nothing run, no recents group; a run, exactly one.
+    const browsed = paletteGroups(commands, "", null);
+    expect(browsed.map((g) => g.category)).toEqual(["Editor", "Tools", "View"]);
+    const browsedIds = browsed.flatMap((g) => g.commands.map((c) => c.id));
+    const recents = paletteGroups(commands, "", "view:grid");
+    expect(recents[0]?.category).toBe(RECENT_CATEGORY);
+    // One row lifted, and every other row exactly where it was — including the rest of the
+    // category the lifted row came out of.
+    expect(recents.flatMap((g) => g.commands.map((c) => c.id))).toEqual([
+      "view:grid",
+      ...browsedIds.filter((id) => id !== "view:grid"),
+    ]);
   });
 });
 
@@ -135,6 +272,7 @@ describe("buildCommands", () => {
       toggleGrid: vi.fn(),
       toggleObjectsSnap: vi.fn(),
       toggleFocusMode: vi.fn(),
+      toggleZenMode: vi.fn(),
       openExport: vi.fn(),
       openTemplates: vi.fn(),
       openMermaid: vi.fn(),
@@ -149,6 +287,7 @@ describe("buildCommands", () => {
       openShapeSwitch: vi.fn(),
       copyStyles: vi.fn(),
       stepFontSize: vi.fn(),
+      vectorize: vi.fn(),
       ...overrides,
     };
   }
@@ -163,7 +302,7 @@ describe("buildCommands", () => {
     });
     return {
       can,
-      element: { locked: false, multi: true, grouped: false, ...element },
+      element: { locked: false, multi: true, grouped: false, vectorizeId: null, ...element },
       switchable: true,
     };
   }
@@ -187,6 +326,18 @@ describe("buildCommands", () => {
   it("has no duplicate ids", () => {
     const ids = buildCommands(host()).map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("toggles zen mode from the palette, printing the registry's own chord", () => {
+    const h = host();
+    const command = buildCommands(h).find((c) => c.id === "view:zenMode");
+    expect(command, "view:zenMode").toBeDefined();
+    expect(command!.category).toBe("View");
+    expect(command!.shortcut).toBe(shortcutFor("view.zenMode"));
+    // Findable by the word the menu and the exit button both use.
+    expect(filterCommands(buildCommands(h), "zen").map((c) => c.id)).toContain("view:zenMode");
+    command!.run();
+    expect(h.toggleZenMode).toHaveBeenCalledOnce();
   });
 
   it("offers every toolbar tool, wired to setTool", () => {
@@ -313,5 +464,115 @@ describe("buildCommands", () => {
   it("has no duplicate ids with everything offered", () => {
     const ids = buildCommands(host({ selection: selected() })).map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("offers one command per font family, applied as the panel's own style patch", () => {
+    // `ShapeActions.text` is the panel's font-family-and-size row
+    // (`shapeActions.ts:143-144`), and the families are the picker's own list
+    // (`FONT_CHOICES`, `fonts.ts`). The oracle's palette has no font command to port at
+    // `@1118751f` — it leaves the row to its properties panel — so these are ours.
+    const h = host({ selection: selected() });
+    const families = buildCommands(h).filter((c) => c.id.startsWith("style:fontFamily:"));
+    expect(families.map((c) => c.id)).toEqual(
+      FONT_CHOICES.map((font) => `style:fontFamily:${font.id}`),
+    );
+    expect(families.map((c) => c.label)).toEqual(FONT_CHOICES.map((font) => `Font: ${font.label}`));
+    for (const font of FONT_CHOICES) {
+      // The two assertions above pair these ids with FONT_CHOICES one for one.
+      families.find((c) => c.id === `style:fontFamily:${font.id}`)!.run();
+    }
+    expect(vi.mocked(h.applyStyle).mock.calls).toEqual(
+      FONT_CHOICES.map((font) => [{ fontFamily: font.id }]),
+    );
+  });
+
+  it("offers no font family where the panel shows no font row", () => {
+    const h = host({ selection: selected(["text"]) });
+    const ids = buildCommands(h).map((c) => c.id);
+    expect(ids.filter((id) => id.startsWith("style:fontFamily:"))).toEqual([]);
+    expect(ids).not.toContain("element:increaseFontSize");
+  });
+
+  describe("Vectorize", () => {
+    const image = (patch: Partial<DrawElement> = {}): DrawElement =>
+      ({
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        angle: 0,
+        seed: 1,
+        strokeColor: "#1e1e1e",
+        backgroundColor: "transparent",
+        fillStyle: "hachure",
+        strokeWidth: 2,
+        strokeStyle: "solid",
+        roughness: 1,
+        opacity: 100,
+        roundness: 8,
+        version: 1,
+        versionNonce: 1,
+        updated: 0,
+        isDeleted: false,
+        ...patch,
+      }) as DrawElement;
+
+    /** Whether the palette offers the row, for exactly what the canvas menu would be given. */
+    const commandsFor = (elements: readonly DrawElement[], locked = false) => {
+      const element = menuElementFromSelection(elements, locked, false);
+      const ids = element
+        ? buildCommands(host({ selection: { ...selected(), element } })).map((c) => c.id)
+        : [];
+      return { element, offered: ids.includes("element:vectorize") };
+    };
+
+    it("is the canvas menu's own row, not a second declaration of it", () => {
+      const { element, offered } = commandsFor([image({ id: "i", type: "image" })]);
+      const row = vectorizeAction(element);
+      // One declaration (`menu.ts` › `vectorizeAction`, scanned by `menu.test.ts`): the
+      // label is the one the context menu prints, and the target is the same id.
+      expect(offered).toBe(true);
+      expect(row).not.toBeNull();
+      // A one-unlocked-image selection always yields a MenuElementInfo — `offered` above
+      // is the assertion that it did.
+      const command = buildCommands(host({ selection: { ...selected(), element: element! } })).find(
+        (c) => c.id === "element:vectorize",
+      );
+      expect(command?.label).toBe(row?.label);
+      expect(command?.label).toBe(VECTORIZE_LABEL);
+      expect(command?.category).toBe("Elements");
+    });
+
+    it("vectorizes the image the menu names", () => {
+      const element = menuElementFromSelection(
+        [image({ id: "img-7", type: "image" })],
+        false,
+        false,
+      );
+      // One unlocked image: `menuElementFromSelection` answers, and the row above is offered.
+      const h = host({ selection: { ...selected(), element: element! } });
+      const command = buildCommands(h).find((c) => c.id === "element:vectorize")!;
+      command.run();
+      expect(h.vectorize).toHaveBeenCalledOnce();
+      expect(h.vectorize).toHaveBeenCalledWith("img-7");
+    });
+
+    it("appears exactly when the canvas menu's row does", () => {
+      const cases: [string, readonly DrawElement[], boolean][] = [
+        ["one unlocked image", [image({ id: "i", type: "image" })], false],
+        ["a locked image", [image({ id: "i", type: "image" })], true],
+        [
+          "an image beside another shape",
+          [image({ id: "i", type: "image" }), image({ id: "r", type: "rectangle" })],
+          false,
+        ],
+        ["an embed", [image({ id: "e", type: "embed" })], false],
+        ["a rectangle", [image({ id: "r", type: "rectangle" })], false],
+      ];
+      for (const [name, elements, locked] of cases) {
+        const { element, offered } = commandsFor(elements, locked);
+        expect(offered, name).toBe(vectorizeAction(element) !== null);
+      }
+    });
   });
 });

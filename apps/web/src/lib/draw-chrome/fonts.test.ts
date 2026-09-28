@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   FONT_CHOICES,
@@ -87,6 +87,80 @@ describe("TEXT_FAMILIES", () => {
     const css = readFileSync(new URL("./fonts.css", import.meta.url), "utf8");
     const declared = new Set([...css.matchAll(/font-family:\s*"([^"]+)"/g)].map((m) => m[1]));
     expect([...declared].sort()).toEqual([...TEXT_FAMILIES].sort());
+  });
+});
+
+/**
+ * The two copies of the faces, and that they are the same files.
+ *
+ * The app needs a face to *draw* with and an exported SVG needs one to *be* the drawing
+ * after it leaves, so the woff2 files are in `apps/web/static/fonts` and in
+ * `engine/crates/draw-engine/assets/fonts` — the same bytes, kept twice, and
+ * `assets/fonts/LICENSES.md` says why. Nothing in either build stops them drifting: the
+ * engine's `include_bytes!` resolves inside its own crate and would still compile with the
+ * app's copy deleted, so a renamed or removed file in `static/fonts` would leave the app
+ * quietly unable to load a font that every exported SVG still carries. This is the test that
+ * notices.
+ *
+ * The engine's table is read out of its **source text** rather than through a binding, and
+ * that is a deliberate trade: the check is about the two trees holding the same paths, and a
+ * binding would need a browser to ask. The cost is that a comment naming a path would be read
+ * as a declaration, so the pattern below only matches the quoted literals the table is built
+ * from and the test asserts a plausible number of them — a table that lost a row fails rather
+ * than quietly matching fewer paths.
+ */
+describe("the faces the SVG exporter embeds", () => {
+  const REPO_ROOT = new URL("../../../../../", import.meta.url);
+  const engineSource = readFileSync(
+    new URL("engine/crates/draw-engine/src/export/font_face.rs", REPO_ROOT),
+    "utf8",
+  );
+  // **Only the table**, not the whole file. The module's own unit test asks about
+  // `"/fonts/Nope.woff2"`, and reading the whole file picked it up as a declaration — the
+  // exact false positive the comment above this block warns about, found the hard way.
+  const table = engineSource.slice(
+    engineSource.indexOf("pub const SHIPPED_FONT_FACES"),
+    engineSource.indexOf("];", engineSource.indexOf("pub const SHIPPED_FONT_FACES")),
+  );
+  const named = [...table.matchAll(/"(\/fonts\/[^"]+\.woff2)"/g)].map((match) => match[1]);
+  // The `include_bytes!` paths live in the other function, so they are matched *as*
+  // `include_bytes!` — matching any quoted `.woff2` read the module's own unit test's
+  // `"/fonts/Nope.woff2"`, which is not a file anything ships.
+  const alsoInAssets = new Set(
+    [...engineSource.matchAll(/include_bytes!\(\s*"([^"]+\.woff2)"/g)].map((match) => match[1]),
+  );
+
+  it("names ten files, and every one of them is a file the app serves", () => {
+    // The count first, because a regex that stopped matching would make the rest vacuous.
+    expect(named.length).toBe(10);
+    const missing = named.filter(
+      (path) => !existsSync(new URL(`apps/web/static${path}`, REPO_ROOT)),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it("names the very same files fonts.css declares, no more and no fewer", () => {
+    const css = readFileSync(new URL("./fonts.css", import.meta.url), "utf8");
+    const inCss = new Set([...css.matchAll(/url\("(\/fonts\/[^"]+)"\)/g)].map((m) => m[1]));
+    expect([...new Set(named)].sort()).toEqual([...inCss].sort());
+  });
+
+  it("has a compiled-in copy of every file it names", () => {
+    // `include_bytes!` is compile-time, so this is really a check that the table and the
+    // assets directory have not parted company — the engine's build would fail otherwise,
+    // but only for the engine's tree, which is the one that cannot see the app's.
+    const missing = [...alsoInAssets].filter(
+      (path) => !existsSync(new URL(`engine/crates/draw-engine/assets${path}`, REPO_ROOT)),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it("carries the same bytes on both sides, for every file", () => {
+    for (const path of named) {
+      const app = readFileSync(new URL(`apps/web/static${path}`, REPO_ROOT));
+      const engine = readFileSync(new URL(`engine/crates/draw-engine/assets${path}`, REPO_ROOT));
+      expect(engine.equals(app), path).toBe(true);
+    }
   });
 });
 

@@ -136,6 +136,12 @@ export const SHORTCUT_REGISTRY: readonly ShortcutEntry[] = [
     label: "Command palette",
     chords: ["CtrlOrCmd+/", "CtrlOrCmd+Shift+P"],
   },
+  // Zen mode, the oracle's own `keyTest` — `!CTRL_OR_CMD && altKey && code === Z`
+  // (`actionToggleZenMode.tsx@1118751f:34-35`), and only that: Shift with Alt still
+  // toggles, because the oracle never asks about it. Host-only, as `shortkey.md:384`
+  // describes it — the flag hides chrome and leaves the canvas alone, so it needs nothing
+  // from the engine, and `zen.ts` holds the inventory of what it hides.
+  { id: "view.zenMode", section: "View", label: "Toggle zen mode", chords: ["Alt+Z"] },
 
   // --- Editor (HelpDialog.tsx's "Editor" island) --------------------------------------
   { id: "editor.delete", section: "Editor", label: "Delete", chords: ["Delete", "Backspace"] },
@@ -147,6 +153,17 @@ export const SHORTCUT_REGISTRY: readonly ShortcutEntry[] = [
     section: "Editor",
     label: "Copy styles",
     chords: ["CtrlOrCmd+Alt+C"],
+  },
+  // "Copy to clipboard as PNG" (`locales/en.json@1118751f:17`) — the oracle's own chord,
+  // `code === C && altKey && shiftKey` (`actionClipboard.tsx@1118751f:250`). **The raster
+  // alone**: `actionCopyAsSvg` declares no `keyTest` at all (`:124-190` ends at
+  // `keywords`), so copy-as-SVG is a context-menu entry and not a chord, and listing both
+  // here would advertise a key the oracle does not have.
+  {
+    id: "editor.copyAsPng",
+    section: "Editor",
+    label: "Copy to clipboard as PNG",
+    chords: ["Alt+Shift+C"],
   },
   {
     id: "editor.pasteStyles",

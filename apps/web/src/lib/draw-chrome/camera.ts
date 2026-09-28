@@ -1,3 +1,6 @@
+import { elementBounds } from "@drawnosaurus/contract";
+import { maxZoom, minZoom } from "@osionos/draw-engine/cameraMath";
+
 /** Camera scale as an integer percentage (100 = 1:1). */
 export function zoomPercent(scale: number): number {
   return Math.round(scale * 100);
@@ -23,18 +26,21 @@ export function boundsOf(elements: Box[]): Box | null {
   let top = Infinity;
   let right = -Infinity;
   let bottom = -Infinity;
-  for (const el of elements) {
-    left = Math.min(left, el.x);
-    top = Math.min(top, el.y);
-    right = Math.max(right, el.x + el.width);
-    bottom = Math.max(bottom, el.y + el.height);
+  for (const box of elements) {
+    // Normalised per element, so a **mirrored** one — `width` or `height` under zero,
+    // which is what a resize drag crossing the anchor leaves behind — keeps its far corner
+    // instead of yielding a box whose min is past its max. That is the engine's
+    // `normalize_rect` (`scene/geometry.rs:14-21`), reached through the one sanctioned
+    // mirror of it, `elementBounds` (`packages/contract/src/bounds.ts:35-44`); on an
+    // element that is not mirrored it is the identity, so no well-behaved rect moves.
+    const el = elementBounds(box);
+    left = Math.min(left, el.minX);
+    top = Math.min(top, el.minY);
+    right = Math.max(right, el.maxX);
+    bottom = Math.max(bottom, el.maxY);
   }
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
-
-/** Mirrors the engine's `MIN_ZOOM`/`MAX_ZOOM` (`camera.rs`). */
-export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 30;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -67,8 +73,8 @@ export function fitCamera(
   const worldH = Math.max(bounds.maxY - bounds.minY, 1);
   const scale = clamp(
     Math.min((viewport.width - padding * 2) / worldW, (viewport.height - padding * 2) / worldH),
-    MIN_ZOOM,
-    MAX_ZOOM,
+    minZoom(),
+    maxZoom(),
   );
   const centerX = (bounds.minX + bounds.maxX) / 2;
   const centerY = (bounds.minY + bounds.maxY) / 2;
@@ -334,19 +340,4 @@ export function persistFocusModePreference(
   } catch {
     // Not persisting is survivable; the current page still honours the choice.
   }
-}
-
-/**
- * World → screen, matching the engine's `world_to_screen`
- * (`wx * scale + camera.x`). Peer cursors are stored in world space.
- */
-export function worldToScreen(
-  camera: { x: number; y: number; scale: number },
-  wx: number,
-  wy: number,
-): { sx: number; sy: number } {
-  return {
-    sx: wx * camera.scale + camera.x,
-    sy: wy * camera.scale + camera.y,
-  };
 }

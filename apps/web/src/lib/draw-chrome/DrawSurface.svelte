@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { DrawCanvas } from "@osionos/draw-engine/svelte";
+  import { screenToWorld, worldToScreen } from "@osionos/draw-engine/cameraMath";
   import { DARK_THEME, EMPTY_SELECTION_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
+    ClipboardFormatName,
     DrawTheme,
     DrawTool,
     FigureParams,
@@ -25,7 +27,6 @@
     persistFocusModePreference,
     readFocusModePreference,
     setCameraExact,
-    worldToScreen,
     zoomPercent,
     type CameraAnimation,
     type CameraLike,
@@ -43,9 +44,10 @@
   import DrawPathPanel from "./DrawPathPanel.svelte";
   import DrawFollowNotice from "./DrawFollowNotice.svelte";
   import ShapeStrip from "./ShapeStrip.svelte";
-  import { sharedShape, switchKey, switchPanelAt } from "./shapeSwitch.ts";
-  import type { FlowchartShape } from "@osionos/draw-engine/types";
+  import { isLinearType, switchKey, switchPanelAt, switchTypes } from "./shapeSwitch.ts";
+  import type { ConversionType } from "@osionos/draw-engine/types";
   import {
+    DEFAULT_GRID_PREFERENCE,
     persistCanvasBackground,
     persistThemePreference,
     persistGridPreference,
@@ -126,7 +128,17 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
-  import { appShortcut, isTextField, styleShortcut, type KeyTarget } from "./shortcuts.ts";
+  import { copyAsClipboard, outcomeWords } from "./clipboard.ts";
+  import {
+    appShortcut,
+    insideDialog,
+    insideOverlay,
+    isTextField,
+    styleShortcut,
+    type AppShortcut,
+    type KeyTarget,
+  } from "./shortcuts.ts";
+  import { chromeVisible } from "./zen.ts";
   import { heldNotice, NOTICE_TEXT } from "./notices.ts";
   import DrawZoomBar from "./DrawZoomBar.svelte";
   import DrawTextEditor from "./DrawTextEditor.svelte";
@@ -167,7 +179,7 @@
   let themeMode = $state<ThemeMode>("light");
   let themePreference = $state<ThemePreference>("light");
   let canvasBackground = $state<string | null>(null);
-  let grid = $state<GridPreference>({ enabled: false, size: 20, step: 5, snap: true });
+  let grid = $state<GridPreference>({ ...DEFAULT_GRID_PREFERENCE });
   /** Snapping to other elements while moving. Off until turned on, as in Excalidraw. */
   let objectsSnap = $state(false);
   let ink = $state("#1e1e1e");
@@ -252,6 +264,14 @@
    * `onFocusModeKeydown`, the only place `pendingKeyboardTextEdit` is set.
    */
   let focusModeEnabled = $state(true);
+  /**
+   * Zen mode: `Alt+Z`, the palette command and the exit button all land here. A boolean on
+   * this chrome and nothing else — the canvas, the camera and the scene are not told, which
+   * is what `shortkey.md:384` means by a host-only feature. What it hides is `zen.ts`'s
+   * table, read here through `chromeVisible`; the inventory is not restated in this
+   * template, so the table stays the one place a decision is written down.
+   */
+  let zenMode = $state(false);
   let pendingKeyboardTextEdit = false;
   let cameraBeforeFocus: Camera | null = null;
   let focusAnim: CameraAnimation | null = null;
@@ -314,10 +334,10 @@
     const topLeft = worldToScreen(currentCamera, minX, minY);
     const bottomRight = worldToScreen(currentCamera, maxX, maxY);
     return {
-      x: topLeft.sx,
-      y: topLeft.sy,
-      width: bottomRight.sx - topLeft.sx,
-      height: bottomRight.sy - topLeft.sy,
+      x: topLeft.x,
+      y: topLeft.y,
+      width: bottomRight.x - topLeft.x,
+      height: bottomRight.y - topLeft.y,
     };
   });
   /** Four bands covering everything but `spotlightRect`, each a plain CSS rect — simpler
@@ -341,6 +361,16 @@
   let showShare = $state(false);
   let showShortcuts = $state(false);
   let showPalette = $state(false);
+  /**
+   * The one command the palette remembers, kept here rather than in the dialog so it
+   * outlives the dialog — the oracle's `lastUsedPaletteItem` sits outside its palette for
+   * the same reason (`CommandPalette.tsx@1118751f:85`). In memory only, like the oracle's
+   * plain jotai store: a reload starts over, and no board change touches it.
+   */
+  let paletteRecentId = $state<string | null>(null);
+  /** The image the Vectorize dialog is open for — the palette's command as well as the
+   *  canvas menu's row opens it. */
+  let vectorizeId = $state<string | null>(null);
   /** The presentation path editor, and the stops it lists — read while it is open. */
   let showPath = $state(false);
   let pathStops = $state<Slide[]>([]);
@@ -350,8 +380,8 @@
     if (!showPath || presenting || !camera) return [];
     return pathStops.flatMap((stop, index) => {
       if (!stop.bounds) return [];
-      const { sx, sy } = worldToScreen(camera, stop.bounds.minX, stop.bounds.minY);
-      return [{ id: stop.frameId, step: index + 1, x: sx, y: sy }];
+      const at = worldToScreen(camera, stop.bounds.minX, stop.bounds.minY);
+      return [{ id: stop.frameId, step: index + 1, x: at.x, y: at.y }];
     });
   });
 
@@ -403,6 +433,26 @@
     if (engine?.copyStyles()) notify("Copied styles.");
   }
 
+  /**
+   * Copy to the clipboard as a picture, and say how it went.
+   *
+   * The whole of what a copy *is* — the elements, the size, the MIME type, whether to copy
+   * at all — is the engine's answer to one call (`clipboard.ts`), and this awaits the
+   * browser's write and reports the outcome. **Every outcome is reported, including the
+   * failures**: the oracle throws in both arms and both actions' `catch` puts the message
+   * on screen (`actionClipboard.tsx@1118751f:176-184, 236-245`), so a copy that quietly
+   * did nothing would be a behaviour this app has and the oracle does not.
+   *
+   * `copied` and the two refusals are the oracle's own sentences, and the success one
+   * carries the engine's word for the scope rather than this file's selection count — which
+   * is not the same number (`packages/element/src/selection.ts@1118751f:141-143`).
+   */
+  async function copyToClipboard(format: ClipboardFormatName): Promise<void> {
+    if (!engine) return;
+    const outcome = await copyAsClipboard(engine, format);
+    notify(outcomeWords(outcome, format));
+  }
+
   function pasteStyles(): void {
     engine?.pasteStyles();
     refreshStyle();
@@ -446,13 +496,17 @@
 
   /**
    * Where a key was pressed. The text being edited on the board is told apart from every
-   * other field by its editor's name, because it is the one field a style chord reaches.
+   * other field by its editor's name, because it is the one field a style chord reaches,
+   * and an open overlay is told apart from all of them because it is holding the focus:
+   * both guards below — the style chords and Enter's focus mode — then leave its keys
+   * alone, and neither has to ask the question again.
    */
   function keyTarget(target: EventTarget | null): KeyTarget {
     const typing = textEdit !== null;
     if (typing && (target as Element | null)?.matches?.('textarea[aria-label="Text editor"]')) {
       return "textEditor";
     }
+    if (insideOverlay(target)) return "overlay";
     return isTextField(target) ? "field" : "board";
   }
 
@@ -465,13 +519,12 @@
   /**
    * The chrome's style keys, ahead of the engine's: Ctrl/Cmd+Alt+C and +V copy and paste
    * styles, S, G and Shift+F open the pickers, Ctrl/Cmd+Shift+< and > step the font size
-   * — see `styleShortcut`. On the capture phase, because the engine's listener sits on
-   * the canvas below and would otherwise take Ctrl+Alt+C for an element copy and S for
-   * the lasso, and the text editor stops every key it is given.
+   * — see `styleShortcut`, which also declines every key that lands inside an open
+   * overlay. On the capture phase, because the engine's listener sits on the canvas below
+   * and would otherwise take Ctrl+Alt+C for an element copy and S for the lasso, and the
+   * text editor stops every key it is given.
    */
   function onStyleShortcut(event: KeyboardEvent): void {
-    // An open dialog keeps its keys too: the colour picker's own S and G pick blue and pink.
-    if ((event.target as Element).closest?.('[role="dialog"]')) return;
     const action = styleShortcut(event, {
       selected: summary.count,
       tool,
@@ -562,6 +615,16 @@
       typeof localStorage === "undefined" ? undefined : localStorage,
       focusModeEnabled,
     );
+  }
+
+  /**
+   * Zen mode: `Alt+Z`, the palette command and the exit button. Deliberately not persisted
+   * — the oracle keeps it in app state and not in storage either
+   * (`actionToggleZenMode.tsx@1118751f:18-26`), and a board that came back with its chrome
+   * hidden would be a surprise nobody asked for.
+   */
+  function toggleZenMode(): void {
+    zenMode = !zenMode;
   }
 
   let canvasHost: HTMLDivElement | undefined = $state();
@@ -764,8 +827,9 @@
   /**
    * A pasted Mermaid definition goes in as its diagram, at the pointer and with the camera
    * left where it is, as the oracle's paste does (`App.tsx@1118751f:4686-4708`). A definition
-   * that does not convert is pasted as the text it is, the way the engine's own paste would
-   * have taken it.
+   * that does not convert is pasted as the text it is: the oracle warns and falls through to
+   * the same `addTextFromPaste` any other text reaches (`App.tsx@1118751f:4704-4708`), where
+   * this used to re-paste the engine's internal buffer instead — never the definition.
    */
   async function pasteMermaid(target: DrawEngine, text: string): Promise<void> {
     const at = lastPointer ?? viewportCentre();
@@ -773,7 +837,7 @@
     try {
       target.insertJson(sceneJson(await mermaidToElements(text)), world);
     } catch {
-      if (!target.pasteJson(text, world)) target.pasteJson(null, world);
+      if (!target.pasteText(text, world)) target.pasteJson(null, world);
     }
   }
 
@@ -1076,11 +1140,15 @@
       flowchartStripPos = null;
       return;
     }
-    const { sx, sy } = worldToScreen(currentCamera, bounds.x + bounds.width / 2, bounds.y);
-    flowchartStripPos = { x: sx, y: sy };
+    const centre = worldToScreen(currentCamera, bounds.x + bounds.width / 2, bounds.y);
+    flowchartStripPos = { x: centre.x, y: centre.y };
   }
 
-  function chooseFlowchartShape(shape: FlowchartShape): void {
+  function chooseFlowchartShape(shape: ConversionType): void {
+    // The strip is only ever given the three closed shapes, and a node has no arrow
+    // form; a linear type reaching here would be a binding that had drifted, and is
+    // dropped rather than cast into a shape the flowchart does not have.
+    if (isLinearType(shape)) return;
     engine?.flowchartSetShape(shape);
   }
 
@@ -1088,7 +1156,12 @@
   // Escape, a press on the canvas, or a selection left with nothing to switch — and kept
   // under the selection as the camera, the shapes and their type move.
   const SHAPE_SWITCH = "Switch shape";
-  let shapeSwitch = $state<{ x: number; y: number; current: FlowchartShape | null } | null>(null);
+  let shapeSwitch = $state<{
+    x: number;
+    y: number;
+    current: ConversionType | null;
+    types: readonly ConversionType[];
+  } | null>(null);
 
   function onShapeSwitchKey(event: KeyboardEvent): void {
     if (!engine || presenting) return;
@@ -1117,7 +1190,16 @@
       closeShapeSwitch();
       return;
     }
-    shapeSwitch = { ...switchPanelAt(bounds, currentCamera), current: sharedShape(selected) };
+    // The type and the types on offer are the engine's reading of the selection — see
+    // `shapeSwitch.ts`. A selection with nothing switchable closes the panel, as the
+    // oracle's does rather than offering a choice between two families.
+    const current = engine.sharedConversionType();
+    const types = switchTypes(current);
+    if (!types.length) {
+      closeShapeSwitch();
+      return;
+    }
+    shapeSwitch = { ...switchPanelAt(bounds, currentCamera), current, types };
   }
 
   function closeShapeSwitch(): void {
@@ -1650,14 +1732,21 @@
   // Peer-cursor broadcast, rAF-coalesced.
   //
   // This used to run on every raw mousemove — ~120/s on a high-polling mouse — and each
-  // one did `engine.screenToWorld`, which is a WASM call that serialises the camera to
-  // JSON in Rust and parses it back in JS, followed by an unthrottled WebSocket frame.
-  // It also fired while the pointer was merely over the toolbar, because the handler sat
-  // on the outermost chrome div.
+  // one did `engine.screenToWorld`, followed by an unthrottled WebSocket frame. The
+  // arithmetic in that method was TypeScript, and the camera it reads still is not: it
+  // goes through the `camera` getter (`engine/src/engine.ts:70`), which crosses into Rust
+  // for `cameraJson` and parses the camera back out of JSON in JS. It also fired while the
+  // pointer was merely over the toolbar, because the handler sat on the outermost chrome
+  // div.
   //
   // Now: bound to the canvas, at most one computation per frame, skipped entirely when
   // the pointer has not moved a whole pixel, and the camera comes from the `currentCamera`
-  // the engine already pushes to us — so there is no WASM hop at all.
+  // the engine already pushes to us — so `screenToWorld`, the engine's own
+  // `screen_to_world` reached from `@osionos/draw-engine/cameraMath`, needs no camera read
+  // and no `JSON.parse`. The free function rather than the method, for that reason alone:
+  // the method reads the camera through the `camera` getter (`engine/src/engine.ts:70`),
+  // which crosses into Rust for `cameraJson`. It is a WASM call now either way, and a
+  // cheap one — five numbers across and two back, once a frame.
   let cursorRaf = 0;
   let cursorPending: { x: number; y: number } | null = null;
   let lastSent = { x: Number.NaN, y: Number.NaN };
@@ -1684,11 +1773,8 @@
     lastPointer = { x: sx, y: sy };
 
     if (realtime && currentCamera) {
-      // Inverse of the engine's world_to_screen (`wx * scale + camera.x`).
-      cursorPending = {
-        x: (sx - currentCamera.x) / currentCamera.scale,
-        y: (sy - currentCamera.y) / currentCamera.scale,
-      };
+      const world = screenToWorld(currentCamera, sx, sy);
+      cursorPending = { x: world.x, y: world.y };
     }
 
     if (cursorRaf) return;
@@ -1727,10 +1813,7 @@
     const target = e.currentTarget as HTMLElement | null;
     if (!target) return;
     const rect = target.getBoundingClientRect();
-    const next = {
-      x: (e.clientX - rect.left - currentCamera.x) / currentCamera.scale,
-      y: (e.clientY - rect.top - currentCamera.y) / currentCamera.scale,
-    };
+    const next = screenToWorld(currentCamera, e.clientX - rect.left, e.clientY - rect.top);
     lastSent = next;
     realtime.sendCursor(next.x, next.y, "laser", down);
   }
@@ -1757,25 +1840,34 @@
    * They live here rather than in the engine's key handler because they are application
    * actions — open a file, save one, open a dialog — not canvas edits. A menu that
    * prints "Ctrl+O" next to an item and then ignores the key is worse than one that
-   * prints nothing.
+   * prints nothing, which is why the menu below is not in the guard after Escape: the
+   * main menu *is* a `role="menu"` and holds the focus, and these four chords are the
+   * ones it prints (`DrawMainMenu.svelte:193`, `:204`, `:215`, `:314`).
    *
    * Skipped while a text field has focus, so typing in the title or the text editor is
-   * never intercepted.
+   * never intercepted, and while a key lands inside an open *dialog* — which is the
+   * narrower question `insideDialog` asks. `Ctrl+/` used to open the palette on top of
+   * the shortcuts dialog, and `?` to stack a second one.
    */
   function onAppShortcut(event: KeyboardEvent): void {
     if (isTextField(event.target)) return;
 
     const mod = event.metaKey || event.ctrlKey;
     const key = event.key.toLowerCase();
-    // Snap, grid, Present and the palette's own toggle chord are decided by the pure,
-    // tested `appShortcut` (`shortcuts.ts`) — the registry's proof runs real events
-    // through it, which an inline condition here could not offer.
-    const shortcut = appShortcut(event, presenting);
+    // Snap, grid, Present, zen mode and the palette's own toggle chord are decided by the
+    // pure, tested `appShortcut` (`shortcuts.ts`) — the registry's proof runs real events
+    // through it, which an inline condition here could not offer. `keyTarget` is the same
+    // question `onStyleShortcut` asks, and it is what keeps a chord out of a field.
+    const shortcut = appShortcut(event, presenting, keyTarget(event.target));
 
     if (event.key === "Escape") {
       // The engine lets the eraser's marks go on the same key; the trail goes with them.
+      // Left out of the guard below on purpose: Escape is how an overlay is dismissed,
+      // and `DrawModals.svelte` decides which one, innermost first.
       eraserTrail.stop();
       activeEmbed = null;
+    } else if (insideDialog(event.target)) {
+      return;
     } else if (mod && event.shiftKey && key === "e") {
       event.preventDefault();
       showExport = true;
@@ -1787,30 +1879,69 @@
     } else if (mod && key === "s") {
       event.preventDefault();
       saveAsFile();
-    } else if (shortcut === "snap") {
-      // Excalidraw's `Alt+S` (`actionToggleObjectsSnapMode.tsx`).
-      event.preventDefault();
-      flipObjectsSnap();
-    } else if (shortcut === "grid") {
-      // Excalidraw's grid shortcut.
-      event.preventDefault();
-      pickGrid({ enabled: !grid.enabled });
+    } else if (shortcut) {
+      runAppShortcut(shortcut, event);
     } else if (!mod && event.key === "?") {
       event.preventDefault();
       showShortcuts = true;
-    } else if (shortcut === "present") {
-      // Was Ctrl/Cmd+Shift+P; the palette (Track B, Part 1) takes that chord now, matching
-      // the oracle (`CommandPalette.tsx@1118751f:145-146`). Ctrl/Cmd+Alt+P is unused in the
-      // oracle's own keymap and not reserved by Chrome or Firefox — the same kind of chord
-      // this project already trusts for copy/paste styles (Ctrl/Cmd+Alt+C/V).
-      event.preventDefault();
-      void enterPresent();
-    } else if (shortcut === "palette") {
-      // Ctrl/Cmd+/ and Ctrl/Cmd+Shift+P open the command palette — the oracle's own
-      // toggle chord (`CommandPalette.tsx@1118751f:145-146`), free for this once Present
-      // moved to Ctrl/Cmd+Alt+P above.
-      event.preventDefault();
-      showPalette = true;
+    }
+  }
+
+  /**
+   * What each of `appShortcut`'s verdicts does. Split out of `onAppShortcut` because that
+   * chain had outgrown the line budget, and because this is the whole of the mapping from
+   * a name to an action. It is total by way of the `never` default below, not by way of
+   * the `switch`: a bare `switch` over a string union compiles fine with a member missing.
+   *
+   * The chords that are not in the registry stay inline in `onAppShortcut`, because they
+   * touch the filesystem or open a dialog this registry does not describe.
+   */
+  function runAppShortcut(shortcut: AppShortcut, event: KeyboardEvent): void {
+    event.preventDefault();
+    switch (shortcut) {
+      case "snap":
+        // Excalidraw's `Alt+S` (`actionToggleObjectsSnapMode.tsx`).
+        flipObjectsSnap();
+        break;
+      case "grid":
+        // Excalidraw's grid shortcut.
+        pickGrid({ enabled: !grid.enabled });
+        break;
+      case "zen":
+        // Excalidraw's `Alt+Z` (`actionToggleZenMode.tsx@1118751f:34-35`). Host-only: it hides
+        // chrome and leaves the canvas, the camera and the scene alone.
+        toggleZenMode();
+        break;
+      case "copyAsPng":
+        // The oracle's own chord, C with Alt and Shift
+        // (`actionClipboard.tsx@1118751f:250`), and its chord for the raster only —
+        // `actionCopyAsSvg` declares none. A promise, not a wait: the key is released long
+        // before the browser has encoded the canvas, and holding the handler would let a
+        // second chord queue behind a copy.
+        void copyToClipboard("png");
+        break;
+      case "present":
+        // Was Ctrl/Cmd+Shift+P; the palette (Track B, Part 1) takes that chord now, matching
+        // the oracle (`CommandPalette.tsx@1118751f:145-146`). Ctrl/Cmd+Alt+P is unused in the
+        // oracle's own keymap and not reserved by Chrome or Firefox — the same kind of chord
+        // this project already trusts for copy/paste styles (Ctrl/Cmd+Alt+C/V).
+        void enterPresent();
+        break;
+      case "palette":
+        // Ctrl/Cmd+/ and Ctrl/Cmd+Shift+P, the oracle's own toggle chord
+        // (`CommandPalette.tsx@1118751f:145-146`), free for this once Present moved to
+        // Ctrl/Cmd+Alt+P.
+        showPalette = true;
+        break;
+      default: {
+        // A `switch` over a string union with no `default` is NOT an exhaustiveness check:
+        // add a member to `AppShortcut` and this still compiles, silently dropping the
+        // chord. `const unhandled: never = shortcut` is what actually makes it an error
+        // (TS2322), and the throw is unreachable — it is here so the failure names the
+        // verdict rather than arriving as silence.
+        const unhandled: never = shortcut;
+        throw new Error(`shortcutRegistry: no app shortcut runs "${unhandled}"`);
+      }
     }
   }
 
@@ -1845,6 +1976,7 @@
     toggleGrid: () => pickGrid({ enabled: !grid.enabled }),
     toggleObjectsSnap: flipObjectsSnap,
     toggleFocusMode,
+    toggleZenMode,
     openExport: () => (showExport = true),
     openTemplates: () => (showTemplates = true),
     openMermaid: () => (showMermaid = true),
@@ -1866,6 +1998,7 @@
     },
     copyStyles,
     stepFontSize,
+    vectorize: (id) => (vectorizeId = id),
   });
   const paletteCommands = $derived(showPalette ? buildCommands(paletteHost()) : []);
 </script>
@@ -2098,6 +2231,7 @@
         x={shapeSwitch.x}
         y={shapeSwitch.y}
         current={shapeSwitch.current}
+        types={shapeSwitch.types}
         onChoose={(shape) => {
           engine?.convertSelection(shape);
           placeShapeSwitch();
@@ -2189,6 +2323,7 @@
     <DrawToolbar
       active={tool}
       {toolLocked}
+      {zenMode}
       onSelect={handleToolSelect}
       onToggleToolLock={() => {
         if (!engine) return;
@@ -2198,7 +2333,7 @@
     />
   {/if}
 
-  {#if panelVisible && !presenting}
+  {#if panelVisible && !presenting && chromeVisible("inspector", zenMode)}
     <DrawInspector
       {summary}
       can={shapeActions}
@@ -2223,10 +2358,38 @@
   {/if}
 
   {#if !presenting}
-    <DrawZoomBar {engine} {zoom} {contentVisible} onFit={zoomToFit} />
+    <DrawZoomBar {engine} {zoom} {contentVisible} {zenMode} onFit={zoomToFit} />
   {/if}
 
-  {#if showPath && !presenting}
+  <!--
+    The way out of zen mode, and the reason the feature is not a trap.
+
+    Alt+Z is a chrome chord, and a chrome chord is exactly what the guard refuses while a
+    field or a dialog holds the focus — so a person part-way through a text box cannot
+    toggle zen mode off, which is right, and would also be stranded if this button were not
+    here. The oracle answers it the same way (`Actions.tsx@1118751f:915-931`,
+    `LayerUI.scss@1118751f:68-90`): a button that exists only while the flag is on, in the
+    corner the hidden panels came from.
+
+    Hidden while presenting, and paired with `!presenting` on the chord in `appShortcut`.
+    Presenting hides the exit button, the palette and the main menu, so a flag that could
+    be set from in there would have no way out at all; refusing the chord while presenting
+    is what makes the gap harmless. Zen mode entered *before* Present survives it and the
+    button is back on leaving, which is coherent: the chrome comes back, still in zen.
+  -->
+  {#if zenMode && !presenting && chromeVisible("exitZenMode", zenMode)}
+    <button
+      type="button"
+      class="exit-zen-mode"
+      aria-label="Exit zen mode (Alt+Z)"
+      title="Exit zen mode — Alt+Z"
+      onclick={toggleZenMode}
+    >
+      Exit zen mode
+    </button>
+  {/if}
+
+  {#if showPath && !presenting && chromeVisible("pathPanel", zenMode)}
     <DrawPathPanel
       stops={pathStops}
       onVisit={visitStop}
@@ -2303,7 +2466,11 @@
       bind:showShortcuts
       bind:showPalette
       {paletteCommands}
+      {paletteRecentId}
+      bind:vectorizeId
+      onPaletteRun={(id) => (paletteRecentId = id)}
       onCopyStyles={copyStyles}
+      onCopyToClipboard={(format) => void copyToClipboard(format)}
       onFit={zoomToFit}
       onEditEmbedLink={(id) => {
         const url = embedFrames.find((frame) => frame.id === id)?.url;

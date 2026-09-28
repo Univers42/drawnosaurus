@@ -161,6 +161,42 @@ describe("registry integrity", () => {
     expect(total).toBe(SHORTCUT_REGISTRY.length);
     expect(new Set(groups.map((g) => g.section)).size).toBe(groups.length);
   });
+
+  it("binds Alt+Z once, and no other entry claims the key", () => {
+    const claiming = SHORTCUT_REGISTRY.filter((e) => e.chords.includes("Alt+Z"));
+    expect(claiming.map((e) => e.id)).toEqual(["view.zenMode"]);
+  });
+
+  it("wires Alt+Z the way a browser reports it, so the proof below is the real chord", () => {
+    // The literal in `zen.test.ts`, tied to this file's own parser — one chord, one
+    // description of it, or the two files drift into testing different keys.
+    expect(parseChord(entry("view.zenMode").chords[0]!)).toEqual({
+      key: "z",
+      code: "KeyZ",
+      ctrlKey: false,
+      metaKey: false,
+      altKey: true,
+      shiftKey: false,
+    });
+  });
+
+  it("leaves Alt+Z to the chrome: no other handler in the app answers it", () => {
+    // Shadowing is the failure that hides itself — the chord is printed, the registry entry
+    // is proven, and the key silently does something else. So the engine and each of the
+    // chrome's own handlers are asked directly, and every one of them must decline.
+    const chord = entry("view.zenMode").chords[0]!;
+    const parsed = parseChord(chord);
+
+    const { engine, calls } = recording();
+    expect(dispatchKeyDown(session(engine), keyEvent(chord))).toBe("pass");
+    expect(calls).toEqual([]);
+
+    expect(
+      styleShortcut(parsed, { selected: 1, tool: "select", strokeRow: true, backgroundRow: true }),
+    ).toBeNull();
+    expect(switchKey(parsed, { open: false, switchable: true, onBoard: true })).toBeNull();
+    expect(presentKeyAction(parsed.key)).toBeNull();
+  });
 });
 
 describe("tool chords activate the right tool", () => {
@@ -453,6 +489,14 @@ describe("style chords (owned by the chrome, ahead of the engine)", () => {
   });
 });
 
+/** The context `styleShortcut` wants: a selection, with both rows present. */
+const ON_THE_BOARD = {
+  selected: 1,
+  tool: "select",
+  strokeRow: true,
+  backgroundRow: true,
+};
+
 describe("app chords (owned by the chrome)", () => {
   it("Alt+S toggles snap", () => {
     expect(appShortcut(parseChord(entry("view.snap").chords[0]!), false)).toBe("snap");
@@ -472,6 +516,97 @@ describe("app chords (owned by the chrome)", () => {
     const chord = entry("presentation.enter").chords[0]!;
     expect(appShortcut(parseChord(chord), false)).toBe("present");
     expect(appShortcut(parseChord(chord), true)).toBeNull();
+  });
+
+  it("Alt+Z toggles zen mode", () => {
+    const chord = entry("view.zenMode").chords[0]!;
+    expect(chord).toBe("Alt+Z");
+    expect(appShortcut(parseChord(chord), false)).toBe("zen");
+  });
+
+  it("Alt+Shift+C copies as PNG, and only that", () => {
+    // The oracle's own chord, for the raster alone: `keyTest: (event) => event.code ===
+    // CODES.C && event.altKey && event.shiftKey` (`actionClipboard.tsx@1118751f:250`).
+    // `actionCopyAsSvg` has **no** `keyTest` at all (`:124-190` ends at `keywords`), so the
+    // vector is a menu entry and not a chord — and that asymmetry is the oracle's, so the
+    // registry carries one entry here rather than two.
+    const chord = entry("editor.copyAsPng").chords[0]!;
+    expect(chord).toBe("Alt+Shift+C");
+    expect(appShortcut(parseChord(chord), false)).toBe("copyAsPng");
+  });
+
+  it("binds Alt+Shift+C once, and no other entry claims the key", () => {
+    const claiming = SHORTCUT_REGISTRY.filter((e) => e.chords.includes("Alt+Shift+C"));
+    expect(claiming.map((e) => e.id)).toEqual(["editor.copyAsPng"]);
+  });
+
+  it("leaves Ctrl/Cmd+Alt+C to copy styles, which the oracle also keeps there", () => {
+    // `actionStyles.ts@1118751f:78-79` is `CTRL_OR_CMD && altKey && code === C`. The oracle
+    // gives that chord **no shift test** and the copy-as-PNG test **no Ctrl/Cmd test**, so
+    // on Ctrl+Alt+Shift+C both `keyTest`s match — and `handleKeyDown` then refuses to
+    // choose: `if (data.length !== 1) { … return false }` with a
+    // "Canceling as multiple actions match this shortcut" warning
+    // (`actions/manager.tsx@1118751f:114-119`). The oracle's own answer to the four-key
+    // chord is *nothing at all*.
+    //
+    // Ours has to pick one, because `appShortcut` is a first-match chain rather than a
+    // filter. Copy styles wins, on the same `mod` guard zen mode and snap already use
+    // (`shortcuts.ts`): the chord with the modifier nobody asked for is not taken. That is
+    // a divergence from a no-op, and it is the smallest one available — reproducing "nothing
+    // happens" would mean a chord that is printed and does nothing, which this file's own
+    // `view.zenMode` comment calls worse than printing nothing.
+    // Ctrl held as well: the four-key press, which is the only one both `keyTest`s can
+    // match. `parseChord` reads the registry's own chord, so Ctrl is added here rather
+    // than written as a second literal.
+    const four = { ...parseChord(entry("editor.copyAsPng").chords[0]!), ctrlKey: true };
+    expect(appShortcut(four, false), "the app chord must not take it").toBeNull();
+    expect(styleShortcut(four, ON_THE_BOARD)).toBe("copyStyles");
+    // And the three-key press is still the copy, with Ctrl absent.
+    const three = parseChord(entry("editor.copyAsPng").chords[0]!);
+    expect(appShortcut(three, false)).toBe("copyAsPng");
+    expect(styleShortcut(three, ON_THE_BOARD)).toBeNull();
+  });
+
+  it("declines the copy chord wherever a field is holding the focus", () => {
+    const chord = entry("editor.copyAsPng").chords[0]!;
+    for (const target of ["textEditor", "field"] as const) {
+      expect(appShortcut(parseChord(chord), false, target), target).toBeNull();
+    }
+  });
+
+  it("Alt+Z is declined wherever a field is holding the focus", () => {
+    // The oracle's own guard: `App.tsx@1118751f:5516` wraps its key dispatch in
+    // `if (!isInputLike(event.target))`, so no chord fires while a field has the focus.
+    // `zen.ts` holds the inventory; this holds the trap shut.
+    const chord = entry("view.zenMode").chords[0]!;
+    for (const target of ["textEditor", "field"] as const) {
+      expect(appShortcut(parseChord(chord), false, target), target).toBeNull();
+    }
+  });
+
+  it("Alt+Z does not toggle while presenting, where the way out of it is hidden", () => {
+    // `!presenting`, as the present chord above carries. Presenting hides the exit button
+    // and the palette, so a flag set from in there is on with nothing to clear it.
+    const chord = entry("view.zenMode").chords[0]!;
+    expect(appShortcut(parseChord(chord), true)).toBeNull();
+  });
+
+  it("Alt+Z is still reachable from inside a menu, which prints its own chords", () => {
+    // The regression this registry's guard caused when the zen chord brought a `KeyTarget`
+    // along: `overlay` covers `[role="menu"]`, and the main menu prints `Alt+S` and
+    // `Ctrl+Alt+P` beside its items. The two chords below are the ones it took with it.
+    const chord = entry("view.zenMode").chords[0]!;
+    expect(appShortcut(parseChord(chord), false, "overlay")).toBe("zen");
+
+    const snap = entry("view.snap").chords[0]!;
+    const present = entry("presentation.enter").chords[0]!;
+    expect(appShortcut(parseChord(snap), false, "overlay"), "Alt+S from the main menu").toBe(
+      "snap",
+    );
+    expect(
+      appShortcut(parseChord(present), false, "overlay"),
+      "Ctrl+Alt+P from the main menu",
+    ).toBe("present");
   });
 });
 
@@ -523,6 +658,7 @@ describe("the command palette prints this registry's own text", () => {
     toggleGrid: () => {},
     toggleObjectsSnap: () => {},
     toggleFocusMode: () => {},
+    toggleZenMode: () => {},
     openExport: () => {},
     openTemplates: () => {},
     openMermaid: () => {},
@@ -533,7 +669,7 @@ describe("the command palette prints this registry's own text", () => {
     // Everything selected and every panel row shown, so every element command is printed.
     selection: {
       can: new Proxy({} as ShapeActions, { get: () => true }),
-      element: { locked: false, multi: true, grouped: false },
+      element: { locked: false, multi: true, grouped: false, vectorizeId: null },
       switchable: true,
     },
     run: () => {},
@@ -542,6 +678,7 @@ describe("the command palette prints this registry's own text", () => {
     openShapeSwitch: () => {},
     copyStyles: () => {},
     stepFontSize: () => {},
+    vectorize: () => {},
   };
   const commands = buildCommands(host);
 
@@ -581,6 +718,7 @@ describe("the command palette prints this registry's own text", () => {
     "view:zoomToSelection": "view.zoomToFitSelection",
     "view:grid": "view.grid",
     "view:snap": "view.snap",
+    "view:zenMode": "view.zenMode",
     "view:present": "presentation.enter",
   };
 
