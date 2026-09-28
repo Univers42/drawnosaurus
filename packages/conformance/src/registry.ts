@@ -466,6 +466,19 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [
       `${ENGINE}/ci_arrowhead_oracle.rs`,
+      // The line was already covered by ci_arrowhead_oracle.rs, which holds every head's
+      // numbers to 1e-9. That is a *picture* comparison: it says the rendering matches a
+      // fixture and says nothing about the relationships between the ten values.
+      // `ci_cardinality_props.rs` is the half that is not a picture -- distinctness across
+      // the set, equivariance under translating and under turning the line about its own
+      // endpoint, and the legacy fold.
+      //
+      // The fold is `dot` -> `circle`, `crowfoot_one` -> `cardinality_one`,
+      // `crowfoot_many` -> `cardinality_many`, `crowfoot_one_or_many` ->
+      // `cardinality_one_or_many`, pinned through `load_scene` and `export_json`. Two tests
+      // rather than one, because a fix handling only the `crowfoot_*` spellings passes one
+      // and silently loses `dot`.
+      `${ENGINE}/ci_cardinality_props.rs`,
       `${WEB}/draw-chrome/menu.test.ts`,
       "e2e/arrowheads.spec.ts",
     ],
@@ -1349,15 +1362,28 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: ["engine/crates/draw-engine/src/selection/linear.rs"],
   },
-  // Not to be confused with the 45°-angle constrain the section rule below's ci_snapping.rs
-  // genuinely tests (constrain_to_angle) — this is a line's own endpoint snapping to a
-  // *nearby element*, and nothing in the crate computes that; a line does not even bind
-  // (see the rule above), let alone snap short of binding.
+  // The comment this replaces said "nothing in the crate computes that", which was true and was
+  // the wrong reason: it read as a missing feature here rather than an absent one in the oracle.
+  // 5.2 walked the call graph and the oracle has **no endpoint-to-element snapping at all**.
+  //
+  // Placing a line's preview point reaches `handlePointDragging` at `App.tsx@1118751f:11253` and
+  // dragging an existing endpoint reaches **the same function** at `:10853`, so the oracle does
+  // share the helper and both gestures answer alike. Its transitive closure — `createPointAt`,
+  // `_getShiftLockedDelta`, `pointDraggingUpdates`, `movePoints`, `_updatePoints` — contains
+  // **zero** calls into `snapping.ts`, and `maybeCacheReferenceSnapPoints`, the only writer of the
+  // snap cache, is called at `:11095`, `:13381`, `:13505` and `:13623`, none of them on this path.
+  //
+  // What it *does* snap to is two things, in order: the grid, per axis (`getGridPoint`,
+  // `linearElementEditor.ts:1468`), then the angle lock (`getLockedLinearCursorAlignSize`,
+  // `:1895-1935`, which grid-snaps first at `:1916`). `getSnapLinesAtPointer` is gated on
+  // `isActiveToolNonLinearSnappable` (`:1402-1414`) and lists rect/ellipse/diamond/frame/
+  // magicframe/image/text — not `line`, not `selection`. And the reachable candidate generators
+  // use bounding-box corners and centres (`snapping.ts:198-313`), not points or midpoints.
   {
     section: "6. Line",
     text: /^Endpoint snapping$/,
     status: "gap",
-    why: "No snap-to-object exists for a line's own endpoint while drawing or dragging it; only the move-selection alignment guides (ci_snapping.rs) and the 45° draw constraint (draw_binding.rs) exist.",
+    why: "not in the oracle — a line's endpoint snaps to the grid and then to the angle lock, and to nothing else, so there is no endpoint-to-object snapping to port. The reach is a per-axis round(v/size)*size with no distance at all, so the diagonal is size/2·√2. Implemented as snap_gesture beside snap (engine/mod.rs), and pinned with a Q/R pair per case: same gesture, grid on, snapping without Ctrl and landing on the raw pointer with it.",
   },
   {
     section: "6. Line",
@@ -1910,11 +1936,28 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_geometry.rs`],
   },
+  // The `why` this replaces said `rotate_element` takes only the pointer position and that a
+  // rotation is never quantised. 5.2 established that the two halves are in *different places* and
+  // that the brief placing the divergence in the rotation path was wrong:
+  //
+  // - `SHIFT_LOCKING_ANGLE = Math.PI / 12` — **15°** (`constants.ts@1118751f:31`), used by
+  //   `sizeHelpers.ts:196-197`. Ours steps by `PI/4` (`interaction/linear_drag.rs:17`) and has
+  //   **four** call sites, all line gestures: `pointer_move.rs:399`, `multi_linear.rs:279`,
+  //   `linear_drag.rs:32`, `elbow.rs:87`. `selection/transform.rs` calls none of them.
+  // - and there is a second divergence beside it: the oracle keeps the length by intersecting
+  //   the locked ray with the perpendicular through the cursor (`sizeHelpers.ts:236-250`) and
+  //   zeroes one component for horizontal and vertical (`:229-234`); we rotate the delta. They
+  //   agree only when already locked.
+  //
+  // Both are left standing deliberately and no test depends on either. 5.2's own first angle test
+  // asserted "a multiple of 45°" and would have pinned the divergence as the reference; it was
+  // replaced with 15°, which every 45 is a multiple of, so the test survives the eventual fix and
+  // fails on an unquantised angle.
   {
     section: "15. Transform engine",
     text: /^(Angle snapping|Shift angle locking)$/,
     status: "gap",
-    why: "rotate_element (selection/transform.rs) takes only the pointer position — no modifier or snap increment reaches it, so a rotation is never quantised.",
+    why: "45° where the oracle has 15° (SHIFT_LOCKING_ANGLE = PI/12, constants.ts@1118751f:31) — in interaction/linear_drag.rs for the four line gestures, not in selection/transform.rs, which calls none of them. Beside it, the oracle keeps the length by projecting onto the locked ray (sizeHelpers.ts:236-250) where we rotate the delta. Two divergences, both owned by the owner.",
   },
   // Rotating a multi-element selection together — the concrete case is bound arrows staying
   // attached through the turn, which needs every member to have turned, not just one shape.
