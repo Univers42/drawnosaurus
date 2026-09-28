@@ -200,12 +200,95 @@ instead is what makes the divergence unrepresentable.
 that used a stored box would crop a turned element's corners. Not this task's; recorded here
 because it is the same mistake in a different place.
 
+## Copy as PNG / as SVG
+
+The oracle's two copy actions are `actionCopyAsPng` (`actionClipboard.tsx@1118751f:192`) and
+`actionCopyAsSvg` (`:124`). Both call `prepareElementsForExport(elements, appState, true)` —
+the literal `true`, in both — so **a copy is the export scope, unchanged**, and there is no
+third mode and no flag to forget. With nothing selected that is the whole scene
+(`data/index.ts@1118751f:56-58, 61-69`), exactly as for a file, and a lone selected frame is
+a frame export.
+
+Three questions a _file_ never asks, all answered in the engine (`export/clipboard.rs`):
+
+- **the MIME type** — `image/png` for the raster, and **`text/plain`** for the vector, not
+  `image/svg+xml`: the oracle writes the string as text because `navigator.clipboard.write`
+  "doesn't work with non-standard mime types" (`clipboard.ts@1118751f:622-625`).
+- **whether to write at all** — the oracle's `predicate`
+  (`actionClipboard.tsx@1118751f:186-188, 247-249`). The browser's half is a fact the host
+  reports (`probablySupportsClipboardBlob`, `clipboard.ts@1118751f:68-72`); the verdict is
+  the motor's, the same way `ExportOptions`'s default scale is decided from a device pixel
+  ratio the engine cannot see (`export/png.rs:51-55`).
+- **what was copied** — the toast's one word, `"selection"` or `"scene"`, carried by
+  `ExportScope::kind` rather than re-derived by the front from its own `selectedCount`,
+  which is not the same number: a selection of ids that are not on the board is not a
+  selection (`selection.ts@1118751f:141-143`).
+
+`ClipboardCopy` **carries its `ExportScope`** rather than a kind alone. Only a browser can
+encode a canvas, so the raster has to be finished by the host, and a copy that handed back
+only a word would send the host to `export_scope` for the elements — a second element-list
+decision, in the one module whose reason to exist is that the two agree.
+
+### The failure path, which is the whole point
+
+The oracle reports every way this can fail and none of them quietly: `exportCanvas` rethrows
+for the vector (`data/index.ts@1118751f:151-159`) and classifies the raster's into three —
+too big, a Firefox `ClipboardItem` that is not defined, and the generic case (`:194-213`) —
+and both actions' `catch` puts the message on screen (`actionClipboard.tsx@1118751f:176-184,
+236-245`). `apps/web/src/lib/draw-chrome/clipboard.ts` is the host side of that, and
+**`copied` is reachable only after the browser has accepted the payload**.
+
+The two formats are not symmetric, and it is not in _whether_ they report: in English the
+oracle's two generic messages are the **same string** (`locales/en.json@1118751f:278` and
+`:320`), so the difference is that the raster can also say _why_ — `too-big` is that branch,
+and the only one a person can act on.
+
+A refused copy carries **which** of the two reasons it was refused, because the oracle says
+two different things about the two: a browser that cannot take the payload makes the menu
+entry **absent** (`ContextMenu.tsx@1118751f:38-48` filters on `predicate`), while an empty
+board leaves the entry visible and reports `alerts.cannotExportEmptyCanvas`
+(`data/index.ts@1118751f:120-122`) — the key path never consults `predicate` at all, only
+`keyTest` (`actions/manager.tsx@1118751f:98-112`).
+
+The oracle's Safari quirk is a **success** path, not a failure one: the `ClipboardItem` has
+to be built in the same tick or the browser complains about lack of user intent
+(`clipboard.ts@1118751f:558-563`), which is why the host awaits the blob and builds the item
+synchronously.
+
+### The chord, and the one place we differ
+
+`Alt+Shift+C` is the oracle's own chord, **for the raster alone**:
+`event.code === CODES.C && event.altKey && event.shiftKey` (`actionClipboard.tsx@1118751f:250`).
+`actionCopyAsSvg` declares **no `keyTest` at all** (`:124-190` ends at `keywords`), so
+copy-as-SVG is a menu entry and not a chord.
+
+**Divergence, deliberate:** that `keyTest` has no Ctrl/Cmd condition and copy styles' has no
+Shift condition (`actionStyles.ts@1118751f:78-79`), so on `Ctrl+Alt+Shift+C` both match — and
+the oracle's `handleKeyDown` refuses to choose, logging "Canceling as multiple actions match
+this shortcut" and returning false (`actions/manager.tsx@1118751f:114-119`). **The oracle's
+answer to the four-key chord is that nothing happens at all.** Ours is a first-match chain,
+not a filter, so the copy chord carries `!mod` (the guard zen mode and snap already use) and
+the four-key press copies styles. Reproducing a no-op would mean advertising a chord that
+does nothing.
+
+### Known limits
+
+- The toast omits the oracle's colour-scheme clause (`locales/en.json@1118751f:575-576`,
+  "…({{exportColorScheme}})"). It reads `appState.exportWithDarkMode`, which is always false
+  by default, and printing "(light mode)" would state a fact this engine has no dark-mode
+  export for. The clause arrives with that feature.
+- The raster's **Firefox hint** (`hints.firefox_clipboard_write`) is not reproduced; the
+  generic message is. It is a string for one browser, and a host that cannot tell which
+  browser refused has nothing to attach it to.
+- The copy takes no scale or transparent-background option: it uses `ExportOptions::default`,
+  the picture the file export produces with its dialog untouched. The oracle passes its live
+  `appState` through, so it honours whatever the export dialog was last set to — which for a
+  person who never opened it is the same default.
+
 ## What is not here yet
 
 Phase 4's other export tasks, and what each would need:
 
-- **4.3, the clipboard.** `exportPng` resolves a `Blob` and stops. The clipboard is the
-  host's (§2), so this needs a menu entry and nothing in the engine changes.
 - **4.4, the round trip.** A `tEXt` chunk holding the scene JSON. Not started, and it needs
   a different hand-off than 4.1's — see above, the `Blob` a `toBlob` returns cannot be
   modified.
@@ -229,7 +312,28 @@ Phase 4's other export tasks, and what each would need:
   camera, framing a frame by its contents, dropping the `isSomeElementSelected` half of the
   guard and reversing the `includeElementsInFrames` direction each fail them, and each of
   those four was run.
+- `crates/draw-engine/tests/ci_export_clipboard.rs` — the four decisions: the type, the
+  predicate, the scope, and which of the two reasons a copy was refused. Natively.
+- `crates/draw-engine/tests/ci_export_clipboard_props.rs` — the invariant, over 200 seeded
+  corpora and **every** subset of each as a selection: the clipboard's text is byte-identical
+  to the file export's, the scope word matches an independent restatement of
+  `isSomeElementSelected`, a frame is measured by its own box, a turned element by what it
+  draws, and a declined copy carries nothing. All four were mutation-checked — a clipboard
+  that decided its own scope, a frame reported as the scene, bounds measured unrotated and a
+  declined copy claiming success each fail one, and one of those two failures is what
+  changed the scope assertion in this list.
 - `apps/web/src/lib/draw-chrome/exportParity.test.ts` — that the front holds none of it.
+- `apps/web/src/lib/draw-chrome/clipboard.test.ts` — the host's side, including every
+  failure: a refused write, a browser with no clipboard, an empty board and a canvas too
+  large to encode, each asserted to produce a _sentence_ and never a silent success.
+- `e2e/copyAsImage.spec.ts` — that the copy reaches a real clipboard. `write` is
+  **recorded and then delegated**, so the type is observed at the moment of the write (an
+  `image/png` cannot be read back in headless Chromium) while the app's success path stays
+  real; the vector is read back off the OS clipboard outright. Permissions are the
+  `context.grantPermissions(["clipboard-read", "clipboard-write"])` on 127.0.0.1 that
+  `e2e/clipboard.spec.ts:51-53` already uses, and no assertion in the file depends on the
+  grant being honoured — a stub that swallowed the write would still be recorded, and the
+  real write failing shows as a reported failure rather than a pass.
 - `e2e/exportPng.spec.ts` — that the numbers reach the pixels: the real dialog, the real
   chips, the downloaded file's own IHDR for the size, its own corner pixel for the
   background, and its own middle pixel for the scale — a 3x export that is a 3x canvas

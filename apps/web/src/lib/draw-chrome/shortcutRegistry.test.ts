@@ -489,6 +489,14 @@ describe("style chords (owned by the chrome, ahead of the engine)", () => {
   });
 });
 
+/** The context `styleShortcut` wants: a selection, with both rows present. */
+const ON_THE_BOARD = {
+  selected: 1,
+  tool: "select",
+  strokeRow: true,
+  backgroundRow: true,
+};
+
 describe("app chords (owned by the chrome)", () => {
   it("Alt+S toggles snap", () => {
     expect(appShortcut(parseChord(entry("view.snap").chords[0]!), false)).toBe("snap");
@@ -514,6 +522,56 @@ describe("app chords (owned by the chrome)", () => {
     const chord = entry("view.zenMode").chords[0]!;
     expect(chord).toBe("Alt+Z");
     expect(appShortcut(parseChord(chord), false)).toBe("zen");
+  });
+
+  it("Alt+Shift+C copies as PNG, and only that", () => {
+    // The oracle's own chord, for the raster alone: `keyTest: (event) => event.code ===
+    // CODES.C && event.altKey && event.shiftKey` (`actionClipboard.tsx@1118751f:250`).
+    // `actionCopyAsSvg` has **no** `keyTest` at all (`:124-190` ends at `keywords`), so the
+    // vector is a menu entry and not a chord — and that asymmetry is the oracle's, so the
+    // registry carries one entry here rather than two.
+    const chord = entry("editor.copyAsPng").chords[0]!;
+    expect(chord).toBe("Alt+Shift+C");
+    expect(appShortcut(parseChord(chord), false)).toBe("copyAsPng");
+  });
+
+  it("binds Alt+Shift+C once, and no other entry claims the key", () => {
+    const claiming = SHORTCUT_REGISTRY.filter((e) => e.chords.includes("Alt+Shift+C"));
+    expect(claiming.map((e) => e.id)).toEqual(["editor.copyAsPng"]);
+  });
+
+  it("leaves Ctrl/Cmd+Alt+C to copy styles, which the oracle also keeps there", () => {
+    // `actionStyles.ts@1118751f:78-79` is `CTRL_OR_CMD && altKey && code === C`. The oracle
+    // gives that chord **no shift test** and the copy-as-PNG test **no Ctrl/Cmd test**, so
+    // on Ctrl+Alt+Shift+C both `keyTest`s match — and `handleKeyDown` then refuses to
+    // choose: `if (data.length !== 1) { … return false }` with a
+    // "Canceling as multiple actions match this shortcut" warning
+    // (`actions/manager.tsx@1118751f:114-119`). The oracle's own answer to the four-key
+    // chord is *nothing at all*.
+    //
+    // Ours has to pick one, because `appShortcut` is a first-match chain rather than a
+    // filter. Copy styles wins, on the same `mod` guard zen mode and snap already use
+    // (`shortcuts.ts`): the chord with the modifier nobody asked for is not taken. That is
+    // a divergence from a no-op, and it is the smallest one available — reproducing "nothing
+    // happens" would mean a chord that is printed and does nothing, which this file's own
+    // `view.zenMode` comment calls worse than printing nothing.
+    // Ctrl held as well: the four-key press, which is the only one both `keyTest`s can
+    // match. `parseChord` reads the registry's own chord, so Ctrl is added here rather
+    // than written as a second literal.
+    const four = { ...parseChord(entry("editor.copyAsPng").chords[0]!), ctrlKey: true };
+    expect(appShortcut(four, false), "the app chord must not take it").toBeNull();
+    expect(styleShortcut(four, ON_THE_BOARD)).toBe("copyStyles");
+    // And the three-key press is still the copy, with Ctrl absent.
+    const three = parseChord(entry("editor.copyAsPng").chords[0]!);
+    expect(appShortcut(three, false)).toBe("copyAsPng");
+    expect(styleShortcut(three, ON_THE_BOARD)).toBeNull();
+  });
+
+  it("declines the copy chord wherever a field is holding the focus", () => {
+    const chord = entry("editor.copyAsPng").chords[0]!;
+    for (const target of ["textEditor", "field"] as const) {
+      expect(appShortcut(parseChord(chord), false, target), target).toBeNull();
+    }
   });
 
   it("Alt+Z is declined wherever a field is holding the focus", () => {

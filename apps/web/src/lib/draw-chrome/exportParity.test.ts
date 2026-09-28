@@ -230,6 +230,10 @@ const FRONT_NUMBER_PATTERNS: ReadonlyArray<{ what: string; find: RegExp }> = [
   { what: "a number passed to exportSvg", find: /exportSvg\(\s*-?\d/ },
   { what: "a padding defaulted in the wrapper", find: /exportSvg\(\s*padding\s*=\s*-?\d/ },
   { what: "a number passed to exportPng", find: /exportPng\(\s*-?\d/ },
+  // The clipboard copy is a second door to the same export, so it is the same question: the
+  // type, the size and the scope all come from `engine.clipboardCopy`, and a number at this
+  // call would be the front choosing a margin or a scale for a picture it does not measure.
+  { what: "a number passed to clipboardCopy", find: /clipboardCopy\(\s*-?\d/ },
 ];
 
 /**
@@ -466,6 +470,30 @@ describe("the wrapper the front calls", () => {
     }
     expect(svgCalls.join("\n")).toMatch(/options\.selectionOnly/);
     expect(calls.join("\n")).toMatch(/options\.selectionOnly/);
+  });
+
+  it("gives the clipboard copy's type, size and scope no route through the front", () => {
+    // The clipboard is a third door to the same export, and it is the one with the most to
+    // get wrong: a host that named its own MIME type would paste into nothing, and one that
+    // chose a scope would have a second element-list decision that happens to agree today.
+    // So the wrapper is read the same way the two exports are, and the call it forwards is
+    // a format name and the browser's two capabilities — nothing that sizes anything.
+    const clipboardCalls = callWindows(lines, "this.inner.clipboardCopy(");
+    expect(
+      clipboardCalls.length,
+      "engine/src/engine.ts should call the clipboardCopy binding",
+    ).toBe(1);
+    const call = clipboardCalls[0]!;
+    // No number: not a padding, not a scale, not a MIME type spelled as one.
+    expect(call, "the clipboard wrapper passes a number the engine did not ask for").not.toMatch(
+      /-?\d/,
+    );
+    // The format is a name from a two-valued union, not a loose string.
+    expect(call).toMatch(/\bformat\b/);
+    // And no `selectionOnly` at all: the oracle's two copy actions pass the literal `true`
+    // to `prepareElementsForExport` (`actionClipboard.tsx@1118751f:139, 212`), so there is
+    // no dialog checkbox for a copy and nothing for the front to narrow.
+    expect(call).not.toMatch(/selectionOnly/);
   });
 });
 
