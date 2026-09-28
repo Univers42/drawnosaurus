@@ -75,9 +75,6 @@ const STILL_GAPS: ReadonlyArray<[string, number, string]> = [
   // the two lines under it, not a requirement of its own.
   ["design.md", 1364, "Selection → image"],
   ["design.md", 1366, "Whole canvas → image"],
-  ["shortkey.md", 436, "Copy PNG to clipboard"],
-  ["shortkey.md", 448, "Copy selection as PNG"],
-  ["shortkey.md", 449, "Copy selection as SVG"],
   // design.md:1348 — fonts in the SVG (4.6).
   ["design.md", 1348, "Fonts"],
   // shortkey.md:437 — a published board. Unrelated to exporting.
@@ -96,6 +93,26 @@ const CLOSED_BY_P42: ReadonlyArray<[string, number, string]> = [
   ["shortkey.md", 445, "Export selection"],
   ["design.md", 1339, "Frame export"],
   ["shortkey.md", 451, "Export frames where appropriate"],
+];
+
+/**
+ * Three more lines 4.1 left as gaps, all closed by 4.3 — a copy is the export, unchanged:
+ * `actionCopyAsPng` (`actionClipboard.tsx@1118751f:192`) and `actionCopyAsSvg` (`:124`) both call
+ * `prepareElementsForExport(elements, appState, true)`, the literal `true` in both at `:139` and
+ * `:212`. An empty selection copies the whole scene; a lone selected frame copies that frame's
+ * contents; neither is decided a second time.
+ *
+ * The chord is the raster's alone. `actionCopyAsSvg` declares no `keyTest` at all — the action
+ * ends at `keywords` at `:190` — so Alt+Shift+C copies a PNG and the SVG has no shortcut at all.
+ *
+ * These are the third, fourth and fifth `why`s in this project that named a task number and went
+ * false the moment the task merged. The test noticed, which is the only reason the count did not
+ * quietly claim them twice.
+ */
+const CLOSED_BY_P43: ReadonlyArray<[string, number, string]> = [
+  ["shortkey.md", 436, "Copy PNG to clipboard"],
+  ["shortkey.md", 448, "Copy selection as PNG"],
+  ["shortkey.md", 449, "Copy selection as SVG"],
 ];
 
 describe("the export lines p4.1 moved", () => {
@@ -122,6 +139,15 @@ describe("the export lines p4.1 moved", () => {
       expect(
         statusOf(source, line),
         `${source}:${line} "${text}" was 4.2's to close, and 4.2 did`,
+      ).toBe("covered");
+    }
+  });
+
+  it("leaves the clipboard lines covered, by 4.3", () => {
+    for (const [source, line, text] of CLOSED_BY_P43) {
+      expect(
+        statusOf(source, line),
+        `${source}:${line} "${text}" was 4.3's to close, and 4.3 did`,
       ).toBe("covered");
     }
   });
