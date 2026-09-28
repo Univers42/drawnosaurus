@@ -154,6 +154,17 @@ export const SHORTCUT_REGISTRY: readonly ShortcutEntry[] = [
     label: "Copy styles",
     chords: ["CtrlOrCmd+Alt+C"],
   },
+  // "Copy to clipboard as PNG" (`locales/en.json@1118751f:17`) — the oracle's own chord,
+  // `code === C && altKey && shiftKey` (`actionClipboard.tsx@1118751f:250`). **The raster
+  // alone**: `actionCopyAsSvg` declares no `keyTest` at all (`:124-190` ends at
+  // `keywords`), so copy-as-SVG is a context-menu entry and not a chord, and listing both
+  // here would advertise a key the oracle does not have.
+  {
+    id: "editor.copyAsPng",
+    section: "Editor",
+    label: "Copy to clipboard as PNG",
+    chords: ["Alt+Shift+C"],
+  },
   {
     id: "editor.pasteStyles",
     section: "Editor",

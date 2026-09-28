@@ -11,6 +11,7 @@
   import DrawShortcutsDialog from "./DrawShortcutsDialog.svelte";
   import DrawCommandPalette from "./DrawCommandPalette.svelte";
   import DrawContextMenu from "./DrawContextMenu.svelte";
+  import type { ClipboardFormatName } from "@osionos/draw-engine/types";
   import VectorizeDialog from "./VectorizeDialog.svelte";
 
   let {
@@ -33,6 +34,7 @@
     onInsertTemplate,
     onEditEmbedLink,
     onCopyStyles,
+    onCopyToClipboard,
     onFit,
     onPaletteRun,
   }: {
@@ -59,6 +61,8 @@
     onInsertTemplate: (json: string) => void;
     onEditEmbedLink: (id: string) => void;
     onCopyStyles: () => void;
+    /** Copy as a picture to the clipboard; the engine decides what, this reports how. */
+    onCopyToClipboard: (format: ClipboardFormatName) => void;
     /** Shift+1, measured against the chrome where it is now. */
     onFit: () => void;
     onPaletteRun: (id: string) => void;
@@ -142,6 +146,12 @@
     onCopyStyles={() => {
       menu = null;
       onCopyStyles();
+    }}
+    onCopyToClipboard={(format) => {
+      // The menu closes first, exactly as every other row does: a copy is asynchronous, and
+      // a menu that stayed up over the canvas would hide the notice the copy reports.
+      menu = null;
+      onCopyToClipboard(format);
     }}
     onFit={() => {
       menu = null;

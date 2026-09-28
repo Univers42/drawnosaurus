@@ -177,7 +177,7 @@ export function styleShortcut(
   return null;
 }
 
-export type AppShortcut = "snap" | "grid" | "present" | "palette" | "zen";
+export type AppShortcut = "snap" | "grid" | "present" | "palette" | "zen" | "copyAsPng";
 
 export interface AppShortcutKey {
   key: string;
@@ -231,6 +231,15 @@ export function appShortcut(
   // is the same as it is for entering presentation twice.
   if (!mod && event.altKey && event.code === "KeyZ" && !presenting) return "zen";
   if (!mod && event.altKey && event.code === "KeyS") return "snap";
+  // `actionCopyAsPng`'s own `keyTest` (`actionClipboard.tsx@1118751f:250`): C with Alt and
+  // Shift. **`!mod` is ours and not the oracle's** — its test has no Ctrl/Cmd condition,
+  // and neither does copy styles' (`actionStyles.ts@1118751f:78-79`), so on
+  // Ctrl+Alt+Shift+C both match and the oracle's `handleKeyDown` refuses to choose
+  // (`actions/manager.tsx@1118751f:114-119`, "Canceling as multiple actions match this
+  // shortcut"). Our chain picks the first match instead of filtering, so `!mod` is what
+  // keeps Ctrl/Cmd+Alt+C with copy styles. The oracle's answer to the four-key chord is a
+  // no-op, and a chord that is printed and does nothing is worse than one that works.
+  if (!mod && event.altKey && event.shiftKey && event.code === "KeyC") return "copyAsPng";
   if (mod && event.code === "Quote") return "grid";
   if (mod && event.altKey && event.code === "KeyP" && !presenting) return "present";
   if (mod && (event.key === "/" || (event.shiftKey && event.key.toLowerCase() === "p"))) {

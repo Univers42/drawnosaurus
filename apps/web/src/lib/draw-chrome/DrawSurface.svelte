@@ -5,6 +5,7 @@
   import { DARK_THEME, EMPTY_SELECTION_STYLE, LIGHT_THEME } from "@osionos/draw-engine/types";
   import type {
     Camera,
+    ClipboardFormatName,
     DrawTheme,
     DrawTool,
     FigureParams,
@@ -127,6 +128,7 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
+  import { copyAsClipboard, outcomeWords } from "./clipboard.ts";
   import {
     appShortcut,
     insideDialog,
@@ -429,6 +431,26 @@
 
   function copyStyles(): void {
     if (engine?.copyStyles()) notify("Copied styles.");
+  }
+
+  /**
+   * Copy to the clipboard as a picture, and say how it went.
+   *
+   * The whole of what a copy *is* — the elements, the size, the MIME type, whether to copy
+   * at all — is the engine's answer to one call (`clipboard.ts`), and this awaits the
+   * browser's write and reports the outcome. **Every outcome is reported, including the
+   * failures**: the oracle throws in both arms and both actions' `catch` puts the message
+   * on screen (`actionClipboard.tsx@1118751f:176-184, 236-245`), so a copy that quietly
+   * did nothing would be a behaviour this app has and the oracle does not.
+   *
+   * `copied` and the two refusals are the oracle's own sentences, and the success one
+   * carries the engine's word for the scope rather than this file's selection count — which
+   * is not the same number (`packages/element/src/selection.ts@1118751f:141-143`).
+   */
+  async function copyToClipboard(format: ClipboardFormatName): Promise<void> {
+    if (!engine) return;
+    const outcome = await copyAsClipboard(engine, format);
+    notify(outcomeWords(outcome, format));
   }
 
   function pasteStyles(): void {
@@ -1872,6 +1894,14 @@
         // chrome and leaves the canvas, the camera and the scene alone.
         toggleZenMode();
         break;
+      case "copyAsPng":
+        // The oracle's own chord, C with Alt and Shift
+        // (`actionClipboard.tsx@1118751f:250`), and its chord for the raster only —
+        // `actionCopyAsSvg` declares none. A promise, not a wait: the key is released long
+        // before the browser has encoded the canvas, and holding the handler would let a
+        // second chord queue behind a copy.
+        void copyToClipboard("png");
+        break;
       case "present":
         // Was Ctrl/Cmd+Shift+P; the palette (Track B, Part 1) takes that chord now, matching
         // the oracle (`CommandPalette.tsx@1118751f:145-146`). Ctrl/Cmd+Alt+P is unused in the
@@ -2421,6 +2451,7 @@
       bind:vectorizeId
       onPaletteRun={(id) => (paletteRecentId = id)}
       onCopyStyles={copyStyles}
+      onCopyToClipboard={(format) => void copyToClipboard(format)}
       onFit={zoomToFit}
       onEditEmbedLink={(id) => {
         const url = embedFrames.find((frame) => frame.id === id)?.url;
