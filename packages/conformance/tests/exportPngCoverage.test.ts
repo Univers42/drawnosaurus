@@ -73,10 +73,7 @@ const STILL_GAPS: ReadonlyArray<[string, number, string]> = [
   // design.md:1364,1366, shortkey.md:436,448,449 — the clipboard (4.3). 1363 is "Clipboard
   // image", a group label like 1328's "PNG", and the parser drops it: it is a heading for
   // the two lines under it, not a requirement of its own.
-  ["design.md", 1364, "Selection → image"],
-  ["design.md", 1366, "Whole canvas → image"],
   // design.md:1348 — fonts in the SVG (4.6).
-  ["design.md", 1348, "Fonts"],
   // shortkey.md:437 — a published board. Unrelated to exporting.
   ["shortkey.md", 437, "Export/share read-only link"],
   // shortkey.md:450 — half of it, and the half that is not is the SVG's.
@@ -93,6 +90,39 @@ const CLOSED_BY_P42: ReadonlyArray<[string, number, string]> = [
   ["shortkey.md", 445, "Export selection"],
   ["design.md", 1339, "Frame export"],
   ["shortkey.md", 451, "Export frames where appropriate"],
+];
+
+/**
+ * Three lines 4.1 left on `STILL_GAPS`, closed since — by three different tasks, which is the
+ * reason they are grouped under one list rather than three.
+ *
+ * `design.md:1364` "Selection → image" — 4.2, and the DIALOG's choice rather than the
+ * clipboard's. `exportParity.test.ts:504-519` asserts the host *hands the decision over*:
+ * `options.selectionOnly` reaches the engine for both raster and vector. `:540-543` asserts
+ * the opposite for the clipboard, because the oracle's two copy actions pass the literal
+ * `true` (`actionClipboard.tsx:139`, `:212`) and have no such option. The same word on both
+ * sides means two different things and one test holds both.
+ *
+ * `design.md:1366` "Whole canvas → image" — 4.1's OWN line, which 4.1 named and did not
+ * finish. `e2e/exportPng.spec.ts:525` is "exports the whole scene even when the camera is
+ * looking at part of it", and `:386`/`:414` pin the rule 4.2 recorded: an empty selection IS
+ * the whole scene (`data/index.ts@1118751f:56-58`, the `else` arm at `:69`).
+ *
+ * `design.md:1348` "Fonts" — 4.6. The SVG carries the faces
+ * (`scene/export.ts@1118751f:439-441` calls `Fonts.generateFontFaceDeclarations`, `:443-451`
+ * joins it into `<style class="style-fonts">` inside the defs). The `why` on the rule said the
+ * export "names the font families without embedding an @font-face" — the opposite of what
+ * shipped, and it came from a grep scoped to `scene/export.ts` and reported as a statement
+ * about the oracle. A zero in one file is not a zero.
+ *
+ * The loop that checks these throws on the FIRST failure, so it reported `1364` alone and said
+ * nothing about the other two. **A for-loop that stops at the first failure tells you one
+ * thing at a time, and its silence about the rest is not agreement.**
+ */
+const CLOSED_AFTER_P41: ReadonlyArray<[string, number, string]> = [
+  ["design.md", 1364, "Selection → image"],
+  ["design.md", 1366, "Whole canvas → image"],
+  ["design.md", 1348, "Fonts"],
 ];
 
 /**
@@ -139,6 +169,15 @@ describe("the export lines p4.1 moved", () => {
       expect(
         statusOf(source, line),
         `${source}:${line} "${text}" was 4.2's to close, and 4.2 did`,
+      ).toBe("covered");
+    }
+  });
+
+  it("leaves the lines 4.1 named but did not finish covered", () => {
+    for (const [source, line, text] of CLOSED_AFTER_P41) {
+      expect(
+        statusOf(source, line),
+        `${source}:${line} "${text}" was still a gap when 4.1 landed, and is covered now`,
       ).toBe("covered");
     }
   });

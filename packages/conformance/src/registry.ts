@@ -2799,11 +2799,61 @@ export const RULES: readonly Rule[] = [
   // it is covered by the "12. Frames" rule above. What is left is genuinely still open, and the
   // clause naming 4.2 went with it -- a reason that says "that is 4.2" stops being true the day
   // 4.2 merges, and nothing catches it.
+  // Split three ways. One rule said `Clipboard image|Selection → image|Whole canvas → image|
+  // ^Fonts$` and was a `gap` with a `why` naming 4.3 as unfinished, so it could not be flipped
+  // for the one part that had shipped. **A rule that covers three features is a rule that
+  // cannot be flipped, because the features land at different times** — the same failure as the
+  // Grid rule's `custom grid spacing|disable snapping` and 4.3's `/PNG|SVG|Google Docs|
+  // single element/`. Three instances now, all mine, all the same shape.
+  //
+  // `^Fonts$` — 4.6. The SVG carries the faces: `scene/export.ts@1118751f:439-441` calls
+  // `Fonts.generateFontFaceDeclarations(elements)` and `:443-451` joins it into
+  // `<style class="style-fonts">` inside the defs. **The `why` this replaces said the export
+  // "names the font families without embedding an @font-face", which was the opposite of what
+  // shipped** — and which came from a grep I ran against `scene/export.ts` alone and reported
+  // as a statement about the oracle. A zero in one file is not a zero.
+  //
+  // Our family strings MATCH theirs for the eight families this app can produce, pinned for
+  // all 64 ids the contract accepts. They differ for ids 4, 10 and 11..=64, deliberately: the
+  // oracle names `Segoe UI Emoji`, and in the only case that can arrive (an Obsidian board
+  // carrying `fontFamily: 4`) the oracle's answer is the WORSE one, because it is an emoji font.
+  // A test fails loudly if anyone "fixes" it.
   {
     section: "32. Export",
-    text: /Clipboard image|Selection → image|Whole canvas → image|^Fonts$/,
-    status: "gap",
-    why: "No clipboard path for either format (4.3), and scene_to_svg names the font families without embedding an @font-face (4.6, export/svg.rs).",
+    text: /^Fonts$/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_svg_fonts.rs`,
+      `${ENGINE}/ci_svg_fonts_bytes.rs`,
+      `${ENGINE}/ci_svg_fonts_props.rs`,
+      `${WEB}/draw-chrome/fonts.test.ts`,
+    ],
+  },
+  // `Selection → image` — 4.2, and the DIALOG's choice rather than the clipboard's.
+  // `exportParity.test.ts:504-519` is the test that matters and it asserts the host *hands the
+  // decision over*: `options.selectionOnly` reaches the engine for both raster and vector.
+  // `:540-543` asserts the opposite for the clipboard, because the oracle's two copy actions
+  // pass the literal `true` (`actionClipboard.tsx:139`, `:212`) and have no such option at all.
+  // **The same word on both sides means two different things, and one test holds both.**
+  {
+    section: "32. Export",
+    text: /Selection → image/,
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_export_scope.rs`,
+      `${WEB}/draw-chrome/exportParity.test.ts`,
+      "e2e/exportPng.spec.ts",
+    ],
+  },
+  // `Whole canvas → image` — 4.1. `e2e/exportPng.spec.ts:525` is "exports the whole scene even
+  // when the camera is looking at part of it", and `:386` and `:414` pin the rule 4.2 recorded:
+  // an empty selection IS the whole scene (`data/index.ts:56-58`, the `else` arm at `:69`), so
+  // "an unset flag is the whole scene".
+  {
+    section: "32. Export",
+    text: /Whole canvas → image/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export.rs`, `${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
   },
   {
     section: "32. Export",
