@@ -106,7 +106,85 @@ to an exact zero, which would also let a one-pixel wobble of a click through as 
 (`App.tsx@1118751f:11857-11869`) fires for a centred draft, so the press ends up a note's
 east edge rather than its middle. That is the oracle's behaviour, reproduced.
 
+## Where a line's own endpoints land
+
+`design.md:288` asks for "Endpoint snapping" and reads as though an endpoint is pulled
+toward other elements. It is not, and the reason is worth writing down because four
+places in the oracle look like they do it.
+
+Placing a line point by point drags the _preview_ point (`App.tsx@1118751f:11253`);
+dragging an existing line's endpoint drags a _committed_ one (`App.tsx@1118751f:10853`).
+Both are `LinearElementEditor.handlePointDragging`, and its transitive closure —
+`createPointAt`, `_getShiftLockedDelta`, `pointDraggingUpdates`, `movePoints`,
+`_updatePoints` — contains no call into `snapping.ts` at all. The candidate list is two
+entries, in this order:
+
+1. **the grid**, per axis, via `getGridPoint` (`linearElementEditor.ts@1118751f:1468`,
+   `points.ts@1118751f:69-81`). Not a distance: a threshold of `size / 2` on each axis,
+   so a pointer at the corner of a cell moves `size / 2 * √2` — the bound
+   `ci_end_snap.rs` uses, and the one a `size / 2` bound would fail.
+2. **the angle lock** (`linearElementEditor.ts@1118751f:1895-1935`), Shift and a single
+   point dragged. It replaces the free branch rather than composing with it, but it
+   grid-snaps the pointer first (`:1916`), so grid then angle.
+
+**The angle lock carries two open divergences, and neither belongs to the rotation path.**
+`SHIFT_LOCKING_ANGLE` is `Math.PI / 12` — **15°** (`constants.ts@1118751f:31`) — used by
+`getLockedLinearCursorAlignSize` (`sizeHelpers.ts@1118751f:196-197`) and by the creation
+path's `getPerfectElementSize` (`:171-172`). `constrain_to_angle`
+(`interaction/linear_drag.rs:17`) steps by `PI / 4`, and it has four call sites here: a
+dragged endpoint (`pointer_move.rs:399`), a preview point (`multi_linear.rs:279`), a
+drag-drawn line (`linear_drag.rs:32`) and an elbow end (`elbow.rs:87`).
+`selection/transform.rs` calls none of them; its open rule is a different defect, that
+`rotate_element` takes only the pointer position so a rotation is not quantised at all.
+
+Second, the length is kept by different geometry. This engine rotates the delta onto the
+locked angle; the oracle intersects the locked ray with the line through the cursor
+perpendicular to it (`sizeHelpers.ts@1118751f:236-250`) and zeroes one component outright
+for the horizontal and vertical cases (`:229-234`). They agree only when the angle is
+already locked. `ci_end_snap.rs` asserts the oracle's floor — a multiple of **15°** — so it
+stays true if the step is corrected, rather than pinning this engine's 45° as if it were
+the reference.
+
+What is _not_ in the list, each with the line that keeps it out:
+
+- another element's points, midpoints or edges — `maybeCacheReferenceSnapPoints`, the only
+  writer of the snap cache, is called from four places (`App.tsx@1118751f:11095`, `13381`,
+  `13505`, `13623`) and none is on this path;
+- `snapResizingElements` — only from `maybeHandleResize`, which runs under
+  `resize.isResizing` (`:10725`), and a press on a linear point never sets it (`:9405-9407`);
+- `snapDraggedElements` — the endpoint path returns at `:10886`, before the branch that
+  reaches it;
+- `getSnapLinesAtPointer` — gated on `isActiveToolNonLinearSnappable`
+  (`snapping.ts@1118751f:1402-1414`), which lists rectangle, ellipse, diamond, frame,
+  magicframe, image and text, and **not** `line`;
+- the same line's other points, and arrow binding — `pointDraggingUpdates` returns the
+  naive drag for anything that is not an arrow (`linearElementEditor.ts@1118751f:2410-2415`).
+
+So the first point of a placed line is `getGridPoint(origin.x, origin.y, ctrl ? null : grid)`
+(`App.tsx@1118751f:10235-10239`) and nothing else, and `registry.ts`'s note on that rule
+is right about the crate and wrong about the reason: it is not that nothing here computes
+it, it is that the oracle has none.
+
+**Ctrl is part of the answer.** All **fifteen** of the oracle's pointer call sites pass a
+`null` grid under Ctrl/Cmd, because Ctrl inverts snapping and the grid is what it switches
+off. `snap_gesture` is that gate; `snap` is the unconditional one, which paste keeps
+because duplicating and pasting grid-snap with no modifier test at all
+(`App.duplicate.ts@1118751f:97-101`).
+
+**The tie is a whole cell.** `getGridPoint` is `Math.round(v / size) * size`, and
+`Math.round` breaks a half towards +∞ — `Math.round(-0.5)` is `-0`. `f64::round` breaks it
+away from zero. On a 20-unit grid that is every negative half-cell: a point at x = -10
+belongs on 0.
+
 ## Where it lives
+
+`render/paint.rs` › `GridSettings::snap_point` is the round; `engine/mod.rs` ›
+`snap_gesture` and `snap` are the two entry points, and `engine/pointer.rs` /
+`engine/pointer_move.rs` are the pointer paths that pick the gated one.
+`interaction/linear_drag.rs` › `constrain_to_angle` is the angle lock, reached from
+`pointer_move.rs` › `constrain_point` for a dragged endpoint and from
+`engine/multi_linear.rs` › `track_multi_linear` for a preview — the same constraint, two
+gestures. `ci_end_snap.rs` is the behaviour, its Q/R pairs and its three properties.
 
 `interaction/shape_drag.rs` › `rect_from_drag` is the whole computation: the reach, Shift's
 lock, and the centre. `engine/pointer_move.rs`'s draft arm passes `self.alt_held` for a
