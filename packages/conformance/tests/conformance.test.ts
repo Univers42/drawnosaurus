@@ -141,7 +141,9 @@ describe("coverage", () => {
     const caught = items.filter((item) => ruleFor(item)?.text === undefined);
     const bySection = new Map<string, number>();
     for (const item of caught) {
-      const section = ruleFor(item)!.section;
+      // A section may be a RegExp as well as a string — section 26's catch-all uses one —
+      // so the key is stringified. The ratchet is about the COUNT, not about the label.
+      const section = String(ruleFor(item)!.section);
       bySection.set(section, (bySection.get(section) ?? 0) + 1);
     }
     // Printed, not just asserted: the shape of the ledger is the point, and a test that merely

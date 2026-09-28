@@ -2399,7 +2399,7 @@ export const RULES: readonly Rule[] = [
     text: /^Shape conversion$/,
     status: "covered",
     tests: [
-        `${ENGINE}/ci_shape_convert.rs`,
+      `${ENGINE}/ci_shape_convert.rs`,
       "apps/web/src/lib/draw-chrome/shapeSwitch.test.ts",
       "e2e/shapeSwitch.spec.ts",
     ],
