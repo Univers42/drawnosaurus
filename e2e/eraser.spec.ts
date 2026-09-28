@@ -265,6 +265,46 @@ async function pileOfCopies(page: Page, count: number): Promise<void> {
 /** Canvas-relative: through the middle of the pile, from clear space to clear space. */
 const ACROSS_THE_PILE = { from: { x: 560, y: 390 }, to: { x: 960, y: 390 } };
 
+/**
+ * How far from white the page is at `at` — what the person sees, the trail over the board
+ * included, where reading the canvas sees only what is under it.
+ */
+async function seenAt(page: Page, at: { x: number; y: number }): Promise<number> {
+  const clip = { x: Math.round(at.x), y: Math.round(at.y), width: 1, height: 1 };
+  const png = (await page.screenshot({ clip })).toString("base64");
+  return page.evaluate(async (png) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${png}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(image, 0, 0);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return 255 * 3 - (r! + g! + b!);
+  }, png);
+}
+
+/**
+ * Runs `look` with the page's clock stopped, then starts it again. A trail fades a fifth of
+ * a second after the last move, sooner than a screenshot can be relied on to land; stopped,
+ * it stays as it was drawn.
+ */
+async function withTrailHeld<T>(page: Page, look: () => Promise<T>): Promise<T> {
+  await page.evaluate(() => {
+    const now = performance.now();
+    performance.now = () => now;
+    return new Promise<void>((done) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => done())),
+    );
+  });
+  try {
+    return await look();
+  } finally {
+    await page.evaluate(() => Reflect.deleteProperty(performance, "now"));
+  }
+}
+
 async function sweep(board: Board, done = true): Promise<void> {
   const { page, box } = board;
   await page.mouse.move(box.x + ACROSS_THE_PILE.from.x, box.y + ACROSS_THE_PILE.from.y);
@@ -489,6 +529,21 @@ test.describe("the eraser's fade on screen", () => {
     await page.mouse.up();
   });
 
+  test("the trail is on screen while the eraser sweeps", async ({ page }) => {
+    const board = await openBoard(page);
+    await pickTool(page, "Eraser");
+    const { box } = board;
+    // Just behind where the sweep ends, where the trail is at its widest.
+    const behind = { x: box.x + ACROSS_THE_PILE.to.x - 30, y: box.y + ACROSS_THE_PILE.to.y };
+    const before = await seenAt(page, behind);
+
+    await sweep(board, false);
+    const during = await withTrailHeld(page, () => seenAt(page, behind));
+    await page.mouse.up();
+
+    expect(during, "the trail darkens the board behind the eraser").toBeGreaterThan(before + 60);
+  });
+
   test("the trail stops with Escape, though the button is still down", async ({ page }) => {
     const board = await openBoard(page);
     await pileOfCopies(page, 1);
@@ -533,9 +588,10 @@ test.describe("the pen's eraser end", () => {
     page: Page,
     from: { x: number; y: number },
     to: { x: number; y: number },
+    whileDown?: () => Promise<void>,
   ) {
     await page.evaluate(
-      ({ from, to }) => {
+      async ({ from, to, pause }) => {
         const canvas = document.querySelector("canvas")!;
         const box = canvas.getBoundingClientRect();
         const fire = (
@@ -558,11 +614,42 @@ test.describe("the pen's eraser end", () => {
             }),
           );
         fire("pointerdown", from, 5, 32);
-        fire("pointermove", to, -1, 32);
-        fire("pointerup", to, 5, 0);
+        if (!pause) {
+          fire("pointermove", to, -1, 32);
+          fire("pointerup", to, 5, 0);
+          return;
+        }
+        // A frame between moves, as a hand gives the host's per-frame coalescing.
+        for (let step = 1; step <= 8; step += 1) {
+          const at = {
+            x: from.x + ((to.x - from.x) * step) / 8,
+            y: from.y + ((to.y - from.y) * step) / 8,
+          };
+          fire("pointermove", at, -1, 32);
+          await new Promise((done) => requestAnimationFrame(done));
+        }
       },
-      { from, to },
+      { from, to, pause: whileDown !== undefined },
     );
+    if (!whileDown) return;
+    await whileDown();
+    await page.evaluate((to) => {
+      const canvas = document.querySelector("canvas")!;
+      const box = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(
+        new PointerEvent("pointerup", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 1,
+          pointerType: "pen",
+          isPrimary: true,
+          clientX: box.left + to.x,
+          clientY: box.top + to.y,
+          button: 5,
+          buttons: 0,
+        }),
+      );
+    }, to);
   }
 
   test("erases what it crosses, and hands back the tool that was in hand", async ({ page }) => {
@@ -573,6 +660,22 @@ test.describe("the pen's eraser end", () => {
     await penEraserStroke(page, ACROSS_THE_PILE.from, ACROSS_THE_PILE.to);
 
     await expect.poll(async () => (await sceneElements(page)).length).toBe(0);
+    expect(await page.evaluate(() => window.__drawEngine!.getTool())).toBe("rectangle");
+  });
+
+  test("draws the eraser's trail, though another tool is in hand", async ({ page }) => {
+    const { box } = await openBoard(page);
+    await pickTool(page, "Rectangle");
+    const { from, to } = ACROSS_THE_PILE;
+    const behind = { x: box.x + to.x - 30, y: box.y + to.y };
+    const before = await seenAt(page, behind);
+
+    let during = 0;
+    await penEraserStroke(page, from, to, async () => {
+      during = await withTrailHeld(page, () => seenAt(page, behind));
+    });
+
+    expect(during, "the trail darkens the board behind the pen").toBeGreaterThan(before + 60);
     expect(await page.evaluate(() => window.__drawEngine!.getTool())).toBe("rectangle");
   });
 });
