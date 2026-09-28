@@ -77,8 +77,8 @@ const PINNED: ReadonlyArray<{ what: string; pattern: RegExp; line: number }> = [
     pattern: /^pub const DEFAULT_EXPORT_PADDING: f64 = /,
     line: 18,
   },
-  { what: "pixel_width", pattern: /\(self\.width \* self\.scale\)\.trunc\(\) as u32/, line: 174 },
-  { what: "pixel_height", pattern: /\(self\.height \* self\.scale\)\.trunc\(\) as u32/, line: 179 },
+  { what: "pixel_width", pattern: /\(self\.width \* self\.scale\)\.trunc\(\) as u32/, line: 190 },
+  { what: "pixel_height", pattern: /\(self\.height \* self\.scale\)\.trunc\(\) as u32/, line: 195 },
 ];
 
 /**
@@ -96,6 +96,30 @@ const ON_A_FORWARD: ReadonlyArray<{ what: string; pattern: RegExp }> = [
   { what: "its own canvas", pattern: /createElement|getContext|toBlob|toDataURL/ },
   { what: "the device pixel ratio", pattern: /devicePixelRatio/ },
   { what: "a padding of its own", pattern: /padding/i },
+];
+
+/**
+ * What a line handing over a file's **bytes** may not also contain.
+ *
+ * The round trip (4.4) is a third door to the same engine, and this is what it is guarded
+ * by. The rules above are about the *arithmetic* of an export; this is about the *payload*,
+ * and it is a separate list because the two have nothing in common: a front that base64'd
+ * a scene, escaped a JSON string or assembled a PNG chunk beside the call would be
+ * building a file, and nothing above would see it — `ON_A_FORWARD` has no pattern for
+ * `atob`, and `TREE_WIDE` has none for a `charCodeAt` loop.
+ *
+ * `Uint8Array` and `TextDecoder` are in here and are **not** what they look like: a host
+ * that hands the engine a `File`'s bytes has to hold them in one of the two, and
+ * `openFile.ts` does. The claim being checked is that the *bytes on the way in* are the
+ * file's own and not something the front derived, so a `Uint8Array` **on the line that
+ * calls the engine** is the tell — which is why this is a statement check and not a
+ * file-at-large one, like `ON_A_FORWARD` and for the same reason.
+ */
+const ON_A_BYTES_FORWARD: ReadonlyArray<{ what: string; pattern: RegExp }> = [
+  { what: "a base64 step", pattern: /\batob\b|\bbtoa\b|base64/i },
+  { what: "a hand-built PNG chunk", pattern: /tEXt|iEND|chunk/i },
+  { what: "a hand-rolled string encoder", pattern: /charCodeAt|fromCharCode|TextEncoder/ },
+  { what: "a checksum of its own", pattern: /crc|checksum/i },
 ];
 
 /**
@@ -253,6 +277,17 @@ const FRONT_NUMBER_PATTERNS: ReadonlyArray<{ what: string; find: RegExp }> = [
  */
 const KNOWN_FRONT_NUMBERS: readonly { path: string; find: RegExp; owner: string }[] = [];
 
+/** The two exports, which are about arithmetic. */
+const EXPORT_DOORS = ["exportPng(", "exportSvg("];
+
+/**
+ * The doors a **file's bytes** come through, which are about the payload.
+ *
+ * `restoreFromImage` is the engine's own (`wasm/input.rs`); the other two are named here
+ * only so a front that grew its own spelling of them is still caught.
+ */
+const FILE_DOORS = ["restoreFromImage(", "restoreFromFile("];
+
 /** The one known-debt site a statement belongs to, if it is one. */
 function knownOwner(path: string, statement: string): string | null {
   return (
@@ -333,15 +368,26 @@ describe("the app and the engine's host", () => {
   it("calls the export without touching a number on the way", () => {
     const found: string[] = [];
     for (const [path, lines] of shipped) {
-      // Both exports, because both take a caller's intent now and both had a front-chosen
-      // number in them. Checking only `exportPng` is what let the SVG path's 16 sit there
-      // through 4.1 — the check was green and the debt was real.
-      for (const call of ["exportPng(", "exportSvg("]) {
+      // All three doors, because all three take a caller's intent and all three had a
+      // front-chosen number or a front-built payload in them. Checking only `exportPng` is
+      // what let the SVG path's 16 sit there through 4.1 — the check was green and the debt
+      // was real — and checking only the two exports is what would have let the round
+      // trip's front build a base64 payload beside `restoreFromImage` in 4.4.
+      for (const call of [...EXPORT_DOORS, ...FILE_DOORS]) {
         for (const statement of callsOf(path, lines, call)) {
           if (knownOwner(path, statement)) continue;
           for (const { what, pattern } of ON_A_FORWARD) {
             if (pattern.test(statement)) {
               found.push(`${path} — ${what} in \`${statement.replace(/\s+/g, " ")}\``);
+            }
+          }
+          // The bytes door is checked on its own vocabulary, and only on the statements
+          // that hand a file's bytes over.
+          if (FILE_DOORS.some((door) => statement.includes(door))) {
+            for (const { what, pattern } of ON_A_BYTES_FORWARD) {
+              if (pattern.test(statement)) {
+                found.push(`${path} — ${what} in \`${statement.replace(/\s+/g, " ")}\``);
+              }
             }
           }
         }
@@ -357,7 +403,8 @@ describe("the app and the engine's host", () => {
   it("gives no file that exports a canvas or a device ratio of its own", () => {
     const found: string[] = [];
     for (const [path, lines] of shipped) {
-      if (!codeOf(path, lines).includes("exportPng(")) continue;
+      if (![...EXPORT_DOORS, ...FILE_DOORS].some((door) => codeOf(path, lines).includes(door)))
+        continue;
       lines.forEach((line, index) => {
         for (const { what, pattern } of IN_A_FILE_THAT_EXPORTS) {
           if (pattern.test(line)) found.push(`${path}:${index + 1} — ${what}`);

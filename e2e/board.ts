@@ -62,6 +62,21 @@ declare global {
        * camera is not consulted: the export is framed by the scene's own bounds.
        */
       exportPng(options?: { scale?: number; transparent?: boolean }): Promise<Blob | null>;
+      /** The vector export, as the Export dialog's SVG button produces it. */
+      exportSvg(options?: { selectionOnly?: boolean }): string | null;
+      /**
+       * Opens a saved picture, and says whether it did — 4.4's round trip.
+       *
+       * Typed here rather than only on `DrawEngine` because this is the surface a spec
+       * drives, and a global that does not name a method is a spec that will not compile the
+       * day someone reads the type and believes it. The `refused` values are the engine's
+       * three, spelled out rather than `string`, so a spec cannot assert against a name the
+       * engine never returns.
+       */
+      restoreFromImage(bytes: Uint8Array): {
+        restored?: true;
+        refused?: "malformed" | "not-ours" | "unreadable";
+      };
       /** Empties the board: no undo step, no autosave — a fuzzer's reset between cases. */
       clear(): void;
       /** Places a scene document's elements as the Mermaid dialog's Insert does. */

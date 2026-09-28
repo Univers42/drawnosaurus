@@ -6,7 +6,7 @@
   import { takeFocus } from "./focusHandback.ts";
   import MainMenuIcon from "./MainMenuIcon.svelte";
   import { CANVAS_BACKGROUNDS, GRID_SIZES } from "./inspector.ts";
-  import { migrateLegacyStickyJson } from "../notes/stickyNotes.ts";
+  import { openDrawing } from "./openFile.ts";
   import type { GridPreference, ThemePreference } from "./theme.ts";
 
   /**
@@ -98,22 +98,27 @@
     fileInput?.click();
   }
 
-  function onFileSelected(event: Event): void {
+  /**
+   * Open whatever was picked, and say so if it was not a drawing.
+   *
+   * The bytes go to the engine and the engine decides: a saved `.png` or `.svg` carries its
+   * scene inside it (`export/roundtrip.rs`), a `.osidraw` is the text door, and this file
+   * only holds the picker and the two sentences. Everything else — the container, the
+   * chunk's key, what a corrupt one means — is Rust's (BUNNY.md §2). The alert is
+   * unchanged in wording and now also covers a picture with no scene in it, which is the
+   * case that matters: a round trip that "worked" by yielding nothing would look exactly
+   * like a fresh board.
+   */
+  async function onFileSelected(event: Event): Promise<void> {
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file || !engine) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result);
-      // A file saved while a sticky note was four shapes opens with the note the engine
-      // draws — see `stickyNotes.ts`.
-      const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
-      if (!engine.loadScene(migrateLegacyStickyJson(text, Date.now(), nonce) ?? text)) {
-        alert("Could not load that file — it is not a drawing this app understands.");
-        return;
-      }
-      onClose();
-    };
-    reader.readAsText(file);
+    const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
+    const outcome = await openDrawing(file, engine, Date.now(), nonce);
+    if (outcome === "not-a-drawing") {
+      alert("Could not load that file — it is not a drawing this app understands.");
+      return;
+    }
+    onClose();
   }
 
   function saveToDisk(): void {
