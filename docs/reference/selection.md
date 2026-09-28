@@ -104,6 +104,70 @@ Pinned by `ci_text_edit.rs` › `a_peer_taking_the_shape_of_a_label_still_being_
 | a selection change | its own history entry when nothing else changed: undo walks back through selections (`history.ts@1118751f:117-137`) | never a step: undo and redo move only through edits, each putting back the selection it recorded (`engine/stamp.rs`) |
 | a peer's change    | never in local history                                                                                              | the same: a peer's patch is never a step                                                                             |
 
+## The points of a line or arrow
+
+**VERIFIED** — holding one point of a line or arrow, and taking it away with Backspace or
+Delete, is a **click on the point** and the **first branch of the ordinary delete action**.
+It is not a key handler on the line editor: `BACKSPACE` appears in exactly three places in
+Excalidraw at `1118751f` — `packages/common/src/keys.ts:37` (the constant),
+`packages/excalidraw/actions/actionDeleteSelected.tsx:306` (`keyTest`), and `App.tsx:5954`
+(⌘/Ctrl+Backspace, clear canvas) — and `linearElementEditor.ts` contains no `Backspace` at
+all. `BUNNY.md:768`'s "5.1 Backspace removes the last point while placing a multi-point
+line" is a misreading of `design.md`'s indented feature list; building it as written would
+have manufactured a divergence. The oracle's three branches, in order, are at
+`actionDeleteSelected.tsx@1118751f:229-272`:
+
+1. `selectedPointsIndices == null` → the whole element (`:229-231`).
+2. `length >= points.length` → the whole element (`:234-251`).
+3. otherwise `deletePoints`, re-mapping the selection to `[first - 1]` or `[0]`
+   (`:253-272`).
+
+`None` and an empty list are different here, which is why
+`DrawEngine::selected_points` is `Option<Vec<usize>>` and never `Some(vec![])`.
+
+**VERIFIED, and the reason this is written down** — the oracle's _marquee_ over a point
+editor, `LinearElementEditor.handleBoxSelection`
+(`linearElementEditor.ts@1118751f:248-309`), **cannot run at that SHA**. Its only call
+site is `App.tsx:11275`, guarded by `this.state.selectedLinearElement?.isEditing`
+(`:11274`); its own first guard (`:255-259`) needs `appState.selectionElement` non-null;
+and `selectionElement` is written in exactly one place, `App.tsx:10497`, which
+`maybeDragNewGenericElement` reaches from the **sibling** branch at `App.tsx:11282` — the
+regular box select, behind the same `!isEditing` test. So whenever it is offered a chance
+to run, `selectionElement` is still null and it returns at `:258`. Excalidraw at `1118751f`
+has no marquee for points; clicking a point is the whole gesture. Do not "fix" this by
+adding one.
+
+**VERIFIED** — `isPointHandle` (`:1424-1431`) is the elbow filter and it _is_ live: for an
+elbow arrow only index `0` and `points.length - 1` are handles, because the middle points
+are the router's corners. The identical predicate appears a second time in the dead
+marquee (`:290-299`).
+
+**IMPLEMENTATION DETAIL** — the five conditions on `handleSelectionOnPointerDown`
+(`App.tsx@1118751f:9351-9364`) gate the _transform handles_, not the per-point selection.
+Gate four (`isLinearElement && (isMobileDevice || points.length === 2)`) is what sends a
+two-point line to the point editor instead of a degenerate box; it does not take per-point
+selection away from one. Gate five (`hoverPointIndex !== -1`) has **no counterpart here**:
+this engine has no such field, the gate is trivially true, and none was invented — a press
+that lands on a point is routed by the point-hit test instead.
+
+**IMPLEMENTATION DETAIL** — `deletePoints` re-normalises with the _same_ helper placement
+uses (`multi_linear.rs`'s `reseat_points`, `engine/point_edit.rs`), because removing the
+point that was the origin has to move the origin or the element's box stops containing its
+own drawing. Its **polygon rule** (`linearElementEditor.ts:1590-1603`) rewrites
+`nextPoints[0]` to the new last point when index `0`, the last index, or the uncommitted
+point went — a closed line's two ends are one place, and taking either away opens the loop.
+
+**IMPLEMENTATION DETAIL, and a trap** — the oracle has **no** "≥ 2 points or gone" guard.
+Deleting one point of a two-point line leaves a one-point line, drawn as a dot. Adding that
+rule is the obvious invariant and it is the wrong one; `ci_point_delete.rs` ›
+`a_two_point_line_can_be_reduced_to_one` records what the oracle actually does.
+
+**OPEN** — the held points are **not painted differently**. The oracle fills a held point
+`rgba(134, 131, 226, 0.9)` instead of `rgba(255, 255, 255, 0.9)`
+(`interactiveScene.ts@1118751f:253-289`), and lights a polygon's last point when its first
+is held (`:1135-1144`). `wasm/paint.rs`'s `paint_linear_handles` has no test harness, so
+this was not changed blind. `DrawEngine::selected_points` is exposed for it.
+
 ## Open
 
 **UNKNOWN** — alignment snapping is on by default here (a moved arrow snapped 6px onto a
