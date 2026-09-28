@@ -1497,11 +1497,55 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_elbow.rs`, `${ENGINE}/ci_elbow_oracle.rs`, "e2e/elbowArrow.spec.ts"],
   },
+  // 5.3. The `why` this replaces said the label "cannot be dragged along it -- Excalidraw's
+  // labelPosition (linearElementEditor.ts@1118751f:1962-2030) is not ported". The function is at
+  // :1963-2030; :1962 is its `static` line.
+  //
+  // A plain primary-button drag on the label. The call graph, walked from the top: hover at
+  // `App.tsx:8445` gives `CURSOR_TYPE.GRAB` via `arrowText.isBoundTextGrabbable`; the
+  // bounding-box handles are taken FIRST (`:9406-9442`) and only a press that missed them
+  // enters `LinearElementEditor.handlePointerDown`; the grab is refused when
+  // `clickedPointIsHandle` or `segmentMidpoint` (`linearElementEditor.ts:1150-1183`) and the
+  // offset is measured from the label's CENTRE (`:1234-1242`); `App.tsx:10766`
+  // `arrowText.maybeDragLabel` owns the move past `DRAGGING_THRESHOLD / zoom`; and
+  // `handleBoundTextDragging` (`:1963-2030`) writes `labelPosition` and `x`/`y` on every move.
+  //
+  // THE UNIT is a fraction of the arrow's own PATH ARC LENGTH, in [0,1] -- written as
+  // `(prefixSums[i] + lengthWithinSegment) / totalLength` (`:2011-2018`), read as
+  // `clamp(f, 0, 1) * totalLength` (`:2050`). The path is `getLinearElementPathSegments`
+  // (`utils.ts:206-233`): the DRAWN curve for a rounded arrow, chords for a sharp one, and an
+  // elbow's unrounded logical polyline whatever `roundness` says. Pieces are measured by arc
+  // length, so 0.5 is half the ground covered, not half the parameter.
+  //
+  // The fixture in `tests/fixtures/label-position.json` is what settles it, and the shape of it
+  // is the point. A straight three-point arrow with perpendicular chords of 120 and 90 -- path
+  // 210 long. At fraction 0.25 the path says (52.5, 0), and the bounding-box reading, the
+  // one-segment reading and the world-offset reading **all say the same wrong thing**:
+  // (30, 0), (30, 0), (0.25, 0). **A discriminator that three wrong readings agree on is not
+  // a discriminator**, so 0.25 alone cannot decide between four of them. At 0.6 the answer is
+  // (120, 6) -- six units into the SECOND chord, which a per-segment reading can never reach.
+  //
+  // Two consequences that are easy to get wrong and are now tested: a LINE's label does not
+  // move (`isArrowElement` is in the guard), and at the default the label sits *under* the
+  // segment-midpoint knob, so a press dead on its centre is a POINT drag and the knob wins by
+  // design. A test that pressed the centre would have silently been testing the other feature.
+  //
+  // 0 and 1 are legal and reachable -- clamped on write, on read and on load
+  // (`restore.ts:573-575`). Dragging 5000 units past either end parks the label there.
+  //
+  // 5.5's non-convertibility is CONNECTED, through the label's EXISTENCE and not its position:
+  // `isEligibleLinearElement` (`ConvertElementTypePopup.tsx:666-672`) refuses on
+  // `hasBoundTextElement`, and `labelPosition` is a field on the label, so dragging can neither
+  // make a labelled arrow convertible nor an unlabelled one non-convertible.
   {
     section: "7. Arrow",
     text: /label positioning/,
-    status: "gap",
-    why: "A label sits on the middle of its arrow's path (linear_label_center, getBoundTextElementCenter), but cannot be dragged along it — Excalidraw's labelPosition (linearElementEditor.ts@1118751f:1962-2030) is not ported.",
+    status: "covered",
+    tests: [
+      `${ENGINE}/ci_label_position.rs`,
+      "packages/contract/tests/engineParity.test.ts",
+      "e2e/labelDrag.spec.ts",
+    ],
   },
   {
     section: "7. Arrow",
