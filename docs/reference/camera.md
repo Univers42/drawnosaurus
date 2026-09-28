@@ -175,8 +175,49 @@ getter (`engine/src/engine.ts:70`), which crosses into Rust for `cameraJson` and
 result back in JS; on the peer-cursor path that is a WASM hop and a `JSON.parse` per
 frame, which is what the note above that path is about.
 
+## Right-button drag to pan
+
+A right-button press is a pan **only once the pointer travels 5px from the press**; released
+before that it is a right-click. One threshold, and a right-drag to pan costs nothing on the
+right-click.
+
+- **The threshold, the distance, the latch and the release's verdict are in the engine**,
+  in `engine/crates/draw-engine/src/pan.rs`, with the gesture they hang off in
+  `engine/crates/draw-engine/src/engine/pan_session.rs`. The host
+  (`engine/src/host/pointerInput.ts`) only passes pointer coordinates, the count of pointers
+  down, and `contextmenu`/`pointerup` events, and acts on what comes back. The
+  `preventDefault` decision is the engine's answer too (`SecondaryPanStart`): whether a press
+  may prevent its own default depends on a text being open, and a host that worked that out
+  for itself would answer it its own way.
+- **The line a port loses:** the move that crosses the threshold starts the pan **at that
+  move** and moves nothing (`App.pan.ts@1118751f:146-148`, "the threshold distance is not
+  caught up"). Without it the board jumps by up to 5px on the first move after, and a test
+  that only checks "the camera moved" cannot see it — `ci_secondary_pan.rs` and
+  `e2e/rightDragPan.spec.ts` both assert the exact number.
+- **`contextmenu` timing is the platform difference, and it is invisible on the wrong
+  machine.** macOS and Linux fire it with the mousedown, before anything can know whether
+  the gesture is a click or a drag; Windows fires it after the mouseup. The session
+  swallows the event that belongs to it and opens the menu on the release itself
+  (`App.pan.ts@1118751f:74-84`, `App.tsx:13225-13246`). Without the swallow, the menu opens
+  under the pointer on the press on macOS and Linux and every right-drag is impossible —
+  and on Windows nothing is wrong, so a suite that only ever ran there would pass.
+  `e2e/rightDragPan.spec.ts` therefore **injects both orderings** with synthetic events, and
+  `src/host/pointerInput.test.ts` pins the same two at the unit level.
+- **A right press is not a host gesture.** The oracle returns from the pointer down before
+  the press becomes one (`App.tsx@1118751f:8698`), so `session.down` stays false and
+  `onPointerMove` does not fire for a right-drag — a host cannot read "a drag is happening"
+  from a right press, and the eraser trail must not collect points from one. What the moves
+  need is the engine's `wantsPointerMoves()`, because `session.down` is the host's own
+  notion of a button and a session has none.
+
 ## Known limits
 
+- The oracle's `#1383` paste suppression (`App.pan.ts@1118751f:157-197`) is ported for the
+  **middle** button only (`pointerInput.ts`), as it was before this work. The oracle's own
+  condition is in the shared move handler with no button test, so it covers space+drag and
+  the hand tool as well, and — since the secondary session runs the same handler after it
+  engages — a right-drag on Linux too. Deliberately not extended here: it would change
+  behaviour that already shipped.
 - Focus mode frames the shape that was selected when Enter was pressed, not the caret —
   a very tall or wide label can still overflow the margin vertically once typed.
 - The 250ms zoom ease and the 80%/2× focus numbers are this project's own picks, not
