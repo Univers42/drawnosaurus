@@ -1708,8 +1708,18 @@ export const RULES: readonly Rule[] = [
   {
     section: "12. Frames",
     text: /Export frame/,
-    status: "gap",
-    why: "See the Frames rule: export has no frame mode.",
+    status: "covered",
+    // The `why` this replaces said "See the Frames rule: export has no frame mode", and the
+    // second half is now false in an interesting way: a frame export is a *selection* export of
+    // one frame, and there is still no frame-specific mode. The distinction that matters is that
+    // a frame is measured by its own element while its contents are what gets painted.
+    //
+    // `exportToCanvas@1118751f:228-233` sets `exportPadding = 0` and measures `[exportingFrame]`
+    // -- the frame element's own turned box, not the union of what it holds -- and `:217-219`
+    // sets `frameRendering.clip = false`, without which the frame's own clip cuts the content
+    // off at its edge. So a child poking past the edge is cropped, and that is the answer rather
+    // than an accident. Framing by the contents would show the poking child and would not match.
+    tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
   },
   // Three cases in ci_frame.rs now drag a frame's own handle: the grown bounds take in
   // what they now hold, the shrunken bounds let go of what no longer fits, and the handles
@@ -2419,8 +2429,27 @@ export const RULES: readonly Rule[] = [
   {
     section: "32. Export",
     text: /^Selection export$/,
-    status: "gap",
-    why: "The export dialog and all three engine.exportSvg/exportPng/exportPng paths still export the whole scene; nothing threads the current selection through to any of them. That is 4.2, and the PNG framing is built so it can be pointed at a selection rather than the scene.",
+    status: "covered",
+    // The `why` this replaces ended "That is 4.2", which is now done. What decides the element
+    // list is a layer above the bounds function, in `prepareElementsForExport`
+    // (`data/index.ts@1118751f:48-96`): `:56-58` sets `isExportingSelection` from
+    // `exportSelectionOnly && isSomeElementSelected(...)`, asked about the *elements* rather than
+    // the ids, so ids that are not on the board do not count as a selection. There is no
+    // selection-bounds function and no frame-bounds function -- `getCanvasSize`
+    // (`export.ts@1118751f:566-575`) takes a list and `getCommonBounds` folds over it, and both
+    // formats hand it the same expression: `exportToCanvas:232-235` and `exportToSvg:341-344` are
+    // character-for-character the same call.
+    //
+    // An empty selection exports the **whole scene**, deliberately: `:56-58`'s flag never becomes
+    // true, so `:61-69` takes its else arm. Pinned, because it is the case most able to pass
+    // without being exercised.
+    //
+    // The property test is the one that matters: an export's world rect must *contain* every
+    // element it was asked to paint, over ten scene shapes including turned, nested, framed,
+    // child-poking-out, deleted and zero-sized. That is what catches a cull aimed at the editor's
+    // camera instead of the export's own rect -- the failure 4.1's acceptance list was written to
+    // prevent.
+    tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
   },
   // scene_to_svg's <image> arm is exercised directly: a real embedded data URL, a flipped
   // image, and the no-picture-yet fallback.
@@ -2451,11 +2480,15 @@ export const RULES: readonly Rule[] = [
     status: "covered",
     tests: [`${ENGINE}/ci_export_png.rs`, "e2e/exportPng.spec.ts"],
   },
+  // `[Ff]rame export` came out of this pattern when 4.2 landed: a frame export exists now, and
+  // it is covered by the "12. Frames" rule above. What is left is genuinely still open, and the
+  // clause naming 4.2 went with it -- a reason that says "that is 4.2" stops being true the day
+  // 4.2 merges, and nothing catches it.
   {
     section: "32. Export",
-    text: /Clipboard image|Selection → image|Whole canvas → image|[Ff]rame export|Fonts/,
+    text: /Clipboard image|Selection → image|Whole canvas → image|^Fonts$/,
     status: "gap",
-    why: "The PNG export is the whole scene at a scale and nothing more: no per-frame export (4.2), no clipboard path for either format (4.3), and scene_to_svg names the font families without embedding an @font-face (4.6, export/svg.rs).",
+    why: "No clipboard path for either format (4.3), and scene_to_svg names the font families without embedding an @font-face (4.6, export/svg.rs).",
   },
   {
     section: "32. Export",
