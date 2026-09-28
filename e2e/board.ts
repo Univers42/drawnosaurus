@@ -137,6 +137,11 @@ export interface SceneElement {
   endArrowhead?: string | null;
   /** Rectangles: an explicit corner radius from the in-place handle. */
   cornerRadius?: number;
+  /**
+   * A label's: how far along its arrow's drawn path it sits, as a fraction of that path's
+   * length. Absent means the middle, which is where a label nobody dragged is drawn.
+   */
+  labelPosition?: number;
   roundness?: number | null;
   /** The reconciliation stamp: every saved edit moves it. */
   version?: number;
