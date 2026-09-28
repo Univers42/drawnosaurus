@@ -53,16 +53,23 @@ const CLOSED_BY_P41: ReadonlyArray<[string, number, string]> = [
   ["shortkey.md", 444, "Export entire canvas"],
 ];
 
-/** The lines around them that stay gaps, because each belongs to another task. */
+/**
+ * The lines around them that stay gaps, because each belongs to another task.
+ *
+ * The 4.2 entries left this list when 4.2 landed — `design.md:1337` "Selection export",
+ * `shortkey.md:445` "Export selection", `design.md:1339` "Frame export" and
+ * `shortkey.md:451` "Export frames where appropriate" — and they are now asserted covered by
+ * `CLOSED_BY_P42` below rather than simply deleted, so a later change that reopens one of them
+ * has something to fail against.
+ *
+ * That split is the point. This list is not "the gaps"; it is "the gaps that are gaps *for a
+ * reason that has not arrived yet*", and every entry's reason is a task number. A test that
+ * hard-codes one task's neighbours as gaps outlives the task and then fails on correct work —
+ * which is exactly what this one did, on the first gate after 4.2 merged.
+ */
 const STILL_GAPS: ReadonlyArray<[string, number, string]> = [
   // design.md:1333 — a *chosen* background colour. The export has the theme's or none (4.5).
   ["design.md", 1333, "Background color"],
-  // design.md:1337, shortkey.md:445 — the selection (4.2).
-  ["design.md", 1337, "Selection export"],
-  ["shortkey.md", 445, "Export selection"],
-  // design.md:1339, shortkey.md:451 — one frame (4.2).
-  ["design.md", 1339, "Frame export"],
-  ["shortkey.md", 451, "Export frames where appropriate"],
   // design.md:1364,1366, shortkey.md:436,448,449 — the clipboard (4.3). 1363 is "Clipboard
   // image", a group label like 1328's "PNG", and the parser drops it: it is a heading for
   // the two lines under it, not a requirement of its own.
@@ -79,6 +86,18 @@ const STILL_GAPS: ReadonlyArray<[string, number, string]> = [
   ["shortkey.md", 450, "Include/exclude background depending on export settings"],
 ];
 
+/**
+ * The four lines 4.2 took off `STILL_GAPS`, asserted covered so the handover is in both
+ * directions. Without this they would simply have been deleted, and a later edit that reopened
+ * one of them would move the conformance figure with nothing to fail.
+ */
+const CLOSED_BY_P42: ReadonlyArray<[string, number, string]> = [
+  ["design.md", 1337, "Selection export"],
+  ["shortkey.md", 445, "Export selection"],
+  ["design.md", 1339, "Frame export"],
+  ["shortkey.md", 451, "Export frames where appropriate"],
+];
+
 describe("the export lines p4.1 moved", () => {
   it("closes the whole-scene PNG, the scale and the background toggle", () => {
     for (const [source, line, text] of CLOSED_BY_P41) {
@@ -93,8 +112,17 @@ describe("the export lines p4.1 moved", () => {
     for (const [source, line, text] of STILL_GAPS) {
       expect(
         statusOf(source, line),
-        `${source}:${line} "${text}" belongs to 4.2, 4.3, 4.5 or 4.6 — not to p4.1`,
+        `${source}:${line} "${text}" belongs to 4.3, 4.5 or 4.6 — not to p4.1`,
       ).toBe("gap");
+    }
+  });
+
+  it("leaves the selection and frame lines covered, by 4.2", () => {
+    for (const [source, line, text] of CLOSED_BY_P42) {
+      expect(
+        statusOf(source, line),
+        `${source}:${line} "${text}" was 4.2's to close, and 4.2 did`,
+      ).toBe("covered");
     }
   });
 

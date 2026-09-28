@@ -918,16 +918,31 @@ export const RULES: readonly Rule[] = [
     why: "Copy-as-image (4.3): nothing writes a PNG to the clipboard. The PNG export produces a Blob the host can hand to a download or a clipboard write — the engine never touches the clipboard itself — but no menu entry asks for it.",
   },
   {
+    // Was `/frames/` with the why "No per-frame export mode" -- which is still *true*, and is
+    // the interesting part, and no longer the reason this line is a gap. A frame export is a
+    // selection export of one frame: there is no frame-specific mode and 4.2 did not add one.
+    // What it did add is that the frame's own element is what gets measured
+    // (`exportToCanvas:228-233`, zero padding, its turned box) while its contents are what
+    // gets painted, with `frameRendering.clip = false` at `:217-219` so the frame's own clip
+    // does not cut the content at its edge. A child poking past the edge is cropped, and that
+    // is the oracle's answer.
+    //
+    // Narrowed from `/frames/` to the one line it ever matched, so it stops shadowing anything.
     section: "🔍 Export tricks",
-    text: /frames/,
-    status: "gap",
-    why: "No per-frame export mode.",
+    text: /^Export frames where appropriate$/,
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
   },
   {
+    // This exact-match rule shadowed the broader `/Selection export|Export selection/` added
+    // for design.md:1337, because first match wins and this one is earlier. So the figure
+    // moved by three when four lines were closed and the fourth stayed a gap for a reason
+    // that had been false since 4.2 landed. **A count that moves is not evidence that the
+    // right line moved** -- which is why the coverage test asserts named lines, not a total.
     section: "🔍 Export tricks",
     text: /^Export selection$/,
-    status: "gap",
-    why: "No selection-scoped export anywhere: the export dialog and both engine.exportSvg/exportPng always export the whole scene.",
+    status: "covered",
+    tests: [`${ENGINE}/ci_export_scope.rs`, "e2e/exportPng.spec.ts"],
   },
   {
     section: "🔍 Export tricks",
@@ -1707,7 +1722,12 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "12. Frames",
-    text: /Export frame/,
+    // Both word orders, and the omission is worth naming: `/Export frame/` alone matches
+    // shortkey.md:451 "Export frames where appropriate" and misses design.md:1339 "Frame
+    // export", so the line 4.2 actually closed stayed a gap while the number moved anyway.
+    // A count that moves is not evidence that the right line moved -- which is why the
+    // coverage test asserts named lines rather than a total.
+    text: /Frame export|Export frame/,
     status: "covered",
     // The `why` this replaces said "See the Frames rule: export has no frame mode", and the
     // second half is now false in an interesting way: a frame export is a *selection* export of
@@ -2428,7 +2448,9 @@ export const RULES: readonly Rule[] = [
   },
   {
     section: "32. Export",
-    text: /^Selection export$/,
+    // `^Selection export$` alone matches design.md:1337 and misses shortkey.md:445
+    // "Export selection", the same reversal as the frame rule above.
+    text: /Selection export|Export selection/,
     status: "covered",
     // The `why` this replaces ended "That is 4.2", which is now done. What decides the element
     // list is a layer above the bounds function, in `prepareElementsForExport`
