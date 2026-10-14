@@ -178,7 +178,9 @@ jobs:
   e2e:
     name: Browser tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The suite alone ran 14.4-19.9 min on main (Sept 2026) and 19.3 min on run 38574584839,
+    # which 20 cut at 20m10s: the ceiling, not a test, decided the verdict.
+    timeout-minutes: 30
     # The specs drive the real engine through a real wheel, so they need the real WASM.
     # Nothing else: every spec stubs /v1/** and the board route falls back to an empty
     # scene, so there is no API and no Mongo here on purpose — a browser test that talks
