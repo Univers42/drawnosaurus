@@ -1,4 +1,11 @@
-import { MongoClient, type Collection, type Db, type ObjectId, type WithId } from "mongodb";
+import {
+  MongoClient,
+  type Binary,
+  type Collection,
+  type Db,
+  type ObjectId,
+  type WithId,
+} from "mongodb";
 import type { DrawElementDto, WorldBounds } from "@drawnosaurus/contract";
 
 /**
@@ -25,6 +32,12 @@ export interface BoardFields {
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
+  /**
+   * When the board's thumbnail was last stored. Set apart from `updatedAt` and `rev`: a
+   * picture of the board is not an edit of it, and must not reorder the gallery or break
+   * an `If-Match`. Absent on boards created before thumbnails existed.
+   */
+  thumbnailAt?: Date | null;
 }
 
 /** A board as it comes back from a read. */
@@ -50,11 +63,24 @@ export interface PictureDoc {
   createdAt: Date;
 }
 
+/**
+ * A board's thumbnail, out of its document so a list or a board read never carries it.
+ * `_id` is the board's `_id`: one thumbnail per board, replaced in place.
+ */
+export interface ThumbnailDoc {
+  _id: ObjectId;
+  png: Binary;
+  bytes: number;
+  etag: string;
+  updatedAt: Date;
+}
+
 export interface MongoHandle {
   client: MongoClient;
   db: Db;
   boards: Collection<BoardFields>;
   pictures: Collection<PictureDoc>;
+  thumbnails: Collection<ThumbnailDoc>;
   close: () => Promise<void>;
 }
 
@@ -65,7 +91,9 @@ export async function connectMongo(url: string, dbName: string): Promise<MongoHa
   const boards = db.collection<BoardFields>("boards");
   const pictures = db.collection<PictureDoc>("pictures");
 
-  return { client, db, boards, pictures, close: () => client.close() };
+  const thumbnails = db.collection<ThumbnailDoc>("thumbnails");
+
+  return { client, db, boards, pictures, thumbnails, close: () => client.close() };
 }
 
 /**

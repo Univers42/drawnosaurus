@@ -71,6 +71,11 @@ export const boardSummarySchema = z.object({
   rev: z.number().int().min(0),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /**
+   * When the board's picture was last stored; null until one is. Optional on the read
+   * side because an API older than the thumbnail routes does not send it.
+   */
+  thumbnailAt: z.string().nullable().optional(),
 });
 
 export const boardListSchema = z.object({

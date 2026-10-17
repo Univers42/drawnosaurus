@@ -19,6 +19,7 @@ export function toSummary(doc: BoardDoc): BoardSummary {
     rev: doc.rev,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
+    thumbnailAt: doc.thumbnailAt?.toISOString() ?? null,
   };
 }
 

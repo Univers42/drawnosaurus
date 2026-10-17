@@ -63,3 +63,9 @@ export const MAX_GROUP_DEPTH = 32;
  * `docs/reference/images.md`.
  */
 export const MAX_IMAGE_DATA_URL_LENGTH = 6 * 1024 * 1024;
+
+/**
+ * The largest board thumbnail the API stores. The engine renders it at most 480px on a
+ * side, so a PNG of this size is a scene the front should not have tried to upload.
+ */
+export const MAX_THUMBNAIL_BYTES = 512 * 1024;
