@@ -88,18 +88,20 @@ Three things worth knowing before touching it:
 
 ## HTTP API (v1)
 
-| Method   | Path                        | Notes                                                                     |
-| -------- | --------------------------- | ------------------------------------------------------------------------- |
-| `GET`    | `/v1/boards?limit&cursor`   | Keyset pagination. Metadata only, never element arrays.                   |
-| `POST`   | `/v1/boards`                | Creates a board, mints the slug. `201` + `Location`.                      |
-| `GET`    | `/v1/boards/:slug`          | Full `.osidraw` envelope. `ETag: "<rev>"`.                                |
-| `PUT`    | `/v1/boards/:slug`          | Full replace. `If-Match` **required** → `428` without it, `409` if stale. |
-| `PATCH`  | `/v1/boards/:slug/elements` | The autosave path. Changed elements + tombstones, reconciled.             |
-| `DELETE` | `/v1/boards/:slug`          | Soft delete.                                                              |
-| `GET`    | `/v1/boards/:slug/live`     | The live websocket: a blind relay of sealed frames.                       |
-| `GET`    | `/v1/share`                 | Where others reach this server: network links, the internet link.         |
-| `POST`   | `/v1/share/tunnel`          | Opens the internet link (this computer only). `DELETE` closes it.         |
-| `GET`    | `/healthz`, `/readyz`       | Liveness; readiness pings Mongo.                                          |
+| Method   | Path                         | Notes                                                                                             |
+| -------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `GET`    | `/v1/boards?limit&cursor`    | Keyset pagination. Metadata only, never element arrays.                                           |
+| `POST`   | `/v1/boards`                 | Creates a board, mints the slug. `201` + `Location`.                                              |
+| `GET`    | `/v1/boards/:slug`           | Full `.osidraw` envelope. `ETag: "<rev>"`.                                                        |
+| `PUT`    | `/v1/boards/:slug`           | Full replace. `If-Match` **required** → `428` without it, `409` if stale.                         |
+| `PATCH`  | `/v1/boards/:slug/elements`  | The autosave path. Changed elements + tombstones, reconciled.                                     |
+| `PUT`    | `/v1/boards/:slug/thumbnail` | The gallery picture: a raw `image/png` body, at most 512 KiB. `204` + `ETag`; leaves `rev` alone. |
+| `GET`    | `/v1/boards/:slug/thumbnail` | The stored PNG. `304` on `If-None-Match`, `404` when there is none.                               |
+| `DELETE` | `/v1/boards/:slug`           | Soft delete.                                                                                      |
+| `GET`    | `/v1/boards/:slug/live`      | The live websocket: a blind relay of sealed frames.                                               |
+| `GET`    | `/v1/share`                  | Where others reach this server: network links, the internet link.                                 |
+| `POST`   | `/v1/share/tunnel`           | Opens the internet link (this computer only). `DELETE` closes it.                                 |
+| `GET`    | `/healthz`, `/readyz`        | Liveness; readiness pings Mongo.                                                                  |
 
 Every failure uses one envelope, `{ "error": { "code", "message" } }`, and nothing internal leaks
 through it.
