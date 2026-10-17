@@ -262,6 +262,9 @@ const FRONT_NUMBER_PATTERNS: ReadonlyArray<{ what: string; find: RegExp }> = [
   { what: "a number passed to exportSvg", find: /exportSvg\(\s*-?\d/ },
   { what: "a padding defaulted in the wrapper", find: /exportSvg\(\s*padding\s*=\s*-?\d/ },
   { what: "a number passed to exportPng", find: /exportPng\(\s*-?\d/ },
+  // The gallery picture is sized by the engine (`THUMBNAIL_MAX_SIDE`); a number here would be
+  // the front choosing how big a board's picture is.
+  { what: "a number passed to exportThumbnail", find: /exportThumbnail\(\s*-?\d/ },
   // The clipboard copy is a second door to the same export, so it is the same question: the
   // type, the size and the scope all come from `engine.clipboardCopy`, and a number at this
   // call would be the front choosing a margin or a scale for a picture it does not measure.
@@ -286,7 +289,7 @@ const FRONT_NUMBER_PATTERNS: ReadonlyArray<{ what: string; find: RegExp }> = [
 const KNOWN_FRONT_NUMBERS: readonly { path: string; find: RegExp; owner: string }[] = [];
 
 /** The two exports, which are about arithmetic. */
-const EXPORT_DOORS = ["exportPng(", "exportSvg("];
+const EXPORT_DOORS = ["exportPng(", "exportSvg(", "exportThumbnail("];
 
 /**
  * The doors a **file's bytes** come through, which are about the payload.
