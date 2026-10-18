@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import type { BoardSummary, WorldBounds } from "@drawnosaurus/contract";
-  import { createBoard, deleteBoard, listBoards } from "$lib/api/client.ts";
+  import { createBoard, deleteBoard, listBoards, thumbnailUrl } from "$lib/api/client.ts";
 
   let boards = $state<BoardSummary[]>([]);
   let nextCursor = $state<string | null>(null);
@@ -10,6 +10,12 @@
   let busy = $state(false);
   let error = $state<string | null>(null);
   let title = $state("");
+  /** Slugs whose picture failed to load: they fall back to the empty preview. */
+  let brokenPictures = $state<ReadonlySet<string>>(new Set());
+
+  const hidePicture = (slug: string): void => {
+    brokenPictures = new Set([...brokenPictures, slug]);
+  };
 
   const describe = (cause: unknown): string =>
     cause instanceof Error ? cause.message : "something went wrong";
@@ -99,6 +105,16 @@
       {#each boards as board (board.slug)}
         <a class="board-card" href={resolve("/boards/[slug]", { slug: board.slug })}>
           <div class="card-preview">
+            {#if board.thumbnailAt && board.elementCount > 0 && !brokenPictures.has(board.slug)}
+              <img
+                class="preview-image"
+                src={thumbnailUrl(board.slug, board.thumbnailAt)}
+                loading="lazy"
+                decoding="async"
+                alt=""
+                onerror={() => hidePicture(board.slug)}
+              />
+            {/if}
             <span class="preview-badge"
               >{board.elementCount} {board.elementCount === 1 ? "element" : "elements"}</span
             >
@@ -233,8 +249,17 @@
     justify-content: flex-end;
     padding: 8px;
     border-bottom: 1px solid var(--line);
+    position: relative;
+  }
+  .preview-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
   .preview-badge {
+    position: relative;
     font-size: 0.72rem;
     font-weight: 600;
     color: var(--muted);

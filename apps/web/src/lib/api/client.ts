@@ -70,6 +70,29 @@ export const listBoards = (limit?: number, cursor?: string): Promise<BoardList> 
   return request<BoardList>(`/v1/boards${suffix}`);
 };
 
+/**
+ * Stores the board's gallery picture. Not through `request()`: the body is raw PNG bytes,
+ * and that helper sends JSON and parses a JSON reply.
+ */
+export async function putThumbnail(slug: string, blob: Blob): Promise<void> {
+  const response = await fetch(`${baseUrl()}/v1/boards/${slug}/thumbnail`, {
+    method: "PUT",
+    headers: { "content-type": "image/png" },
+    body: blob,
+  });
+  if (!response.ok) {
+    throw new ApiClientError(
+      response.status,
+      "thumbnail_failed",
+      `thumbnail upload failed with ${response.status}`,
+    );
+  }
+}
+
+/** Where the gallery loads a board's picture; `version` (its `thumbnailAt`) busts the cache. */
+export const thumbnailUrl = (slug: string, version: string): string =>
+  `${baseUrl()}/v1/boards/${slug}/thumbnail?v=${encodeURIComponent(version)}`;
+
 /** Where other people can reach this drawnosaurus, for the Share dialog. */
 export const getShareInfo = (): Promise<ShareInfo> => request<ShareInfo>("/v1/share");
 

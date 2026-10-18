@@ -3,7 +3,8 @@
   import { page } from "$app/state";
   import { elementsFromJson } from "@osionos/draw-engine/json";
   import { Scene, type DrawElement } from "@osionos/draw-engine/types";
-  import { ApiClientError, getBoard, patchElements } from "$lib/api/client.ts";
+  import type { DrawEngine } from "@osionos/draw-engine/engine";
+  import { ApiClientError, getBoard, patchElements, putThumbnail } from "$lib/api/client.ts";
   import {
     SceneAutosaver,
     type AutosaveStatus,
@@ -16,6 +17,7 @@
   import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
   import { migrateLegacyStickyGroups } from "$lib/notes/stickyNotes.ts";
+  import { ThumbnailUploader } from "$lib/thumbnail/thumbnailUploader.ts";
 
   const slug = $derived(page.params.slug ?? "");
 
@@ -56,6 +58,17 @@
    */
   const saved = new PictureLedger();
 
+  let engine: DrawEngine | null = null;
+  /** Board opened with elements and no stored picture; spent once the engine is ready. */
+  let needsThumbnailBackfill = false;
+  let previousStatus: AutosaveStatus = "idle";
+
+  const thumbnails = new ThumbnailUploader({
+    render: async () => (engine === null ? null : await engine.exportThumbnail()),
+    upload: (blob) => putThumbnail(slug, blob),
+    now: () => Date.now(),
+  });
+
   const saver = new SceneAutosaver<DrawElement>({
     readScene: () => live.elements,
     lookup: live.lookup,
@@ -74,6 +87,8 @@
       saved.note(patch.elements);
     },
     onStatus: (next) => {
+      thumbnails.onStatus(previousStatus, next);
+      previousStatus = next;
       status = next;
     },
     classify,
@@ -94,6 +109,7 @@
         const board = await getBoard(slug);
         title = board.title;
         loaded = elementsFromJson(JSON.stringify(board.scene)) ?? [];
+        needsThumbnailBackfill = loaded.some((element) => !element.isDeleted) && !board.thumbnailAt;
         // The draft this page used to keep in localStorage: the server has the board,
         // and the string only took up the quota.
         storage()?.removeItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
@@ -152,6 +168,7 @@
       if (document.visibilityState !== "hidden") return;
       void saver.flush();
       void drafts.flush();
+      void thumbnails.flushNow();
     };
     document.addEventListener("visibilitychange", flushOnHide);
 
@@ -168,7 +185,15 @@
 
   onDestroy(() => {
     saver.dispose();
+    thumbnails.dispose();
   });
+
+  function onReady(next: DrawEngine): void {
+    engine = next;
+    if (!needsThumbnailBackfill) return;
+    needsThumbnailBackfill = false;
+    thumbnails.backfill();
+  }
 
   /**
    * Applies what the engine reports, which is usually only what changed.
@@ -181,6 +206,7 @@
    * that joined a frame goes directly below it — carries the order of every id.
    */
   function onSceneChange(json: string): void {
+    thumbnails.noteChanged();
     let parsed: unknown;
     try {
       parsed = JSON.parse(json);
@@ -243,6 +269,7 @@
         {slug}
         {status}
         {onSceneChange}
+        {onReady}
         {fetchLatest}
         ariaLabel="Board canvas"
       />

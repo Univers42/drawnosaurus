@@ -1,4 +1,4 @@
-import { BSON, type Collection } from "mongodb";
+import { BSON, type Collection, type ObjectId } from "mongodb";
 import {
   applyOrder,
   liveElements,
@@ -99,6 +99,7 @@ export class BoardRepository {
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
+      thumbnailAt: null,
     };
 
     const { insertedId } = await this.boards.insertOne(doc);
@@ -158,6 +159,15 @@ export class BoardRepository {
     }
 
     throw conflict("board is being written too often; retry");
+  }
+
+  /**
+   * Records that a thumbnail was stored. Touches neither `rev` nor `updatedAt`: the list
+   * sorts on `updatedAt` and `If-Match` relies on `rev`, and a picture of the board is
+   * neither an edit nor a reason to reorder the gallery.
+   */
+  async markThumbnail(id: ObjectId, at: Date): Promise<void> {
+    await this.boards.updateOne({ _id: id }, { $set: { thumbnailAt: at } });
   }
 
   async softDelete(ownerId: string, slug: string): Promise<void> {

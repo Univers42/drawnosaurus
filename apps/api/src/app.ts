@@ -2,6 +2,8 @@ import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
 import { assertAuthModeSupported } from "./auth.ts";
 import { registerBoardRoutes } from "./boards/routes.ts";
+import { registerThumbnailRoutes } from "./boards/thumbnailRoutes.ts";
+import { ThumbnailStore } from "./boards/thumbnails.ts";
 import { PictureStore } from "./boards/pictures.ts";
 import { BoardRepository } from "./boards/repository.ts";
 import type { Config } from "./config.ts";
@@ -64,6 +66,13 @@ export async function buildApp({
 
   const repo = new BoardRepository(mongo.boards, new PictureStore(mongo.pictures));
   registerBoardRoutes(app, { repo, config });
+  await app.register(async (scope) => {
+    registerThumbnailRoutes(scope, {
+      repo,
+      config,
+      thumbnails: new ThumbnailStore(mongo.thumbnails),
+    });
+  });
   // Live collaboration is engine/realtime (separate process), not an in-process WS.
   registerShareRoutes(app, config);
 

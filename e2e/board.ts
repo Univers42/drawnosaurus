@@ -150,6 +150,9 @@ export interface SceneElement {
 /** Every `PATCH /v1/**` body the page has sent, in order, per page. */
 const patches = new WeakMap<Page, SceneElement[][]>();
 
+/** The PNG bodies the page PUT to `/thumbnail`, oldest first. Not JSON, so kept apart from `patches`. */
+const thumbnails = new WeakMap<Page, Buffer[]>();
+
 export interface Board {
   page: Page;
   canvas: Locator;
@@ -303,9 +306,20 @@ export async function openBoard(
   await page.routeWebSocket(/\/(live|ws)$/, options.live ?? stubRealtimeHandshake);
 
   patches.set(page, []);
+  thumbnails.set(page, []);
 
   await page.route("**/v1/**", async (route) => {
     const url = route.request().url();
+    // Before the JSON branch: a thumbnail body is a PNG, and `postDataJSON()` throws on it.
+    if (new URL(url).pathname.endsWith("/thumbnail")) {
+      if (route.request().method() === "PUT") {
+        thumbnails.get(page)?.push(route.request().postDataBuffer() ?? Buffer.alloc(0));
+        await route.fulfill({ status: 204 });
+      } else {
+        await route.fulfill({ status: 404 });
+      }
+      return;
+    }
     if (route.request().method() !== "GET") {
       // The autosaver's PATCH: recorded, then acknowledged. Recorded because "did this
       // reach the server" is a question the engine cannot answer about itself, and it is
@@ -640,6 +654,11 @@ export async function sceneElements(page: Page): Promise<SceneElement[]> {
 /** Their types, in scene order — which is z-order, back to front. */
 export async function elementKinds(page: Page): Promise<string[]> {
   return (await sceneElements(page)).map((element) => element.type);
+}
+
+/** The thumbnails the page has uploaded so far, as the raw bytes it sent. */
+export function uploadedThumbnails(page: Page): Buffer[] {
+  return thumbnails.get(page) ?? [];
 }
 
 /** Every element the page has sent to the API so far, flattened across patches. */
