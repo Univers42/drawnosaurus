@@ -65,6 +65,7 @@ export {
   MAX_PAGE_SIZE,
   MAX_POINTS_PER_ELEMENT,
   MAX_TEXT_LENGTH,
+  MAX_THUMBNAIL_BYTES,
   MAX_TITLE_LENGTH,
   SUPPORTED_OSIDRAW_VERSION,
 } from "./limits.ts";
@@ -83,3 +84,5 @@ export {
   type ShareRole,
   type TunnelState,
 } from "./share.ts";
+
+export { isPngBytes } from "./thumbnail.ts";

@@ -87,6 +87,7 @@ is refused, and the commit stamps above it.
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `PUT /v1/boards/:slug`            | **requires `If-Match`** — 428 without it, 409 if stale, because a full replace from a stale tab destroys newer work |
 | `PATCH /v1/boards/:slug/elements` | none, by design: the autosave path merges per element so two writers converge                                       |
+| `PUT /v1/boards/:slug/thumbnail`  | none: a picture of the board is not an edit, so it never bumps `rev` or `updatedAt`                                 |
 
 `apps/api/src/boards/routes.ts` is HTTP only; merge rules are in the contract, persistence in
 `repository.ts`.
