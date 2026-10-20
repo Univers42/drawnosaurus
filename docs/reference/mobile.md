@@ -14,13 +14,13 @@ one is written down below.
 **VERIFIED** — `formFactor.ts` decides it, and its thresholds are the oracle's
 (`packages/common/src/editorInterface.ts@1118751f:81-89`, `:117-133`, `:167-184`):
 
-| the board is… | when                                                             |
-| -------------- | ---------------------------------------------------------------- |
-| a **phone**   | `width <= 599`, or `height < 500 && width < 1000`                |
-| a **tablet**  | its short side is over 599 and its long side at most 1180         |
-| a **desktop** | anything wider                                                   |
+| the board is… | when                                                      |
+| ------------- | --------------------------------------------------------- |
+| a **phone**   | `width <= 599`, or `height < 500 && width < 1000`         |
+| a **tablet**  | its short side is over 599 and its long side at most 1180 |
+| a **desktop** | anything wider                                            |
 
-**DESIGN** — the rule is a *class* on the chrome's root (`.draw-chrome.phone`), not a
+**DESIGN** — the rule is a _class_ on the chrome's root (`.draw-chrome.phone`), not a
 media query, because the oracle hangs its phone chrome off one too
 (`App.tsx@1118751f:2420-2424`, the `.excalidraw--mobile` class). A class survives the
 overlays, the popovers and the dialogs threaded with the same condition, and it cannot
@@ -43,13 +43,13 @@ are rather than two boxes that could overlap.
 (`MobileToolbar.tsx@1118751f:102-154`): seven fixed slots — pan, select, draw, erase, the
 two popovers and More — and text, image and frame joining the row as the width allows.
 
-| the oracle's number    | ours                     | what it decides                        |
-| ---------------------- | ------------------------ | -------------------------------------- |
-| `WIDTH = 36`           | `MOBILE_TOOL_WIDTH`      | a slot's width                         |
-| `GAP = 4`              | `MOBILE_TOOL_GAP`        | the gap between slots                  |
-| `MIN_TOOLS = 7`        | the base slots           | the row's fixed slots                  |
-| `MIN_WIDTH = 276`      | `MOBILE_BAR_MIN_WIDTH`   | the width the row needs for them       |
-| `ADDITIONAL_WIDTH = 40`| `MOBILE_BAR_SLOT_WIDTH`  | one more slot's width                  |
+| the oracle's number     | ours                    | what it decides                  |
+| ----------------------- | ----------------------- | -------------------------------- |
+| `WIDTH = 36`            | `MOBILE_TOOL_WIDTH`     | a slot's width                   |
+| `GAP = 4`               | `MOBILE_TOOL_GAP`       | the gap between slots            |
+| `MIN_TOOLS = 7`         | the base slots          | the row's fixed slots            |
+| `MIN_WIDTH = 276`       | `MOBILE_BAR_MIN_WIDTH`  | the width the row needs for them |
+| `ADDITIONAL_WIDTH = 40` | `MOBILE_BAR_SLOT_WIDTH` | one more slot's width            |
 
 Text is promoted from 316px, image from 356, frame from 396 — the oracle's own
 thresholds (`MIN_WIDTH + 1/2/3 * ADDITIONAL_WIDTH`, `MobileToolbar.tsx@1118751f:112-114`).
@@ -66,13 +66,13 @@ its icon (`MobileToolbar.tsx@1118751f:52-57`, `lastActiveGenericShape` and
 (`Actions.tsx@1118751f:731-880`): the properties the selection has, one button each,
 with the rows that travel together coalesced into one popover.
 
-| the oracle's number      | ours                        | what it decides                       |
-| ------------------------ | --------------------------- | ------------------------------------- |
-| `WIDTH = 32`             | `MOBILE_ACTION_WIDTH`       | a slot's width                        |
-| `GAP = 6`                | `MOBILE_ACTION_GAP`         | the gap between slots                 |
-| `MIN_ACTIONS = 9`        | `MOBILE_STRIP_MIN_ACTIONS`  | undo and redo included                |
-| `MIN_WIDTH = 336`        | `MOBILE_STRIP_MIN_WIDTH`    | the width the row needs               |
-| `ADDITIONAL_WIDTH = 38`  | `MOBILE_STRIP_SLOT_WIDTH`   | one more slot's width                 |
+| the oracle's number     | ours                       | what it decides         |
+| ----------------------- | -------------------------- | ----------------------- |
+| `WIDTH = 32`            | `MOBILE_ACTION_WIDTH`      | a slot's width          |
+| `GAP = 6`               | `MOBILE_ACTION_GAP`        | the gap between slots   |
+| `MIN_ACTIONS = 9`       | `MOBILE_STRIP_MIN_ACTIONS` | undo and redo included  |
+| `MIN_WIDTH = 336`       | `MOBILE_STRIP_MIN_WIDTH`   | the width the row needs |
+| `ADDITIONAL_WIDTH = 38` | `MOBILE_STRIP_SLOT_WIDTH`  | one more slot's width   |
 
 Delete is promoted from 374px and duplicate from 412 (`showDeleteOutside`,
 `showDuplicateOutside`, `Actions.tsx@1118751f:771-774`); what is not promoted stays in the
@@ -80,7 +80,7 @@ layer popover.
 
 **DESIGN** — one deliberate narrowing: the oracle's strip appears with a selection, and
 this one is always on the dock. With nothing selected the two colour buttons act on the
-*next* shape — the engine's own next style, the way Excalidraw's canvas properties work
+_next_ shape — the engine's own next style, the way Excalidraw's canvas properties work
 — so a thumb can pick a look before it draws one. Everything else on the row is the
 selection's and appears with it.
 
@@ -112,11 +112,11 @@ button is a scroll away.
 `zoomAt` and the pan through `panBy`, so the camera is moved the way a mouse moves it
 and the board's own zoom-to-fit and follow-the-presenter keep working.
 
-| gesture                | what happens                                                                 |
-| ---------------------- | ---------------------------------------------------------------------------- |
-| one finger             | the board's own: draw, select, erase, move                                     |
-| two fingers, moving   | the centre's travel pans, twice over (the oracle's multiplier, `App.tsx@1118751f:9160-9212`) |
-| two fingers, spreading | the distance ratio zooms at the fingers' centre                                |
+| gesture                | what happens                                                                                                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| one finger             | the board's own: draw, select, erase, move                                                                                               |
+| two fingers, moving    | the centre's travel pans, twice over (the oracle's multiplier, `App.tsx@1118751f:9160-9212`)                                             |
+| two fingers, spreading | the distance ratio zooms at the fingers' centre                                                                                          |
 | a finger at rest       | after 500ms it opens the canvas menu where it rests (`maybeOpenContextMenuAfterPointerDownOnTouchDevices`, `App.tsx@1118751f:9093-9110`) |
 
 The listeners sit on the **capture** phase of the canvas host, so a touch the gesture
@@ -125,7 +125,7 @@ nothing under two fingers, and the stroke the first finger began is dropped rath
 committed.
 
 **DESIGN** — the second finger's arrival drops the first finger's stroke, as the oracle
-does (`App.tsx@1118751f:8618-8630`), but the *engine* decides what to drop: the front end
+does (`App.tsx@1118751f:8618-8630`), but the _engine_ decides what to drop: the front end
 surrogate-reports the arrival and the engine's own Escape-equivalent throws the gesture
 away. That is wider than the oracle's rule, which keeps a stroke of ten points or more,
 and it also clears the selection — the engine's Escape does — so the selection is put
@@ -142,22 +142,22 @@ just opened. The click cannot be prevented at the source (the press was not, and
 engine needs it), so the controller claims it (`consumeClick`) and the caller swallows it
 on the window's capture phase.
 
-**VERIFIED** — `zoomAt`'s factor multiplies the scale the engine holds *now*
+**VERIFIED** — `zoomAt`'s factor multiplies the scale the engine holds _now_
 (`engine/src/cameraMath.ts`, `target.scale / after.scale` at the WASM boundary), so the
 ratio is measured against where the last paired move left the fingers, not the gesture's
 start: each move is one engine-sized step.
 
 ## Where each part lives
 
-| part                | where                                                                     |
-| ------------------- | ------------------------------------------------------------------------- |
-| the form factor     | `apps/web/src/lib/draw-chrome/formFactor.ts` (+ its test)                  |
-| the bottom bar      | `apps/web/src/lib/draw-chrome/DrawMobileToolbar.svelte`, plan in `mobileToolbar.ts` |
-| the style strip     | `apps/web/src/lib/draw-chrome/DrawMobileActions.svelte`, plan in `mobileActions.ts` |
-| the gestures        | `apps/web/src/lib/draw-chrome/touchGesture.ts` (+ its test)                |
-| the touch wiring    | `DrawSurface.svelte` — the capture-phase listeners on the canvas host      |
-| the phone's CSS     | `apps/web/src/lib/draw-chrome/draw-chrome.css`, under `.draw-chrome.phone` |
-| the browser tests   | `e2e/mobile.spec.ts`                                                       |
+| part              | where                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| the form factor   | `apps/web/src/lib/draw-chrome/formFactor.ts` (+ its test)                           |
+| the bottom bar    | `apps/web/src/lib/draw-chrome/DrawMobileToolbar.svelte`, plan in `mobileToolbar.ts` |
+| the style strip   | `apps/web/src/lib/draw-chrome/DrawMobileActions.svelte`, plan in `mobileActions.ts` |
+| the gestures      | `apps/web/src/lib/draw-chrome/touchGesture.ts` (+ its test)                         |
+| the touch wiring  | `DrawSurface.svelte` — the capture-phase listeners on the canvas host               |
+| the phone's CSS   | `apps/web/src/lib/draw-chrome/draw-chrome.css`, under `.draw-chrome.phone`          |
+| the browser tests | `e2e/mobile.spec.ts`                                                                |
 
 ## The browser tests
 
