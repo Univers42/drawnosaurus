@@ -25,6 +25,7 @@ prompts.md
 
 # Written by the tooling, not by hand.
 .claude/settings.local.json
+.superpowers
 
 # `engine.exportJson()`'s own pretty-print (`serde_json::to_string_pretty`), byte-for-byte
 # — that is the point, since a template is "what a story built", not a reformatting of
