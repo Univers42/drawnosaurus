@@ -41,23 +41,30 @@ const CHROME_PARTS: readonly (readonly [string, string])[] = [
 ];
 
 async function chromeBoxes(page: Page): Promise<ChromeBox[]> {
-  return page.evaluate((parts) => {
-    const boxes: {
-      name: string;
-      left: number;
-      top: number;
-      right: number;
-      bottom: number;
-    }[] = [];
-    for (const [selector, name] of parts) {
-      for (const node of Array.from(document.querySelectorAll(selector))) {
-        const r = node.getBoundingClientRect();
-        if (r.right <= r.left || r.bottom <= r.top) continue;
-        boxes.push({ name, left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+  return page.evaluate(
+    (parts) => {
+      const boxes: {
+        name: string;
+        left: number;
+        top: number;
+        right: number;
+        bottom: number;
+      }[] = [];
+      for (const [selector, name] of parts) {
+        for (const node of Array.from(document.querySelectorAll(selector))) {
+          const r = node.getBoundingClientRect();
+          if (r.right <= r.left || r.bottom <= r.top) continue;
+          // A box nobody can see is not a box: the folded status chips stay in the
+          // document so their width can be measured, and they are out of the way.
+          const style = getComputedStyle(node);
+          if (style.visibility === "hidden" || style.display === "none") continue;
+          boxes.push({ name, left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+        }
       }
-    }
-    return boxes;
-  }, CHROME_PARTS as readonly (readonly [string, string])[]);
+      return boxes;
+    },
+    CHROME_PARTS as readonly (readonly [string, string])[],
+  );
 }
 
 function boxesIntersect(

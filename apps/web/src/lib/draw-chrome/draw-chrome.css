@@ -98,6 +98,23 @@
    `formFactor.ts` for why — and every phone rule below keys off it. */
 
 /*
+  The top bar's rows.
+
+  The tool bar sits in the middle of the header's row, and the header's two ends share
+  what is left of it. When the row cannot hold the bar and both ends together, the bar
+  takes a row of its own below the header and the header's row is the width of the
+  screen again — `topBar.ts` decides, and this class is the answer's one effect on the
+  layout.
+
+  The style panel follows the bar down: a panel that started where the bar is would be
+  under it.
+*/
+.draw-chrome.toolbar-row {
+  --chrome-toolbar-top: 66px;
+  --chrome-panel-top: 122px;
+}
+
+/*
   The phone's dock: the style strip above the tool bar, both at the bottom, where a
   thumb is. The desktop's own bars are not drawn on a phone at all (see DrawSurface):
   a row of ten tools across the top of a 360px screen is what the oracle's phone

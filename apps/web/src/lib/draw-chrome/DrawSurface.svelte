@@ -154,6 +154,7 @@
   import PeerCursors from "./PeerCursors.svelte";
   import "./draw-chrome.css";
   import { formFactorFor, type FormFactor } from "./formFactor.ts";
+  import { TITLE_MAX, type TopBarPlan } from "./topBar.ts";
   import { createTouchController } from "./touchGesture.ts";
 
   let {
@@ -257,6 +258,21 @@
   });
 
   let selectedCount = $state(0);
+
+  /**
+   * The top bar's plan, and the tool bar's width it is measured against.
+   *
+   * The header measures the parts it owns and asks the plan what to do with them
+   * (`topBar.ts`); the plan's one answer that is not the header's own is whether the
+   * tool bar has a row of its own, which is the chrome's business — hence the class on
+   * the root.
+   */
+  let toolbarWidth = $state(0);
+  let topBarPlan = $state<TopBarPlan>({
+    toolbarOwnRow: false,
+    titleMaxWidth: TITLE_MAX,
+    foldChips: false,
+  });
   /**
    * The engine's `styleRevision()` as last read. It moves on everything that can change
    * what the panel shows — a selection, a style, an undo, a peer's edit to what is
@@ -2281,6 +2297,7 @@
   class="draw-chrome"
   class:phone={formFactor === "phone"}
   class:tablet={formFactor === "tablet"}
+  class:toolbar-row={topBarPlan.toolbarOwnRow}
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
     onFocusModeKeydown(e);
@@ -2303,6 +2320,9 @@
       onToggleMenu={() => (showMainMenu = !showMainMenu)}
       onOpenShare={openShare}
       onOpenShortcuts={() => (showShortcuts = true)}
+      {toolbarWidth}
+      phone={formFactor === "phone"}
+      onPlan={(plan) => (topBarPlan = plan)}
     >
       {#snippet menu()}
         {#if showMainMenu}
@@ -2630,6 +2650,7 @@
       {toolLocked}
       {zenMode}
       onSelect={handleToolSelect}
+      onWidth={(width) => (toolbarWidth = width)}
       onToggleToolLock={() => {
         if (!engine) return;
         engine.setToolLocked(!engine.getToolLocked());

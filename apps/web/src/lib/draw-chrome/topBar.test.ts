@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  FOLDED_CHIPS,
-  TITLE_MAX,
-  TITLE_MIN,
-  topBarPlan,
-  type TopBarWidths,
-} from "./topBar.ts";
+import { FOLDED_CHIPS, TITLE_MAX, TITLE_MIN, topBarPlan, type TopBarWidths } from "./topBar.ts";
 
 /**
  * The top bar's plan.
@@ -56,6 +50,7 @@ describe("topBarPlan", () => {
     const plan = topBarPlan({ ...measured, viewport: 900 });
     expect(plan.toolbarOwnRow).toBe(false);
     expect(plan.foldChips).toBe(true);
+    expect(plan.titleMaxWidth).toBeGreaterThanOrEqual(TITLE_MIN);
     expect(plan.titleMaxWidth).toBe(92);
   });
 
@@ -77,9 +72,7 @@ describe("topBarPlan", () => {
 
   it("never lets the title take more than its own width", () => {
     for (const viewport of [600, 768, 820, 900, 1024, 1180, 1280, 1920]) {
-      expect(topBarPlan({ ...measured, viewport }).titleMaxWidth).toBeLessThanOrEqual(
-        TITLE_MAX,
-      );
+      expect(topBarPlan({ ...measured, viewport }).titleMaxWidth).toBeLessThanOrEqual(TITLE_MAX);
     }
   });
 

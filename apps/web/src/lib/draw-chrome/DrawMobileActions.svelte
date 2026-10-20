@@ -301,25 +301,9 @@
 {#if open}
   <div class="sheet draw-panel" role="dialog" aria-label={slotLabel[open]}>
     {#if open === "shape properties"}
-      <ShapeActionRows
-        section="shape"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="shape" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {:else if open === "arrow properties"}
-      <ShapeActionRows
-        section="arrow"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="arrow" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {:else if open === "text"}
       {#if can.text}
         <InspectorRow label="Font family">
@@ -334,45 +318,13 @@
           />
         </InspectorRow>
       {/if}
-      <ShapeActionRows
-        section="text"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="text" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {:else if open === "figure"}
-      <ShapeActionRows
-        section="figure"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="figure" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {:else if open === "opacity"}
-      <ShapeActionRows
-        section="opacity"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="opacity" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {:else if open === "layer actions"}
-      <ShapeActionRows
-        section="actions"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="actions" {summary} {can} {engine} {onApply} {onPreview} {run} />
       {#if plan.overflow.includes("duplicate")}
         <InspectorRow label="Duplicate">
           <button

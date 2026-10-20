@@ -691,7 +691,11 @@
 <style>
   .panel {
     position: absolute;
-    top: 66px;
+    /*
+      The panel's place: under the header, or under the tool bar's own row when the top
+      bar has one (`draw-chrome.css`'s `--chrome-panel-top`).
+    */
+    top: var(--chrome-panel-top, 66px);
     left: 14px;
     width: 216px;
     padding: 14px;

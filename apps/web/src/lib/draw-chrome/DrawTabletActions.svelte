@@ -172,12 +172,7 @@
 
 <svelte:window onpointerdown={onWindowPointerDown} />
 
-<aside
-  bind:this={panel}
-  class="draw-panel panel"
-  aria-label="Style panel"
-  data-viewport-ui="side"
->
+<aside bind:this={panel} class="draw-panel panel" aria-label="Style panel" data-viewport-ui="side">
   <div class="column">
     {#each plan as item (item)}
       <div class="item">
@@ -280,46 +275,14 @@
     }}
   >
     {#if open === "shape properties"}
-      <ShapeActionRows
-        section="shape"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="shape" {summary} {can} {engine} {onApply} {onPreview} {run} />
       <ShapeActionRows section="opacity" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {:else if open === "arrow properties"}
-      <ShapeActionRows
-        section="arrow"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="arrow" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {:else if open === "text properties"}
-      <ShapeActionRows
-        section="text"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="text" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {:else if open === "actions"}
-      <ShapeActionRows
-        section="actions"
-        {summary}
-        {can}
-        {engine}
-        {onApply}
-        {onPreview}
-        {run}
-      />
+      <ShapeActionRows section="actions" {summary} {can} {engine} {onApply} {onPreview} {run} />
     {/if}
   </div>
 {/if}
@@ -331,7 +294,11 @@
   */
   .panel {
     position: absolute;
-    top: 66px;
+    /*
+      The panel's place: under the header, or under the tool bar's own row when the top
+      bar has one (`draw-chrome.css`'s `--chrome-panel-top`).
+    */
+    top: var(--chrome-panel-top, 66px);
     left: 14px;
     width: fit-content;
     padding: 8px;
