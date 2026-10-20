@@ -61,6 +61,14 @@ declare global {
         screenX: number,
         screenY: number,
       ): string | null;
+      /** Places a default-sized shape as the palette's "Add rectangle" does. */
+      insertDefaultShape(
+        kind: "rectangle" | "diamond" | "ellipse",
+        screenX: number,
+        screenY: number,
+      ): string | null;
+      /** Selects by id, as a press does. */
+      select(ids: string[]): void;
       /** The embeds on screen and where their frames go, as JSON. */
       embedFramesJson(): string;
       /** The selection, serialised as this scene's own clipboard JSON — Ctrl+C's write. */

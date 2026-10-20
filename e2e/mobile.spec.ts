@@ -211,6 +211,22 @@ test.describe("phone portrait 390×844", () => {
 
   test("the style strip changes a stroke colour and its popover closes", async ({ page }) => {
     await openBoard(page);
+    // The strip is the selection's: with nothing selected and no tool in hand there is
+    // nothing for it to act on, so the oracle does not show it (the same predicate the
+    // desktop's panel uses).
+    await expect(
+      page.getByRole("toolbar", { name: "Shape actions" }),
+      "no strip without a selection",
+    ).toBeHidden();
+
+    // A rectangle, selected: the strip's rows are what a selection fills in.
+    await page.evaluate(() => {
+      const engine = window.__drawEngine!;
+      const canvas = document.querySelector("canvas")!.getBoundingClientRect();
+      const id = engine.insertDefaultShape("rectangle", canvas.width / 2, canvas.height / 2);
+      if (id) engine.select([id]);
+    });
+
     const strip = page.getByRole("toolbar", { name: "Shape actions" });
     await expect(strip).toBeVisible();
 
@@ -219,6 +235,16 @@ test.describe("phone portrait 390×844", () => {
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: /^Red —/ }).click();
     await expect(dialog).toBeHidden();
+
+    // And the shape is red: the pick reached the engine, not only the picker.
+    const stroke = await page.evaluate(() => {
+      const engine = window.__drawEngine!;
+      const element = JSON.parse(engine.exportJson()).elements.find(
+        (el: { type: string }) => el.type === "rectangle",
+      );
+      return element.strokeColor;
+    });
+    expect(stroke, "the shape's stroke is the colour that was picked").toBe("#e03131");
   });
 
   test("a pinch zooms, a two-finger drag pans, neither draws", async ({ page }) => {
