@@ -148,6 +148,14 @@ no draft, so an in-app navigation away from an unsaved edit waits for the save t
 does not happen if it failed; once the save line shows the failure, the next one goes through
 (`lib/boards/holdForSave.ts`).
 
+**The public build opens a drawing, and connects it to nothing.** Its `/` goes to the drawing
+last open in this browser, or to a new one (`lib/boards/lastDrawing.ts`; the gallery's delete
+forgets it), and writes nothing: a drawing's row comes with its first save, or with a name
+given in the gallery, so the gallery lists every row there is. Whether a drawing has a live
+link is `liveKeyFor` in `lib/realtime/liveRoom.ts`: every board in the Docker build, none in
+the public build until it is shared — no socket, nothing on the header, and no Share button
+until that build has a Share dialog of its own.
+
 Every toolbar entry in `tools.ts` is typed `DrawTool`, the engine's own union — the sticky
 note included, which the engine owns now — so the toolbar cannot offer a tool `setTool` does
 not accept.
