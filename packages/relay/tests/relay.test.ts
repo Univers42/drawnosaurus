@@ -330,6 +330,30 @@ describe("what one frame may cost", () => {
     expect(sentTo(relay.receive(a, to(topic(256))), all)).toHaveLength(1);
   });
 
+  // Fix round 2: an event type is copied into every EVENT, as the topic is.
+  it("drops a publish whose event type is over 64 bytes, and serves one of 64", () => {
+    const relay = new Relay();
+    const all = watcher(relay);
+    const a = joined(relay, "one");
+    const typed = (bytes: number) =>
+      JSON.stringify({
+        type: "PUBLISH",
+        topic: "boards/one/live",
+        event_type: "e".repeat(bytes),
+        payload: 1,
+      });
+    expect(sentTo(relay.receive(a, typed(65)), all)).toEqual([]);
+    expect(sentTo(relay.receive(a, typed(64)), all)).toHaveLength(1);
+    // Bytes, not characters: 33 two-byte characters are 66 bytes.
+    const wide = JSON.stringify({
+      type: "PUBLISH",
+      topic: "boards/one/live",
+      event_type: "é".repeat(33),
+      payload: 1,
+    });
+    expect(sentTo(relay.receive(a, wide), all)).toEqual([]);
+  });
+
   it("keeps a sequence for at most 10,000 topics, forgetting the least recently published", () => {
     const relay = new Relay();
     const all = watcher(relay);

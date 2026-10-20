@@ -16,7 +16,10 @@ import worker, { RelayObject } from "../src/worker.ts";
  */
 class FakeSocket {
   readonly sent: string[] = [];
+  /** Closed from this end (`ws.close`): CLOSING, and possibly still listed. */
   closed = false;
+  /** Its page has gone: the runtime no longer lists it. */
+  disconnected = false;
   private attachment: unknown = null;
 
   send(frame: string): void {
@@ -64,8 +67,10 @@ class FakeSocket {
 }
 
 /**
- * What outlives the object across hibernation: the accepted sockets and their tags. Like
- * the runtime, it keeps listing a socket after it closes.
+ * What outlives the object across hibernation: the accepted sockets and their tags. As the
+ * runtime documents it (https://developers.cloudflare.com/durable-objects/api/state/,
+ * `getWebSockets`): "Disconnected WebSockets are not returned", but one may still be
+ * "even after `ws.close` has been called", while CLOSING.
  */
 class FakeState {
   readonly accepted: { ws: FakeSocket; tags: string[] }[] = [];
@@ -75,7 +80,9 @@ class FakeState {
   }
 
   getWebSockets(tag?: string): FakeSocket[] {
-    return this.accepted.filter((a) => tag === undefined || a.tags.includes(tag)).map((a) => a.ws);
+    return this.accepted
+      .filter((a) => !a.ws.disconnected && (tag === undefined || a.tags.includes(tag)))
+      .map((a) => a.ws);
   }
 
   /** The pair the runtime answers by itself, without waking the object. */
@@ -249,6 +256,39 @@ describe("the Durable Object", () => {
     expect(a.control()).toEqual([{ type: "gone", socket: b.connId() }]);
     expect(a.sent.at(-1)).toBe(`{"type":"gone","socket":"${b.connId()}"}`);
     expect(other.control()).toEqual([]);
+  });
+
+  /*
+   * Fix round 2. A close can be what wakes the object, and by then the closing socket may
+   * be disconnected, so the woken object's `getWebSockets()` does not list it: only its own
+   * attachment still says who it was and where it was subscribed.
+   */
+  it("announces a socket closing on a woken object that no longer lists it, once", () => {
+    const state = new FakeState();
+    const first = objectOn(state);
+    const a = join(first, state, "drawing");
+    const b = join(first, state, "drawing");
+    const other = join(first, state, "another");
+    b.disconnected = true;
+    const woken = objectOn(state);
+    expect(state.getWebSockets()).not.toContain(b);
+    woken.webSocketClose(asSocket(b));
+    expect(a.control()).toEqual([{ type: "gone", socket: b.connId() }]);
+    expect(other.control()).toEqual([]);
+    // Its close reported again, on this object or the next, announces nothing more.
+    woken.webSocketClose(asSocket(b));
+    objectOn(state).webSocketClose(asSocket(b));
+    expect(a.control()).toEqual([{ type: "gone", socket: b.connId() }]);
+  });
+
+  it("announces a socket once when the runtime reports both its error and its close", () => {
+    const state = new FakeState();
+    const object = objectOn(state);
+    const a = join(object, state, "drawing");
+    const b = join(object, state, "drawing");
+    object.webSocketError(asSocket(b));
+    object.webSocketClose(asSocket(b));
+    expect(a.control()).toEqual([{ type: "gone", socket: b.connId() }]);
   });
 
   it("tells the others on the drawing that a socket has erred, by its name", () => {
