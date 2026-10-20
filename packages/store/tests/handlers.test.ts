@@ -456,6 +456,22 @@ describe.each(stores)("the store, over %s", (_name, open) => {
     expect(await db.head("drawing1")).toBeNull();
   });
 
+  it("answers 405 with the route's methods for any other, whatever its name", async () => {
+    const { db } = open();
+    const cases: [string, string, string][] = [
+      ["DELETE", "drawing1", "GET, PUT"],
+      ["constructor", "drawing1", "GET, PUT"],
+      ["PUT", "drawing1/parts/1", "GET"],
+      ["GET", "drawing1/staged/upload01", "POST"],
+      ["toString", "drawing1/staged/upload01/parts/0", "PUT"],
+    ];
+    for (const [method, path, allow] of cases) {
+      const response = await send(db, method, path, { rev: 0 });
+      expect(response.status, `${method} ${path}`).toBe(405);
+      expect(response.headers.get("allow")).toBe(allow);
+    }
+  });
+
   it("decides a write again when another lands between its read and its own write", async () => {
     const { db } = open();
     await putScene(db, "drawing1", bytes(100));
@@ -491,8 +507,11 @@ describe.each(stores)("the store, over %s", (_name, open) => {
       seen: seen.nonce,
       head: { ...seen, rev: 2, nonce: "late", bytes: 10, sceneBytes: 10 },
       writtenAt: T0 + 3 * DAY,
-      item: SCENE,
-      parts: [bytes(10, 9)],
+      changes: [
+        { kind: "put", item: SCENE, n: 0, total: 1, bytes: bytes(10, 9) },
+        { kind: "trim", item: SCENE, from: 1 },
+        { kind: "dropStaged" },
+      ],
       sweep: { before: T0 + DAY, limit: SWEEP_LIMIT },
     };
     expect(await db.write(late)).toBe(false);
@@ -509,7 +528,7 @@ describe("the store, when its database refuses", () => {
   it("answers 503 store_unavailable, an error the browser can show", async () => {
     const spent = (): Promise<never> =>
       Promise.reject(new Error("D1_ERROR: Exceeded maximum daily rows written"));
-    const db: StoreDb = { head: spent, scene: spent, picture: spent, write: spent };
+    const db: StoreDb = { head: spent, item: spent, part: spent, scene: spent, write: spent };
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     for (const response of [await get(db, "drawing1"), await putScene(db, "drawing1", bytes(10))]) {

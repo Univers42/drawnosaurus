@@ -6,7 +6,7 @@ import { memoryStore } from "./memory.ts";
 import type { StoreDb } from "./storeDb.ts";
 
 /** The request headers the handlers read. Only these cross into the `Request`. */
-const FORWARDED = ["authorization", "if-match", "content-length"] as const;
+const FORWARDED = ["authorization", "if-match", "x-parts", "content-length"] as const;
 
 /**
  * The store for `vite dev` and the browser tests: the real handlers over the in-memory fake,

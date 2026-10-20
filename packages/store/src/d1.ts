@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { SCENE, type Head, type StoreDb } from "./storeDb.ts";
+import { SCENE, type Change, type Head, type Part, type StoreDb } from "./storeDb.ts";
 
 /*
  * The part of D1's Worker API the store calls, declared here rather than taken from
@@ -34,7 +34,7 @@ export interface D1Database {
 export const encodePart = (part: Uint8Array): string =>
   Buffer.from(part.buffer, part.byteOffset, part.byteLength).toString("base64");
 
-export const decodePart = (text: string): Uint8Array => Buffer.from(text, "base64");
+export const decodePart = (text: string): Uint8Array<ArrayBuffer> => Buffer.from(text, "base64");
 
 interface HeadRow {
   rev: number;
@@ -43,6 +43,8 @@ interface HeadRow {
   bytes: number;
   scene_bytes: number;
   pictures: number;
+  staged_bytes: number;
+  staged_at: number;
 }
 
 const toHead = (row: HeadRow): Head => ({
@@ -52,41 +54,94 @@ const toHead = (row: HeadRow): Head => ({
   bytes: row.bytes,
   sceneBytes: row.scene_bytes,
   pictures: row.pictures,
+  stagedBytes: row.staged_bytes,
+  stagedAt: row.staged_at,
 });
+
+interface PartRow {
+  total: number;
+  data: string;
+}
+
+const toPart = (row: PartRow | undefined | null): Part | null =>
+  row ? { total: row.total, bytes: decodePart(row.data) } : null;
+
+// ?1 and ?2 are the drawing and the new nonce in every statement after the claim.
+const LANDED = "EXISTS (SELECT 1 FROM drawings WHERE id = ?1 AND nonce = ?2)";
+
+/** The SQL of each change, bound after ?1 and ?2. */
+const CHANGES = {
+  put: `INSERT INTO parts (drawing_id, item, n, total, size, data)
+        SELECT ?1, ?3, ?4, ?5, ?6, ?7 WHERE ${LANDED}
+        ON CONFLICT (drawing_id, item, n) DO UPDATE
+        SET total = excluded.total, size = excluded.size, data = excluded.data`,
+  trim: `DELETE FROM parts WHERE drawing_id = ?1 AND item = ?3 AND n >= ?4 AND ${LANDED}`,
+  rename: `UPDATE parts SET item = ?4 WHERE drawing_id = ?1 AND item = ?3 AND ${LANDED}`,
+  // GLOB, not LIKE: case-sensitive, so SQLite reads it as a range on the key.
+  dropStaged: `DELETE FROM parts WHERE drawing_id = ?1 AND item GLOB '@*' AND ${LANDED}`,
+} as const;
+
+const bindings = (change: Change): (string | number)[] => {
+  switch (change.kind) {
+    case "put":
+      return [
+        change.item,
+        change.n,
+        change.total,
+        change.bytes.byteLength,
+        encodePart(change.bytes),
+      ];
+    case "trim":
+      return [change.item, change.from];
+    case "rename":
+      return [change.from, change.to];
+    case "dropStaged":
+      return [];
+  }
+};
 
 /** The store's database on D1, as `migrations/0001_init.sql` lays it out. */
 export function d1Store(db: D1Database): StoreDb {
-  const partsOf = (id: string, item: string): D1PreparedStatement =>
+  const partOf = (id: string, item: string, n: number): D1PreparedStatement =>
     db
-      .prepare("SELECT data FROM parts WHERE drawing_id = ?1 AND item = ?2 ORDER BY n")
-      .bind(id, item);
+      .prepare("SELECT total, data FROM parts WHERE drawing_id = ?1 AND item = ?2 AND n = ?3")
+      .bind(id, item, n);
 
   return {
     async head(id) {
       const row = await db
         .prepare(
-          "SELECT rev, proof, nonce, bytes, scene_bytes, pictures FROM drawings WHERE id = ?1",
+          `SELECT rev, proof, nonce, bytes, scene_bytes, pictures, staged_bytes, staged_at
+           FROM drawings WHERE id = ?1`,
         )
         .bind(id)
         .first<HeadRow>();
       return row === null ? null : toHead(row);
     },
 
-    async scene(id) {
-      // One batch is one transaction, so the rev and the parts are of the same write.
-      const [revs, rows] = (await db.batch([
-        db.prepare("SELECT rev FROM drawings WHERE id = ?1").bind(id),
-        partsOf(id, SCENE),
-      ])) as [D1Result<{ rev: number }>, D1Result<{ data: string }>];
-      const head = revs.results[0];
-      return head === undefined
-        ? null
-        : { rev: head.rev, parts: rows.results.map((row) => decodePart(row.data)) };
+    async item(id, item) {
+      const row = await db
+        .prepare(
+          `SELECT count(*) AS parts, max(total) AS total, sum(size) AS bytes
+           FROM parts WHERE drawing_id = ?1 AND item = ?2`,
+        )
+        .bind(id, item)
+        .first<{ parts: number; total: number; bytes: number }>();
+      return row === null || row.parts === 0 ? null : row;
     },
 
-    async picture(id, pid) {
-      const { results } = await partsOf(id, pid).all<{ data: string }>();
-      return results.length === 0 ? null : results.map((row) => decodePart(row.data));
+    async part(id, item, n) {
+      return toPart(await partOf(id, item, n).first<PartRow>());
+    },
+
+    async scene(id, n) {
+      // One batch is one transaction, so the rev and the part are of the same write.
+      const [revs, rows] = (await db.batch([
+        db.prepare("SELECT rev FROM drawings WHERE id = ?1").bind(id),
+        partOf(id, SCENE, n),
+      ])) as [D1Result<{ rev: number }>, D1Result<PartRow>];
+      const head = revs.results[0];
+      return head === undefined ? null : { rev: head.rev, part: toPart(rows.results[0]) };
     },
 
     /**
@@ -103,8 +158,9 @@ export function d1Store(db: D1Database): StoreDb {
         write.seen === null
           ? db
               .prepare(
-                `INSERT INTO drawings (id, nonce, rev, proof, written_at, bytes, scene_bytes, pictures)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) ON CONFLICT (id) DO NOTHING`,
+                `INSERT INTO drawings (id, nonce, rev, proof, written_at, bytes, scene_bytes,
+                   pictures, staged_bytes, staged_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT (id) DO NOTHING`,
               )
               .bind(
                 id,
@@ -115,12 +171,14 @@ export function d1Store(db: D1Database): StoreDb {
                 head.bytes,
                 head.sceneBytes,
                 head.pictures,
+                head.stagedBytes,
+                head.stagedAt,
               )
           : db
               .prepare(
                 `UPDATE drawings SET nonce = ?2, rev = ?3, written_at = ?4, bytes = ?5,
-                   scene_bytes = ?6, pictures = ?7
-                 WHERE id = ?1 AND nonce = ?8`,
+                   scene_bytes = ?6, pictures = ?7, staged_bytes = ?8, staged_at = ?9
+                 WHERE id = ?1 AND nonce = ?10`,
               )
               .bind(
                 id,
@@ -130,31 +188,22 @@ export function d1Store(db: D1Database): StoreDb {
                 head.bytes,
                 head.sceneBytes,
                 head.pictures,
+                head.stagedBytes,
+                head.stagedAt,
                 write.seen,
               );
-      // ?1 and ?2 are the drawing and the new nonce in every statement after the claim.
-      const landed = "EXISTS (SELECT 1 FROM drawings WHERE id = ?1 AND nonce = ?2)";
-      const store = write.parts.map((part, n) =>
-        db
-          .prepare(
-            `INSERT INTO parts (drawing_id, item, n, data) SELECT ?1, ?3, ?4, ?5 WHERE ${landed}
-             ON CONFLICT (drawing_id, item, n) DO UPDATE SET data = excluded.data`,
-          )
-          .bind(id, head.nonce, write.item, n, encodePart(part)),
+      const changes = write.changes.map((change) =>
+        db.prepare(CHANGES[change.kind]).bind(id, head.nonce, ...bindings(change)),
       );
-      // A scene written again in fewer parts leaves no stale tail behind.
-      const trim = db
-        .prepare(`DELETE FROM parts WHERE drawing_id = ?1 AND item = ?3 AND n >= ?4 AND ${landed}`)
-        .bind(id, head.nonce, write.item, write.parts.length);
       // Both deletes pick the same drawings: nothing changes `drawings` between them.
       const expired =
         "SELECT id FROM drawings WHERE written_at < ?3 ORDER BY written_at, id LIMIT ?4";
       const sweep = [
-        `DELETE FROM parts WHERE drawing_id IN (${expired}) AND ${landed}`,
-        `DELETE FROM drawings WHERE id IN (${expired}) AND ${landed}`,
+        `DELETE FROM parts WHERE drawing_id IN (${expired}) AND ${LANDED}`,
+        `DELETE FROM drawings WHERE id IN (${expired}) AND ${LANDED}`,
       ].map((sql) => db.prepare(sql).bind(id, head.nonce, write.sweep.before, write.sweep.limit));
 
-      const [swap] = await db.batch([claim, ...store, trim, ...sweep]);
+      const [swap] = await db.batch([claim, ...changes, ...sweep]);
       return swap?.meta.changes === 1;
     },
   };

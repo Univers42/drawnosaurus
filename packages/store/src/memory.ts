@@ -1,9 +1,34 @@
-import { SCENE, type Head, type StoreDb } from "./storeDb.ts";
+import { SCENE, type Change, type Head, type Part, type StoreDb } from "./storeDb.ts";
 
 interface Drawing {
   head: Head;
   writtenAt: number;
-  items: Map<string, readonly Uint8Array[]>;
+  items: Map<string, Part[]>;
+}
+
+function apply(items: Map<string, Part[]>, change: Change): void {
+  switch (change.kind) {
+    case "put": {
+      const parts = [...(items.get(change.item) ?? [])];
+      parts[change.n] = { total: change.total, bytes: change.bytes };
+      items.set(change.item, parts);
+      return;
+    }
+    case "trim": {
+      const parts = items.get(change.item)?.slice(0, change.from) ?? [];
+      if (parts.length === 0) items.delete(change.item);
+      else items.set(change.item, parts);
+      return;
+    }
+    case "rename": {
+      const parts = items.get(change.from);
+      items.delete(change.from);
+      if (parts) items.set(change.to, parts);
+      return;
+    }
+    case "dropStaged":
+      for (const item of items.keys()) if (item.startsWith("@")) items.delete(item);
+  }
 }
 
 /**
@@ -13,22 +38,30 @@ interface Drawing {
  */
 export function memoryStore(): StoreDb {
   const drawings = new Map<string, Drawing>();
+  const partsOf = (id: string, item: string): Part[] | undefined =>
+    drawings.get(id)?.items.get(item);
   return {
     head: async (id) => drawings.get(id)?.head ?? null,
-    scene: async (id) => {
-      const drawing = drawings.get(id);
-      return drawing
-        ? { rev: drawing.head.rev, parts: [...(drawing.items.get(SCENE) ?? [])] }
+    item: async (id, item) => {
+      const parts = partsOf(id, item);
+      return parts?.[0]
+        ? {
+            parts: parts.length,
+            total: parts[0].total,
+            bytes: parts.reduce((size, part) => size + part.bytes.byteLength, 0),
+          }
         : null;
     },
-    picture: async (id, pid) => {
-      const parts = drawings.get(id)?.items.get(pid);
-      return parts ? [...parts] : null;
+    part: async (id, item, n) => partsOf(id, item)?.[n] ?? null,
+    scene: async (id, n) => {
+      const drawing = drawings.get(id);
+      return drawing ? { rev: drawing.head.rev, part: partsOf(id, SCENE)?.[n] ?? null } : null;
     },
     write: async (write) => {
       const current = drawings.get(write.id);
       if ((current?.head.nonce ?? null) !== write.seen) return false;
-      const items = new Map(current?.items).set(write.item, [...write.parts]);
+      const items = new Map(current?.items);
+      for (const change of write.changes) apply(items, change);
       drawings.set(write.id, { head: write.head, writtenAt: write.writtenAt, items });
       const expired = [...drawings]
         .filter(([, drawing]) => drawing.writtenAt < write.sweep.before)
