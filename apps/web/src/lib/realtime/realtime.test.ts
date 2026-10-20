@@ -956,6 +956,49 @@ describe("realtimeClient keeping everyone up to date", () => {
     channel.disconnect();
   });
 
+  it("tells the page who joined, and not of its own join echoed back", async () => {
+    // A sync over the relay's 64 KiB is dropped (task-5r): the page saves its edits to the
+    // online copy for the newcomer instead, and needs to know when someone came.
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    const joined: string[] = [];
+    const stop = channel.onJoin((clientId) => joined.push(clientId));
+    channel.connect("ws://rt/ws");
+    handshake(FakeSocket.made[0]!);
+
+    const join = { type: "join", name: "Ana", color: "#e03131", have: {} } as const;
+    channel.handleMessage({ ...join, clientId: "ana" });
+    channel.handleMessage({ ...join, clientId: channel.profile.clientId });
+    stop();
+    channel.handleMessage({ ...join, clientId: "ben" });
+
+    expect(joined).toEqual(["ana"]);
+    channel.disconnect();
+  });
+
+  it("tells one newcomer the online copy now has what it lacks, and only that one hears it", async () => {
+    browser();
+    const channel = new RealtimeChannel<El>("abc");
+    const told: string[] = [];
+    channel.onStored((from) => told.push(from));
+    channel.connect("ws://rt/ws");
+    const socket = FakeSocket.made[0]!;
+    handshake(socket);
+
+    channel.sendStored("ana");
+    await tick();
+    channel.handleMessage({ type: "stored", clientId: "ben", to: "someone else" });
+    channel.handleMessage({ type: "stored", clientId: "ben", to: channel.profile.clientId });
+
+    expect(socket.messages().find((msg) => msg.type === "stored")).toEqual({
+      type: "stored",
+      clientId: channel.profile.clientId,
+      to: "ana",
+    });
+    expect(told).toEqual(["ben"]);
+    channel.disconnect();
+  });
+
   it("forgets at once what someone held when the server says their connection went", async () => {
     browser();
     const channel = new RealtimeChannel<El>("abc");
