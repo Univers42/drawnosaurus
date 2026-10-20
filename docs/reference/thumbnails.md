@@ -1,6 +1,6 @@
 # Board thumbnails
 
-The gallery (`apps/web/src/routes/+page.svelte`) shows a picture of each board in
+The gallery (`apps/web/src/lib/gallery/Gallery.svelte`) shows a picture of each board in
 `.card-preview`, with the element-count badge laid over it.
 
 ## How a picture gets there
@@ -39,6 +39,22 @@ board read never carries it. Storing one sets `thumbnailAt` and nothing else on 
 - It does not retry on a timer. A failed upload waits for the next save or the next hide.
 - It does not rewrite a picture when someone else edits a board and nobody saves from this
   client's tab.
+
+## Getting back to the gallery
+
+The board's main menu has a first item, **My drawings**, an anchor to `/gallery` (the same
+page as `/`: `lib/gallery/Gallery.svelte`).
+
+- Excalidraw at `1118751f` has no gallery, so it has no such item. This is a design
+  decision, not a port.
+- It exists because the header is hidden on boards (`routes/+layout.svelte`, `onBoard`),
+  and the browser's Back was the only way out.
+- The owner approved it on 2026-10-20.
+- In the Docker build a guest who opens it sees the gallery's existing refusal, because
+  `GET /v1/boards` is host-only. That is the same as a guest opening `/` today.
+
+Leaving a board by any in-app navigation saves what is pending: the board page's
+`beforeNavigate` flushes the autosaver, the draft and the thumbnail, ahead of `onDestroy`.
 
 ## Caveat
 

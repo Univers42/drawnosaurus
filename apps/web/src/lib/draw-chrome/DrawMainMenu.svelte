@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { resolve } from "$app/paths";
   import { BUILD, describeBuild } from "../build.ts";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { downloadBlob } from "./download.ts";
@@ -192,6 +193,13 @@
   onkeydown={onKeyDown}
 >
   <div class="dropdown-menu-container">
+    <!-- An anchor, not a button: it is navigation, so middle-click and open-in-new-tab work.
+         The board saves what is pending on the way out (`beforeNavigate`). -->
+    <a role="menuitem" class="dropdown-menu-item" href={resolve("/gallery")}>
+      <MainMenuIcon name="gallery" />
+      <span class="dropdown-menu-item__text">My drawings</span>
+    </a>
+
     <button type="button" role="menuitem" class="dropdown-menu-item" onclick={openFile}>
       <MainMenuIcon name="folder" />
       <span class="dropdown-menu-item__text">Open</span>
@@ -471,6 +479,7 @@
     border-radius: 6px;
     cursor: pointer;
     text-align: left;
+    text-decoration: none;
     flex: 1 0 auto;
   }
 

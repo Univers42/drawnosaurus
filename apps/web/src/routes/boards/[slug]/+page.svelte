@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { beforeNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import { elementsFromJson } from "@osionos/draw-engine/json";
   import { Scene, type DrawElement } from "@osionos/draw-engine/types";
@@ -165,10 +166,7 @@
     })();
 
     const flushOnHide = (): void => {
-      if (document.visibilityState !== "hidden") return;
-      void saver.flush();
-      void drafts.flush();
-      void thumbnails.flushNow();
+      if (document.visibilityState === "hidden") flushPending();
     };
     document.addEventListener("visibilitychange", flushOnHide);
 
@@ -176,6 +174,18 @@
       document.removeEventListener("visibilitychange", flushOnHide);
     };
   });
+
+  /** Sends everything still waiting: the diff, the local draft and the gallery picture. */
+  function flushPending(): void {
+    void saver.flush();
+    void drafts.flush();
+    void thumbnails.flushNow();
+  }
+
+  // Leaving inside the app tears this page down with `onDestroy`, which disposes the
+  // saver — an edit still inside the debounce was never sent. `beforeNavigate` runs ahead
+  // of any teardown, so the engine can still render the thumbnail too.
+  beforeNavigate(flushPending);
 
   /** The board as the server has it, deletions included — for catching up after a drop. */
   async function fetchLatest(): Promise<DrawElement[]> {
