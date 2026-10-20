@@ -117,7 +117,8 @@
     type Claims,
   } from "../realtime/peerClaims.ts";
   import { syncPeerLasers } from "../realtime/peerLaser.ts";
-  import { importRoomKey, resolveRoomKey } from "../realtime/roomCrypto.ts";
+  import { liveKeyFor } from "../realtime/liveRoom.ts";
+  import { importRoomKey } from "../realtime/roomCrypto.ts";
   import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
   import type { StampedElement, ScenePatch } from "../autosave/sceneDiff.ts";
   import { liveLabel, type SaveLine } from "./status.ts";
@@ -157,12 +158,19 @@
     onSceneChange,
     onReady,
     fetchLatest,
+    browser = false,
   }: {
     scene: Scene;
     title?: string;
     slug?: string;
     status?: SaveLine;
     ariaLabel?: string;
+    /**
+     * The public build. Passed in: only the routes read `BROWSER_MODE`. There a drawing has
+     * no live link until it is shared (`liveRoom.ts`), and no Share button until that build
+     * has a Share dialog of its own: this one promises a live room it does not have.
+     */
+    browser?: boolean;
     onSceneChange?: (json: string) => void;
     onReady?: (engine: DrawEngine) => void;
     /**
@@ -358,6 +366,8 @@
   let showMermaid = $state(false);
   let showTemplates = $state(false);
   let showShare = $state(false);
+  /** What Share opens; nothing in the public build yet (see `browser`), so no Share there. */
+  const openShare = $derived(browser ? undefined : () => (showShare = true));
   let showShortcuts = $state(false);
   let showPalette = $state(false);
   /**
@@ -393,7 +403,9 @@
   let realtime: RealtimeChannel<StampedElement> | null = null;
   /** Whether the live link has ever come up, and ever failed — see `liveLabel`. */
   let liveHistory = $state({ everConnected: false, everFailed: false });
-  const liveText = $derived(slug ? liveLabel(liveStatus, liveHistory) : null);
+  /** No live link, by design: a drawing not shared. Nothing to report, so nothing is. */
+  let unshared = $state(false);
+  const liveText = $derived(slug && !unshared ? liveLabel(liveStatus, liveHistory) : null);
   const liveBroadcast = new LiveSceneBroadcaster<StampedElement>();
   /** What peers hold and are doing, as the live link last said — see `syncPeers`. */
   let peerStates: Peer<StampedElement>[] = [];
@@ -1634,9 +1646,14 @@
       liveBroadcast.reset(scene.toArray() as StampedElement[]);
       // Fragment room key never leaves the browser. Mint one if the URL has none so
       // the share link becomes a capability URL; peers who open the same #room=
-      // derive the same AES key. The API only sees opaque sealed frames.
+      // derive the same AES key. The API only sees opaque sealed frames. None at all for
+      // a drawing not shared: no channel, no socket.
       void (async () => {
-        const raw = await resolveRoomKey(slug, window.location);
+        const raw = await liveKeyFor({ browser, slug, location: window.location });
+        if (raw === null) {
+          unshared = true;
+          return;
+        }
         const roomKey = await importRoomKey(raw);
         if (liveCancelled) return;
         realtime = new RealtimeChannel(slug, roomKey);
@@ -2028,7 +2045,7 @@
       {status}
       live={liveText}
       onToggleMenu={() => (showMainMenu = !showMainMenu)}
-      onOpenShare={() => (showShare = true)}
+      onOpenShare={openShare}
       onOpenShortcuts={() => (showShortcuts = true)}
     >
       {#snippet menu()}
@@ -2049,7 +2066,7 @@
             onOpenExport={() => (showExport = true)}
             onOpenMermaid={() => (showMermaid = true)}
             onOpenTemplates={() => (showTemplates = true)}
-            onOpenShare={() => (showShare = true)}
+            onOpenShare={openShare}
             onOpenShortcuts={() => (showShortcuts = true)}
             onOpenPresent={() => void enterPresent()}
             onOpenPath={openPath}

@@ -17,7 +17,8 @@
     /** What to say about live collaboration, or null when all is well. See `liveLabel`. */
     live?: string | null;
     onToggleMenu: () => void;
-    onOpenShare: () => void;
+    /** Opens the Share dialog. Without it there is no Share button: see `DrawSurface`. */
+    onOpenShare?: (() => void) | undefined;
     onOpenShortcuts: () => void;
     onRename?: (nextTitle: string) => void;
     /**
@@ -127,29 +128,31 @@
   </div>
 
   <div class="right-group">
-    <button
-      type="button"
-      class="share-btn"
-      onclick={onOpenShare}
-      aria-label="Share & collaborate"
-      title="Live Collaboration"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        width="15"
-        height="15"
-        stroke="currentColor"
-        stroke-width="2"
-        fill="none"
+    {#if onOpenShare}
+      <button
+        type="button"
+        class="share-btn"
+        onclick={onOpenShare}
+        aria-label="Share & collaborate"
+        title="Live Collaboration"
       >
-        <circle cx="18" cy="5" r="3" />
-        <circle cx="6" cy="12" r="3" />
-        <circle cx="18" cy="19" r="3" />
-        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-      </svg>
-      <span>Share</span>
-    </button>
+        <svg
+          viewBox="0 0 24 24"
+          width="15"
+          height="15"
+          stroke="currentColor"
+          stroke-width="2"
+          fill="none"
+        >
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+        <span>Share</span>
+      </button>
+    {/if}
 
     <button
       type="button"

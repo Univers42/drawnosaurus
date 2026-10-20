@@ -280,6 +280,7 @@
         {onSceneChange}
         {onReady}
         {fetchLatest}
+        browser={BROWSER_MODE}
         ariaLabel="Board canvas"
       />
     {:else}

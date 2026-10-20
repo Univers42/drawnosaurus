@@ -62,7 +62,8 @@
     onOpenExport: () => void;
     onOpenMermaid: () => void;
     onOpenTemplates: () => void;
-    onOpenShare: () => void;
+    /** Opens the Share dialog. Without it there is no "Live collaboration…" item. */
+    onOpenShare?: (() => void) | undefined;
     onOpenShortcuts: () => void;
     onOpenPresent: () => void;
     onOpenPath: () => void;
@@ -248,15 +249,18 @@
       <span class="dropdown-menu-item__text">Templates…</span>
     </button>
 
-    <button
-      type="button"
-      role="menuitem"
-      class="dropdown-menu-item"
-      onclick={() => pick(onOpenShare)}
-    >
-      <MainMenuIcon name="collab" />
-      <span class="dropdown-menu-item__text">Live collaboration…</span>
-    </button>
+    {#if onOpenShare}
+      {@const openShare = onOpenShare}
+      <button
+        type="button"
+        role="menuitem"
+        class="dropdown-menu-item"
+        onclick={() => pick(openShare)}
+      >
+        <MainMenuIcon name="collab" />
+        <span class="dropdown-menu-item__text">Live collaboration…</span>
+      </button>
+    {/if}
 
     <button
       type="button"
