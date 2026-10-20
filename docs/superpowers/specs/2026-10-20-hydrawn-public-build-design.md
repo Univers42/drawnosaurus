@@ -147,6 +147,41 @@ with the client's own frame builders and readers (`realtimeProtocol.ts`), so the
 drift apart unnoticed. The public build is pointed at it with `VITE_HYDRAWN_RELAY_URL`
 (`lib/config.ts`, `relayWsUrl`); the socket is `wss://<worker host>/ws`.
 
+The client's ping is a fixed string, `{"type":"PING"}` (`pingFrame`), and all it needs back
+is a frame of type `PONG` (`isPong`, `realtimeClient.ts`), so the runtime answers it alone,
+with a fixed `{"type":"PONG"}`: `setWebSocketAutoResponse`, which answers "without waking
+WebSockets in hibernation"
+([state API](https://developers.cloudflare.com/durable-objects/api/state/#setwebsocketautoresponse)),
+and whose answers "will not incur additional wall-clock time, and so they will not be
+charged" ([pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),
+note 3). That pong has no `server_time`, which the Rust relay's has; the client never reads
+it. Any other ping still reaches the relay and is answered as the Rust relay answers it.
+
+What one frame may cost is bounded before it is parsed, and a frame over any bound is
+dropped without an answer, as the Rust relay drops a frame it cannot read:
+
+- a frame over 66,560 UTF-16 code units (`MAX_FRAME_LENGTH`): the 64 KiB payload cap plus
+  1,024, where the client's largest envelope is 111 bytes (`publishFrame` with a 32-character
+  slug and `preview-end`); a string never has more code units than UTF-8 bytes, so no frame
+  the payload cap lets through is refused;
+- a frame nested deeper than 127 levels (`MAX_DEPTH`), serde_json's recursion limit as
+  measured on `engine/realtime`, and short of where `JSON.stringify` overflows the stack;
+- a publish to a topic over 256 bytes (`MAX_TOPIC_BYTES`); the client's are 44.
+
+Each topic's sequence is kept for at most 10,000 topics, the least recently published
+forgotten first (`MAX_TOPICS`): forgetting one restarts it at 1, as waking does, and the
+client never reads it. Nothing a frame does can throw out of the object, which would reset
+it and drop every socket on it: what the relay cannot serve it drops, and anything else is
+logged and that frame dropped.
+
+**Beyond the Rust relay, and additive (Ruling 26):** when a socket closes or errors, every
+other connection subscribed to one of its topic patterns — the same drawing — is sent
+`{"type":"gone","socket":"<conn_id>"}` once, naming it as `AUTH_OK` did. It is the frame the
+client already handles (`handleControl`, `realtimeClient.ts`: it lets go at once of what
+that peer held) and the browser tests' stub relay already sends (`e2e/board.ts`, `relay()`).
+The Rust relay sends nothing; there the client lets go only once the peer's presence is
+45 s stale (`PEER_STALE_MS`).
+
 The relay sees only sealed frames, and the drawing id in the topic; it cannot read a
 drawing. It stores nothing: what each connection has subscribed to is kept in that
 socket's hibernation attachment, not in the object's storage.
@@ -155,8 +190,10 @@ socket's hibernation attachment, not in the object's storage.
 all day is about 0.125 GB × 86,400 s ≈ 10,800 GB-s, under the free 13,000 GB-s a day; one
 object per drawing would multiply that by the number of drawings live at once. It uses the
 WebSocket Hibernation API, so while nobody sends anything it is not billed for duration.
-The ceiling is one object for every live drawing — 32,768 sockets, one thread; the upgrade
-path is sharding by drawing id.
+The ceiling is one object for every live drawing — 32,768 sockets
+([state API](https://developers.cloudflare.com/durable-objects/api/state/): "a maximum of
+32,768 WebSocket connections per Durable Object"), one thread; the upgrade path is sharding
+by drawing id.
 
 The free plan, read on 2026-10-20
 ([pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),
@@ -273,9 +310,12 @@ of editing shared drawings per day, across everyone — fewer when pictures add 
 relay's websockets, and its free plan is 100 GB a month and non-commercial only.
 
 For the relay, an open shared drawing sends a ping every 5 s and its presence every 15 s
-(`LINK_CHECK_MS`, `PRESENCE_HEARTBEAT_MS`, `realtimeClient.ts`): 23,040 messages, about
-1,150 requests, per tab open all day — so 100,000 requests a day is about 87 tab-days of
-drawings left open. A moving pointer sends up to one cursor per animation frame
+(`LINK_CHECK_MS`, `PRESENCE_HEARTBEAT_MS`, `realtimeClient.ts`). The runtime answers the
+pings, and those answers are not charged, so a tab open all day costs its presence: 5,760
+messages, 288 requests — 100,000 requests a day is about 347 tab-days of drawings left
+open. The pricing page does not say in so many words that an auto-answered ping is not
+counted as a request; if it is, a tab costs 23,040 messages, about 1,150 requests, and the
+figure is about 87 tab-days. A moving pointer sends up to one cursor per animation frame
 (`DrawSurface.svelte`); at 60 a second that is 10,800 requests an hour, so pointer motion,
 not idle tabs, is what spends the allowance.
 
@@ -308,8 +348,9 @@ Red first, and shown red — `CLAUDE.md`, _What a test is for_.
 - That Cloudflare Pages serves the SPA fallback for `/boards/<id>` deep links.
 - How `$env/dynamic/public` behaves in an `adapter-static` build; prefer static env in
   the public build.
-- That the deployed relay hibernates, and that its messages are counted 20:1, as the
-  pricing page says — read from the account's Durable Object metrics.
+- That the deployed relay hibernates, that its messages are counted 20:1, and that the
+  pings the runtime answers are not counted, as the pricing page says — read from the
+  account's Durable Object metrics.
 - That the relay accepts websocket upgrades from another origin (the site and the relay are
   on different hosts in the public build): the Worker checks no `Origin`.
 - The new reference page, `docs/reference/public-build.md`, and the index row for it in

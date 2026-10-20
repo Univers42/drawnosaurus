@@ -27,6 +27,38 @@ export const MAX_SUBSCRIPTIONS = 200;
  */
 export const MAX_CONNECTION_BYTES = 8_192;
 
+/**
+ * The longest frame read, in UTF-16 code units, checked before anything parses it. The
+ * client's largest is a publish at the payload cap: 65,536 bytes of payload in a 111-byte
+ * envelope (`publishFrame`: a 44-byte topic, `boards/` + a 32-character slug + `/live`,
+ * and its longest event type, `preview-end`). A string never has more code units than
+ * UTF-8 bytes, so no frame the payload cap lets through is refused here; the 1,024 over
+ * the payload cap leave room for a topic at `MAX_TOPIC_BYTES` and longer event types.
+ * Dropped unanswered, like a frame that does not parse.
+ */
+export const MAX_FRAME_LENGTH = MAX_PAYLOAD_BYTES + 1_024;
+
+/**
+ * The longest topic a publish may name, in UTF-8 bytes; the client's are 44. Only a
+ * publish's topic is kept (as a sequence's key) and copied into every EVENT; a pattern is
+ * bounded already by `MAX_CONNECTION_BYTES`.
+ */
+export const MAX_TOPIC_BYTES = 256;
+
+/**
+ * How deep a frame may nest: serde_json's recursion limit, which drops a frame 128 levels
+ * deep and serves one 127 deep (measured on engine/realtime). Deeper, `JSON.stringify`
+ * would overflow the stack.
+ */
+export const MAX_DEPTH = 127;
+
+/**
+ * How many topics keep a sequence. Past it, the least recently published is forgotten and
+ * starts again at 1, as every topic does when the object wakes; the client never reads a
+ * sequence. At most about 10,000 × 512 bytes of key, a few MB.
+ */
+export const MAX_TOPICS = 10_000;
+
 /** What one connection is: kept in its socket's attachment, so a woken object rebuilds it. */
 export interface Connection {
   id: string;
@@ -54,7 +86,10 @@ const now = (): string => new Date().toISOString();
 
 export class Relay {
   private readonly connections = new Map<string, Connection>();
-  /** The last sequence given out per topic, as `SequenceGenerator` keeps it: in memory. */
+  /**
+   * The last sequence given out per topic, as `SequenceGenerator` keeps it: in memory.
+   * In the order each topic was last published to, so the first is the one to forget.
+   */
   private readonly sequences = new Map<string, number>();
 
   /** A new connection, or one restored from what `connection` returned before. */
@@ -73,10 +108,25 @@ export class Relay {
     return this.connections.get(id);
   }
 
-  /** Forgets a connection: it is sent nothing more, and what it sends is not served. */
+  /**
+   * Forgets a connection: it is sent nothing more, and what it sends is not served. Each
+   * other connection subscribed to one of its topic patterns — the same drawing, as the
+   * client subscribes to one pattern per drawing — is told once that it is gone, by the
+   * name AUTH_OK gave it, so it lets go of what that one held at once (`handleControl`,
+   * `realtimeClient.ts`). The Rust relay says nothing; this is Ruling 26, and additive.
+   */
   close(id: string): Outbound[] {
+    const conn = this.connections.get(id);
+    if (!conn) return [];
     this.connections.delete(id);
-    return [];
+    const patterns = new Set(conn.subs.map(([, pattern]) => pattern));
+    // The shape the browser tests' stub relay sends (`e2e/board.ts`, `relay()`).
+    const frame = JSON.stringify({ type: "gone", socket: id });
+    const out: Outbound[] = [];
+    for (const peer of this.connections.values()) {
+      if (peer.subs.some(([, pattern]) => patterns.has(pattern))) out.push({ to: peer.id, frame });
+    }
+    return out;
   }
 
   /**
@@ -118,10 +168,16 @@ export class Relay {
    * frames by their `clientId`.
    */
   private publish(topic: string, eventType: string, payload: unknown): Outbound[] {
+    if (byteLength(topic) > MAX_TOPIC_BYTES) return [];
     const body = JSON.stringify(payload);
     if (byteLength(body) > MAX_PAYLOAD_BYTES) return [];
     const sequence = (this.sequences.get(topic) ?? 0) + 1;
+    this.sequences.delete(topic);
     this.sequences.set(topic, sequence);
+    if (this.sequences.size > MAX_TOPICS) {
+      const oldest = this.sequences.keys().next().value;
+      if (oldest !== undefined) this.sequences.delete(oldest);
+    }
     // Rendered once for every subscriber, as the Rust writer does (`serialize_event`),
     // with `EventPayload`'s fields in its order.
     const event = JSON.stringify({
@@ -168,8 +224,12 @@ function capacityExceeded(reason: string): unknown {
   return { type: "ERROR", code: "CAPACITY_EXCEEDED", message: `Capacity exceeded: ${reason}` };
 }
 
-/** A JSON object, or null for anything else: serde's tagged enum takes nothing else. */
+/**
+ * A JSON object, or null for anything else: serde's tagged enum takes nothing else. A
+ * frame too long or too deep is not parsed at all.
+ */
 function parse(text: string): ClientFrame | null {
+  if (text.length > MAX_FRAME_LENGTH || !withinDepth(text)) return null;
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -179,6 +239,31 @@ function parse(text: string): ClientFrame | null {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as ClientFrame)
     : null;
+}
+
+/**
+ * Whether no `{` or `[` outside a string opens deeper than `MAX_DEPTH`. Exact for valid
+ * JSON, and anything else `JSON.parse` refuses anyway.
+ */
+function withinDepth(text: string): boolean {
+  let depth = 0;
+  let inString = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const c = text.charCodeAt(i);
+    if (inString) {
+      // After `\` the next unit is escaped, a `"` included.
+      if (c === 0x5c) i += 1;
+      else if (c === 0x22) inString = false;
+    } else if (c === 0x22) {
+      inString = true;
+    } else if (c === 0x7b || c === 0x5b) {
+      depth += 1;
+      if (depth > MAX_DEPTH) return false;
+    } else if (c === 0x7d || c === 0x5d) {
+      depth -= 1;
+    }
+  }
+  return true;
 }
 
 /**

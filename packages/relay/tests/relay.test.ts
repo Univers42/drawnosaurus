@@ -362,6 +362,8 @@ describe("what one frame may cost", () => {
     expect(relay.receive(a, nested(30_000))).toEqual([]);
     // Brackets inside a string are not nesting.
     expect(sentTo(relay.receive(a, publish("one", "[".repeat(1_000))), b)).toHaveLength(1);
+    // Nor after an escaped quote, which does not end the string.
+    expect(sentTo(relay.receive(a, publish("one", `"${"[".repeat(1_000)}`)), b)).toHaveLength(1);
     expect(sentTo(relay.receive(a, publish("one", 1)), b)).toHaveLength(1);
   });
 });

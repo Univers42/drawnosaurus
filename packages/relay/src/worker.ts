@@ -1,5 +1,5 @@
 import type { DurableObjectNamespace, DurableObjectState } from "./cloudflare.ts";
-import { Relay, type Connection } from "./relay.ts";
+import { Relay, type Connection, type Outbound } from "./relay.ts";
 
 interface Env {
   RELAY: DurableObjectNamespace;
@@ -7,7 +7,11 @@ interface Env {
 
 /** The client's ping (`pingFrame()`, realtimeProtocol.ts), byte for byte. */
 export const PING = '{"type":"PING"}';
-/** A pong as the client reads one (`isPong`, realtimeClient.ts: any frame of type PONG). */
+/**
+ * A pong as the client reads one (`isPong`, realtimeClient.ts: any frame of type PONG). The
+ * Rust relay's carries `server_time` too; the client never reads it, so this one is fixed
+ * and the runtime can answer it alone.
+ */
 export const PONG = '{"type":"PONG"}';
 
 /**
@@ -54,6 +58,12 @@ export class RelayObject {
 
   constructor(ctx: DurableObjectState) {
     this.ctx = ctx;
+    // The client's ping is answered by the runtime, "without waking WebSockets in
+    // hibernation", and auto-responses "will not incur additional wall-clock time"
+    // (https://developers.cloudflare.com/durable-objects/api/state/#setwebsocketautoresponse,
+    // https://developers.cloudflare.com/durable-objects/platform/pricing/). Any other ping
+    // still reaches the relay, which answers it with `server_time` as the Rust one does.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
     // Woken from hibernation, the constructor runs again with the sockets still open.
     for (const ws of ctx.getWebSockets()) {
       const conn = connectionOf(ws);
@@ -70,21 +80,22 @@ export class RelayObject {
     return new Response(null, { status: 101, webSocket: pair[0] });
   }
 
+  /**
+   * Nothing a frame does may throw out of here: the object would be reset, and every socket
+   * on it with it. The relay drops what it cannot serve; anything else is logged and that
+   * frame dropped, as engine/realtime drops a frame it cannot read, and the others carry on.
+   */
   webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): void {
-    const id = connectionOf(ws)?.id;
-    // A binary frame is ignored, as engine/realtime's reader ignores one (`reader.rs`).
-    if (id === undefined || typeof message !== "string") return;
-    for (const { to, frame } of this.relay.receive(id, message)) {
-      for (const peer of this.ctx.getWebSockets(to)) {
-        try {
-          peer.send(frame);
-        } catch {
-          // Closing as we send: its webSocketClose is on its way, and the others still get theirs.
-        }
-      }
+    try {
+      const id = connectionOf(ws)?.id;
+      // A binary frame is ignored, as engine/realtime's reader ignores one (`reader.rs`).
+      if (id === undefined || typeof message !== "string") return;
+      this.deliver(this.relay.receive(id, message));
+      const conn = this.relay.connection(id);
+      if (conn) ws.serializeAttachment(conn);
+    } catch (error) {
+      console.error("relay: frame dropped", error);
     }
-    const conn = this.relay.connection(id);
-    if (conn) ws.serializeAttachment(conn);
   }
 
   /**
@@ -105,9 +116,26 @@ export class RelayObject {
     }
   }
 
+  /** Forgets the socket's connection, and tells the others on its drawings it is gone. */
   private forget(ws: WebSocket): void {
-    const id = connectionOf(ws)?.id;
-    if (id !== undefined) this.relay.close(id);
+    try {
+      const id = connectionOf(ws)?.id;
+      if (id !== undefined) this.deliver(this.relay.close(id));
+    } catch (error) {
+      console.error("relay: close not announced", error);
+    }
+  }
+
+  private deliver(out: Outbound[]): void {
+    for (const { to, frame } of out) {
+      for (const peer of this.ctx.getWebSockets(to)) {
+        try {
+          peer.send(frame);
+        } catch {
+          // Closing as we send: its webSocketClose is on its way, and the others still get theirs.
+        }
+      }
+    }
   }
 }
 
