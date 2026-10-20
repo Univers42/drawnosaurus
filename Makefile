@@ -260,7 +260,7 @@ build: $(ENGINE_PKG) ## Build the api, web, and realtime images
 RELAY_URL ?= wss://hydrawn-relay.hydrawn.workers.dev/ws
 
 build-public: $(ENGINE_PKG) ## Build the browser-only public site into apps/web/build and check its shape
-	$(TOOLING) sh -c 'VITE_HYDRAWN_MODE=browser VITE_HYDRAWN_RELAY_URL=$(RELAY_URL) pnpm --filter @drawnosaurus/web build'
+	$(TOOLING) sh -c 'VITE_HYDRAWN_MODE=browser VITE_HYDRAWN_RELAY_URL=$(RELAY_URL) VITE_BUILD_APP_SHA=$(BUILD_APP_SHA) VITE_BUILD_ENGINE_SHA=$(BUILD_ENGINE_SHA) pnpm --filter @drawnosaurus/web build'
 	VITE_HYDRAWN_RELAY_URL=$(RELAY_URL) sh scripts/check-public-build.sh apps/web/build
 
 up: $(ENGINE_PKG) ## Start the stack mongo + api + web behind the gateway on WEB_PORT + realtime
