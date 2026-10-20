@@ -86,7 +86,7 @@ export function mobileActionBarPlan(
 
   const promoDelete = deleteOutsideActions(width);
   const promoDuplicate = duplicateOutsideActions(width);
-  const right: MobileActionBarPlan["right"] = ["undo", "redo"];
+  const right: ("undo" | "redo" | "duplicate" | "delete")[] = ["undo", "redo"];
   if (promoDuplicate) right.push("duplicate");
   if (promoDelete) right.push("delete");
 

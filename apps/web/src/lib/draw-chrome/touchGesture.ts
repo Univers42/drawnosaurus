@@ -68,6 +68,8 @@ export function createTouchController(hooks: TouchHooks) {
   let engaged = false;
   /** The press fired and traded its pointer-up for the menu. */
   let menuFired = false;
+  /** The click the lift of that press produced, waiting to be claimed. */
+  let clickToClaim = false;
   let lastDistance = 0;
   let lastCentre = { x: 0, y: 0 };
   let pressAnchor = { x: 0, y: 0 };
@@ -137,6 +139,7 @@ export function createTouchController(hooks: TouchHooks) {
           pressTimer = null;
           menuFired = true;
           engaged = true;
+          clickToClaim = true;
           hooks.openContextMenu(event.x, event.y);
         }, LONG_PRESS_MS);
         return swallow(false);
@@ -185,6 +188,23 @@ export function createTouchController(hooks: TouchHooks) {
       const swallowed = pointers.size > 0 || menuFired;
       if (pointers.size === 0) resetGesture();
       return swallow(swallowed);
+    },
+
+    /**
+     * Whether the click that follows this gesture belongs to it.
+     *
+     * A finger that opened a menu is still down when the menu appears, and the menu is
+     * under it: the lift produces a click, and that click lands on the menu's own
+     * backdrop — which would close the menu the long press had just opened. The
+     * browser's compatibility click cannot be prevented (the press was not, and the
+     * engine needs it), so the caller swallows it here instead.
+     *
+     * Claimed once: the click after that is the person's.
+     */
+    consumeClick() {
+      if (!clickToClaim) return false;
+      clickToClaim = false;
+      return true;
     },
   };
 }

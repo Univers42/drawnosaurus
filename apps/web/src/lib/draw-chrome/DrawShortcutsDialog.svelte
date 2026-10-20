@@ -65,6 +65,13 @@
     width: 620px;
     max-width: 92vw;
     box-shadow: var(--shadow-lg);
+    /* The list is longer than a phone's screen — it is longer than a laptop's, in one
+       column — so the card is capped and the list scrolls inside it. Without the cap
+       the card grew to more than twice the screen's height and its footer was a scroll
+       away. */
+    max-height: calc(100dvh - 2rem);
+    display: flex;
+    flex-direction: column;
   }
 
   /* The card is focused only so the dialog keeps the keys; a ring round the whole card
@@ -100,6 +107,9 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 16px;
+    /* The scrolling part: the card keeps its height, the list gives way. */
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .shortcut-section h4 {

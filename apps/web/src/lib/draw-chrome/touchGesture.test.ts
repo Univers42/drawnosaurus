@@ -152,6 +152,32 @@ describe("createTouchController", () => {
     expect(up(c, 1, 120, 340).swallow).toBe(true);
   });
 
+  it("a long press claims the click its lift produces", () => {
+    const hooks = makeHooks();
+    const c = createTouchController(hooks);
+    // Nothing has been pressed: there is no click to claim.
+    expect(c.consumeClick()).toBe(false);
+
+    down(c, 1, 120, 340);
+    vi.advanceTimersByTime(600);
+    up(c, 1, 120, 340);
+
+    // The lift of a finger that opened a menu also produces a click, and the menu is
+    // under the finger by then: the click belongs to the gesture that opened the menu,
+    // not to whatever happens to be under the finger.
+    expect(c.consumeClick()).toBe(true);
+    // And only that one: the next click is the person's.
+    expect(c.consumeClick()).toBe(false);
+  });
+
+  it("a plain tap claims no click", () => {
+    const hooks = makeHooks();
+    const c = createTouchController(hooks);
+    down(c, 1, 120, 340);
+    up(c, 1, 120, 340);
+    expect(c.consumeClick()).toBe(false);
+  });
+
   it("a long press is cancelled by travel, a second finger, or a lift", () => {
     const hooks = makeHooks();
     let c = createTouchController(hooks);

@@ -258,9 +258,20 @@ test.describe("phone narrow 360×740", () => {
     const size = page.viewportSize()!;
 
     async function expectFits(name: string, element: { boundingBox: () => Promise<unknown> }) {
-      const box = (await element.boundingBox())!;
+      const box = (await element.boundingBox()) as {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
       expectInside(
-        { name, ...(box as { x: number; y: number; width: number; height: number }) },
+        {
+          name,
+          left: box.x,
+          top: box.y,
+          right: box.x + box.width,
+          bottom: box.y + box.height,
+        },
         size,
       );
     }
@@ -281,7 +292,10 @@ test.describe("phone narrow 360×740", () => {
       await page.keyboard.press("ControlOrMeta+/");
       await expect(paletteInput).toBeVisible();
       await paletteInput.fill(label);
-      await page.getByRole("option", { name: new RegExp(`^${label.replace(/…$/, "…?")}$`) }).first().click();
+      // The option's accessible name carries its shortcut with it ("Export… Ctrl+Shift+E"),
+      // so the label is a prefix of the name, not the whole of it.
+      const pattern = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/…$/, "…?");
+      await page.getByRole("option", { name: new RegExp(`^${pattern}`) }).first().click();
       await expect(paletteInput).toBeHidden();
     }
 
@@ -294,10 +308,15 @@ test.describe("phone narrow 360×740", () => {
     await page.getByRole("button", { name: "Keyboard shortcuts" }).click();
     await expectDialogFits("shortcuts");
 
-    for (const command of ["Export…", "Templates…", "Mermaid to diagram…", "Embed"]) {
+    for (const command of ["Export…", "Templates…", "Mermaid to diagram…"]) {
       await runCommand(command);
       await expectDialogFits(command);
     }
+
+    // The embed dialog the way a phone reaches it: the More menu on the bottom bar.
+    await page.getByRole("button", { name: "More tools" }).click();
+    await page.getByRole("menuitemradio", { name: "Embed web page" }).click();
+    await expectDialogFits("embed");
 
     // A rectangle at the centre, a long press to open the canvas menu beside it — and
     // out of that menu, the Vectorize dialog, which needs an image to exist at all.
@@ -342,10 +361,10 @@ test.describe("phone narrow 360×740", () => {
       const { x, y, scale } = engine.camera;
       return {
         x: canvas.left + (element.x + element.width / 2) * scale + x,
-        y: canvas.top + element.y * scale + y,
+        y: canvas.top + (element.y + element.height / 2) * scale + y,
       };
     }, kinds.lastIndexOf("image"));
-    await longPress(page, { x: imageAt.x, y: imageAt.y - 4 });
+    await longPress(page, imageAt);
     await page.getByRole("menuitem", { name: "Vectorize image…" }).click();
     await expectDialogFits("vectorize");
   });

@@ -48,6 +48,19 @@
     }
   }
 
+  /**
+   * Escape closes it, as it closes every other dialog here.
+   *
+   * It did not: this one is drawn by the surface rather than by the dialogs' own
+   * layer, so it missed the Escape handling that layer does — and a dialog that can
+   * only be left with the mouse is a dialog a keyboard cannot use.
+   */
+  function handleWindowKeydown(event: KeyboardEvent): void {
+    if (event.key !== "Escape") return;
+    event.preventDefault();
+    onClose();
+  }
+
   let field: HTMLInputElement | undefined = $state();
 
   // Not `autofocus`: Svelte honours that itself, in a microtask that only fires when
@@ -57,6 +70,8 @@
   // focused, so the field never took it and a keypress meant for the link drew.
   onMount(() => field?.focus());
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="embed-title">
   <div class="modal-card">

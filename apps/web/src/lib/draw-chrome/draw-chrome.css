@@ -94,6 +94,105 @@
   border-color: var(--line);
 }
 
+/* Which surface a form factor is drawn for is a class on the root, not a media query —
+   `formFactor.ts` for why — and every phone rule below keys off it. */
+
+/*
+  The phone's dock: the style strip above the tool bar, both at the bottom, where a
+  thumb is. The desktop's own bars are not drawn on a phone at all (see DrawSurface):
+  a row of ten tools across the top of a 360px screen is what the oracle's phone
+  layout exists to replace.
+
+  The dock is one measured surface (`data-viewport-ui="bottom"`), so the engine's
+  viewport offsets count the bars where they are — the strip and the bar together, in
+  one box, rather than two that could overlap.
+*/
+.draw-chrome.phone .mobile-dock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+  z-index: 20;
+  /* The gaps between the rows belong to the board, not to the bars. */
+  pointer-events: none;
+}
+
+.draw-chrome.phone .mobile-dock > * {
+  pointer-events: auto;
+}
+
+/* The header on a phone: the same controls, less of everything else. The title is
+   truncated, the save status is kept for the screen reader but out of the way, and
+   the share button is its icon alone — the row has to fit 360px, and the status and
+   the word "Share" are what do not. */
+.draw-chrome.phone .draw-header {
+  top: max(8px, env(safe-area-inset-top));
+  left: max(8px, env(safe-area-inset-left));
+  right: max(8px, env(safe-area-inset-right));
+  height: 40px;
+  gap: 8px;
+}
+
+.draw-chrome.phone .draw-header .board-title,
+.draw-chrome.phone .draw-header .title-input {
+  max-width: 26vw;
+}
+
+.draw-chrome.phone .draw-header .save-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.draw-chrome.phone .draw-header .share-btn {
+  padding: 0 10px;
+}
+
+.draw-chrome.phone .draw-header .share-btn span {
+  display: none;
+}
+
+/* The way out of zen mode, and the notice about a refused image: both sit at the
+   bottom of the desktop chrome, which on a phone is the dock. They move above it. */
+.draw-chrome.phone .exit-zen-mode {
+  bottom: calc(7.5rem + env(safe-area-inset-bottom));
+  right: max(8px, env(safe-area-inset-right));
+}
+
+.draw-chrome.phone .image-notice {
+  bottom: calc(9rem + env(safe-area-inset-bottom));
+}
+
+/*
+  A dialog on a phone: it never grows past the screen.
+
+  The desktop's dialogs are sized for a desktop's screen and grow with their content —
+  the shortcuts list alone is more than twice a phone's height, and the Mermaid dialog's
+  two panels are 360px each. The card is capped and what does not fit scrolls inside it,
+  so the dialog's own edges stay on the screen and its close button stays reachable.
+*/
+.draw-chrome.phone .modal-card {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+/* The palette sits 12vh down the page, so it is that much shorter. */
+.draw-chrome.phone .palette-card {
+  max-height: calc(88dvh - 2rem);
+  overflow-y: auto;
+}
+
 /* Modal and dialog backdrops */
 .draw-backdrop {
   position: fixed;
