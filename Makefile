@@ -255,9 +255,13 @@ build: $(ENGINE_PKG) ## Build the api, web, and realtime images
 	$(DC) build api web realtime
 	@echo -e "$(GREEN)✔ images built$(RESET)"
 
+# The public build's relay: the owner's Cloudflare Worker, one Durable Object, no cold
+# start (Ruling 23). Baked into the bundle, so the build's socket points at it.
+RELAY_URL ?= wss://hydrawn-relay.hydrawn.workers.dev/ws
+
 build-public: $(ENGINE_PKG) ## Build the browser-only public site into apps/web/build and check its shape
-	$(TOOLING) sh -c 'VITE_HYDRAWN_MODE=browser pnpm --filter @drawnosaurus/web build'
-	sh scripts/check-public-build.sh apps/web/build
+	$(TOOLING) sh -c 'VITE_HYDRAWN_MODE=browser VITE_HYDRAWN_RELAY_URL=$(RELAY_URL) pnpm --filter @drawnosaurus/web build'
+	VITE_HYDRAWN_RELAY_URL=$(RELAY_URL) sh scripts/check-public-build.sh apps/web/build
 
 up: $(ENGINE_PKG) ## Start the stack mongo + api + web behind the gateway on WEB_PORT + realtime
 	$(DC) up -d --build mongo realtime api web

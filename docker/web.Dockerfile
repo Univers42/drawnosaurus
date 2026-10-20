@@ -13,11 +13,13 @@ WORKDIR /app
 # esbuild transform resolves that chain at build time.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc tsconfig.base.json ./
 COPY packages/contract/package.json ./packages/contract/
+COPY packages/store/package.json ./packages/store/
 COPY apps/web/package.json ./apps/web/
 
 RUN pnpm install --frozen-lockfile --filter "@drawnosaurus/web..."
 
 COPY packages/contract ./packages/contract
+COPY packages/store ./packages/store
 COPY apps/web ./apps/web
 COPY engine/src ./engine/src
 COPY engine/pkg ./engine/pkg

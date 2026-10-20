@@ -10,6 +10,8 @@
 #                   (lib/store/browser.ts), so finding them means the server store shipped.
 #   _app/env.js - lib/config.ts reads $env/dynamic/public, which SvelteKit serves from this
 #                 file at run time; without it, that read fails as the app starts.
+#   the relay - the public build's live link points at the relay Worker, and the socket is
+#               opened with it: a build without it opens no live link at all.
 #
 # Usage: scripts/check-public-build.sh [build-dir]   (default apps/web/build)
 set -eu
@@ -17,6 +19,7 @@ set -eu
 dir="${1:-apps/web/build}"
 max_bytes=26214400
 max_files=20000
+relay_url="${VITE_HYDRAWN_RELAY_URL:-wss://hydrawn-relay.hydrawn.workers.dev/ws}"
 failed=0
 fail() {
   echo "check-public-build: FAIL $1"
@@ -44,6 +47,9 @@ api=$(grep -rlF '/v1/boards' "$dir" || true)
 [ -z "$api" ] || fail "the API's board paths (/v1/boards) are in: $api"
 
 [ -f "$dir/_app/env.js" ] || fail "$dir/_app/env.js is missing; lib/config.ts reads it at run time"
+
+relay=$(grep -rlF "$relay_url" "$dir" || true)
+[ -n "$relay" ] || fail "the relay ($relay_url) is not in the bundle; the live link would open nothing"
 
 [ "$failed" -eq 0 ] || exit 1
 
