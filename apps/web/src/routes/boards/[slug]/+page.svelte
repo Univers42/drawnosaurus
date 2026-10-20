@@ -10,7 +10,7 @@
   import { rememberLastDrawing } from "$lib/boards/lastDrawing.ts";
   import { openBoard } from "$lib/boards/openBoard.ts";
   import { BROWSER_MODE } from "$lib/mode.ts";
-  import { boards } from "$lib/store/index.ts";
+  import { boards, secrets } from "$lib/store/index.ts";
   import {
     SceneAutosaver,
     type AutosaveStatus,
@@ -21,7 +21,12 @@
   import { SceneMirror } from "$lib/autosave/sceneMirror.ts";
   import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
+  import { OnlineCopy } from "$lib/draw-chrome/onlineCopy.ts";
   import { saveLine } from "$lib/draw-chrome/status.ts";
+  import { drawingSecret } from "$lib/sharing/secret.ts";
+  import { createShareSession } from "$lib/sharing/shareSession.ts";
+  import { StoredCopy } from "$lib/sharing/storedCopy.ts";
+  import { isUnsent, sharedLine, type SharedLine } from "$lib/sharing/status.ts";
   import { ThumbnailUploader } from "$lib/thumbnail/thumbnailUploader.ts";
 
   /**
@@ -36,6 +41,15 @@
   let title = $state("Board");
   /** The public build's: the stored drawing could not be read, so it opened empty. */
   let unread = $state(false);
+  /**
+   * The public build's: the drawing's secret, when it is shared. It arrives with the
+   * link, and a share mints one — either way the live link starts on it.
+   */
+  let roomSecret = $state<Uint8Array | null>(null);
+  /** The public build's: the online copy's saver, and its last word. */
+  let sharedStatus = $state<AutosaveStatus>("idle");
+  /** The public build's: the copy may yet lack the last seconds before the tab closed. */
+  let unsent = $state(false);
 
   /**
    * Latest elements the engine reported, found by id; the autosaver reads this, never
@@ -108,18 +122,98 @@
     classify,
   });
 
+  /**
+   * The public build's: the drawing's online copy, and the saver that writes this page's
+   * own edits to it. Null until the drawing is shared: a drawing without a secret has no
+   * copy, and no live link.
+   */
+  let copy: StoredCopy<DrawElement> | null = null;
+  let online: OnlineCopy<DrawElement> | null = null;
+
+  /** The copy for `secret`, and the saver that writes it. */
+  function useCopy(secret: Uint8Array): void {
+    copy = new StoredCopy<DrawElement>({ slug, secret });
+    online = new OnlineCopy<DrawElement>({
+      slug,
+      copy,
+      readScene: () => live.elements,
+      lookup: live.lookup,
+      storage: storage() ?? null,
+      onStatus: (next) => {
+        sharedStatus = next;
+        unsent = isUnsent(storage() ?? null, slug);
+      },
+    });
+  }
+
+  /**
+   * "Share live": mint the secret, write the first copy, keep the secret, go live, and
+   * put the link in the address bar — in that order, and only that order
+   * (`sharing/shareSession.ts`).
+   *
+   * The session is kept across attempts: a first write can land with its answer lost,
+   * and a new secret's token would then be refused for good.
+   */
+  let sharing: ReturnType<typeof createShareSession> | null = null;
+
+  async function shareLive(): Promise<string> {
+    sharing ??= createShareSession({
+      slug,
+      origin: window.location.origin,
+      writeFirstCopy: async (secret) => {
+        useCopy(secret);
+        await online?.writeFirstCopy();
+      },
+      keepSecret: async (secret) => {
+        await secrets?.keepSecret(slug, secret);
+      },
+      goLive: (secret) => {
+        roomSecret = secret;
+      },
+      replaceState: (url) => {
+        history.replaceState(null, "", url);
+      },
+    });
+    return sharing.start();
+  }
+
+  /**
+   * Someone joined the room: the online copy is written with what this page had, and the
+   * newcomer is told to read it. A live sync over the relay's 64 KiB never arrives, so
+   * this is how a newcomer sees a drawing bigger than that.
+   */
+  async function onPeerJoined(): Promise<void> {
+    await online?.saveNow();
+  }
+
+  /** What the header says about the online copy, or nothing when there is none. */
+  const shared = $derived<SharedLine | null>(
+    online ? sharedLine(sharedStatus, { unread, unsent }) : null,
+  );
+
   onMount(() => {
     // What `/` reopens in the public build (`boards/lastDrawing.ts`). The Docker build's `/`
     // is the gallery.
     if (BROWSER_MODE) rememberLastDrawing(storage(), slug);
 
     void (async () => {
+      // The public build's: the drawing's secret, from the link or from this browser's
+      // store. A link's secret is adopted, and kept, only by a drawing that has none.
+      const secret =
+        BROWSER_MODE && secrets
+          ? await drawingSecret(secrets, slug, window.location.hash)
+          : null;
+      if (secret) {
+        roomSecret = secret;
+        useCopy(secret);
+      }
       const opened = await openBoard({
         slug,
         browser: BROWSER_MODE,
         store: boards,
         drafts,
         storage: storage(),
+        stored: copy,
         now: () => Date.now(),
         nonce: () => Math.floor(Math.random() * 0x7fffffff),
       });
@@ -135,6 +229,8 @@
       saver.tracker.reset(loaded);
       saved.reset(loaded);
       live.replace(elements);
+      // The online copy holds what it holds: the saver must not send it again.
+      online?.resetKnown(opened.copied ?? loaded);
       // `opened.tombstones` (empty when nothing was migrated) rides along on `scene`,
       // not on `live`: DrawSurface reads `scene.toArray()` twice, once to seed
       // `engine.setScene()` and once to seed `liveBroadcast.reset()` — the one place
@@ -148,6 +244,13 @@
       scene = new Scene([...elements, ...opened.tombstones]);
       if (resave.length > 0) {
         saver.tracker.noteChanged(resave);
+        saver.notify();
+      }
+      // The drawing was opened from the online copy: this browser holds none of it, so
+      // the saver writes it here, whole — the next visit finds the whole drawing and
+      // not only what changed since.
+      if (opened.copied) {
+        saver.tracker.noteEverything();
         saver.notify();
       }
     })();
@@ -167,6 +270,13 @@
     void saver.flush();
     void drafts?.flush();
     void thumbnails.flushNow();
+    // The online copy goes out too, and only a body of 64 KB or less rides the
+    // keepalive request: the rest may not, and the mark says so.
+    if (online) {
+      void online.leave().then(() => {
+        unsent = isUnsent(storage() ?? null, slug);
+      });
+    }
   }
 
   // Leaving inside the app tears this page down with `onDestroy`, which disposes the
@@ -185,8 +295,17 @@
     if (held === null) flushPending();
   });
 
-  /** The board as the server has it, deletions included — for catching up after a drop. */
+  /**
+   * The board as the server has it, deletions included — for catching up after a drop.
+   *
+   * The public build has no server: the online copy is what the drawing is, and it is
+   * read instead.
+   */
   async function fetchLatest(): Promise<DrawElement[]> {
+    if (BROWSER_MODE) {
+      const stored = await copy?.read();
+      return stored?.elements ?? [];
+    }
     const board = await boards.get(slug, { tombstones: true });
     return elementsFromJson(JSON.stringify(board.scene)) ?? [];
   }
@@ -207,6 +326,10 @@
   /**
    * Applies what the engine reports, which is usually only what changed.
    *
+   * `origin` says whose change it is: this page's own, or one that arrived from a peer.
+   * The local copy holds both — it is this browser's drawing — but the online copy is
+   * written by each person for their own changes, so a peer's is left to them.
+   *
    * The engine used to hand over the entire scene as JSON on every mutation. At 20k
    * elements that was ~9.8MB and ~60ms per shape drawn — the cost of drawing one
    * rectangle grew with the size of the board. It now sends a delta for the common
@@ -214,7 +337,7 @@
    * (a z-order command, a hard delete, an undo). A delta that moved the stack — a shape
    * that joined a frame goes directly below it — carries the order of every id.
    */
-  function onSceneChange(json: string): void {
+  function onSceneChange(json: string, origin: "local" | "remote"): void {
     thumbnails.noteChanged();
     let parsed: unknown;
     try {
@@ -227,6 +350,10 @@
       const appended = live.apply(parsed);
       saver.tracker.noteChanged(parsed.updated.map((element) => element.id));
       saver.tracker.noteChanged(parsed.removed);
+      if (origin === "local") {
+        online?.noteChanged(parsed.updated.map((element) => element.id));
+        online?.noteChanged(parsed.removed);
+      }
       if (parsed.order) {
         // The stack moved as well: only comparing everything finds the order to save.
         saver.tracker.noteEverything();
@@ -248,6 +375,7 @@
           before.version === after.version && before.versionNonce === after.versionNonce,
       );
       saver.tracker.noteEverything();
+      if (origin === "local") online?.noteEverything();
       drafts?.record(slug, changed, removed, { order: live.elements.map((element) => element.id) });
     }
 
@@ -281,6 +409,10 @@
         {onReady}
         {fetchLatest}
         browser={BROWSER_MODE}
+        {roomSecret}
+        onShareLive={shareLive}
+        onPeerJoined={onPeerJoined}
+        {shared}
         ariaLabel="Board canvas"
       />
     {:else}

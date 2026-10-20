@@ -1,6 +1,7 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { storeDevMiddleware } from "@drawnosaurus/store/devMiddleware";
 
 /**
  * The engine alias itself lives in svelte.config.js (kit.alias) so it is declared
@@ -39,11 +40,31 @@ if (mode !== "server" && mode !== "browser") {
   throw new Error(`VITE_HYDRAWN_MODE must be "server" or "browser", got "${mode}"`);
 }
 
+/**
+ * The store's own handlers, over its in-memory database, at the `/store` the Pages
+ * Function answers in production (`packages/store/src/devMiddleware.ts`). So `vite dev`,
+ * `vite preview` and the browser tests all have a store, and the browser cannot tell
+ * them apart from the deployed one.
+ *
+ * Mounted without a path: a mount path is cut from `req.url`, and the handlers route on
+ * the whole of it.
+ */
+function storeDev(): import("vite").Plugin {
+  const mount = (server: { middlewares: { use: (fn: unknown) => void } }): void => {
+    server.middlewares.use(storeDevMiddleware());
+  };
+  return {
+    name: "hydrawn-store-dev",
+    configureServer: mount,
+    configurePreviewServer: mount,
+  };
+}
+
 export default defineConfig({
   // Folded in, so `BROWSER_MODE` (lib/mode.ts) is a constant and the minifier drops the
   // branch that does not apply.
   define: { "import.meta.env.VITE_HYDRAWN_MODE": JSON.stringify(mode) },
-  plugins: [sveltekit()],
+  plugins: [sveltekit(), storeDev()],
   server: {
     fs: { allow: [engineSrc, enginePkg] },
     watch: usePolling ? { usePolling: true, interval: 300 } : undefined,

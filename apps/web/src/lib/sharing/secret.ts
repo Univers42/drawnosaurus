@@ -30,3 +30,12 @@ export async function drawingSecret(
 /** The link to send: the drawing's address, its secret in the fragment. */
 export const shareLink = (origin: string, slug: string, secret: Uint8Array): string =>
   `${origin.replace(/\/$/, "")}/boards/${slug}${formatRoomHash(secret)}`;
+
+/** Whether two secrets are the same one, byte for byte. */
+export const sameSecret = (a: Uint8Array | null, b: Uint8Array | null): boolean => {
+  if (a === null || b === null) return a === b;
+  if (a.byteLength !== b.byteLength) return false;
+  let difference = 0;
+  for (let i = 0; i < a.byteLength; i++) difference |= a[i]! ^ b[i]!;
+  return difference === 0;
+};

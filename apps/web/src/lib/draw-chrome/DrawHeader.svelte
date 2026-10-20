@@ -1,11 +1,13 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { autosaveIsTrouble, autosaveLabel, type SaveLine } from "./status.ts";
+  import { SHARED_LABELS, type SharedLine } from "../sharing/status.ts";
 
   let {
     title = "Untitled",
     status = "idle",
     live = null,
+    shared = null,
     onToggleMenu,
     onOpenShare,
     onOpenShortcuts,
@@ -16,6 +18,8 @@
     status?: SaveLine;
     /** What to say about live collaboration, or null when all is well. See `liveLabel`. */
     live?: string | null;
+    /** What to say about a shared drawing's online copy, or null when there is none. */
+    shared?: SharedLine | null;
     onToggleMenu: () => void;
     /** Opens the Share dialog. Without it there is no Share button: see `DrawSurface`. */
     onOpenShare?: (() => void) | undefined;
@@ -123,6 +127,11 @@
       >
         <span class="dot-offline"></span>
         {live}
+      </span>
+    {/if}
+    {#if shared}
+      <span class="save-status shared-status" aria-live="polite" aria-label="Shared copy">
+        {SHARED_LABELS[shared]}
       </span>
     {/if}
   </div>

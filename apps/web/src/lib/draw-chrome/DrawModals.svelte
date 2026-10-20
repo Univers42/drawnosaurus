@@ -8,6 +8,7 @@
   import DrawMermaidModal from "./DrawMermaidModal.svelte";
   import DrawTemplatesModal from "./DrawTemplatesModal.svelte";
   import DrawShareModal from "./DrawShareModal.svelte";
+  import DrawPublicShareModal from "./DrawPublicShareModal.svelte";
   import DrawShortcutsDialog from "./DrawShortcutsDialog.svelte";
   import DrawCommandPalette from "./DrawCommandPalette.svelte";
   import DrawContextMenu from "./DrawContextMenu.svelte";
@@ -19,6 +20,9 @@
     slug = "",
     peers = [],
     connectionStatus = "disconnected",
+    browser = false,
+    secret = null,
+    onShareLive,
     menu = $bindable(null),
     showMainMenu = $bindable(false),
     showExport = $bindable(false),
@@ -42,6 +46,12 @@
     slug?: string;
     peers?: PeerCursor[];
     connectionStatus?: ConnectionStatus;
+    /** The public build. Passed in: only the routes read `BROWSER_MODE`. */
+    browser?: boolean;
+    /** The public build's: the drawing's secret, when it is shared. */
+    secret?: Uint8Array | null;
+    /** The public build's: "Share live", which mints the secret and writes the first copy. */
+    onShareLive?: () => Promise<string>;
     menu: { x: number; y: number; element: MenuElementInfo | null; unlockAll: boolean } | null;
     showMainMenu: boolean;
     showExport: boolean;
@@ -107,7 +117,18 @@
 {/if}
 
 {#if showShare}
-  <DrawShareModal {slug} {peers} {connectionStatus} onClose={() => (showShare = false)} />
+  <!-- Two Share dialogs, one per build: the server's offers the links it can serve, and
+       the public build's the one link the online copy and the relay make. -->
+  {#if browser}
+    <DrawPublicShareModal
+      {slug}
+      {secret}
+      onShare={onShareLive}
+      onClose={() => (showShare = false)}
+    />
+  {:else}
+    <DrawShareModal {slug} {peers} {connectionStatus} onClose={() => (showShare = false)} />
+  {/if}
 {/if}
 
 {#if showShortcuts}

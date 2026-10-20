@@ -122,6 +122,8 @@
   import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
   import type { StampedElement, ScenePatch } from "../autosave/sceneDiff.ts";
   import { liveLabel, type SaveLine } from "./status.ts";
+  import { sameSecret } from "../sharing/secret.ts";
+  import type { SharedLine } from "../sharing/status.ts";
   import DrawHeader from "./DrawHeader.svelte";
   import DrawMainMenu from "./DrawMainMenu.svelte";
   import { downloadBlob } from "./download.ts";
@@ -159,6 +161,10 @@
     onReady,
     fetchLatest,
     browser = false,
+    roomSecret = null,
+    onShareLive,
+    onPeerJoined,
+    shared = null,
   }: {
     scene: Scene;
     title?: string;
@@ -171,7 +177,25 @@
      * has a Share dialog of its own: this one promises a live room it does not have.
      */
     browser?: boolean;
-    onSceneChange?: (json: string) => void;
+    /**
+     * The public build's: the drawing's secret, when it is shared. A new one starts the
+     * live link, so sharing a drawing brings it online without a reload.
+     */
+    roomSecret?: Uint8Array | null;
+    /** The public build's: "Share live" — mints the secret, writes the first copy, goes live. */
+    onShareLive?: () => Promise<string>;
+    /**
+     * The public build's: someone joined, and the online copy must hold what this client
+     * had before the newcomer reads it.
+     */
+    onPeerJoined?: () => Promise<void>;
+    /** What to say about the shared copy, or null when the drawing is not shared. */
+    shared?: SharedLine | null;
+    /**
+     * The scene changed. `origin` says whose change it is: "local" for the person at the
+     * board, "remote" for one that arrived from a peer. Each saves only their own.
+     */
+    onSceneChange?: (json: string, origin: "local" | "remote") => void;
     onReady?: (engine: DrawEngine) => void;
     /**
      * The board as the server has it now, deleted elements included — read after the
@@ -367,7 +391,7 @@
   let showTemplates = $state(false);
   let showShare = $state(false);
   /** What Share opens; nothing in the public build yet (see `browser`), so no Share there. */
-  const openShare = $derived(browser ? undefined : () => (showShare = true));
+  const openShare = $derived(() => (showShare = true));
   let showShortcuts = $state(false);
   let showPalette = $state(false);
   /**
@@ -405,6 +429,19 @@
   let liveHistory = $state({ everConnected: false, everFailed: false });
   /** No live link, by design: a drawing not shared. Nothing to report, so nothing is. */
   let unshared = $state(false);
+  /** The live link is closing: a start under way must not open a socket. */
+  let liveCancelled = false;
+  /** The live link is up: a second start would open a second socket to the same room. */
+  let liveStarted = false;
+  /** The secret the live link was started with, so it is started once. */
+  let liveSecret: Uint8Array | null = null;
+  /** What the live link subscribed to, so it can be let go of when the page goes. */
+  let unsubPeers: (() => void) | undefined;
+  let unsubPeerState: (() => void) | undefined;
+  let unsubStatus: (() => void) | undefined;
+  let unsubPatch: (() => void) | undefined;
+  let unsubJoin: (() => void) | undefined;
+  let unsubStored: (() => void) | undefined;
   const liveText = $derived(slug && !unshared ? liveLabel(liveStatus, liveHistory) : null);
   const liveBroadcast = new LiveSceneBroadcaster<StampedElement>();
   /** What peers hold and are doing, as the live link last said — see `syncPeers`. */
@@ -1056,7 +1093,7 @@
 
   function handleSceneChange(json: string): void {
     refreshStyle();
-    onSceneChange?.(json);
+    onSceneChange?.(json, "local");
     refreshEmbedFrames();
     refreshPathStops();
     if (shapeSwitch) placeShapeSwitch();
@@ -1294,7 +1331,10 @@
     liveBroadcast.adoptRemote(patch);
     // Order-only patches carry no elements; exportJson is the safe host sync.
     // Otherwise a delta keeps tombstones visible to the autosave tracker.
-    onSceneChange?.(patch.order?.length ? engine.exportJson() : remotePatchToSceneEvent(patch));
+    onSceneChange?.(
+      patch.order?.length ? engine.exportJson() : remotePatchToSceneEvent(patch),
+      "remote",
+    );
     refreshEmbedFrames();
     refreshPathStops();
   }
@@ -1636,11 +1676,6 @@
     };
     media.addEventListener("change", onSystemThemeChange);
 
-    let unsubPeers: (() => void) | undefined;
-    let unsubPeerState: (() => void) | undefined;
-    let unsubStatus: (() => void) | undefined;
-    let unsubPatch: (() => void) | undefined;
-    let liveCancelled = false;
     if (slug) {
       // Seed the broadcaster from the loaded scene so the first stroke is a diff.
       liveBroadcast.reset(scene.toArray() as StampedElement[]);
@@ -1648,61 +1683,24 @@
       // the share link becomes a capability URL; peers who open the same #room=
       // derive the same AES key. The API only sees opaque sealed frames. None at all for
       // a drawing not shared: no channel, no socket.
-      void (async () => {
-        const raw = await liveKeyFor({
-          browser,
-          slug,
-          location: window.location,
-          secret: null,
-        });
-        if (raw === null) {
-          unshared = true;
-          return;
-        }
-        const roomKey = await importRoomKey(raw);
-        if (liveCancelled) return;
-        realtime = new RealtimeChannel(slug, roomKey);
-        unsubPeers = realtime.onPeers((list) => {
-          // Before `peers` is overwritten: this diffs against the outgoing list, so a
-          // peer's laser trail gets its final `down: false` when they leave mid-stroke.
-          if (engine) syncPeerLasers(peers, list, engine.peerLaser.bind(engine));
-          peers = list;
-        });
-        unsubPeerState = realtime.onPeerState((list) => {
-          peerStates = list;
-          syncPeers();
-          syncPresence(list);
-        });
-        // What was selected before the link existed is held from now.
-        if (engine) claimSelected(engine.getSelectedElements().map((element) => element.id));
-        // Whoever joins is sent what they lack, and this client is on joining: the
-        // server has only what has been saved. Sent first, so all of it is known here.
-        realtime.setSceneSync({
-          inventory: () => {
-            flushLive();
-            return liveBroadcast.inventory();
-          },
-          missing: (have) => {
-            flushLive();
-            return liveBroadcast.missing(have);
-          },
-        });
-        unsubStatus = realtime.onStatus((next) => {
-          const reconnected = next === "connected" && liveHistory.everConnected;
-          if (liveStatus === "connecting" && next === "disconnected") {
-            liveHistory.everFailed = true;
+      //
+      // The public build does not come here: its live link starts when the drawing's
+      // secret arrives, so sharing a drawing brings it online without a reload.
+      if (!browser) {
+        void (async () => {
+          const raw = await liveKeyFor({
+            browser,
+            slug,
+            location: window.location,
+            secret: null,
+          });
+          if (raw === null) {
+            unshared = true;
+            return;
           }
-          if (next === "connected") liveHistory.everConnected = true;
-          liveStatus = next;
-          if (next === "connected") {
-            // Ours first — what was drawn offline — then theirs, from the server.
-            flushLive();
-            if (reconnected) void catchUp();
-          }
-        });
-        unsubPatch = realtime.onRemotePatch(applyRemote);
-        realtime.connect();
-      })();
+          await startLive(raw);
+        })();
+      }
     }
 
     return () => {
@@ -1712,8 +1710,101 @@
       unsubPeerState?.();
       unsubStatus?.();
       unsubPatch?.();
+      unsubJoin?.();
+      unsubStored?.();
       realtime?.disconnect();
     };
+  });
+
+  /**
+   * The live link, under the drawing's secret: the key comes from the secret, and every
+   * frame is sealed with it. The relay sees the drawing's id and nothing else.
+   *
+   * Started when a `roomSecret` arrives, so sharing a drawing brings it online without a
+   * reload, and once only: a second call would open a second socket.
+   */
+  async function startLive(raw: Uint8Array): Promise<void> {
+    if (liveStarted || liveCancelled) return;
+    liveStarted = true;
+    const roomKey = await importRoomKey(raw);
+    if (liveCancelled) return;
+    realtime = new RealtimeChannel(slug, roomKey);
+    unsubPeers = realtime.onPeers((list) => {
+      // Before `peers` is overwritten: this diffs against the outgoing list, so a
+      // peer's laser trail gets its final `down: false` when they leave mid-stroke.
+      if (engine) syncPeerLasers(peers, list, engine.peerLaser.bind(engine));
+      peers = list;
+    });
+    unsubPeerState = realtime.onPeerState((list) => {
+      peerStates = list;
+      syncPeers();
+      syncPresence(list);
+    });
+    // What was selected before the link existed is held from now.
+    if (engine) claimSelected(engine.getSelectedElements().map((element) => element.id));
+    // Whoever joins is sent what they lack, and this client is on joining: the
+    // server has only what has been saved. Sent first, so all of it is known here.
+    realtime.setSceneSync({
+      inventory: () => {
+        flushLive();
+        return liveBroadcast.inventory();
+      },
+      missing: (have) => {
+        flushLive();
+        return liveBroadcast.missing(have);
+      },
+    });
+    unsubStatus = realtime.onStatus((next) => {
+      const reconnected = next === "connected" && liveHistory.everConnected;
+      if (liveStatus === "connecting" && next === "disconnected") {
+        liveHistory.everFailed = true;
+      }
+      if (next === "connected") liveHistory.everConnected = true;
+      liveStatus = next;
+      if (next === "connected") {
+        // Ours first — what was drawn offline — then theirs, from the server.
+        flushLive();
+        if (reconnected) void catchUp();
+      }
+    });
+    unsubPatch = realtime.onRemotePatch(applyRemote);
+    // Someone joined: the online copy is written with what this client had, and the
+    // newcomer is told to read it. A sync over the relay's 64 KiB never arrives, so
+    // without this the newcomer would never see a drawing bigger than that.
+    unsubJoin = realtime.onJoin((clientId) => {
+      if (!onPeerJoined) return;
+      void (async () => {
+        try {
+          await onPeerJoined();
+        } catch {
+          // The copy could not be written: the newcomer keeps what it has.
+        }
+        realtime?.sendStored(clientId);
+      })();
+    });
+    // The copy has what this client had: read it, and take what the newcomer lacks.
+    unsubStored = realtime.onStored(() => {
+      void catchUp();
+    });
+    realtime.connect();
+  }
+
+  /**
+   * The public build's live link: it starts when the drawing's secret arrives, and the
+   * first one wins — a second call would open a second socket to the same room.
+   */
+  $effect(() => {
+    const raw = roomSecret;
+    if (!browser) return;
+    if (!raw || !slug) {
+      // Not shared: there is no live link, and nothing to say about one.
+      unshared = true;
+      return;
+    }
+    unshared = false;
+    if (liveSecret !== null && sameSecret(liveSecret, raw)) return;
+    liveSecret = raw;
+    void startLive(raw);
   });
 
   onDestroy(() => {
@@ -2049,6 +2140,7 @@
       {title}
       {status}
       live={liveText}
+      {shared}
       onToggleMenu={() => (showMainMenu = !showMainMenu)}
       onOpenShare={openShare}
       onOpenShortcuts={() => (showShortcuts = true)}
@@ -2478,6 +2570,9 @@
       {slug}
       {peers}
       connectionStatus={liveStatus}
+      {browser}
+      secret={roomSecret}
+      onShareLive={onShareLive}
       bind:menu
       bind:showMainMenu
       bind:showExport
