@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SceneAutosaver, type AutosaveStatus } from "../autosave/autosaver.ts";
+import { SceneAutosaver, type AutosaveStatus, type FailureKind } from "../autosave/autosaver.ts";
 import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
 import { holdForSave, type Departure } from "./holdForSave.ts";
+
+// `api/client.ts` (for `ApiClientError`) reads the runtime config, which reads this
+// SvelteKit virtual module; vitest has no resolver for it. See `config.test.ts`.
+vi.mock("$env/dynamic/public", () => ({ env: {} }));
+
+const { ApiClientError } = await import("../api/client.ts");
 
 const el = (id: string): StampedElement => ({
   id,
@@ -22,7 +28,10 @@ function deferred() {
 }
 
 /** A board's real saver, one change noted and not sent yet; the test answers its sends. */
-function board(send: (patch: ScenePatch<StampedElement>) => Promise<void>) {
+function board(
+  send: (patch: ScenePatch<StampedElement>) => Promise<void>,
+  classify?: (error: unknown) => FailureKind,
+) {
   let status: AutosaveStatus = "idle";
   const scene = [el("a")];
   const saver = new SceneAutosaver({
@@ -31,6 +40,7 @@ function board(send: (patch: ScenePatch<StampedElement>) => Promise<void>) {
     onStatus: (next) => {
       status = next;
     },
+    ...(classify ? { classify } : {}),
     now: () => 0,
     nonce: () => 1,
   });
@@ -123,6 +133,35 @@ describe("holdForSave, in the browser build", () => {
     expect(goto).not.toHaveBeenCalled();
     expect(go).not.toHaveBeenCalled();
   });
+
+  it.each([
+    // As the page's `classify` has it: the browser store's full quota is a final 413.
+    [
+      "too-large",
+      (error: unknown): FailureKind =>
+        error instanceof ApiClientError && error.status === 413 ? "too-large" : "retry",
+    ],
+    // Retried on a timer; while a retry is out the save is in flight, and held as one.
+    ["error", undefined],
+  ] as const)(
+    "lets the next navigation through once the save line shows the failure (%s)",
+    async (shown, classify) => {
+      const full = new ApiClientError(413, "board_too_large", "this browser has no room left");
+      const drawing = board(() => Promise.reject(full), classify);
+
+      const first = departure();
+      const held = leave(first, drawing);
+      await held.held;
+      expect(first.cancel).toHaveBeenCalledOnce();
+      expect(drawing.status()).toBe(shown);
+      expect(held.goto).not.toHaveBeenCalled();
+
+      // The save line has said it: leaving now is the person's choice, not a loss unseen.
+      const second = departure();
+      expect(leave(second, drawing).held).toBeNull();
+      expect(second.cancel).not.toHaveBeenCalled();
+    },
+  );
 
   it("stays on the drawing when the flush itself rejects", async () => {
     const drawing = board(async () => undefined);
