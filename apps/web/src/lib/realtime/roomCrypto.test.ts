@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import {
   deriveBoardRoomKeyBytes,
+  deriveWriteToken,
   ensureRoomKey,
   formatRoomHash,
   generateRoomKeyBytes,
   importRoomKey,
   open,
+  openBytes,
   parseRoomKeyFromHash,
+  pictureStoreId,
   resolveRoomKey,
   seal,
+  sealBytes,
   type SealedEnvelope,
 } from "./roomCrypto.ts";
 
@@ -206,5 +211,78 @@ describe("roomCrypto without a secure context", () => {
     expect(await open(key, { ...envelope, ct: flipLastBase64UrlChar(envelope.ct) })).toBeNull();
     expect(await open(await importRoomKey(generateRoomKeyBytes(), null), envelope)).toBeNull();
     expect(await open(key, { v: 1, iv: "!!!", ct: "!!!" })).toBeNull();
+  });
+});
+
+describe("roomCrypto for the online copy", () => {
+  // The store's own pattern for a bearer token (`packages/store/src/handlers.ts`, BEARER).
+  const BEARER = /^[\w.~+/-]{32,512}=*$/;
+
+  it("derives one write token from one secret, with Web Crypto or without", async () => {
+    // Two people holding the link write the same copy: their tokens must be one token,
+    // whichever of them is on a page without a secure context.
+    const raw = generateRoomKeyBytes();
+    const token = await deriveWriteToken(raw);
+
+    expect(await deriveWriteToken(raw)).toBe(token);
+    expect(await deriveWriteToken(raw, null)).toBe(token);
+    expect(await deriveWriteToken(generateRoomKeyBytes())).not.toBe(token);
+    expect(token).toMatch(BEARER);
+  });
+
+  it("gives away neither the secret nor the room key in the token", async () => {
+    const raw = generateRoomKeyBytes();
+    const token = await deriveWriteToken(raw);
+    const secret = formatRoomHash(raw).slice("#room=".length);
+
+    expect(token).not.toBe(secret);
+    expect(token.includes(secret.slice(0, 12))).toBe(false);
+    const fallback = await importRoomKey(raw, null);
+    if (fallback.engine !== "fallback") throw new Error("expected the fallback key");
+    expect(token).not.toBe(Buffer.from(fallback.key).toString("base64url"));
+  });
+
+  it("seals bytes and opens them, each engine reading the other's", async () => {
+    const raw = generateRoomKeyBytes();
+    const onLocalhost = await importRoomKey(raw);
+    const onTheLan = await importRoomKey(raw, null);
+    const bytes = encoder.encode("a scene, compressed, would be here");
+
+    const sealed = await sealBytes(onLocalhost, bytes);
+    expect(decoder.decode((await openBytes(onTheLan, sealed))!)).toBe(decoder.decode(bytes));
+    const back = await sealBytes(onTheLan, bytes);
+    expect(decoder.decode((await openBytes(onLocalhost, back))!)).toBe(decoder.decode(bytes));
+    // A fresh IV each time: the same bytes never seal the same way twice.
+    expect(Buffer.from(await sealBytes(onLocalhost, bytes))).not.toEqual(Buffer.from(sealed));
+    expect(Buffer.from(sealed).includes(Buffer.from(bytes))).toBe(false);
+  });
+
+  it("opens nothing tampered with, cut short, or sealed under another secret", async () => {
+    const key = await importRoomKey(generateRoomKeyBytes());
+    const sealed = await sealBytes(key, encoder.encode("hello"));
+    const tampered = sealed.slice();
+    tampered[tampered.length - 1] = tampered[tampered.length - 1]! ^ 1;
+
+    expect(await openBytes(key, tampered)).toBeNull();
+    expect(await openBytes(key, sealed.slice(0, 11))).toBeNull();
+    expect(await openBytes(await importRoomKey(generateRoomKeyBytes()), sealed)).toBeNull();
+    expect(await openBytes(await importRoomKey(generateRoomKeyBytes(), null), sealed)).toBeNull();
+  });
+
+  it("names a picture by its bytes and the secret, never by its bytes alone", async () => {
+    // Content-derived, so two browsers sending one picture name it alike and the second is
+    // told it is stored; keyed, so the store cannot tell which picture it holds.
+    const raw = generateRoomKeyBytes();
+    const picture = encoder.encode("image/png\n…the picture's bytes…");
+    const id = await pictureStoreId(raw, picture);
+
+    expect(await pictureStoreId(raw, picture)).toBe(id);
+    expect(await pictureStoreId(raw, picture, null)).toBe(id);
+    expect(await pictureStoreId(raw, encoder.encode("another picture"))).not.toBe(id);
+    expect(await pictureStoreId(generateRoomKeyBytes(), picture)).not.toBe(id);
+    // The store's id rule: 6 to 32 lowercase letters and digits (`slugSchema`).
+    expect(id).toMatch(/^[a-z0-9]{32}$/);
+    const plainHash = createHash("sha256").update(picture).digest("hex");
+    expect(plainHash.startsWith(id)).toBe(false);
   });
 });
