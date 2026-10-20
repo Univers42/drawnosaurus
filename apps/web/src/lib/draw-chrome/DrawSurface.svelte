@@ -1649,7 +1649,12 @@
       // derive the same AES key. The API only sees opaque sealed frames. None at all for
       // a drawing not shared: no channel, no socket.
       void (async () => {
-        const raw = await liveKeyFor({ browser, slug, location: window.location });
+        const raw = await liveKeyFor({
+          browser,
+          slug,
+          location: window.location,
+          secret: null,
+        });
         if (raw === null) {
           unshared = true;
           return;

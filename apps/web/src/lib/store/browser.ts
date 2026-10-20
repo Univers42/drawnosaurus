@@ -13,7 +13,7 @@ import {
 import { ApiClientError, type PatchAck } from "../api/client.ts";
 import { BOARDS, DRAWINGS, ELEMENTS, openDraftDb } from "../autosave/draftDb.ts";
 import { fillPictures } from "../autosave/pictures.ts";
-import type { BoardStore } from "./types.ts";
+import type { BoardStore, SecretStore } from "./types.ts";
 
 /**
  * The public build's store: drawings kept in this browser's IndexedDB, with no server.
@@ -36,6 +36,11 @@ interface DrawingRow {
   bounds: WorldBounds | null;
   thumbnail?: Blob;
   thumbnailAt?: string;
+  /**
+   * The secret it was shared with — the link's `#room=` key (`sharing/secret.ts`). Never in
+   * what `summary` or `board` return: it stays in this browser, as the link does.
+   */
+  secret?: Uint8Array;
 }
 
 /** The drafts' rows, as `indexedDbBackend` writes them. */
@@ -202,7 +207,10 @@ function readDrawing(tx: IDBTransaction, slug: string) {
   };
 }
 
-export function browserStore({ idb, now = () => new Date() }: BrowserStoreOptions): BoardStore {
+export function browserStore({
+  idb,
+  now = () => new Date(),
+}: BrowserStoreOptions): BoardStore & SecretStore {
   let opened: Promise<IDBDatabase> | null = null;
 
   async function run<T>(
@@ -359,6 +367,25 @@ export function browserStore({ idb, now = () => new Date() }: BrowserStoreOption
           // Kept alive until revoked: the gallery releases it (`gallery/cardPicture.ts`).
           return picture ? URL.createObjectURL(picture) : null;
         };
+      }),
+
+    secret: (slug) =>
+      run("readonly", (tx) => {
+        const stored = tx.objectStore(DRAWINGS).get(slug) as IDBRequest<DrawingRow | undefined>;
+        return () => stored.result?.secret ?? null;
+      }),
+
+    keepSecret: (slug, secret) =>
+      run("readwrite", (tx, step) => {
+        const stored = tx.objectStore(DRAWINGS).get(slug) as IDBRequest<DrawingRow | undefined>;
+        stored.onsuccess = step(() => {
+          // A drawing opened from a link has no row until now: it gets one, listed like a
+          // drawing someone named, so it can be found again. Not an edit: no rev, no date.
+          const at = now();
+          const row = stored.result ?? newRow(slug, untitled(at), at);
+          tx.objectStore(DRAWINGS).put({ ...row, secret } satisfies DrawingRow);
+        });
+        return () => undefined;
       }),
   };
 }

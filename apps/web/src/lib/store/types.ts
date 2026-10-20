@@ -26,3 +26,15 @@ export interface BoardStore {
    */
   thumbnail(slug: string, version: string): Promise<string | null>;
 }
+
+/**
+ * Where a shared drawing's secret is kept in this browser: on the drawing's own row, in the
+ * public build's store (`browser.ts`). The Docker build has none — its live key is the
+ * board's (`realtime/liveRoom.ts`).
+ */
+export interface SecretStore {
+  /** The secret the drawing was shared with, or null when it never was. */
+  secret(slug: string): Promise<Uint8Array | null>;
+  /** Keeps the secret with the drawing, giving a drawing that has no row yet its row. */
+  keepSecret(slug: string, secret: Uint8Array): Promise<void>;
+}
