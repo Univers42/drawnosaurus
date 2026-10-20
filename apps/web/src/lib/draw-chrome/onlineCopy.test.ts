@@ -2,8 +2,8 @@ import { randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handle } from "@drawnosaurus/store/handlers";
 import { memoryStore } from "@drawnosaurus/store/memory";
-import type { StampedElement } from "../autosave/sceneDiff.ts";
-import type { StoredCopy } from "../sharing/storedCopy.ts";
+import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
+import type { OnlineCopyStore } from "./onlineCopy.ts";
 
 // `api/client.ts` (for `ApiClientError`) reads the runtime config, which reads this
 // SvelteKit virtual module; vitest has no resolver for it. See `config.test.ts`.
@@ -59,25 +59,30 @@ function network() {
   return { db, fetch, sent };
 }
 
-/** The copy, and the page that saves it: the scene it holds, and the store it writes to. */
-function page(options: { throttleMs?: number } = {}) {
-  const net = network();
-  const raw = secret();
-  const copy = new Copy<Shape>({ slug: SLUG, secret: raw, fetch: net.fetch });
-  let scene: Shape[] = [];
+/** The page that saves the copy: the scene it holds, and the copy it writes to. */
+function page(copy: OnlineCopyStore<Shape>, scene: Shape[] = []) {
+  let held = scene;
   const online = new OnlineCopy<Shape>({
     slug: SLUG,
-    copy: copy as StoredCopy<Shape>,
-    readScene: () => scene,
-    lookup: (id) => scene.find((element) => element.id === id),
-    ...options,
+    copy,
+    readScene: () => held,
+    lookup: (id) => held.find((element) => element.id === id),
   });
-  const edit = (element: Shape) => {
-    scene = scene.map((held) => (held.id === element.id ? element : held));
-    if (!scene.some((held) => held.id === element.id)) scene = [...scene, element];
-    online.noteChanged([element.id]);
+  const put = (element: Shape) => {
+    held = held.map((one) => (one.id === element.id ? element : one));
+    if (!held.some((one) => one.id === element.id)) held = [...held, element];
   };
-  return { net, copy, online, edit, scene: () => scene };
+  return {
+    online,
+    /** This page's own edit. */
+    edit: (element: Shape) => {
+      put(element);
+      online.noteChanged([element.id]);
+    },
+    /** A peer's edit: in the scene, and not this page's to write. */
+    peer: put,
+    scene: () => held,
+  };
 }
 
 /** What the store holds, read back with the same secret. */
@@ -99,17 +104,11 @@ describe("OnlineCopy", () => {
     const net = network();
     const raw = secret();
     const copy = new Copy<Shape>({ slug: SLUG, secret: raw, fetch: net.fetch });
-    let scene = [shape("a"), shape("b")];
-    const online = new OnlineCopy<Shape>({
-      slug: SLUG,
-      copy: copy as StoredCopy<Shape>,
-      readScene: () => scene,
-      lookup: (id) => scene.find((element) => element.id === id),
-    });
+    const { online } = page(copy, [shape("a"), shape("b")]);
 
     await online.writeFirstCopy();
 
-    expect(await stored(net, raw)).toEqual(scene);
+    expect(await stored(net, raw)).toEqual([shape("a"), shape("b")]);
     const before = net.sent.length;
     // The copy holds the scene, so the saver must not send it again.
     await online.saveNow();
@@ -120,49 +119,50 @@ describe("OnlineCopy", () => {
     const net = network();
     const raw = secret();
     const copy = new Copy<Shape>({ slug: SLUG, secret: raw, fetch: net.fetch });
-    let scene = [shape("a")];
-    const online = new OnlineCopy<Shape>({
-      slug: SLUG,
-      copy: copy as StoredCopy<Shape>,
-      readScene: () => scene,
-      lookup: (id) => scene.find((element) => element.id === id),
-    });
+    const { online, peer, edit } = page(copy, [shape("a")]);
     await online.writeFirstCopy();
 
     // A peer's edit: it is in the scene, and this page never notes it as its own.
-    scene = [shape("a"), shape("peer", 2)];
+    peer(shape("peer", 2));
     await online.saveNow();
     expect(await stored(net, raw), "a peer's edit was written here").toEqual([shape("a")]);
 
     // This page's own edit.
-    scene = [shape("a", 2), shape("peer", 2)];
-    online.noteChanged(["a"]);
+    edit(shape("a", 3));
     await online.saveNow();
 
     const held = await stored(net, raw);
-    expect(held.find((element) => element.id === "a")?.version).toBe(2);
+    expect(held.find((element) => element.id === "a")?.version).toBe(3);
     expect(held.some((element) => element.id === "peer"), "the peer's edit again").toBe(false);
   });
 
   it("writes at most once every 20 seconds while the edits keep coming", async () => {
-    const { net, copy, online, edit } = page();
-    const raw = secret();
-    await online.writeFirstCopy();
-    const before = net.sent.length;
+    // A copy that answers at once: the clock is the only thing under test here.
+    const writes: ScenePatch<Shape>[] = [];
+    const copy = {
+      leaving: false,
+      save: async (patch: ScenePatch<Shape>) => {
+        writes.push(patch);
+      },
+    };
+    const { online, edit } = page(copy, [shape("a")]);
 
     for (let second = 0; second < 60; second += 1) {
       edit(shape("a", second + 2));
       await vi.advanceTimersByTimeAsync(1000);
     }
+    await vi.advanceTimersByTimeAsync(60_000);
 
-    const writes = net.sent.filter((request) => request.method === "PUT").length;
-    expect(writes - (before > 0 ? 1 : 0)).toBeLessThanOrEqual(4);
+    // One edit a second for a minute is three throttled writes, not sixty.
+    expect(writes).toHaveLength(3);
     expect(ONLINE_COPY_THROTTLE_MS).toBe(20_000);
-    expect(copy).toBeDefined();
   });
 
-  it("sends what is left when the page is hidden, and says the last seconds may be missing", async () => {
-    const { net, online, edit } = page();
+  it("sends what is left when the page is hidden, on a keepalive request", async () => {
+    const net = network();
+    const raw = secret();
+    const copy = new Copy<Shape>({ slug: SLUG, secret: raw, fetch: net.fetch });
+    const { online, edit } = page(copy, [shape("a")]);
     await online.writeFirstCopy();
     edit(shape("a", 2));
 
