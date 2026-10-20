@@ -78,16 +78,17 @@ Delete is promoted from 374px and duplicate from 412 (`showDeleteOutside`,
 `showDuplicateOutside`, `Actions.tsx@1118751f:771-774`); what is not promoted stays in the
 layer popover.
 
-**DESIGN** — one deliberate narrowing: the oracle's strip appears with a selection, and
-this one is always on the dock. With nothing selected the two colour buttons act on the
-_next_ shape — the engine's own next style, the way Excalidraw's canvas properties work
-— so a thumb can pick a look before it draws one. Everything else on the row is the
-selection's and appears with it.
+**DESIGN** — one deliberate narrowing: the text rows are coalesced into one popover rather
+than two. The oracle coalesces rows for the same reason (two 32px buttons for one
+selection's typing is a row of near-identical squares), and every text property stays
+reachable: only the second button's slot goes.
 
-**DESIGN** — the text rows are coalesced into one popover rather than two. The oracle
-coalesces rows for the same reason (two 32px buttons for one selection's typing is a row
-of near-identical squares), and every text property stays reachable: only the second
-button's slot goes.
+The strip appears when a shape is selected or a drawing tool is in hand — the oracle's own
+rule (`shouldRenderSelectedShapeActions`, the same predicate the desktop's panel uses, and
+`shapeActions.visible` here). With neither, there is nothing for it to act on, and the
+dock is the tool bar alone. With a drawing tool in hand and nothing selected, the two
+colour rows act on the _next_ shape — the engine's own next style, the way Excalidraw's
+canvas properties work — so a thumb can pick a look before it draws one.
 
 ## The header
 

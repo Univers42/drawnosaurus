@@ -2503,22 +2503,29 @@
     of ten tools across the top of a 360px screen is the thing the oracle's phone
     layout exists to replace (`MobileToolbar.tsx@1118751f`), and a second set of
     controls under the same finger is worse than none.
+
+    The strip appears when a shape is selected or a drawing tool is in hand, the
+    oracle's own rule (`shouldRenderSelectedShapeActions`, the same predicate the
+    desktop's panel uses — `shapeActions.visible`); with neither, there is nothing
+    for it to act on.
   -->
   {#if !presenting && formFactor === "phone"}
     <div class="mobile-dock" data-viewport-ui="bottom">
-      <DrawMobileActions
-        {summary}
-        can={shapeActions}
-        {engine}
-        {themeMode}
-        onApply={applyStyle}
-        onPreview={previewStyle}
-        run={(action) => {
-          if (!engine) return;
-          action(engine);
-          refreshStyle();
-        }}
-      />
+      {#if shapeActions.visible}
+        <DrawMobileActions
+          {summary}
+          can={shapeActions}
+          {engine}
+          {themeMode}
+          onApply={applyStyle}
+          onPreview={previewStyle}
+          run={(action) => {
+            if (!engine) return;
+            action(engine);
+            refreshStyle();
+          }}
+        />
+      {/if}
       <DrawMobileToolbar active={tool} onSelect={handleToolSelect} />
     </div>
   {/if}
