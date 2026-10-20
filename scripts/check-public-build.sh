@@ -12,6 +12,8 @@
 #                 file at run time; without it, that read fails as the app starts.
 #   the relay - the public build's live link points at the relay Worker, and the socket is
 #               opened with it: a build without it opens no live link at all.
+#   the stamp - the menu names the commits a build was made from (lib/build.ts); a build
+#               without them says "live source (make dev)", which is false on a deploy.
 #
 # Usage: scripts/check-public-build.sh [build-dir]   (default apps/web/build)
 set -eu
@@ -20,6 +22,7 @@ dir="${1:-apps/web/build}"
 max_bytes=26214400
 max_files=20000
 relay_url="${VITE_HYDRAWN_RELAY_URL:-wss://hydrawn-relay.hydrawn.workers.dev/ws}"
+app_sha="${BUILD_APP_SHA:-$(git rev-parse --short HEAD)}"
 failed=0
 fail() {
   echo "check-public-build: FAIL $1"
@@ -50,6 +53,9 @@ api=$(grep -rlF '/v1/boards' "$dir" || true)
 
 relay=$(grep -rlF "$relay_url" "$dir" || true)
 [ -n "$relay" ] || fail "the relay ($relay_url) is not in the bundle; the live link would open nothing"
+
+stamp=$(grep -rlF "${app_sha%-dirty}" "$dir/_app" || true)
+[ -n "$stamp" ] || fail "the build is not stamped with app ${app_sha%-dirty}; the menu would say it is live source"
 
 [ "$failed" -eq 0 ] || exit 1
 
