@@ -59,6 +59,15 @@ export const MAX_DEPTH = 127;
  */
 export const MAX_TOPICS = 10_000;
 
+/** The client's ping (`pingFrame()`, realtimeProtocol.ts), byte for byte. */
+export const PING = '{"type":"PING"}';
+/**
+ * A pong as the client reads one (`isPong`, realtimeClient.ts: any frame of type PONG). The
+ * Rust relay's carries `server_time` too; the client never reads it, so this one is fixed
+ * and the runtime can answer it alone (`worker.ts`).
+ */
+export const PONG = '{"type":"PONG"}';
+
 /** What one connection is: kept in its socket's attachment, so a woken object rebuilds it. */
 export interface Connection {
   id: string;

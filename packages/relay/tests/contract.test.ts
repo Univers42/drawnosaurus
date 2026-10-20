@@ -11,8 +11,7 @@ import {
   publishFrame,
   subscribeFrame,
 } from "../../../apps/web/src/lib/realtime/realtimeProtocol.ts";
-import { Relay, type Outbound } from "../src/relay.ts";
-import { PING, PONG } from "../src/worker.ts";
+import { PING, PONG, Relay, type Outbound } from "../src/relay.ts";
 
 /**
  * The token `realtimeClient.ts` sends when none is configured (`DEV_AUTH_TOKEN`) — always,
