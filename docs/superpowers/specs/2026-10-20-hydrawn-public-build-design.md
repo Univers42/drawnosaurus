@@ -97,7 +97,7 @@ public build (`apps/web/svelte.config.js`; the app is already `ssr = false`,
 7-day hold (`minimumReleaseAge`, `docs/reference/conventions.md`).
 
 **The seam is `apps/web/src/lib/api/client.ts`** — every server call goes through it, from
-four importers: the gallery (`routes/+page.svelte`), the board
+four importers: the gallery (`lib/gallery/Gallery.svelte`), the board
 (`routes/boards/[slug]/+page.svelte`), `DrawTemplatesModal.svelte` and
 `DrawShareModal.svelte`. The public build supplies the same operations — list, create,
 read, save, delete, thumbnail — over browser storage, so those four call one interface
