@@ -31,7 +31,7 @@ interface DrawingRow {
   createdAt: string;
   updatedAt: string;
   rev: number;
-  /** Live elements. Zero keeps a drawing out of the gallery: opened, never drawn on. */
+  /** Live elements. */
   elementCount: number;
   bounds: WorldBounds | null;
   thumbnail?: Blob;
@@ -219,6 +219,10 @@ export function browserStore({ idb, now = () => new Date() }: BrowserStoreOption
   return {
     // ponytail: reads every row for each page; a browser holds tens of drawings, not
     // thousands. Upgrade path: an `updatedAt` index cursor opened at the position.
+    //
+    // Every row is listed, empty ones too. A row exists once a drawing was created with a
+    // name (`create`) or first saved (`patchElements`); a drawing only opened has none, so
+    // a visit to `/` lists nothing, and one someone named is theirs to find.
     list: (limit = DEFAULT_PAGE_SIZE, cursor) =>
       run("readonly", (tx) => {
         const rows = tx.objectStore(DRAWINGS).index("updatedAt").getAll() as IDBRequest<
@@ -228,9 +232,7 @@ export function browserStore({ idb, now = () => new Date() }: BrowserStoreOption
           // The index holds them oldest first, a tie by slug: newest first is the reverse.
           const listed = rows.result
             .reverse()
-            .filter(
-              (row) => row.elementCount > 0 && (cursor === undefined || position(row) < cursor),
-            );
+            .filter((row) => cursor === undefined || position(row) < cursor);
           const page = listed.slice(0, limit);
           const last = page.at(-1);
           return {
