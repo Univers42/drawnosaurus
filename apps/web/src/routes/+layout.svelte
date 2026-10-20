@@ -7,7 +7,6 @@
     readThemePreference,
     resolveThemeMode,
   } from "$lib/draw-chrome/theme.ts";
-  import { BROWSER_MODE } from "$lib/mode.ts";
   import "../app.css";
 
   let { children } = $props();
@@ -35,18 +34,6 @@
     );
   }
 </script>
-
-<svelte:head>
-  <!-- Inter, from Google's CDN, in the Docker build only. The public build asks no one but
-       its own origin for anything (the spec's anti-goal: a drawing not shared goes nowhere),
-       so there the text is in the system's sans, `app.css`'s fallback. -->
-  {#if !BROWSER_MODE}
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-    />
-  {/if}
-</svelte:head>
 
 <div class="shell">
   {#if !onBoard}

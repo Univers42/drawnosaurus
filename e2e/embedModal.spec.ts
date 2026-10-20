@@ -57,16 +57,6 @@ const APP_ORIGIN = new URL(
 ).origin;
 
 /**
- * The app's own webfont, fetched from Google's CDN by `apps/web/src/routes/+layout.svelte`.
- *
- * Not something an embed needs and not something any assertion here reads — §11 already
- * says never to assert on font-metric pixels, precisely because this request is not
- * dependable. It is named rather than swallowed so the leak list below stays a list of
- * surprises.
- */
-const APP_FONT = /^https:\/\/fonts\.(googleapis|gstatic)\.com\//;
-
-/**
  * Answers a framed page from a route, and records every request that leaves this origin.
  *
  * Both halves matter. The route is what keeps the test off youtube.com; the recorder is
@@ -78,12 +68,7 @@ async function stubProviders(page: Page): Promise<string[]> {
   const leaked: string[] = [];
   page.on("request", (request) => {
     const url = request.url();
-    if (
-      !/^https?:\/\//.test(url) ||
-      url.startsWith(APP_ORIGIN) ||
-      APP_FONT.test(url) ||
-      PROVIDERS.test(url)
-    ) {
+    if (!/^https?:\/\//.test(url) || url.startsWith(APP_ORIGIN) || PROVIDERS.test(url)) {
       return;
     }
     leaked.push(url);

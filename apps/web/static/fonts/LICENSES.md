@@ -23,6 +23,19 @@ release the file comes from. A font whose licence none of these establishes is n
 The files are shipped unmodified, under their own names; "Lilita One" and "Cascadia Code" are
 Reserved Font Names and are used only for the unmodified fonts.
 
+## The app's own typeface
+
+Inter is not a canvas face: it is the face the app's chrome is set in (`src/app.css`), and not
+in Excalidraw's tree, so the rule above does not apply to it. Its files are the ones Google
+Fonts served the app for `family=Inter:wght@400;500;600;700` (CSS v20), byte for byte, under
+Google's names prefixed `Inter-`: one variable file (`wght` 100 to 900) per script — Cyrillic,
+Cyrillic Ext, Greek, Greek Ext, Vietnamese, Latin Ext and Latin. Each is Inter "Version
+4.001;git-66647c0bb" (ID 5), built 2024-05-24 (`head.modified`).
+
+| Family | Files                          | Copyright                                                                | Licence, and where it is stated                                                                                                                                                                                                                                                                                                                 | Full text     |
+| ------ | ------------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Inter  | `Inter/Inter-…woff2` (7 files) | Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) | SIL OFL 1.1. The file: ID 14 `https://openfontlicense.org` (no ID 13). Upstream: `LICENSE.txt` of `github.com/rsms/inter` at `66647c0bb`, the commit ID 5 names, is the OFL 1.1 — the same text as `OFL-1.1.txt` but for one heading ("PERMISSION AND CONDITIONS" where that file has "PERMISSION & CONDITIONS"), and it reserves no font name. | `OFL-1.1.txt` |
+
 ## Not shipped
 
 | Family (id)                 | Why                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | What draws instead                  |
