@@ -145,7 +145,7 @@ describe("OnlineCopy", () => {
         writes.push(patch);
       },
     };
-    const { online, edit } = page(copy, [shape("a")]);
+    const { edit } = page(copy, [shape("a")]);
 
     for (let second = 0; second < 60; second += 1) {
       edit(shape("a", second + 2));
