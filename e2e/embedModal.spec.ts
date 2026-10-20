@@ -57,7 +57,7 @@ const APP_ORIGIN = new URL(
 ).origin;
 
 /**
- * The app's own webfont, fetched from Google's CDN by `apps/web/src/app.css:1`.
+ * The app's own webfont, fetched from Google's CDN by `apps/web/src/routes/+layout.svelte`.
  *
  * Not something an embed needs and not something any assertion here reads — §11 already
  * says never to assert on font-metric pixels, precisely because this request is not
