@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { d1Store } from "../src/d1.ts";
 import { handle } from "../src/handlers.ts";
 import {
@@ -152,6 +152,16 @@ describe.each(stores)("the store, over %s", (_name, open) => {
     if (largestRow) expect(largestRow()).toBeLessThan(D1_MAX_ROW_BYTES);
   });
 
+  it("reads a scene written again in fewer parts as the new one, no tail of the old", async () => {
+    const { db } = open();
+    await putScene(db, "drawing1", bytes(3 * PART_BYTES + 5));
+    expect((await putScene(db, "drawing1", bytes(PART_BYTES + 5, 2), { rev: 1 })).status).toBe(204);
+
+    const got = await read(await get(db, "drawing1"));
+    expect(Buffer.compare(got, bytes(PART_BYTES + 5, 2))).toBe(0);
+    expect((await db.scene("drawing1"))?.parts.length).toBe(2);
+  });
+
   it("answers 413 for a write that would take the drawing past the cap, its pictures counted", async () => {
     const { db } = open();
     const picture = MAX_DRAWING_BYTES - 1000;
@@ -206,6 +216,29 @@ describe.each(stores)("the store, over %s", (_name, open) => {
     expect(await db.head("drawing1")).toBeNull();
   });
 
+  it("decides a write again when another lands between its read and its own write", async () => {
+    const { db } = open();
+    await putScene(db, "drawing1", bytes(100));
+    let raced = false;
+    const racing: StoreDb = {
+      ...db,
+      head: async (id) => {
+        const head = await db.head(id);
+        if (!raced) {
+          raced = true;
+          await putPicture(db, "drawing1", "picture1", bytes(50));
+        }
+        return head;
+      },
+    };
+
+    const response = await putScene(racing, "drawing1", bytes(100, 2), { rev: 1 });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("etag")).toBe('"2"');
+    expect(await read(await get(db, "drawing1/pictures/picture1"))).toEqual(bytes(50));
+    expect((await headOf(db, "drawing1")).bytes).toBe(150);
+  });
+
   it("lands nothing, sweep included, from a write decided on a head that has changed since", async () => {
     const { db } = open();
     await putScene(db, "expired1", bytes(100), { now: T0 });
@@ -229,6 +262,22 @@ describe.each(stores)("the store, over %s", (_name, open) => {
     expect((await headOf(db, "drawing1")).rev).toBe(1);
     expect(await read(await get(db, "drawing1"))).toEqual(bytes(100));
     expect((await get(db, "expired1")).status).toBe(200);
+  });
+});
+
+describe("the store, when its database refuses", () => {
+  it("answers 503 store_unavailable, an error the browser can show", async () => {
+    const spent = (): Promise<never> =>
+      Promise.reject(new Error("D1_ERROR: Exceeded maximum daily rows written"));
+    const db: StoreDb = { head: spent, scene: spent, picture: spent, write: spent };
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    for (const response of [await get(db, "drawing1"), await putScene(db, "drawing1", bytes(10))]) {
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({ error: { code: "store_unavailable" } });
+    }
+    expect(logged).toHaveBeenCalledTimes(2);
+    logged.mockRestore();
   });
 });
 

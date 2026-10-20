@@ -30,6 +30,33 @@ export const PART_BYTES = 1 << 20;
  */
 export const MAX_DRAWING_BYTES = 10 << 20;
 
+/*
+ * What a request costs on the free plan, and what happens at its limits.
+ *
+ * Pages Functions count against the Workers Free quota
+ * (https://developers.cloudflare.com/pages/functions/pricing/), whose limits are
+ * (https://developers.cloudflare.com/workers/platform/limits/): 100,000 requests a day, 10 ms
+ * of CPU per request, and a 100 MB request body on a Free zone — never reached, since the
+ * store stops reading at MAX_DRAWING_BYTES. Waiting on D1 is not CPU time.
+ *
+ * The CPU goes on encoding: each byte stored is base64-encoded here and JSON-encoded by the D1
+ * binding, about 2.9 ms per MiB written and 0.8 per MiB read on Node 22
+ * (tests/d1Codec.bench.ts, 2026-10-20). The largest write, a scene at MAX_DRAWING_BYTES, costs
+ * about 30 ms; a picture at the app's 4 MiB, about 12; a scene save of a few hundred KB, about
+ * 1. So writes over ~3 MiB are over 10 ms. Cloudflare gives an isolate "some built-in
+ * flexibility" to run over now and then, but a Worker that keeps doing so is stopped with
+ * error 1102, "Worker exceeded resource limits": the browser sees a failed save, and says so.
+ *
+ * Nothing at a limit costs money: the free plan refuses work, it does not bill it. Past
+ * 100,000 requests a day Workers answer error 1027 until 00:00 UTC (the Pages pages do not say
+ * what Pages answers). Past D1's 100,000 rows written or 5,000,000 read a day
+ * (https://developers.cloudflare.com/d1/platform/pricing/), or its 500 MB, every D1 call fails
+ * and the handlers answer 503 `store_unavailable`.
+ *
+ * ponytail: a write over ~3 MiB leans on that flexibility; upgrade path — the browser sends a
+ * large scene or picture one part per request.
+ */
+
 /**
  * The most pictures one drawing may hold. It is what bounds the sweep: a drawing holds at
  * most MAX_DRAWING_BYTES / PART_BYTES parts of bytes, plus one part per item for the last,

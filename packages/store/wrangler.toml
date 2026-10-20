@@ -1,0 +1,21 @@
+# The public build on Cloudflare Pages: the static app, plus the store's Function
+# (functions/store/[[path]].ts) over one D1 database. Run from this directory, at deploy
+# time only — wrangler is deliberately not a dependency, so it stays out of the lockfile:
+#
+#   npx -y wrangler@4.149.0 d1 create hydrawn-store        (once; prints the database id)
+#   npx -y wrangler@4.149.0 d1 migrations apply hydrawn-store --remote
+#   npx -y wrangler@4.149.0 pages deploy
+#
+# Pages routes only /store/* to the Function, from the functions/ tree; every other path is a
+# static file, which the free plan serves without counting a request.
+name = "hydrawn-app"
+pages_build_output_dir = "../../apps/web/build"
+compatibility_date = "2026-10-01"
+# node:buffer, which encodes the stored parts as base64 (src/d1.ts says why).
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "STORE"
+database_name = "hydrawn-store"
+# A placeholder, on purpose: the id is the one `wrangler d1 create` prints at deploy time.
+database_id = "REPLACE-WITH-THE-ID-wrangler-d1-create-PRINTS"
