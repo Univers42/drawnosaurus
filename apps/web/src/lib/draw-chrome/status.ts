@@ -1,18 +1,37 @@
 import type { AutosaveStatus } from "$lib/autosave/autosaver.ts";
 import type { ConnectionStatus } from "$lib/realtime/realtimeClient.ts";
 
-export function autosaveLabel(status: AutosaveStatus): string {
+/**
+ * What the header's save line reports: the saver's state, or `unread` — a drawing this
+ * browser holds but could not read, opened empty so drawing can go on (the public build;
+ * `boards/openBoard.ts`).
+ */
+export type SaveLine = AutosaveStatus | "unread";
+
+export function autosaveLabel(status: SaveLine): string {
   if (status === "saving") return "Saving…";
   if (status === "pending") return "Unsaved changes";
   if (status === "error") return "Save failed — retrying";
   if (status === "too-large") return "Not saved — board over 16 MB";
   if (status === "refused") return "Not saved — refused by the server";
+  if (status === "unread") return "Not loaded — this browser could not read it";
   return "Saved";
 }
 
 /** Whether the save state is one the header should show as a problem. */
-export function autosaveIsTrouble(status: AutosaveStatus): boolean {
-  return status === "error" || status === "too-large" || status === "refused";
+export function autosaveIsTrouble(status: SaveLine): boolean {
+  return (
+    status === "error" || status === "too-large" || status === "refused" || status === "unread"
+  );
+}
+
+/**
+ * The save line over a drawing that could not be read. Its saves still land, merged into
+ * what is stored, but "Saved" would say the drawing is what the page shows: so the failure
+ * stays on the line whenever the saver has nothing more pressing to say.
+ */
+export function saveLine(status: AutosaveStatus, unread: boolean): SaveLine {
+  return unread && status === "idle" ? "unread" : status;
 }
 
 /**

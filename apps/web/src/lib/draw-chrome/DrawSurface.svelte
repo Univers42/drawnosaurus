@@ -120,8 +120,7 @@
   import { importRoomKey, resolveRoomKey } from "../realtime/roomCrypto.ts";
   import { LiveSceneBroadcaster, remotePatchToSceneEvent } from "../realtime/liveBroadcast.ts";
   import type { StampedElement, ScenePatch } from "../autosave/sceneDiff.ts";
-  import type { AutosaveStatus } from "../autosave/autosaver.ts";
-  import { liveLabel } from "./status.ts";
+  import { liveLabel, type SaveLine } from "./status.ts";
   import DrawHeader from "./DrawHeader.svelte";
   import DrawMainMenu from "./DrawMainMenu.svelte";
   import { downloadBlob } from "./download.ts";
@@ -162,7 +161,7 @@
     scene: Scene;
     title?: string;
     slug?: string;
-    status?: AutosaveStatus;
+    status?: SaveLine;
     ariaLabel?: string;
     onSceneChange?: (json: string) => void;
     onReady?: (engine: DrawEngine) => void;

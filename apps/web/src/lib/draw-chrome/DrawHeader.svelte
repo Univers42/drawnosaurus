@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import type { AutosaveStatus } from "$lib/autosave/autosaver.ts";
-  import { autosaveIsTrouble, autosaveLabel } from "./status.ts";
+  import { autosaveIsTrouble, autosaveLabel, type SaveLine } from "./status.ts";
 
   let {
     title = "Untitled",
@@ -14,7 +13,7 @@
     menu,
   }: {
     title?: string;
-    status?: AutosaveStatus;
+    status?: SaveLine;
     /** What to say about live collaboration, or null when all is well. See `liveLabel`. */
     live?: string | null;
     onToggleMenu: () => void;

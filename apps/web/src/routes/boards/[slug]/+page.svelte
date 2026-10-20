@@ -6,6 +6,8 @@
   import { Scene, type DrawElement } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { ApiClientError } from "$lib/api/client.ts";
+  import { openBoard } from "$lib/boards/openBoard.ts";
+  import { BROWSER_MODE } from "$lib/mode.ts";
   import { boards } from "$lib/store/index.ts";
   import {
     SceneAutosaver,
@@ -14,11 +16,10 @@
   } from "$lib/autosave/autosaver.ts";
   import { DraftStore, indexedDbBackend } from "$lib/autosave/draftStore.ts";
   import { PictureLedger } from "$lib/autosave/pictures.ts";
-  import { recoverStripped } from "$lib/autosave/recover.ts";
   import { SceneMirror } from "$lib/autosave/sceneMirror.ts";
   import { splitPatch } from "$lib/autosave/split.ts";
   import DrawSurface from "$lib/draw-chrome/DrawSurface.svelte";
-  import { migrateLegacyStickyGroups } from "$lib/notes/stickyNotes.ts";
+  import { saveLine } from "$lib/draw-chrome/status.ts";
   import { ThumbnailUploader } from "$lib/thumbnail/thumbnailUploader.ts";
 
   /**
@@ -31,6 +32,8 @@
   let scene = $state<Scene | undefined>(undefined);
   let status = $state<AutosaveStatus>("idle");
   let title = $state("Board");
+  /** The public build's: the stored drawing could not be read, so it opened empty. */
+  let unread = $state(false);
 
   /**
    * Latest elements the engine reported, found by id; the autosaver reads this, never
@@ -43,10 +46,10 @@
 
   /**
    * The local copy of the board, for when the server cannot be reached. Written a change
-   * at a time, off the frame that made it — see `draftStore.ts` for what it replaced.
+   * at a time, off the frame that made it — see `draftStore.ts` for what it replaced. None
+   * in the public build: its store is already the local copy (`boards/openBoard.ts`).
    */
-  const drafts = new DraftStore(indexedDbBackend());
-  const LEGACY_DRAFT_PREFIX = "drawnosaurus:draft:";
+  const drafts = BROWSER_MODE ? null : new DraftStore(indexedDbBackend());
 
   /**
    * 413 is the board or the request being too large, 400 a change the server will not
@@ -103,58 +106,26 @@
 
   onMount(() => {
     void (async () => {
-      /** The board as the server has it — or, when it cannot be reached, as the draft does. */
-      let loaded: DrawElement[] = [];
-      /** The board as it is opened: `loaded`, with what this page repairs on the way in. */
-      let elements: DrawElement[] = [];
-      /** The ids of what it repaired, each re-stamped or deleted, to be saved again. */
-      const resave: string[] = [];
-      const nonce = (): number => Math.floor(Math.random() * 0x7fffffff);
-      // Read beside the board rather than after it, so it costs the page no time.
-      const draft = drafts.load(slug) as Promise<DrawElement[] | null>;
-      try {
-        const board = await boards.get(slug);
-        title = board.title;
-        loaded = elementsFromJson(JSON.stringify(board.scene)) ?? [];
-        needsThumbnailBackfill = loaded.some((element) => !element.isDeleted) && !board.thumbnailAt;
-        // The draft this page used to keep in localStorage: the server has the board,
-        // and the string only took up the quota.
-        storage()?.removeItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
-        // What the server stripped from boards saved before its schema had the fields —
-        // every video an empty box — this browser may still have in its draft.
-        const recovered = recoverStripped(loaded, await draft, Date.now(), nonce);
-        elements = recovered.elements;
-        resave.push(...recovered.repaired.map((element) => element.id));
-      } catch {
-        // The server is unreachable: the local draft, or the one an older version of
-        // this page kept in localStorage.
-        const drafted = await draft;
-        const legacy = storage()?.getItem(`${LEGACY_DRAFT_PREFIX}${slug}`);
-        loaded = drafted ?? (legacy ? (elementsFromJson(legacy) ?? []) : []);
-        elements = loaded;
-        title = slug ? `Board ${slug}` : "Untitled";
-      }
+      const opened = await openBoard({
+        slug,
+        browser: BROWSER_MODE,
+        store: boards,
+        drafts,
+        storage: storage(),
+        now: () => Date.now(),
+        nonce: () => Math.floor(Math.random() * 0x7fffffff),
+      });
+      const { loaded, elements, resave } = opened;
+      title = opened.title;
+      needsThumbnailBackfill = opened.needsThumbnailBackfill;
+      unread = opened.failure !== null;
 
-      // A sticky note saved while it was four shapes in a group — shadow, pad, date and
-      // label — made the one element the engine draws. See `stickyNotes.ts`.
-      const migrated = migrateLegacyStickyGroups(elements, Date.now(), nonce);
-      if (migrated.changed.length > 0) {
-        elements = migrated.elements;
-        const removed = migrated.removed.map((element) => element.id);
-        resave.push(...migrated.changed.map((element) => element.id), ...removed);
-        // And in the draft, or a board opened offline shows the dropped pieces again,
-        // beside a note that is no longer in their group to take them back.
-        drafts.record(slug, migrated.changed, removed, {
-          order: elements.map((element) => element.id),
-        });
-      }
-
-      // The tracker starts from what the server has, so what was repaired outranks it and
+      // The tracker starts from what the store has, so what was repaired outranks it and
       // goes out whole — and what was dropped, an id that vanished, as its tombstone.
       saver.tracker.reset(loaded);
       saved.reset(loaded);
       live.replace(elements);
-      // `migrated.removed` (empty when nothing was migrated) rides along on `scene`,
+      // `opened.tombstones` (empty when nothing was migrated) rides along on `scene`,
       // not on `live`: DrawSurface reads `scene.toArray()` twice, once to seed
       // `engine.setScene()` and once to seed `liveBroadcast.reset()` — the one place
       // that reaches both the engine's own merge and the live link. Without the
@@ -164,7 +135,7 @@
       // missing/adoptRemote); the engine, never having heard of the id at all, takes
       // it unconditionally (`apply_remote_patch_step`, `self.scene.get(id) == None`).
       // Loaded here as deleted elements instead, both refuse it on stamp alone.
-      scene = new Scene([...elements, ...migrated.removed]);
+      scene = new Scene([...elements, ...opened.tombstones]);
       if (resave.length > 0) {
         saver.tracker.noteChanged(resave);
         saver.notify();
@@ -184,7 +155,7 @@
   /** Sends everything still waiting: the diff, the local draft and the gallery picture. */
   function flushPending(): void {
     void saver.flush();
-    void drafts.flush();
+    void drafts?.flush();
     void thumbnails.flushNow();
   }
 
@@ -237,12 +208,12 @@
       if (parsed.order) {
         // The stack moved as well: only comparing everything finds the order to save.
         saver.tracker.noteEverything();
-        drafts.record(slug, parsed.updated, parsed.removed, {
+        drafts?.record(slug, parsed.updated, parsed.removed, {
           order: live.elements.map((element) => element.id),
         });
       } else {
         // Nothing moved in the stack: all the delta did was put new elements on top.
-        drafts.record(slug, parsed.updated, parsed.removed, { appended });
+        drafts?.record(slug, parsed.updated, parsed.removed, { appended });
       }
     } else {
       const elements = elementsFromJson(json);
@@ -255,7 +226,7 @@
           before.version === after.version && before.versionNonce === after.versionNonce,
       );
       saver.tracker.noteEverything();
-      drafts.record(slug, changed, removed, { order: live.elements.map((element) => element.id) });
+      drafts?.record(slug, changed, removed, { order: live.elements.map((element) => element.id) });
     }
 
     saver.notify();
@@ -283,7 +254,7 @@
         {scene}
         {title}
         {slug}
-        {status}
+        status={saveLine(status, unread)}
         {onSceneChange}
         {onReady}
         {fetchLatest}

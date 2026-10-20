@@ -137,6 +137,15 @@ covered by the browser specs. Follow that split when adding behaviour. (`DrawSur
 has grown past 2,400 lines; a new behaviour that can be tested goes in a `.ts` module beside
 it, not in the orchestrator.)
 
+**A board page is one board's for its whole life.** SvelteKit keeps a page when only its
+params change, so `routes/boards/[slug]/+layout.svelte` keys it on the slug, and the page
+reads its slug once: going from one board to another — a template picked inside a board —
+builds a new page, and nothing the old one still has to send can reach the new board. What
+it opens with is `lib/boards/openBoard.ts`: the store's copy, repaired from the draft (waited
+for at most `DRAFT_REPAIR_WAIT_MS` once the server has answered), the draft or the legacy
+copy when the server cannot be reached, and the sticky-note migration. The public build runs
+no draft.
+
 Every toolbar entry in `tools.ts` is typed `DrawTool`, the engine's own union — the sticky
 note included, which the engine owns now — so the toolbar cannot offer a tool `setTool` does
 not accept.

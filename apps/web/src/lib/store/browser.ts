@@ -70,8 +70,11 @@ function mintSlug(): string {
 // Spelled out: `toLocaleDateString`'s short months differ between browsers ("Sep", "Sept").
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-/** There is no rename, so a drawing saved before anyone named it is titled by its day. */
-const untitled = (at: Date): string => `Drawing — ${at.getDate()} ${MONTHS[at.getMonth()]}`;
+/**
+ * There is no rename, so a drawing saved before anyone named it is titled by its day. Also
+ * the title a board page shows for a drawing not saved yet (`boards/openBoard.ts`).
+ */
+export const untitled = (at: Date): string => `Drawing — ${at.getDate()} ${MONTHS[at.getMonth()]}`;
 
 const newRow = (slug: string, title: string, at: Date): DrawingRow => ({
   slug,
