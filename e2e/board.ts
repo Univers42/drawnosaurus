@@ -172,6 +172,12 @@ export interface Board {
 export const OPEN_CANVAS = { left: 440, top: 170, right: 1160, bottom: 650 } as const;
 
 /**
+ * The relay's payload cap: a publish over 64 KiB is dropped without an answer, as the
+ * Rust relay drops it and as the Worker does (`packages/relay`).
+ */
+const PAYLOAD_CAP = 64 * 1024;
+
+/**
  * Speaks the engine/realtime handshake so the page reaches `connected` instead of
  * reconnecting forever. Specs that care about the wire pass their own handler.
  */
@@ -219,6 +225,10 @@ export function stubRealtimeHandshake(socket: WebSocketRoute): void {
  * name it was given — "1" is the first page to join — which is how a spec keeps a
  * message crossing the room for as long as it needs: the two sides of a race that is
  * otherwise a few milliseconds wide. Its handshake and pings are still answered.
+ *
+ * A publish over the payload cap is dropped, as the Rust relay and the Worker both drop
+ * it (`packages/relay`, `engine/realtime`): a sync of a drawing bigger than the cap
+ * never arrives, and the copy is the only way to it.
  */
 export function relay() {
   const sockets = new Map<WebSocketRoute, string>();
@@ -267,7 +277,10 @@ export function relay() {
         return;
       }
       if (msg.type !== "PUBLISH" || held.has(id)) return;
-      frames.push(JSON.stringify(msg.payload ?? null));
+      const payload = JSON.stringify(msg.payload ?? null);
+      // Over the cap: dropped without an answer, as the real relays drop it.
+      if (payload.length > PAYLOAD_CAP) return;
+      frames.push(payload);
       const event = JSON.stringify({
         type: "EVENT",
         topic: msg.topic,
