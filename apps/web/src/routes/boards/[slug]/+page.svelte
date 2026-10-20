@@ -311,6 +311,7 @@
   onDestroy(() => {
     destroyed = true;
     saver.dispose();
+    online?.dispose();
     thumbnails.dispose();
   });
 

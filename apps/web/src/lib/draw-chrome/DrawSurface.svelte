@@ -173,8 +173,8 @@
     ariaLabel?: string;
     /**
      * The public build. Passed in: only the routes read `BROWSER_MODE`. There a drawing has
-     * no live link until it is shared (`liveRoom.ts`), and no Share button until that build
-     * has a Share dialog of its own: this one promises a live room it does not have.
+     * no live link until it is shared (`liveRoom.ts`), and its Share dialog is the
+     * public build's own (`DrawModals`).
      */
     browser?: boolean;
     /**
@@ -390,7 +390,7 @@
   let showMermaid = $state(false);
   let showTemplates = $state(false);
   let showShare = $state(false);
-  /** What Share opens; nothing in the public build yet (see `browser`), so no Share there. */
+  /** What Share opens: the dialog of this build — `DrawModals` picks it by the mode. */
   const openShare = $derived(() => (showShare = true));
   let showShortcuts = $state(false);
   let showPalette = $state(false);

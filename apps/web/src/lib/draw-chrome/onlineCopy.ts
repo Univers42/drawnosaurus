@@ -125,6 +125,11 @@ export class OnlineCopy<T extends StampedElement> {
     await this.saver.flush();
   }
 
+  /** The page is gone: the timer and the retries stop with it. */
+  dispose(): void {
+    this.saver.dispose();
+  }
+
   /**
    * The page is leaving: what is left goes out, and the copy may yet lack it.
    *
