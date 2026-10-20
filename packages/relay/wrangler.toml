@@ -1,0 +1,19 @@
+# The public build's live relay (spec: "The relay"; ledger Ruling 23). Deployed by the owner
+# with wrangler, which is not a dependency: `npx -y wrangler@4.149.0 deploy`, from here.
+name = "hydrawn-relay"
+main = "src/worker.ts"
+# Pinned. On or after 2026-04-07 the runtime answers a WebSocket close frame itself
+# (`web_socket_auto_reply_to_close`), which `webSocketClose` relies on.
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# One object for every drawing — why, and the upgrade path, in src/worker.ts.
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "RelayObject"
+
+# The free plan offers only the SQLite storage backend. The relay stores nothing; the
+# class has to be declared with some backend all the same.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["RelayObject"]
