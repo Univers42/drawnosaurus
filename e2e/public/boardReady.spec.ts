@@ -61,3 +61,32 @@ test("a newcomer whose engine is still loading waits: no board to draw on, no ro
 
   await context.close();
 });
+
+/**
+ * An engine that never loads says so.
+ *
+ * The loader keeps a rejection (`engine/src/wasmLoad.ts`), so the engine is not tried
+ * again in that page: the board cannot be had, and a reload is the only way to have it.
+ * A page that says "Loading board…" for ever, with no way out, is not a board and not an
+ * answer — so the failure is shown, and a reload is offered.
+ */
+test("an engine that cannot load says so, and offers a reload", async ({ page }) => {
+  test.setTimeout(60_000);
+  // The engine's WASM does not arrive at all.
+  await page.route("**/*.wasm", (route) => route.abort());
+
+  await page.goto("/");
+
+  // The page says the engine could not load, in place of the board.
+  const alert = page.getByRole("alert");
+  await expect(alert).toBeVisible({ timeout: 15_000 });
+  await expect(alert).toContainText(/engine/i);
+  // And it offers the only way out there is.
+  const reload = page.getByRole("button", { name: "Reload" });
+  await expect(reload).toBeVisible();
+
+  // The reload has the engine: the loader's rejection did not survive it.
+  await page.unroute("**/*.wasm");
+  await reload.click();
+  await expect(page.locator("canvas").first()).toBeVisible({ timeout: 30_000 });
+});
