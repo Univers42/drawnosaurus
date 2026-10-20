@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { beforeNavigate } from "$app/navigation";
+  import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import { elementsFromJson } from "@osionos/draw-engine/json";
   import { Scene, type DrawElement } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { ApiClientError } from "$lib/api/client.ts";
+  import { holdForSave } from "$lib/boards/holdForSave.ts";
   import { openBoard } from "$lib/boards/openBoard.ts";
   import { BROWSER_MODE } from "$lib/mode.ts";
   import { boards } from "$lib/store/index.ts";
@@ -72,6 +73,8 @@
   /** Board opened with elements and no stored picture; spent once the engine is ready. */
   let needsThumbnailBackfill = false;
   let previousStatus: AutosaveStatus = "idle";
+  /** Torn down: a load still under way must not seed a page that is gone. */
+  let destroyed = false;
 
   const thumbnails = new ThumbnailUploader({
     render: async () => (engine === null ? null : await engine.exportThumbnail()),
@@ -115,6 +118,8 @@
         now: () => Date.now(),
         nonce: () => Math.floor(Math.random() * 0x7fffffff),
       });
+      // Left before its board opened: the saver is disposed and nothing of it is on screen.
+      if (destroyed) return;
       const { loaded, elements, resave } = opened;
       title = opened.title;
       needsThumbnailBackfill = opened.needsThumbnailBackfill;
@@ -161,8 +166,19 @@
 
   // Leaving inside the app tears this page down with `onDestroy`, which disposes the
   // saver — an edit still inside the debounce was never sent. `beforeNavigate` runs ahead
-  // of any teardown, so the engine can still render the thumbnail too.
-  beforeNavigate(flushPending);
+  // of any teardown, so the engine can still render the thumbnail too. In the public build
+  // the navigation waits for the save as well, and does not happen if it failed: there is
+  // no draft behind the saver there (`holdForSave.ts`).
+  beforeNavigate((navigation) => {
+    const held = holdForSave(navigation, {
+      browser: BROWSER_MODE,
+      status: () => status,
+      flush: () => saver.flush(),
+      go: (delta) => history.go(delta),
+      goto,
+    });
+    if (held === null) flushPending();
+  });
 
   /** The board as the server has it, deletions included — for catching up after a drop. */
   async function fetchLatest(): Promise<DrawElement[]> {
@@ -171,6 +187,7 @@
   }
 
   onDestroy(() => {
+    destroyed = true;
     saver.dispose();
     thumbnails.dispose();
   });

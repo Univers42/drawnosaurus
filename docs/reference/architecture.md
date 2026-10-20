@@ -144,7 +144,8 @@ builds a new page, and nothing the old one still has to send can reach the new b
 it opens with is `lib/boards/openBoard.ts`: the store's copy, repaired from the draft (waited
 for at most `DRAFT_REPAIR_WAIT_MS` once the server has answered), the draft or the legacy
 copy when the server cannot be reached, and the sticky-note migration. The public build runs
-no draft.
+no draft, so an in-app navigation away from an unsaved edit waits for the save there, and
+does not happen if it failed (`lib/boards/holdForSave.ts`).
 
 Every toolbar entry in `tools.ts` is typed `DrawTool`, the engine's own union — the sticky
 note included, which the engine owns now — so the toolbar cannot offer a tool `setTool` does
