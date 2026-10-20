@@ -40,8 +40,8 @@ const at = (path: string): string => `http://hydrawn.test/store/v1/drawings/${pa
 
 interface Options {
   token?: string;
-  rev?: number;
-  parts?: number;
+  rev?: number | string;
+  parts?: number | string;
   now?: number;
 }
 
@@ -67,7 +67,11 @@ async function send(
   return response;
 }
 
-const get = (db: StoreDb, path: string): Promise<Response> => send(db, "GET", path);
+const get = (db: StoreDb, path: string, now = T0): Promise<Response> =>
+  send(db, "GET", path, { now });
+
+/** Where a picture of more than one part is sent: an upload of its own, under an id. */
+const uploading = (picture: string, uid = "upload01"): string => `${picture}/uploads/${uid}`;
 
 const putScene = (
   db: StoreDb,
@@ -145,6 +149,8 @@ interface Opened {
   largestRow?: () => number;
   /** How many staged parts are stored, where the store has rows. */
   stagedRows?: () => number;
+  /** How many parts of unfinished picture uploads are stored, where the store has rows. */
+  pendingRows?: () => number;
 }
 
 const stores: [string, () => Opened][] = [
@@ -161,6 +167,7 @@ const stores: [string, () => Opened][] = [
             "SELECT max(length(drawing_id) + length(item) + 8 + length(data)) AS size FROM parts",
           ),
         stagedRows: () => count("SELECT count(*) AS size FROM parts WHERE item GLOB '@*'"),
+        pendingRows: () => count("SELECT count(*) AS size FROM parts WHERE item GLOB '#*'"),
       };
     },
   ],
@@ -207,8 +214,12 @@ describe.each(stores)("the store, over %s", (_name, open) => {
 
     const picture = split(bytes(PART_BYTES + 10));
     expect(
-      (await putPart(db, "drawing1/pictures/picture1", 0, picture[0]!, { token: OTHER, parts: 2 }))
-        .status,
+      (
+        await putPart(db, uploading("drawing1/pictures/picture1"), 0, picture[0]!, {
+          token: OTHER,
+          parts: 2,
+        })
+      ).status,
     ).toBe(403);
     expect(
       (
@@ -243,11 +254,11 @@ describe.each(stores)("the store, over %s", (_name, open) => {
     traffic.length = 0;
     const path = "drawing1/pictures/picture1";
     for (const n of [0, 1, 2]) {
-      expect((await putPart(db, path, n, parts[n]!, { parts: 4 })).status).toBe(204);
+      expect((await putPart(db, uploading(path), n, parts[n]!, { parts: 4 })).status).toBe(204);
     }
     expect((await get(db, path)).status).toBe(404);
     expect((await get(db, `${path}/parts/0`)).status).toBe(404);
-    expect((await putPart(db, path, 3, parts[3]!, { parts: 4 })).status).toBe(204);
+    expect((await putPart(db, uploading(path), 3, parts[3]!, { parts: 4 })).status).toBe(204);
 
     const got = await readWhole(db, path);
     expect(got.status).toBe(200);
@@ -347,18 +358,20 @@ describe.each(stores)("the store, over %s", (_name, open) => {
   it("sweeps an abandoned staged upload at the first write after staging idles out", async () => {
     const { db, stagedRows } = open();
     await putScene(db, "drawing1", bytes(100));
-    await upload(db, "drawing1/staged/upload01", bytes(2 * PART_BYTES, 2), { rev: 1 });
+    await upload(db, "drawing1/staged/upload01", bytes(3 * PART_BYTES, 2), { rev: 1 });
 
-    // 100 bytes, 2 MiB staged and an 8 MiB picture are over the cap: the last part is refused.
+    // 3 MiB staged beside an 8 MiB picture is over the cap: the picture's last part is refused.
     const picture = bytes(8 * PART_BYTES, 4);
     const path = "drawing1/pictures/picture1";
-    expect(await upload(db, path, picture, { now: T0 + 60_000 })).toEqual([
+    expect(await upload(db, uploading(path), picture, { now: T0 + 60_000 })).toEqual([
       204, 204, 204, 204, 204, 204, 204, 413,
     ]);
     // Once staging has idled out, the staged upload is gone and the part lands.
     const later = T0 + STAGED_IDLE_MS + 1;
     const last = split(picture)[7]!;
-    expect((await putPart(db, path, 7, last, { parts: 8, now: later })).status).toBe(204);
+    expect((await putPart(db, uploading(path), 7, last, { parts: 8, now: later })).status).toBe(
+      204,
+    );
 
     expect((await headOf(db, "drawing1")).bytes).toBe(100 + picture.byteLength);
     expect((await commit(db, "drawing1", "upload01", { rev: 1, now: later })).status).toBe(409);
@@ -366,10 +379,146 @@ describe.each(stores)("the store, over %s", (_name, open) => {
     if (stagedRows) expect(stagedRows()).toBe(0);
   });
 
+  it("replaces a 6 MiB staged scene with another: the cap leaves out the scene a commit replaces", async () => {
+    const { db } = open();
+    await putScene(db, "drawing1", bytes(100));
+    const second = bytes(6 * PART_BYTES, 3);
+    const six = Array<number>(6).fill(204);
+    expect(
+      await upload(db, "drawing1/staged/uploada", bytes(6 * PART_BYTES, 2), { rev: 1 }),
+    ).toEqual(six);
+    expect((await commit(db, "drawing1", "uploada", { rev: 1 })).status).toBe(204);
+    expect(await upload(db, "drawing1/staged/uploadb", second, { rev: 2 })).toEqual(six);
+    expect((await commit(db, "drawing1", "uploadb", { rev: 2 })).status).toBe(204);
+    expect(Buffer.compare((await readWhole(db, "drawing1")).bytes, second)).toBe(0);
+
+    // Staging still fits beside the pictures: 4 MiB of them leave 6 MiB to stage.
+    const picture = bytes(4 * PART_BYTES, 4);
+    expect(await upload(db, uploading("drawing1/pictures/picture1"), picture)).toEqual([
+      204, 204, 204, 204,
+    ]);
+    expect(
+      await upload(db, "drawing1/staged/uploadc", bytes(7 * PART_BYTES, 5), { rev: 3 }),
+    ).toEqual([...six, 413]);
+    // A one-part scene replaces the 6 MiB scene beside them; the staged parts go with it.
+    expect((await putScene(db, "drawing1", bytes(PART_BYTES, 6), { rev: 3 })).status).toBe(204);
+    expect((await headOf(db, "drawing1")).bytes).toBe(5 * PART_BYTES);
+  });
+
+  it("completes a retried picture upload whose bytes differ; the interrupted one is swept once idle", async () => {
+    const { db, pendingRows } = open();
+    await putScene(db, "drawing1", bytes(100));
+    const picture = "drawing1/pictures/picture1";
+    // Sealing again draws a fresh IV, so a retry of the same picture sends other bytes.
+    const [first, second] = split(bytes(3 * PART_BYTES, 2));
+    const resealed = bytes(3 * PART_BYTES, 3);
+    expect((await putPart(db, uploading(picture, "uploada"), 0, first!, { parts: 3 })).status).toBe(
+      204,
+    );
+    expect(
+      (await putPart(db, uploading(picture, "uploada"), 1, second!, { parts: 3 })).status,
+    ).toBe(204);
+    expect((await get(db, picture)).status).toBe(404);
+
+    const retried = T0 + 60_000;
+    expect(await upload(db, uploading(picture, "uploadb"), resealed, { now: retried })).toEqual([
+      204, 204, 204,
+    ]);
+    expect(Buffer.compare((await readWhole(db, picture)).bytes, resealed)).toBe(0);
+    // Until it idles out, the interrupted upload counts against the cap.
+    expect((await headOf(db, "drawing1")).bytes).toBe(100 + 5 * PART_BYTES);
+
+    const later = retried + STAGED_IDLE_MS + 1;
+    expect((await putScene(db, "drawing1", bytes(100, 4), { rev: 1, now: later })).status).toBe(
+      204,
+    );
+    const head = await headOf(db, "drawing1");
+    expect(head.bytes).toBe(100 + 3 * PART_BYTES);
+    expect(head.pictures).toBe(1);
+    expect(
+      (await putPart(db, uploading(picture, "uploada"), 2, first!, { parts: 3, now: later }))
+        .status,
+    ).toBe(409);
+    if (pendingRows) expect(pendingRows()).toBe(0);
+  });
+
+  it("keeps the first of two uploads of one picture to finish, mixing in none of the other", async () => {
+    const { db } = open();
+    const picture = "drawing1/pictures/picture1";
+    const a = split(bytes(2 * PART_BYTES + 1000, 2));
+    const b = split(bytes(2 * PART_BYTES + 1000, 3));
+    for (const n of [0, 1]) {
+      expect(
+        (await putPart(db, uploading(picture, "uploada"), n, a[n]!, { parts: 3 })).status,
+      ).toBe(204);
+      expect(
+        (await putPart(db, uploading(picture, "uploadb"), n, b[n]!, { parts: 3 })).status,
+      ).toBe(204);
+    }
+    expect((await putPart(db, uploading(picture, "uploada"), 2, a[2]!, { parts: 3 })).status).toBe(
+      204,
+    );
+    expect((await putPart(db, uploading(picture, "uploadb"), 2, b[2]!, { parts: 3 })).status).toBe(
+      409,
+    );
+    expect(
+      Buffer.compare((await readWhole(db, picture)).bytes, bytes(2 * PART_BYTES + 1000, 2)),
+    ).toBe(0);
+    expect((await headOf(db, "drawing1")).pictures).toBe(1);
+  });
+
+  it("checks the write proof before it reads the body", async () => {
+    const { db } = open();
+    await putScene(db, "drawing1", bytes(100));
+    const request = new Request(at("drawing1"), {
+      method: "PUT",
+      headers: { authorization: `Bearer ${OTHER}`, "if-match": "1" },
+      body: bytes(100, 2),
+    });
+    expect((await handle(request, db, T0)).status).toBe(403);
+    expect(request.bodyUsed).toBe(false);
+    // So a stranger's body over one part is a 403, never read far enough to be a 413.
+    expect(
+      (await putScene(db, "drawing1", bytes(PART_BYTES + 1), { rev: 1, token: OTHER })).status,
+    ).toBe(403);
+  });
+
+  it("answers 404 for a drawing not written for a year, before any sweep deletes it", async () => {
+    const { db } = open();
+    await putScene(db, "drawing1", bytes(100), { now: T0 });
+    await putPicture(db, "drawing1", "picture1", bytes(100), { now: T0 });
+    for (const path of ["drawing1", "drawing1/parts/0", "drawing1/pictures/picture1"]) {
+      expect((await get(db, path, T0 + EXPIRY_MS)).status, path).toBe(200);
+      expect((await get(db, path, T0 + EXPIRY_MS + 1)).status, path).toBe(404);
+    }
+    expect(await db.head("drawing1")).not.toBeNull();
+  });
+
+  it("answers 400 for a part number, an if-match or an x-parts that is not a canonical decimal", async () => {
+    const { db } = open();
+    await putScene(db, "drawing1", bytes(100));
+    for (const n of ["01", "00", "-1", "+1", "1e0", "1.0", "0x1", "one"]) {
+      expect((await get(db, `drawing1/parts/${n}`)).status, n).toBe(400);
+    }
+    for (const rev of ["01", '"01"', "+1", "-0", "1e0", "1.0", '"1', "0x1"]) {
+      expect((await putScene(db, "drawing1", bytes(10), { rev })).status, rev).toBe(400);
+    }
+    const staged = "drawing1/staged/upload01";
+    for (const parts of ["02", "+2", "2.0"]) {
+      expect(
+        (await putPart(db, staged, 0, bytes(PART_BYTES), { rev: 1, parts })).status,
+        parts,
+      ).toBe(400);
+    }
+    expect((await headOf(db, "drawing1")).rev).toBe(1);
+    expect((await putScene(db, "drawing1", bytes(10), { rev: '"1"' })).status).toBe(204);
+    expect((await putScene(db, "drawing1", bytes(10), { rev: 2 })).status).toBe(204);
+  });
+
   it("answers 413 for a write that would take the drawing past the cap, its pictures counted", async () => {
     const { db } = open();
     const picture = MAX_DRAWING_BYTES - 1000;
-    expect(await upload(db, "drawing1/pictures/picture1", bytes(picture))).toEqual(
+    expect(await upload(db, uploading("drawing1/pictures/picture1"), bytes(picture))).toEqual(
       Array<number>(10).fill(204),
     );
 
@@ -392,27 +541,37 @@ describe.each(stores)("the store, over %s", (_name, open) => {
     expect((await putPicture(db, "drawing1", "picture1", bytes(3000))).status).toBe(204);
     expect(await read(await get(db, "drawing1/pictures/picture1"))).toEqual(bytes(3000));
 
-    // Part by part: each part is write-once, and so is the part count.
-    const path = "drawing1/pictures/picture2";
+    // In an upload, a part sent again with the same bytes is a 204, with others a 409.
+    const path = uploading("drawing1/pictures/picture2");
     const [first, rest] = split(bytes(PART_BYTES + 5));
     expect((await putPart(db, path, 0, first!, { parts: 2 })).status).toBe(204);
     expect((await putPart(db, path, 0, first!, { parts: 2 })).status).toBe(204);
     expect((await putPart(db, path, 0, bytes(PART_BYTES, 9), { parts: 2 })).status).toBe(409);
     expect((await putPart(db, path, 0, first!, { parts: 3 })).status).toBe(409);
     expect((await putPart(db, path, 1, rest!, { parts: 2 })).status).toBe(204);
+    // Complete, the picture is write-once: its parts again are 204s, any other upload a 409.
+    expect((await putPart(db, path, 1, rest!, { parts: 2 })).status).toBe(204);
     expect((await putPart(db, path, 1, bytes(5, 9), { parts: 2 })).status).toBe(409);
+    const other = uploading("drawing1/pictures/picture2", "upload02");
+    expect((await putPart(db, other, 0, bytes(PART_BYTES, 9), { parts: 2 })).status).toBe(409);
+    expect((await putPicture(db, "drawing1", "picture2", bytes(5))).status).toBe(409);
     expect((await headOf(db, "drawing1")).bytes).toBe(3000 + PART_BYTES + 5);
     expect((await headOf(db, "drawing1")).pictures).toBe(2);
   });
 
   it("takes an upload's parts in order, each but the last a whole part", async () => {
     const { db } = open();
-    const path = "drawing1/pictures/picture1";
+    const path = uploading("drawing1/pictures/picture1");
     expect((await putPart(db, path, 1, bytes(10), { parts: 2 })).status).toBe(409);
     expect((await putPart(db, path, 0, bytes(PART_BYTES - 1), { parts: 2 })).status).toBe(400);
     expect((await putPart(db, path, 2, bytes(10), { parts: 2 })).status).toBe(400);
     expect((await putPart(db, path, 0, bytes(10), { parts: MAX_PARTS + 1 })).status).toBe(400);
     expect((await putPart(db, path, 0, bytes(10), { parts: 0 })).status).toBe(400);
+    // A picture of one part is a plain PUT, and a plain PUT holds one part.
+    expect((await putPart(db, path, 0, bytes(10), { parts: 1 })).status).toBe(400);
+    expect((await putPicture(db, "drawing1", "picture1", bytes(10), { parts: 2 })).status).toBe(
+      400,
+    );
     // A scene of one part is a plain PUT: staging one would only leave rows behind.
     const staged = "drawing1/staged/upload01";
     expect((await putPart(db, staged, 0, bytes(10), { rev: 0, parts: 1 })).status).toBe(400);
@@ -452,6 +611,19 @@ describe.each(stores)("the store, over %s", (_name, open) => {
         .status,
     ).toBe(400);
     expect((await commit(db, "drawing1", "up", { rev: 0 })).status).toBe(400);
+    expect(
+      (
+        await putPart(
+          db,
+          uploading("drawing1/pictures/picture1", "Up_load1"),
+          0,
+          bytes(PART_BYTES),
+          {
+            parts: 2,
+          },
+        )
+      ).status,
+    ).toBe(400);
     expect(await db.head("Drawing1")).toBeNull();
     expect(await db.head("drawing1")).toBeNull();
   });
@@ -464,6 +636,8 @@ describe.each(stores)("the store, over %s", (_name, open) => {
       ["PUT", "drawing1/parts/1", "GET"],
       ["GET", "drawing1/staged/upload01", "POST"],
       ["toString", "drawing1/staged/upload01/parts/0", "PUT"],
+      ["PUT", "drawing1/pictures/picture1/parts/0", "GET"],
+      ["GET", "drawing1/pictures/picture1/uploads/upload01/parts/0", "PUT"],
     ];
     for (const [method, path, allow] of cases) {
       const response = await send(db, method, path, { rev: 0 });
@@ -528,7 +702,7 @@ describe("the store, when its database refuses", () => {
   it("answers 503 store_unavailable, an error the browser can show", async () => {
     const spent = (): Promise<never> =>
       Promise.reject(new Error("D1_ERROR: Exceeded maximum daily rows written"));
-    const db: StoreDb = { head: spent, item: spent, part: spent, scene: spent, write: spent };
+    const db: StoreDb = { head: spent, item: spent, part: spent, read: spent, write: spent };
     const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     for (const response of [await get(db, "drawing1"), await putScene(db, "drawing1", bytes(10))]) {
