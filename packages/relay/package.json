@@ -1,0 +1,16 @@
+{
+  "name": "@drawnosaurus/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The public build's live relay: the part of engine/realtime's wire protocol the web client speaks, as a Cloudflare Worker with one Durable Object. Deployed with wrangler, which stays out of the lockfile (npx -y wrangler@4.149.0).",
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
