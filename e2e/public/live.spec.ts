@@ -46,12 +46,15 @@ function rectangles(count: number, from = 0): Record<string, unknown>[] {
 
 /** The scene, loaded into the engine the way the app's own code loads one. */
 async function load(page: Page, elements: Record<string, unknown>[]): Promise<void> {
-  await page.evaluate(({ elements, style }) => {
-    const placed = elements.map((element) => ({ ...style, ...element }));
-    window.__drawEngine!.loadScene(
-      JSON.stringify({ type: "osidraw", version: 1, source: "e2e", elements: placed }),
-    );
-  }, { elements, style: STYLE });
+  await page.evaluate(
+    ({ elements, style }) => {
+      const placed = elements.map((element) => ({ ...style, ...element }));
+      window.__drawEngine!.loadScene(
+        JSON.stringify({ type: "osidraw", version: 1, source: "e2e", elements: placed }),
+      );
+    },
+    { elements, style: STYLE },
+  );
 }
 
 /** The Share dialog's link: the drawing's address and its secret. */
@@ -154,12 +157,16 @@ test("with the sharer's page closed, a third browser opens the link and gets the
   );
   const listening = await listenForPicker(page);
   await pickTool(page, "Insert image");
-  await (await listening.opened).setFiles({
+  await (
+    await listening.opened
+  ).setFiles({
     name: "noise.png",
     mimeType: "image/png",
     buffer: noise,
   });
-  await expect.poll(async () => (await sceneElements(page)).filter((e) => e.type === "image").length).toBe(1);
+  await expect
+    .poll(async () => (await sceneElements(page)).filter((e) => e.type === "image").length)
+    .toBe(1);
 
   const link = await share(page);
   // The sharer is gone: their page is closed, and the copy is all that is left.
@@ -169,8 +176,7 @@ test("with the sharer's page closed, a third browser opens the link and gets the
   const elements = await sceneElements(other.page);
   expect(elements.length, "the drawing did not come with the link").toBe(1);
   const image = elements.find((element) => element.type === "image") as
-    | (SceneElement & { dataUrl?: string })
-    | undefined;
+    (SceneElement & { dataUrl?: string }) | undefined;
   expect(image?.dataUrl, "the picture did not come with the drawing").toBeDefined();
   expect(image?.dataUrl?.startsWith("data:image/")).toBe(true);
   expect(image?.dataUrl?.length ?? 0, "the picture is not the size it should be").toBeGreaterThan(

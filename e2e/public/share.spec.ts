@@ -11,9 +11,7 @@ import { qrSource } from "../../apps/web/src/lib/draw-chrome/qr.ts";
  * seal the live frames. The QR code carries the same link, so a phone can open it.
  */
 
-test("the Share dialog shows the link, copies it, and the QR code encodes it", async ({
-  page,
-}) => {
+test("the Share dialog shows the link, copies it, and the QR code encodes it", async ({ page }) => {
   // The relay, stubbed: a shared drawing opens its live link, and there is no relay
   // behind this dev server to open it to.
   await page.routeWebSocket(/\/ws$/, relay().join);

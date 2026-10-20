@@ -200,9 +200,7 @@
       // The public build's: the drawing's secret, from the link or from this browser's
       // store. A link's secret is adopted, and kept, only by a drawing that has none.
       const secret =
-        BROWSER_MODE && secrets
-          ? await drawingSecret(secrets, slug, window.location.hash)
-          : null;
+        BROWSER_MODE && secrets ? await drawingSecret(secrets, slug, window.location.hash) : null;
       if (secret) {
         roomSecret = secret;
         useCopy(secret);
@@ -411,7 +409,7 @@
         browser={BROWSER_MODE}
         {roomSecret}
         onShareLive={shareLive}
-        onPeerJoined={onPeerJoined}
+        {onPeerJoined}
         {shared}
         ariaLabel="Board canvas"
       />

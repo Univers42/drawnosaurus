@@ -2572,7 +2572,7 @@
       connectionStatus={liveStatus}
       {browser}
       secret={roomSecret}
-      onShareLive={onShareLive}
+      {onShareLive}
       bind:menu
       bind:showMainMenu
       bind:showExport

@@ -133,7 +133,10 @@ describe("OnlineCopy", () => {
 
     const held = await stored(net, raw);
     expect(held.find((element) => element.id === "a")?.version).toBe(3);
-    expect(held.some((element) => element.id === "peer"), "the peer's edit again").toBe(false);
+    expect(
+      held.some((element) => element.id === "peer"),
+      "the peer's edit again",
+    ).toBe(false);
   });
 
   it("writes at most once every 20 seconds while the edits keep coming", async () => {

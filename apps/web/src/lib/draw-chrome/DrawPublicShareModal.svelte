@@ -35,7 +35,9 @@
    * bar, with the secret in its fragment. Opening the dialog again shows the same link.
    */
   const known = $derived(
-    secret && typeof window !== "undefined" ? shareLink(window.location.origin, slug, secret) : null,
+    secret && typeof window !== "undefined"
+      ? shareLink(window.location.origin, slug, secret)
+      : null,
   );
 
   const shown = $derived(link ?? known);
@@ -96,9 +98,7 @@
     </div>
 
     {#if shown}
-      <p class="lead">
-        Send this link. Whoever opens it draws on this drawing with you, live.
-      </p>
+      <p class="lead">Send this link. Whoever opens it draws on this drawing with you, live.</p>
       <div class="link-row">
         <input
           readonly
@@ -118,8 +118,8 @@
         <img src={qrSource(shown)} alt="QR code of the share link" />
       </div>
       <p class="note">
-        The link carries the drawing's secret, and it is never sent to a server: whoever has
-        it can draw on this drawing, and nobody else can read what is there.
+        The link carries the drawing's secret, and it is never sent to a server: whoever has it can
+        draw on this drawing, and nobody else can read what is there.
       </p>
     {:else}
       <p class="lead">Invite people to draw on this drawing with you, live.</p>
@@ -136,8 +136,8 @@
         <p class="copy-failed" role="alert">{failure}</p>
       {/if}
       <p class="note">
-        The drawing is kept online as well, so the people you share it with still find it
-        after you close the tab. The secret stays in the link: no server can read it.
+        The drawing is kept online as well, so the people you share it with still find it after you
+        close the tab. The secret stays in the link: no server can read it.
       </p>
     {/if}
   </div>

@@ -1,6 +1,7 @@
 import { sveltekit } from "@sveltejs/kit/vite";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import type { Plugin } from "vite";
 import { storeDevMiddleware } from "@drawnosaurus/store/devMiddleware";
 
 /**
@@ -49,14 +50,15 @@ if (mode !== "server" && mode !== "browser") {
  * Mounted without a path: a mount path is cut from `req.url`, and the handlers route on
  * the whole of it.
  */
-function storeDev(): import("vite").Plugin {
-  const mount = (server: { middlewares: { use: (fn: unknown) => void } }): void => {
-    server.middlewares.use(storeDevMiddleware());
-  };
+function storeDev(): Plugin {
   return {
     name: "hydrawn-store-dev",
-    configureServer: mount,
-    configurePreviewServer: mount,
+    configureServer(server) {
+      server.middlewares.use(storeDevMiddleware());
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(storeDevMiddleware());
+    },
   };
 }
 

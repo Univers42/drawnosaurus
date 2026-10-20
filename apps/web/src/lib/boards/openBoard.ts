@@ -175,12 +175,7 @@ async function fromServer({
 /** Nothing of the drawing: a new one, or one this browser could not read. */
 const empty = { loaded: [], elements: [], resave: [], needsThumbnailBackfill: false, copied: null };
 
-async function fromBrowser({
-  slug,
-  store,
-  now,
-  stored,
-}: OpenBoardOptions): Promise<Read> {
+async function fromBrowser({ slug, store, now, stored }: OpenBoardOptions): Promise<Read> {
   // A link to a shared drawing is opened here, ahead of this browser's own copy: its
   // secret, and the online copy when this browser has none (the spec's _The secret_ and
   // _The stored copy_).
@@ -245,4 +240,3 @@ async function fromBrowser({
     failure: null,
   };
 }
-
