@@ -130,6 +130,7 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawMobileToolbar from "./DrawMobileToolbar.svelte";
   import DrawMobileActions from "./DrawMobileActions.svelte";
+  import DrawTabletActions from "./DrawTabletActions.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
   import { copyAsClipboard, outcomeWords } from "./clipboard.ts";
@@ -2279,6 +2280,7 @@
   bind:this={chromeRoot}
   class="draw-chrome"
   class:phone={formFactor === "phone"}
+  class:tablet={formFactor === "tablet"}
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
     onFocusModeKeydown(e);
@@ -2636,28 +2638,51 @@
     />
   {/if}
 
+  <!--
+    The style panel. On a tablet it is the oracle's compact column of icon buttons and
+    popovers, not the desktop's panel of rows: the panel is 216px wide and as tall as the
+    screen, over the drawing, and a tablet has room for a column where a desktop has room
+    for a panel (`editorInterface.ts@1118751f:152-164`, `deriveStylesPanelMode`: a tablet
+    is `compact`). The full inspector is not drawn there at all.
+  -->
   {#if panelVisible && !presenting && chromeVisible("inspector", zenMode) && formFactor !== "phone"}
-    <DrawInspector
-      {summary}
-      can={shapeActions}
-      {engine}
-      {themeMode}
-      {openPicker}
-      builtinPresets={BUILTIN_PRESETS}
-      {userPresets}
-      onApplyPreset={(preset) => applyStyle(preset.style)}
-      onSavePreset={saveCurrentAsPreset}
-      onRenamePreset={renamePreset}
-      onDeletePreset={deletePreset}
-      onOpenPicker={(kind) => (openPicker = kind)}
-      onApply={applyStyle}
-      onPreview={previewStyle}
-      run={(action) => {
-        if (!engine) return;
-        action(engine);
-        refreshStyle();
-      }}
-    />
+    {#if formFactor === "tablet"}
+      <DrawTabletActions
+        {summary}
+        can={shapeActions}
+        {engine}
+        {themeMode}
+        onApply={applyStyle}
+        onPreview={previewStyle}
+        run={(action) => {
+          if (!engine) return;
+          action(engine);
+          refreshStyle();
+        }}
+      />
+    {:else}
+      <DrawInspector
+        {summary}
+        can={shapeActions}
+        {engine}
+        {themeMode}
+        {openPicker}
+        builtinPresets={BUILTIN_PRESETS}
+        {userPresets}
+        onApplyPreset={(preset) => applyStyle(preset.style)}
+        onSavePreset={saveCurrentAsPreset}
+        onRenamePreset={renamePreset}
+        onDeletePreset={deletePreset}
+        onOpenPicker={(kind) => (openPicker = kind)}
+        onApply={applyStyle}
+        onPreview={previewStyle}
+        run={(action) => {
+          if (!engine) return;
+          action(engine);
+          refreshStyle();
+        }}
+      />
+    {/if}
   {/if}
 
   {#if !presenting && formFactor !== "phone"}
