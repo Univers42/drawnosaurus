@@ -221,7 +221,7 @@
             {@render linkRow(internetLink, false)}
           {/if}
           <p>
-            Open until you stop it, or restart drawnosaurus.
+            Open until you stop it, or restart Hydrawn.
             <button type="button" class="text-btn" onclick={closeInternet} disabled={busy}
               >Stop sharing on the internet</button
             >

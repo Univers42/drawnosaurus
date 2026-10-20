@@ -19,7 +19,7 @@ export interface Config {
   /** Owner every request maps to while authMode is "dev". */
   devOwnerId: string;
   /**
-   * Where people on the local network reach this drawnosaurus — the gateway's origin
+   * Where people on the local network reach this Hydrawn — the gateway's origin
    * on each LAN address, such as `http://10.12.19.1:5273`, and the kind of network it
    * goes over. Set by `make up`, which is the only thing that can see the host's
    * addresses: inside the container there are none but the container's own. Empty when

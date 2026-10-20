@@ -6,7 +6,7 @@ import type { TunnelState } from "@drawnosaurus/contract";
  * dialog.
  *
  * It used to take a terminal and `make share`. Now the person at the computer running
- * drawnosaurus presses a button: the API starts `cloudflared`, which dials out to
+ * Hydrawn presses a button: the API starts `cloudflared`, which dials out to
  * Cloudflare — no account, no open port — and is given a random public HTTPS name that
  * passes requests back to the gateway's internet entrance (:82). The name is read from
  * cloudflared's own log.

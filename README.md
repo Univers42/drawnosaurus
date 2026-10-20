@@ -1,7 +1,7 @@
-# drawnosaurus
+# Hydrawn
 
 A collaborative whiteboard. The drawing engine is [draw-engine](https://github.com/Univers42/draw-engine)
-— Rust compiled to WebAssembly — running **in the browser**; drawnosaurus adds the part the engine
+— Rust compiled to WebAssembly — running **in the browser**; Hydrawn adds the part the engine
 deliberately does not have: persistence, an HTTP contract, and a merge rule for concurrent editors.
 
 ```

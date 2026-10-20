@@ -1,4 +1,4 @@
-# The one address drawnosaurus is reached at: the app and its API on the same origin.
+# The one address Hydrawn is reached at: the app and its API on the same origin.
 #
 # The page used to be told the API lived at http://localhost:4300. On the computer
 # running the stack that is true; on a colleague's it is their own machine, where
@@ -58,7 +58,7 @@
 	@hostOnly expression `(({method} == "GET" || {method} == "HEAD" || {method} == "POST") && {path} == "/v1/boards") || ({method} == "DELETE" && {path}.startsWith("/v1/boards/")) || ({method} != "GET" && {method} != "HEAD" && {path}.startsWith("/v1/share/"))`
 	handle @hostOnly {
 		header Content-Type application/json
-		respond `{"error":{"code":"host_only","message":"Only the computer running drawnosaurus can do that. Open a board from the link you were given."}}` 403
+		respond `{"error":{"code":"host_only","message":"Only the computer running Hydrawn can do that. Open a board from the link you were given."}}` 403
 	}
 }
 

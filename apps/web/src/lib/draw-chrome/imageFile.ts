@@ -68,7 +68,7 @@ export function rejectImageFile(file: { type: string; size: number }): ImageReje
 export function describeRejection(reason: ImageRejection): string {
   switch (reason) {
     case "type":
-      return "That file is not an image drawnosaurus can read.";
+      return "That file is not an image Hydrawn can read.";
     case "size":
       return `Images must be under ${Math.round(IMAGE_MAX_BYTES / (1024 * 1024))} MB.`;
     case "decode":

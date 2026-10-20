@@ -39,7 +39,7 @@
   {#if !onBoard}
     <header>
       <div class="brand-row">
-        <a class="brand" href={resolve("/")}>🦕 drawnosaurus</a>
+        <a class="brand" href={resolve("/")}>Hydrawn</a>
         <span class="tagline">Collaborative canvas · Rust + WASM</span>
       </div>
       <button type="button" class="theme-btn" onclick={toggleTheme} aria-label="Toggle theme">

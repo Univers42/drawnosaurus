@@ -17,7 +17,7 @@ network, or from anywhere through the internet link. Nothing to install, no acco
 
 ## On the same network
 
-1. On the computer that runs drawnosaurus: `make up`. It ends with the link for your
+1. On the computer that runs Hydrawn: `make up`. It ends with the link for your
    network, and which network that is:
 
    ```
@@ -62,12 +62,12 @@ everyone else, and it only lets them into the boards they have links to (see
 2. Send that one. It works from any network — another school, home, a phone on mobile
    data.
 3. When you are done: **Stop sharing on the internet**. The link stops working at once.
-   Restarting drawnosaurus (`make up`) closes it too. The next one gets a new address,
+   Restarting Hydrawn (`make up`) closes it too. The next one gets a new address,
    so an old link cannot be reused.
 
 From a terminal it is `make share` and `make unshare`.
 
-It is a Cloudflare _quick tunnel_: drawnosaurus dials out to Cloudflare, which gives it a
+It is a Cloudflare _quick tunnel_: Hydrawn dials out to Cloudflare, which gives it a
 public HTTPS address — no account, and no port to open on any router or firewall, so it
 works from networks you do not control. The link is offered only once Cloudflare's DNS
 publishes the new name, so the first person to open it is not told it does not exist. It
@@ -105,11 +105,11 @@ heavily.
 
 ## Can it be fully automatic?
 
-Everything but the sending. drawnosaurus finds your computer's name and addresses, builds
+Everything but the sending. Hydrawn finds your computer's name and addresses, builds
 the links with the room key in them, puts the best one first, opens the internet link on
 a click, and shows a QR code. What it cannot do is make the link appear on your
 colleague's screen by itself: a browser has no way to look around the network for
-drawnosaurus, so someone has to send them the link — or show them the QR code.
+Hydrawn, so someone has to send them the link — or show them the QR code.
 
 ## Who can do what
 
@@ -124,7 +124,7 @@ drawnosaurus, so someone has to send them the link — or show them the QR code.
   the people you want there.
 - **Live changes are end-to-end encrypted.** The part of the link after `#room=` is the
   room key. Browsers never send what follows a `#` to a server, so the live link carries
-  only sealed frames that neither drawnosaurus's server nor Cloudflare can read. The
+  only sealed frames that neither Hydrawn's server nor Cloudflare can read. The
   saved board itself is stored readable, on your computer.
 - **Nothing else is open.** Other computers reach port 5274 and nothing more: port 5273,
   the API and the database answer this computer only.
@@ -147,7 +147,7 @@ blocks it:
   kept apart (see [On the same network](#on-the-same-network)), and many Wi-Fi networks
   also stop the devices on them from talking to each other. Nothing on your computer
   changes that — use **Share on the internet**, which goes around it;
-- a firewall on the computer running drawnosaurus. If you administer it:
+- a firewall on the computer running Hydrawn. If you administer it:
   `sudo ufw allow 5274/tcp` (Ubuntu), or allow incoming connections for Docker (macOS).
 
 **The first link is not the right one** — several networks, a VPN: find the right
@@ -174,7 +174,7 @@ fixed:** the server used to drop an embed's address, a frame's name and what was
 frame. Open the board once in the browser that made it: its local copy still has them,
 and they are put back and saved again.
 
-**"Only the computer running drawnosaurus can do that":** the home page, or deleting a
+**"Only the computer running Hydrawn can do that":** the home page, or deleting a
 board, from another computer. That is on purpose — open boards from their links.
 
 ## How it works

@@ -4,7 +4,7 @@ import type { Config } from "./config.ts";
 import { Tunnel } from "./tunnel.ts";
 
 /**
- * `/v1/share`: where other people can reach this drawnosaurus, and the internet link.
+ * `/v1/share`: where other people can reach this Hydrawn, and the internet link.
  *
  * The page cannot know where it can be reached — a board opened at localhost has no
  * idea which address a colleague would use — so the Share dialog asks here:
@@ -56,7 +56,7 @@ export function registerShareRoutes(
   const hostOnly = {
     error: {
       code: "host_only",
-      message: "Only the computer running drawnosaurus can open or close the internet link.",
+      message: "Only the computer running Hydrawn can open or close the internet link.",
     },
   };
 

@@ -93,10 +93,10 @@ export async function putThumbnail(slug: string, blob: Blob): Promise<void> {
 export const thumbnailUrl = (slug: string, version: string): string =>
   `${baseUrl()}/v1/boards/${slug}/thumbnail?v=${encodeURIComponent(version)}`;
 
-/** Where other people can reach this drawnosaurus, for the Share dialog. */
+/** Where other people can reach this Hydrawn, for the Share dialog. */
 export const getShareInfo = (): Promise<ShareInfo> => request<ShareInfo>("/v1/share");
 
-/** Opens the internet link. Only the computer running drawnosaurus may. */
+/** Opens the internet link. Only the computer running Hydrawn may. */
 export const startTunnel = (): Promise<ShareInfo> =>
   request<ShareInfo>("/v1/share/tunnel", { method: "POST" });
 

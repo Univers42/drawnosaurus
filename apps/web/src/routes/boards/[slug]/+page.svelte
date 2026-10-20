@@ -258,7 +258,7 @@
     (value as { type?: unknown }).type === "osidraw-delta";
 </script>
 
-<svelte:head><title>{title} · drawnosaurus</title></svelte:head>
+<svelte:head><title>{title} · Hydrawn</title></svelte:head>
 
 <div class="board">
   <div class="surface">
