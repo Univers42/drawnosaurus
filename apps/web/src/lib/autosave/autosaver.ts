@@ -38,6 +38,12 @@ export interface AutosaverOptions<T extends StampedElement> {
    */
   classify?: (error: unknown) => FailureKind;
   debounceMs?: number;
+  /**
+   * Saves at most once per this many ms, instead of after a pause: the first change arms
+   * the timer, and changes after it do not move it. For the online copy, where someone
+   * drawing without a pause was never saved by a debounce (`sharing/storedCopy.ts`).
+   */
+  throttleMs?: number;
   now?: () => number;
   nonce?: () => number;
 }
@@ -75,7 +81,10 @@ export class SceneAutosaver<T extends StampedElement> {
     }
 
     this.setStatus("pending");
-    this.arm(this.options.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+    const { throttleMs } = this.options;
+    if (throttleMs === undefined) this.arm(this.options.debounceMs ?? DEFAULT_DEBOUNCE_MS);
+    // A throttle keeps the timer it has, a retry's included: an edit never delays a save.
+    else if (this.timer === null) this.arm(throttleMs);
   }
 
   /**
