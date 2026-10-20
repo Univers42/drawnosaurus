@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autosaveIsTrouble, autosaveLabel, liveLabel } from "./status.ts";
+import { autosaveIsTrouble, autosaveLabel, liveLabel, saveLine } from "./status.ts";
 
 describe("autosaveLabel", () => {
   it("names every saver state", () => {
@@ -22,6 +22,22 @@ describe("autosaveIsTrouble", () => {
       true,
     );
     expect(["idle", "pending", "saving"].some((s) => autosaveIsTrouble(s as never))).toBe(false);
+  });
+});
+
+describe("saveLine", () => {
+  it("keeps a drawing that could not be read on the line, as trouble, never as Saved", () => {
+    expect(autosaveLabel("unread")).toBe("Not loaded — this browser could not read it");
+    expect(autosaveIsTrouble("unread")).toBe(true);
+    // Saving still works, but "Saved" would claim the whole drawing is what is shown.
+    expect(saveLine("idle", true)).toBe("unread");
+    expect(saveLine("idle", false)).toBe("idle");
+  });
+
+  it("lets the saver say what it is doing, or what failed, over it", () => {
+    for (const status of ["pending", "saving", "error", "too-large", "refused"] as const) {
+      expect(saveLine(status, true)).toBe(status);
+    }
   });
 });
 
