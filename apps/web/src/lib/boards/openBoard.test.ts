@@ -70,11 +70,14 @@ function setup({
   get,
   draft = Promise.resolve(null),
   legacy,
+  stored,
 }: {
   browser?: boolean;
   get: () => Promise<Board>;
   draft?: Promise<DrawElement[] | null>;
   legacy?: readonly DrawElement[];
+  /** The public build's: the online copy, read when this browser holds none of it. */
+  stored?: { read: () => Promise<{ rev: number; elements: DrawElement[] } | null> };
 }) {
   const storage = memoryStorage(
     legacy === undefined
@@ -84,7 +87,7 @@ function setup({
   const drafts = { load: vi.fn(() => draft), record: vi.fn() };
   const store = { get: vi.fn(get) };
   const open = () =>
-    openBoard({ slug: SLUG, browser, store, drafts, storage, now: () => NOW, nonce });
+    openBoard({ slug: SLUG, browser, store, drafts, storage, stored, now: () => NOW, nonce });
   return { open, storage, drafts, store };
 }
 
@@ -274,6 +277,54 @@ describe("openBoard on the browser path", () => {
       expect(storage.removeItem).not.toHaveBeenCalled();
       expect(opened.resave).toEqual([]);
     }
+  });
+
+  it("opens the online copy when this browser holds none of the drawing", async () => {
+    // Someone opening a share link: this browser has never seen the drawing, and the
+    // copy is what there is of it.
+    const { open } = setup({
+      browser: true,
+      get: async () => board([]),
+      stored: { read: async () => ({ rev: 3, elements: [el("a"), el("b")] }) },
+    });
+
+    const opened = await open();
+
+    expect(ids(opened.elements)).toEqual(["a", "b"]);
+    // This browser holds none of it yet: the saver writes the copy here, so the next
+    // visit finds the whole drawing and not only what changed since.
+    expect(opened.loaded).toEqual([]);
+    expect(ids(opened.copied ?? [])).toEqual(["a", "b"]);
+    expect(opened.failure).toBeNull();
+  });
+
+  it("keeps this browser's own copy, and does not read the online one", async () => {
+    const read = vi.fn(async () => ({ rev: 3, elements: [el("elsewhere")] }));
+    const { open } = setup({
+      browser: true,
+      get: async () => board([el("mine")]),
+      stored: { read },
+    });
+
+    const opened = await open();
+
+    expect(read).not.toHaveBeenCalled();
+    expect(ids(opened.elements)).toEqual(["mine"]);
+    expect(opened.copied).toBeNull();
+  });
+
+  it("reports an online copy it could not read, rather than opening the drawing empty", async () => {
+    const refused = new ApiClientError(500, "storage_failed", "the copy could not be read");
+    const { open } = setup({
+      browser: true,
+      get: async () => board([]),
+      stored: { read: () => Promise.reject(refused) },
+    });
+
+    const opened = await open();
+
+    expect(opened.failure).toBe(refused);
+    expect(opened.elements).toEqual([]);
   });
 });
 

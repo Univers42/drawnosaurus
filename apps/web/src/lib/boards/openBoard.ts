@@ -26,8 +26,18 @@ export interface OpenBoardOptions {
   drafts: Pick<DraftStore, "load" | "record"> | null;
   /** Where an older version of the page kept its draft. The server path's only. */
   storage: Storage | undefined;
+  /**
+   * The public build's: the online copy, read when this browser has no copy of its own —
+   * what someone opening a share link finds. Null when the drawing was never shared.
+   */
+  stored?: StoredCopyReader | null;
   now: () => number;
   nonce: () => number;
+}
+
+/** What the online copy holds, read back: the drawing, as it was stored. */
+export interface StoredCopyReader {
+  read(): Promise<{ rev: number; elements: DrawElement[] } | null>;
 }
 
 export interface OpenedBoard {
@@ -47,6 +57,12 @@ export interface OpenedBoard {
    * or when there was none to read.
    */
   failure: Error | null;
+  /**
+   * The browser path's: what the online copy held, when it was read — this browser had no
+   * copy of its own. The drawing is shown from it, and the saver writes it here, so the
+   * next visit finds the whole drawing and not only what this browser changed since.
+   */
+  copied: DrawElement[] | null;
 }
 
 /**
@@ -136,6 +152,7 @@ async function fromServer({
       resave: recovered.repaired.map((element) => element.id),
       needsThumbnailBackfill,
       failure: null,
+      copied: null,
     };
   } catch {
     // The server is unreachable: the local draft, or the one an older version of this
@@ -150,31 +167,82 @@ async function fromServer({
       resave: [],
       needsThumbnailBackfill: false,
       failure: null,
+      copied: null,
     };
   }
 }
 
-async function fromBrowser({ slug, store, now }: OpenBoardOptions): Promise<Read> {
-  // A link to a shared drawing will be opened here, ahead of this browser's own copy: its
+/** Nothing of the drawing: a new one, or one this browser could not read. */
+const empty = { loaded: [], elements: [], resave: [], needsThumbnailBackfill: false, copied: null };
+
+async function fromBrowser({
+  slug,
+  store,
+  now,
+  stored,
+}: OpenBoardOptions): Promise<Read> {
+  // A link to a shared drawing is opened here, ahead of this browser's own copy: its
   // secret, and the online copy when this browser has none (the spec's _The secret_ and
-  // _The stored copy_). Nothing reads either yet.
+  // _The stored copy_).
+  let opened: ReturnType<typeof answered> | null = null;
   try {
-    const opened = answered(await store.get(slug));
-    return { ...opened, elements: opened.loaded, resave: [], failure: null };
+    opened = answered(await store.get(slug));
   } catch (error) {
-    const empty = { loaded: [], elements: [], resave: [], needsThumbnailBackfill: false };
     // Not held here: a new drawing, whose row its first save creates (`browser.ts`).
     if (error instanceof ApiClientError && error.status === 404) {
-      return { ...empty, title: untitled(new Date(now())), failure: null };
+      opened = null;
+    } else {
+      // Held, and unreadable. Opened empty, and reported, rather than passed off as a new
+      // drawing. Saving still cannot destroy what is stored: a save is a merge, the newer
+      // stamp per element winning (`reconcileElements`), so this page can only add to the
+      // drawing; it cannot delete what it never read.
+      return {
+        ...empty,
+        title: "Untitled",
+        failure: error instanceof Error ? error : new Error(String(error)),
+      };
     }
-    // Held, and unreadable. Opened empty, and reported, rather than passed off as a new
-    // drawing. Saving still cannot destroy what is stored: a save is a merge, the newer
-    // stamp per element winning (`reconcileElements`), so this page can only add to the
-    // drawing; it cannot delete what it never read.
-    return {
-      ...empty,
-      title: "Untitled",
-      failure: error instanceof Error ? error : new Error(String(error)),
-    };
   }
+
+  // This browser's own copy wins: it is the one it edits, and the one the gallery lists.
+  if (opened && opened.loaded.length > 0) {
+    return { ...opened, elements: opened.loaded, resave: [], failure: null, copied: null };
+  }
+
+  // Nothing of it here: the online copy, if the drawing was shared. It is shown at once,
+  // without waiting for the relay to wake.
+  if (stored) {
+    try {
+      const copy = await stored.read();
+      if (copy) {
+        return {
+          title: opened?.title ?? untitled(new Date(now())),
+          // This browser holds nothing of it yet: the saver writes the copy here, so the
+          // next visit finds the whole drawing and not only what changed since.
+          loaded: [],
+          elements: copy.elements,
+          resave: [],
+          needsThumbnailBackfill: copy.elements.some((element) => !element.isDeleted),
+          failure: null,
+          copied: copy.elements,
+        };
+      }
+    } catch (error) {
+      // The copy could not be read: opened empty, and reported, as a drawing this browser
+      // holds and cannot read is.
+      return {
+        ...empty,
+        title: opened?.title ?? "Untitled",
+        failure: error instanceof Error ? error : new Error(String(error)),
+      };
+    }
+  }
+
+  return {
+    ...empty,
+    title: opened?.title ?? untitled(new Date(now())),
+    needsThumbnailBackfill: false,
+    failure: null,
+  };
 }
+
