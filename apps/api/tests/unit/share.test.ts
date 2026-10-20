@@ -286,6 +286,7 @@ describe("the routes", () => {
         headers: { "x-drawnosaurus-role": role, host: "localhost:5273" },
       });
       expect(response.statusCode, role).toBe(403);
+      expect(response.json().error.message, role).toContain("Hydrawn");
     }
     expect(cloudflared.spawned).toHaveLength(0);
 
