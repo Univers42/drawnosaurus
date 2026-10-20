@@ -340,4 +340,56 @@ describe("browserStore", () => {
     expect(status).toBeGreaterThanOrEqual(500);
     expect(status).toBeLessThan(600);
   });
+
+  describe("a shared drawing's secret", () => {
+    const secret = () => crypto.getRandomValues(new Uint8Array(32));
+
+    it("has none until one is kept, and gives back the one kept", async () => {
+      const { store } = fresh();
+      await store.patchElements("shared1", { elements: [shape("a")] });
+      const raw = secret();
+
+      expect(await store.secret("shared1")).toBeNull();
+      await store.keepSecret("shared1", raw);
+
+      expect(await store.secret("shared1")).toEqual(raw);
+      expect(await store.secret("other1")).toBeNull();
+    });
+
+    it("gives a drawing opened from a link its row, listed, so it can be found again", async () => {
+      const { store } = fresh();
+
+      await store.keepSecret("linked1", secret());
+
+      expect((await store.list()).boards).toEqual([
+        expect.objectContaining({ slug: "linked1", title: "Drawing — 20 Oct", elementCount: 0 }),
+      ]);
+    });
+
+    it("keeps it through saves, a replace and a picture, and shows it nowhere", async () => {
+      const { store } = fresh();
+      const raw = secret();
+      await store.patchElements("shared1", { elements: [shape("a")] });
+      await store.keepSecret("shared1", raw);
+
+      await store.patchElements("shared1", { elements: [shape("b")] });
+      const { rev } = await store.get("shared1");
+      await store.replace("shared1", file([shape("c")]), rev);
+      await store.putThumbnail("shared1", new Blob(["png"]));
+
+      expect(await store.secret("shared1")).toEqual(raw);
+      const listed = JSON.stringify([await store.list(), await store.get("shared1")]);
+      expect(listed).not.toContain("secret");
+    });
+
+    it("goes with the drawing when it is removed", async () => {
+      const { store } = fresh();
+      await store.patchElements("shared1", { elements: [shape("a")] });
+      await store.keepSecret("shared1", secret());
+
+      await store.remove("shared1");
+
+      expect(await store.secret("shared1")).toBeNull();
+    });
+  });
 });

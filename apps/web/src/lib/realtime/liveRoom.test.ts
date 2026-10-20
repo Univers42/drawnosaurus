@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { deriveBoardRoomKeyBytes, parseRoomKeyFromHash } from "./roomCrypto.ts";
+import { deriveBoardRoomKeyBytes, formatRoomHash, parseRoomKeyFromHash } from "./roomCrypto.ts";
 import { liveKeyFor } from "./liveRoom.ts";
 
 const at = (hash = "") => ({ hash, pathname: "/boards/mine1", search: "" });
@@ -13,7 +13,12 @@ describe("liveKeyFor", () => {
     const replaceState = vi.fn();
     vi.stubGlobal("history", { replaceState });
 
-    const key = await liveKeyFor({ browser: false, slug: "mine1", location: at() });
+    const key = await liveKeyFor({
+      browser: false,
+      slug: "mine1",
+      location: at(),
+      secret: null,
+    });
 
     expect(key).toEqual(await deriveBoardRoomKeyBytes("mine1"));
     expect(replaceState).toHaveBeenCalledTimes(1);
@@ -27,10 +32,31 @@ describe("liveKeyFor", () => {
     vi.stubGlobal("history", { replaceState });
     vi.stubGlobal("localStorage", { setItem, getItem: () => null });
 
-    const key = await liveKeyFor({ browser: true, slug: "mine1", location: at() });
+    const key = await liveKeyFor({ browser: true, slug: "mine1", location: at(), secret: null });
 
     expect(key).toBeNull();
     expect(replaceState).not.toHaveBeenCalled();
     expect(setItem).not.toHaveBeenCalled();
+  });
+
+  it("gives the public build the shared drawing's own secret, whatever the address says", async () => {
+    const replaceState = vi.fn();
+    vi.stubGlobal("history", { replaceState });
+    const secret = crypto.getRandomValues(new Uint8Array(32));
+    const another = formatRoomHash(crypto.getRandomValues(new Uint8Array(32)));
+
+    const key = await liveKeyFor({ browser: true, slug: "mine1", location: at(another), secret });
+
+    expect(key).toEqual(secret);
+    expect(replaceState).not.toHaveBeenCalled();
+  });
+
+  it("keeps the Docker build's key from the board, whatever secret is passed", async () => {
+    vi.stubGlobal("history", { replaceState: vi.fn() });
+    const secret = crypto.getRandomValues(new Uint8Array(32));
+
+    const key = await liveKeyFor({ browser: false, slug: "mine1", location: at(), secret });
+
+    expect(key).toEqual(await deriveBoardRoomKeyBytes("mine1"));
   });
 });
