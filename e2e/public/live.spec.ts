@@ -95,7 +95,7 @@ test("a second browser opens the share link and sees the drawing, live, both way
   browser,
 }) => {
   test.setTimeout(90_000);
-  const live = relay();
+  const live = relay({ payloadCap: 64 * 1024 });
   await page.routeWebSocket(/\/ws$/, live.join);
   await openApp(page);
 

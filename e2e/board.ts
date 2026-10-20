@@ -172,12 +172,6 @@ export interface Board {
 export const OPEN_CANVAS = { left: 440, top: 170, right: 1160, bottom: 650 } as const;
 
 /**
- * The relay's payload cap: a publish over 64 KiB is dropped without an answer, as the
- * Rust relay drops it and as the Worker does (`packages/relay`).
- */
-const PAYLOAD_CAP = 64 * 1024;
-
-/**
  * Speaks the engine/realtime handshake so the page reaches `connected` instead of
  * reconnecting forever. Specs that care about the wire pass their own handler.
  */
@@ -228,9 +222,11 @@ export function stubRealtimeHandshake(socket: WebSocketRoute): void {
  *
  * A publish over the payload cap is dropped, as the Rust relay and the Worker both drop
  * it (`packages/relay`, `engine/realtime`): a sync of a drawing bigger than the cap
- * never arrives, and the copy is the only way to it.
+ * never arrives, and the copy is the only way to it. The cap is opt-in, because the
+ * Docker build's specs hold a picture reaching the other screen — and a picture's first
+ * patch carries its data, which is over the cap.
  */
-export function relay() {
+export function relay(options: { payloadCap?: number } = {}) {
   const sockets = new Map<WebSocketRoute, string>();
   const frames: string[] = [];
   const held = new Set<string>();
@@ -279,7 +275,7 @@ export function relay() {
       if (msg.type !== "PUBLISH" || held.has(id)) return;
       const payload = JSON.stringify(msg.payload ?? null);
       // Over the cap: dropped without an answer, as the real relays drop it.
-      if (payload.length > PAYLOAD_CAP) return;
+      if (options.payloadCap !== undefined && payload.length > options.payloadCap) return;
       frames.push(payload);
       const event = JSON.stringify({
         type: "EVENT",
