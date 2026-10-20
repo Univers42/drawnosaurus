@@ -7,6 +7,7 @@ import {
   subscribeFrame,
 } from "../../../apps/web/src/lib/realtime/realtimeProtocol.ts";
 import type { DurableObjectNamespace, DurableObjectState } from "../src/cloudflare.ts";
+import * as main from "../src/worker.ts";
 import worker, { RelayObject } from "../src/worker.ts";
 
 /**
@@ -261,6 +262,17 @@ describe("the Durable Object", () => {
 });
 
 describe("the Worker", () => {
+  it("exports nothing but its handler and classes, which is all workerd will start", () => {
+    // workerd takes every named export of `main` as an entrypoint and refuses to start on
+    // anything else: "Incorrect type for map entry 'PING': the provided value is not of type
+    // 'function or ExportedHandler'" (wrangler dev 4.149.0).
+    const others = Object.entries(main).filter(([name]) => name !== "default");
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.filter(([, value]) => typeof value !== "function").map(([name]) => name)).toEqual(
+      [],
+    );
+  });
+
   /** The binding, recording which object each request was sent to. */
   function binding() {
     const named: string[] = [];
