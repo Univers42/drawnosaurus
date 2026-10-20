@@ -5,7 +5,10 @@
   "type": "module",
   "description": "The public build's online copy of a shared drawing: sealed bytes kept on D1 behind a Cloudflare Pages Function, which can read none of them.",
   "exports": {
-    "./devMiddleware": "./src/devMiddleware.ts"
+    "./devMiddleware": "./src/devMiddleware.ts",
+    "./handlers": "./src/handlers.ts",
+    "./limits": "./src/limits.ts",
+    "./memory": "./src/memory.ts"
   },
   "scripts": {
     "build": "tsc --noEmit",

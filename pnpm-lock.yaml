@@ -85,6 +85,9 @@ importers:
       '@drawnosaurus/contract':
         specifier: workspace:*
         version: link:../../packages/contract
+      '@drawnosaurus/store':
+        specifier: workspace:*
+        version: link:../../packages/store
       '@excalidraw/mermaid-to-excalidraw':
         specifier: 2.2.2
         version: 2.2.2
