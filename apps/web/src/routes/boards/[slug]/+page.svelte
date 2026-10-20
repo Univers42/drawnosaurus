@@ -426,7 +426,7 @@
   .board {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100dvh;
     width: 100vw;
     overflow: hidden;
     background: var(--bg);

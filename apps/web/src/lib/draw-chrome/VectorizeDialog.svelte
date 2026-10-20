@@ -339,7 +339,7 @@
     border-radius: 0.75rem;
     padding: 1.25rem;
     width: min(30rem, calc(100vw - 2rem));
-    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
     overflow: auto;
     box-sizing: border-box;
     box-shadow: 0 16px 48px rgb(0 0 0 / 24%);
