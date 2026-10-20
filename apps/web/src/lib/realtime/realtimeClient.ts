@@ -99,7 +99,14 @@ export type RealtimeMessage<T extends StampedElement> =
    */
   | { type: "present"; clientId: string; name: string; color: string; frameId: string | null }
   /** Left Present — pairs with `present` the way `preview-end` pairs with `preview`. */
-  | { type: "present-end"; clientId: string };
+  | { type: "present-end"; clientId: string }
+  /**
+   * For `to`, who joined: the sender's online copy now holds what the sender had — a sync
+   * over the relay's 64 KiB never arrives, so `to` reads the copy instead (the public
+   * build, `sharing/storedCopy.ts`). Additive, like `present`: an old peer never sends it,
+   * and ignores it.
+   */
+  | { type: "stored"; clientId: string; to: string };
 
 const CURSOR_COLORS = ["#e03131", "#2f9e44", "#1971c2", "#f08c00", "#9c36b5", "#0c8599"];
 const textEncoder = new TextEncoder();
@@ -194,6 +201,8 @@ export class RealtimeChannel<T extends StampedElement> {
   private outbound: Promise<void> = Promise.resolve();
   private patchListeners: ((patch: ScenePatch<T>) => void)[] = [];
   private statusListeners: ((status: ConnectionStatus) => void)[] = [];
+  private joinListeners: ((clientId: string) => void)[] = [];
+  private storedListeners: ((from: string) => void)[] = [];
   /** True once AUTH+SUBSCRIBE have completed for the current socket. */
   private sessionReady = false;
   private roomKey: RoomKey | null;
@@ -439,6 +448,11 @@ export class RealtimeChannel<T extends StampedElement> {
     });
   }
 
+  /** Tells `to`, who joined, that the online copy now has what this client had. */
+  sendStored(to: string): void {
+    void this.send({ type: "stored", clientId: this.profile.clientId, to });
+  }
+
   sendPatch(patch: ScenePatch<T>): void {
     void this.send({
       type: "patch",
@@ -670,6 +684,7 @@ export class RealtimeChannel<T extends StampedElement> {
           have: this.sync.inventory(),
         });
       }
+      this.joinListeners.forEach((fn) => fn(msg.clientId));
     } else if (msg.type === "sync") {
       if (msg.to !== this.profile.clientId) return;
       if (Array.isArray(msg.elements) && msg.elements.length > 0) {
@@ -709,6 +724,8 @@ export class RealtimeChannel<T extends StampedElement> {
       this.notifyState();
     } else if (msg.type === "patch") {
       this.patchListeners.forEach((fn) => fn(msg.patch));
+    } else if (msg.type === "stored") {
+      if (msg.to === this.profile.clientId) this.storedListeners.forEach((fn) => fn(msg.clientId));
     } else if (msg.type === "leave") {
       this.peers.delete(msg.clientId);
       this.notifyPeers();
@@ -771,6 +788,22 @@ export class RealtimeChannel<T extends StampedElement> {
     this.patchListeners.push(callback);
     return () => {
       this.patchListeners = this.patchListeners.filter((l) => l !== callback);
+    };
+  }
+
+  /** Someone joined — not this client's own join, echoed back. */
+  onJoin(callback: (clientId: string) => void): () => void {
+    this.joinListeners.push(callback);
+    return () => {
+      this.joinListeners = this.joinListeners.filter((l) => l !== callback);
+    };
+  }
+
+  /** A peer says the online copy now has what it had for this client: `from`, its id. */
+  onStored(callback: (from: string) => void): () => void {
+    this.storedListeners.push(callback);
+    return () => {
+      this.storedListeners = this.storedListeners.filter((l) => l !== callback);
     };
   }
 
