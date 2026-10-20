@@ -148,6 +148,7 @@
   import DrawModals from "./DrawModals.svelte";
   import PeerCursors from "./PeerCursors.svelte";
   import "./draw-chrome.css";
+  import { formFactorFor, type FormFactor } from "./formFactor.ts";
 
   let {
     scene,
@@ -182,8 +183,7 @@
   } = $props();
 
   let engine = $state.raw<DrawEngine | null>(null);
-  let theme = $state<DrawTheme>(LIGHT_THEME);
-  let themeMode = $state<ThemeMode>("light");
+  let theme = $state<DrawTheme>(LIGHT_THEME);  let themeMode = $state<ThemeMode>("light");
   let themePreference = $state<ThemePreference>("light");
   let canvasBackground = $state<string | null>(null);
   let grid = $state<GridPreference>({ ...DEFAULT_GRID_PREFERENCE });
@@ -192,6 +192,39 @@
   let ink = $state("#1e1e1e");
   let tool = $state<DrawTool>("select");
   let toolLocked = $state(false);
+
+  /**
+   * The form factor this chrome is drawn for.
+   *
+   * The class it puts on the root (`.draw-chrome.phone`) is what every phone rule keys
+   * off — the oracle's approach — and the client controls the whole page here, so the
+   * window's inner box is the editor's box (`formFactor.ts` for why that is the right
+   * pair of numbers to measure). Read once now, then again on every resize and rotation:
+   * a rotation is a resize the browser announces either way.
+   */
+  let formFactor = $state<FormFactor>(
+    typeof window === "undefined" ? "desktop" : formFactorFor(window.innerWidth, window.innerHeight),
+  );
+
+  $effect(() => {
+    const track = (): void => {
+      formFactor = formFactorFor(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener("resize", track);
+    window.addEventListener("orientationchange", track);
+    return () => {
+      window.removeEventListener("resize", track);
+      window.removeEventListener("orientationchange", track);
+    };
+  });
+
+  // The bars a form factor swap leaves behind are measured chrome: re-measure the room
+  // when it settles, so a reveal or a fit counts the bars where they now are.
+  $effect(() => {
+    void formFactor;
+    queueMicrotask(measureRoom);
+  });
+
   let selectedCount = $state(0);
   /**
    * The engine's `styleRevision()` as last read. It moves on everything that can change
@@ -2031,6 +2064,7 @@
 <div
   bind:this={chromeRoot}
   class="draw-chrome"
+  class:phone={formFactor === "phone"}
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
     onFocusModeKeydown(e);
