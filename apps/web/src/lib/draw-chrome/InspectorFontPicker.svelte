@@ -24,6 +24,7 @@
     onToggle,
     onPick,
     onPreview,
+    compact = false,
   }: {
     value: number | null;
     open: boolean;
@@ -35,6 +36,14 @@
     onPick: (id: number) => void;
     /** Shows a family on the selection without committing it; `null` takes it back. */
     onPreview: (id: number | null) => void;
+    /**
+     * The trigger alone, without the quick picks.
+     *
+     * The tablet's compact panel has one 32px slot per property, and three quick picks
+     * and a divider do not fit in one. The list itself is unchanged: the trigger opens
+     * the same list, wherever it is opened from.
+     */
+    compact?: boolean;
   } = $props();
 
   let trigger: HTMLButtonElement | undefined = $state();
@@ -173,25 +182,27 @@
   </button>
 {/snippet}
 
-<div class="fonts">
-  <div class="picks" role="radiogroup" aria-label="Font family">
-    {#each QUICK_FONTS as font (font.id)}
-      <button
-        type="button"
-        role="radio"
-        class:on={shown === font.id}
-        aria-checked={shown === font.id}
-        aria-label={font.label}
-        title={font.label}
-        onmousedown={holdFocus}
-        onclick={() => onPick(font.id)}
-      >
-        <Icon name={font.icon} size={14} />
-      </button>
-    {/each}
-  </div>
+<div class="fonts" class:compact>
+  {#if !compact}
+    <div class="picks" role="radiogroup" aria-label="Font family">
+      {#each QUICK_FONTS as font (font.id)}
+        <button
+          type="button"
+          role="radio"
+          class:on={shown === font.id}
+          aria-checked={shown === font.id}
+          aria-label={font.label}
+          title={font.label}
+          onmousedown={holdFocus}
+          onclick={() => onPick(font.id)}
+        >
+          <Icon name={font.icon} size={14} />
+        </button>
+      {/each}
+    </div>
 
-  <div class="divider"></div>
+    <div class="divider"></div>
+  {/if}
 
   <button
     bind:this={trigger}
@@ -281,6 +292,13 @@
 
   .trigger {
     flex: 0 0 30px;
+  }
+
+  /* The trigger alone, in a 32px slot: the tablet's compact column's own measure. */
+  .fonts.compact .trigger {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
   }
 
   .picks button.on,
