@@ -278,3 +278,67 @@ describe("SceneAutosaver", () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe("SceneAutosaver with a throttle", () => {
+  // The online copy's saver (`sharing/storedCopy.ts`): someone who draws without a pause
+  // must still be saved, so new edits do not push the save back as a debounce's do.
+  function drawing(options: { throttleMs?: number; debounceMs?: number }) {
+    let version = 1;
+    let scene = [el("a")];
+    const send = vi.fn().mockResolvedValue(undefined);
+    const saver = new SceneAutosaver({
+      readScene: () => scene,
+      send,
+      now: () => 0,
+      nonce: () => 1,
+      ...options,
+    });
+    saver.tracker.reset(scene);
+    const edit = () => {
+      version += 1;
+      scene = [el("a", version)];
+      saver.notify();
+    };
+    return { saver, send, edit };
+  }
+
+  it("saves every 20 s while edits keep coming: one a second for a minute is 3 saves", async () => {
+    const { send, edit } = drawing({ throttleMs: 20_000 });
+
+    for (let second = 0; second < 60; second += 1) {
+      edit();
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(send.mock.calls.at(-1)?.[0].elements[0]).toMatchObject({ version: 61 });
+  });
+
+  it("where a debounce of the same length saves nothing until the edits stop", async () => {
+    const { send, edit } = drawing({ debounceMs: 20_000 });
+
+    for (let second = 0; second < 60; second += 1) {
+      edit();
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("waits the throttle for one edit alone, and a flush does not wait at all", async () => {
+    const { saver, send, edit } = drawing({ throttleMs: 20_000 });
+
+    edit();
+    await vi.advanceTimersByTimeAsync(19_999);
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    edit();
+    await saver.flush();
+    expect(send).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(send, "the flush took the throttled save's place").toHaveBeenCalledTimes(2);
+  });
+});
