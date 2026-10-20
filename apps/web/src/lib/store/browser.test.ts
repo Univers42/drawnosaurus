@@ -123,6 +123,28 @@ describe("browserStore", () => {
     expect((await store.list()).boards).toHaveLength(2);
   });
 
+  it("moves its rev as the API does: 1 when made, 2 after the first save, 1 more per write", async () => {
+    // `apps/api/src/boards/repository.ts`: `BoardRepository.create` writes `rev: 1`, and
+    // `BoardRepository.commit` — the one write path, under `patchElements` and `replace` —
+    // `$inc`s it by one on every write, whether the merge kept anything or not. A slug
+    // first saved here, never created, starts where a created one does.
+    const { store } = fresh();
+    const created = await store.create("Made");
+    expect(created.rev).toBe(1);
+    expect((await store.patchElements(created.slug, { elements: [shape("a")] })).rev).toBe(2);
+
+    expect((await store.patchElements("savedfirst1", { elements: [shape("a")] })).rev).toBe(2);
+    const newer = await store.patchElements("savedfirst1", {
+      elements: [shape("a", { version: 2 })],
+    });
+    expect(newer.rev).toBe(3);
+    // Refused by the merge, and a write all the same.
+    const older = await store.patchElements("savedfirst1", { elements: [shape("a")] });
+    expect(older).toMatchObject({ applied: 0, rejected: 1, rev: 4 });
+    expect((await store.get("savedfirst1")).rev).toBe(4);
+    expect((await store.replace("savedfirst1", file([shape("b")]), 4)).rev).toBe(5);
+  });
+
   it("keeps the newer of two copies of an element, whichever arrives last", async () => {
     const { store } = fresh();
     await store.patchElements("newer1", {
