@@ -17,5 +17,5 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "STORE"
 database_name = "hydrawn-store"
-# A placeholder, on purpose: the id is the one `wrangler d1 create` prints at deploy time.
-database_id = "REPLACE-WITH-THE-ID-wrangler-d1-create-PRINTS"
+# Created 2026-10-20 with `wrangler d1 create hydrawn-store`.
+database_id = "9337dfd5-5be1-4946-850a-2796fb6336e6"
