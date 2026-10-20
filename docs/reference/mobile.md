@@ -1,8 +1,13 @@
-# The phone layout
+# The phone and tablet layouts
 
 A phone gets its own chrome: a bottom tool bar, a compact style strip, a header that
 fits, and touch that draws with one finger and pans and pinches with two. Not a scaled-down
 desktop — the desktop's bars are not drawn at all on a phone.
+
+A tablet keeps the desktop's chrome, with two differences: its style panel is the
+oracle's compact column of buttons and popovers rather than the desktop's panel of rows,
+and its top bar holds — the menu, the title, the status chips, the tool bar, Share and
+Help never overlap one another at any width from 600 px up.
 
 The oracle's numbers are the oracle's (`packages/excalidraw/components/MobileToolbar.tsx
 @1118751f`, `packages/excalidraw/components/Actions.tsx@1118751f:731-880`,
@@ -12,7 +17,7 @@ one is written down below.
 ## Which form factor
 
 **VERIFIED** — `formFactor.ts` decides it, and its thresholds are the oracle's
-(`packages/common/src/editorInterface.ts@1118751f:81-89`, `:117-133`, `:167-184`):
+(`packages/common/src/editorInterface.ts@1118751f:19-26`, `:64-79`, `:137-150`):
 
 | the board is… | when                                                      |
 | ------------- | --------------------------------------------------------- |
@@ -20,18 +25,20 @@ one is written down below.
 | a **tablet**  | its short side is over 599 and its long side at most 1180 |
 | a **desktop** | anything wider                                            |
 
-**DESIGN** — the rule is a _class_ on the chrome's root (`.draw-chrome.phone`), not a
-media query, because the oracle hangs its phone chrome off one too
-(`App.tsx@1118751f:2420-2424`, the `.excalidraw--mobile` class). A class survives the
-overlays, the popovers and the dialogs threaded with the same condition, and it cannot
-disagree with the bars about the width: every bar reads the one decision. The window's
-inner box is the editor's box here — the whole page is the editor — and the class is
-re-read on every resize and every rotation, because a rotation is a resize the browser
-announces either way.
+**DESIGN** — the rule is a _class_ on the chrome's root (`.draw-chrome.phone`,
+`.draw-chrome.tablet`), not a media query, because the oracle hangs its phone chrome off
+one too (`App.tsx@1118751f:2420-2424`, the `.excalidraw--mobile` class). A class survives
+the overlays, the popovers and the dialogs threaded with the same condition, and it
+cannot disagree with the bars about the width: every bar reads the one decision. The
+window's inner box is the editor's box here — the whole page is the editor — and the
+class is re-read on every resize and every rotation, because a rotation is a resize the
+browser announces either way.
 
-**DESIGN** — only the phone has its own chrome. The tablet and the desktop keep the
-desktop's: a tablet has room for the desktop's bars, and a second layout to keep true is
-a second layout to drift.
+**DESIGN** — the phone is the only form factor with a chrome of its own: a bottom dock
+instead of the desktop's bars. The tablet keeps the desktop's bars and the desktop's
+header, and changes two things — its style panel is the oracle's compact column, and its
+top bar holds at every width from 600px up. A tablet has room for the desktop's bars,
+and a second set of them to keep true is a second set to drift.
 
 ## The dock
 
@@ -148,24 +155,115 @@ on the window's capture phase.
 ratio is measured against where the last paired move left the fingers, not the gesture's
 start: each move is one engine-sized step.
 
+## The tablet's style panel
+
+**VERIFIED** — the oracle decides the styles panel's mode from the form factor, not from
+the width alone (`packages/common/src/editorInterface.ts@1118751f:152-164`,
+`deriveStylesPanelMode`): a phone gets `mobile`, a tablet gets `compact`, and only the
+desktop chooses for itself. `formFactor.ts` already answers phone / tablet / desktop by
+the oracle's own rule, so the tablet is the band between the phone's 599 and the
+desktop's 1180.
+
+**VERIFIED** — the compact panel is `CompactShapeActions`
+(`packages/excalidraw/components/Actions.tsx@1118751f:612-724`), which its own comment
+calls "the collapsed, popover-driven layout used on tablets": a narrow column of 32px
+icon buttons with an 8px gap (`Actions.scss@1118751f:95-179`), each opening a popover.
+The rows that travel together are one popover — the oracle's own reason for combining
+them (`CombinedShapeProperties`, `CombinedArrowProperties`, `CombinedTextProperties`,
+`CombinedExtraActions`).
+
+**DESIGN** — the full inspector is not drawn on a tablet at all. It is 216px wide and as
+tall as the screen, over the drawing; the column is 48px wide and as tall as it needs to
+be. The oracle's answer for a tablet is the column, and it is the same answer here.
+
+| the oracle's              | here              | what it opens                             |
+| ------------------------- | ----------------- | ----------------------------------------- |
+| `changeStrokeColor`       | the stroke swatch | the stroke colour picker                  |
+| `changeBackgroundColor`   | the fill swatch   | the background colour picker              |
+| `CombinedShapeProperties` | one button        | fill, width, stroke style, edges, opacity |
+| `CombinedArrowProperties` | one button        | the arrow's type and its heads            |
+| `changeFontFamily`        | one button        | the font list                             |
+| `CombinedTextProperties`  | one button        | size, alignment, vertical alignment       |
+| `duplicateSelection`      | one button        | —                                         |
+| `deleteSelectedElements`  | one button        | —                                         |
+| `CombinedExtraActions`    | one button        | layers, mirror, grouping, alignment       |
+
+The plan is `tabletActions.ts`, and the rows the popovers open are the phone's own
+(`ShapeActionRows.svelte`), so a property cannot behave one way on a phone and another
+on a tablet.
+
+**DESIGN** — the column sits under the header, and under the tool bar's own row when the
+top bar has one (see below). The oracle puts it under the menu button, beside the tool
+bar; here the tool bar's row is above it, so the column is below both.
+
+## The tablet's top bar
+
+**DESIGN** — the call the oracle cannot make for us: its top bar holds the menu, the
+shapes and the right-hand cluster, and no title and no status chips
+(`LayerUI.tsx@1118751f:239-247`), so it has nothing to give way. Ours has both, and
+they give way in this order:
+
+1. **the title first** — it is cut short with an ellipsis, down to `TITLE_MIN` (48px),
+   which is enough for a word and the ellipsis;
+2. **then the status chips** — they fold into one icon whose label is the whole line
+   ("Unsaved changes · Shared copy saved"), so the words are still there for the screen
+   reader and for the tooltip, and only the room goes.
+
+The Share button keeps its word: it is at the far end of the row, where the space is,
+and a button that is only an icon is a button nobody is sure of.
+
+**DESIGN** — and when the row cannot hold the tool bar and the header's two ends
+together, the tool bar takes a row of its own below the header. That is the smallest
+change that holds: the title and the chips are given their room back and every tool
+stays visible. The alternative — a narrower bar, with tools behind a menu — would hide
+tools on a device with room to show them, which is the phone's arrangement and not the
+tablet's.
+
+The widths are measured, not guessed: the header measures its own parts (the menu, the
+title's natural width, the chips' width), the tool bar measures itself, and `topBar.ts`
+turns the two into the plan. The tool bar takes its own row when the space beside it is
+less than what the ends need — a menu, a title at 48px and a folded chip on one side,
+the Share button and the Help button on the other. With this chrome's 497px bar that is
+below about 815px of viewport.
+
+| the number     | ours | what it decides                                      |
+| -------------- | ---- | ---------------------------------------------------- |
+| `TITLE_MIN`    | 48   | the width a cut title keeps                          |
+| `TITLE_MAX`    | 180  | the title's own width                                |
+| `FOLDED_CHIPS` | 28   | the folded chip: one icon, whatever the statuses say |
+
+The desktop is not touched by any of it: at 1280 the plan gives the title its own width,
+leaves the chips open and keeps the tool bar in the header's row, which is the layout the
+desktop has always had.
+
 ## Where each part lives
 
-| part              | where                                                                               |
-| ----------------- | ----------------------------------------------------------------------------------- |
-| the form factor   | `apps/web/src/lib/draw-chrome/formFactor.ts` (+ its test)                           |
-| the bottom bar    | `apps/web/src/lib/draw-chrome/DrawMobileToolbar.svelte`, plan in `mobileToolbar.ts` |
-| the style strip   | `apps/web/src/lib/draw-chrome/DrawMobileActions.svelte`, plan in `mobileActions.ts` |
-| the gestures      | `apps/web/src/lib/draw-chrome/touchGesture.ts` (+ its test)                         |
-| the touch wiring  | `DrawSurface.svelte` — the capture-phase listeners on the canvas host               |
-| the phone's CSS   | `apps/web/src/lib/draw-chrome/draw-chrome.css`, under `.draw-chrome.phone`          |
-| the browser tests | `e2e/mobile.spec.ts`                                                                |
+| part               | where                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| the form factor    | `apps/web/src/lib/draw-chrome/formFactor.ts` (+ its test)                           |
+| the bottom bar     | `apps/web/src/lib/draw-chrome/DrawMobileToolbar.svelte`, plan in `mobileToolbar.ts` |
+| the style strip    | `apps/web/src/lib/draw-chrome/DrawMobileActions.svelte`, plan in `mobileActions.ts` |
+| the gestures       | `apps/web/src/lib/draw-chrome/touchGesture.ts` (+ its test)                         |
+| the touch wiring   | `DrawSurface.svelte` — the capture-phase listeners on the canvas host               |
+| the tablet's panel | `apps/web/src/lib/draw-chrome/DrawTabletActions.svelte`, plan in `tabletActions.ts` |
+| the panel's rows   | `apps/web/src/lib/draw-chrome/ShapeActionRows.svelte`                               |
+| the top bar's plan | `apps/web/src/lib/draw-chrome/topBar.ts` (+ its test)                               |
+| the phone's CSS    | `apps/web/src/lib/draw-chrome/draw-chrome.css`, under `.draw-chrome.phone`          |
+| the browser tests  | `e2e/mobile.spec.ts`, `e2e/tablet.spec.ts`                                          |
 
 ## The browser tests
 
-`e2e/mobile.spec.ts` is the contract: the chrome stays inside the screen and the bars do
-not overlap, a rectangle drawn by touch is never covered by chrome, the style strip
-changes a stroke colour, a pinch zooms and a two-finger drag pans and neither draws,
-every dialog and menu fits 360px, and the long press opens the canvas menu. The touch
-goes through CDP's own input pipeline, so the page sees the same PointerEvents a real
-finger produces — a failure means the layout or the input handling changed, never the
-viewport or the data.
+`e2e/mobile.spec.ts` is the phone's contract: the chrome stays inside the screen and the
+bars do not overlap, a rectangle drawn by touch is never covered by chrome, the style
+strip changes a stroke colour, a pinch zooms and a two-finger drag pans and neither
+draws, every dialog and menu fits 360px, and the long press opens the canvas menu. The
+touch goes through CDP's own input pipeline, so the page sees the same PointerEvents a
+real finger produces — a failure means the layout or the input handling changed, never
+the viewport or the data.
+
+`e2e/tablet.spec.ts` is the tablet's: at 768×1024, 1024×768, 820×1180 and 600×960 the
+top bar's parts never overlap one another and never leave the screen, the style panel is
+the compact column and covers less than a fifteenth of it, and a stroke colour picked in
+the column's popover reaches the shape. At 1280×800 the desktop's own chrome is exactly
+as it was: the full inspector, where it was, and the tool bar centred in the header's
+row.
