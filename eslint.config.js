@@ -11,6 +11,9 @@ export default ts.config(
       "engine/**",
       // Someone else's source, pinned for comparison — never ours to lint.
       "third_party/**",
+      // Scratch: a work area, not source. Never committed (see .gitignore), and
+      // Prettier already skips it — a script in here must not fail the gate either.
+      ".superpowers/**",
       "**/build/**",
       "**/dist/**",
       "**/.svelte-kit/**",
