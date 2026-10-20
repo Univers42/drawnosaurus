@@ -6,6 +6,10 @@
 #   no 404.html - on Pages a 404.html replaces the SPA fallback, so deep links 404.
 #   .wasm       - the engine must ship, and no file may pass Pages' 25 MiB per-file cap.
 #   < 20000     - Pages' per-deployment file cap.
+#   no /v1/boards - the API's board paths: the public build keeps its boards in the browser
+#                   (lib/store/browser.ts), so finding them means the server store shipped.
+#   _app/env.js - lib/config.ts reads $env/dynamic/public, which SvelteKit serves from this
+#                 file at run time; without it, that read fails as the app starts.
 #
 # Usage: scripts/check-public-build.sh [build-dir]   (default apps/web/build)
 set -eu
@@ -35,6 +39,11 @@ big=$(find "$dir" -type f -size +"$max_bytes"c)
 
 count=$(find "$dir" -type f | wc -l | tr -d ' ')
 [ "$count" -lt "$max_files" ] || fail "$count files, the limit is under $max_files"
+
+api=$(grep -rlF '/v1/boards' "$dir" || true)
+[ -z "$api" ] || fail "the API's board paths (/v1/boards) are in: $api"
+
+[ -f "$dir/_app/env.js" ] || fail "$dir/_app/env.js is missing; lib/config.ts reads it at run time"
 
 [ "$failed" -eq 0 ] || exit 1
 
