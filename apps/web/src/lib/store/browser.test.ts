@@ -95,11 +95,10 @@ describe("browserStore", () => {
     expect((await failure(store.putThumbnail("nosuchboard", new Blob(["png"])))).status).toBe(404);
   });
 
-  it("lists a drawing once it is saved, and never one only created", async () => {
-    const { store } = fresh();
+  it("lists one opened at its address once saved, and one created with a name at once", async () => {
+    const { store, tick } = fresh();
     const created = await store.create("Nothing drawn");
-
-    expect((await store.list()).boards).toEqual([]);
+    tick();
 
     const ack = await store.patchElements("firstsave1", {
       elements: [shape("a", { x: 5, y: 5, width: 20, height: -10 })],
@@ -114,13 +113,29 @@ describe("browserStore", () => {
       rejected: 0,
     });
     const listed = await store.list();
-    expect(listed.boards.map((board) => board.slug)).toEqual(["firstsave1"]);
+    expect(listed.boards.map((board) => board.slug)).toEqual(["firstsave1", created.slug]);
     expect(listed.boards[0]).toMatchObject({ elementCount: 1, rev: ack.rev });
     expect(listed.nextCursor).toBeNull();
-    // The created one keeps its title, and is listed once something is on it.
+    // The created one keeps its title once something is on it.
     await store.patchElements(created.slug, { elements: [shape("b")] });
     expect((await store.get(created.slug)).title).toBe("Nothing drawn");
     expect((await store.list()).boards).toHaveLength(2);
+  });
+
+  it("lists a drawing created with a name before anything is drawn on it, reopened too", async () => {
+    // Someone named it, so it is theirs to find. Only a drawing never named and never drawn
+    // on stays out, and that one has no row: `/` opens it without writing one.
+    const { store, idb } = fresh();
+    const created = await store.create("Named, nothing drawn");
+
+    const reopened = browserStore({ idb });
+
+    const [listed] = (await reopened.list()).boards;
+    expect(listed).toMatchObject({
+      slug: created.slug,
+      title: "Named, nothing drawn",
+      elementCount: 0,
+    });
   });
 
   it("moves its rev as the API does: 1 when made, 2 after the first save, 1 more per write", async () => {
