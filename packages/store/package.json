@@ -1,0 +1,23 @@
+{
+  "name": "@drawnosaurus/store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The public build's online copy of a shared drawing: sealed bytes kept on D1 behind a Cloudflare Pages Function, which can read none of them.",
+  "exports": {
+    "./devMiddleware": "./src/devMiddleware.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@drawnosaurus/contract": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
