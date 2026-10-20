@@ -37,3 +37,22 @@ test("nothing is sized by 100vh, the height a phone's browser bars cover the bot
   });
   expect(tall, "rules that size by 100vh").toEqual([]);
 });
+
+/**
+ * The board zooms itself: a pinch on the canvas is the engine's zoom. A pinch or a double tap
+ * anywhere else would zoom the whole page instead, and take the header and the toolbar off the
+ * screen with it. Excalidraw's page cannot be scaled by the browser, and reaches under a
+ * phone's notch and home bar so the safe-area insets the bars pad with are real
+ * (`excalidraw-app/index.html@1118751f:6-9`). A synthetic pinch in an emulated phone does not
+ * zoom the page either way, so this reads the page's own word for it.
+ */
+test("the page is the oracle's: not scalable by the browser, and under the phone's notch", async ({
+  page,
+}) => {
+  await openApp(page);
+  const content = await page.locator('meta[name="viewport"]').getAttribute("content");
+  const terms = new Set((content ?? "").split(",").map((term) => term.trim()));
+  for (const term of ["maximum-scale=1", "user-scalable=no", "viewport-fit=cover"]) {
+    expect(terms, `the viewport meta lacks ${term}`).toContain(term);
+  }
+});
