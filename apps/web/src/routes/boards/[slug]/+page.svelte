@@ -3,6 +3,7 @@
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import { elementsFromJson } from "@osionos/draw-engine/json";
+  import { loadDrawEngine } from "@osionos/draw-engine/engine";
   import { Scene, type DrawElement } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { ApiClientError } from "$lib/api/client.ts";
@@ -205,16 +206,24 @@
         roomSecret = secret;
         useCopy(secret);
       }
-      const opened = await openBoard({
-        slug,
-        browser: BROWSER_MODE,
-        store: boards,
-        drafts,
-        storage: storage(),
-        stored: copy,
-        now: () => Date.now(),
-        nonce: () => Math.floor(Math.random() * 0x7fffffff),
-      });
+      // The engine and the board, fetched together: the board is presented when both
+      // are here. Until the engine is up the canvas cannot answer a draw — a drag on it
+      // draws nothing, and a peer's patch has nowhere to go — so a page that shows the
+      // board anyway is a board that looks alive and is not. The two waits overlap, so
+      // the slower of them is all it costs.
+      const [opened] = await Promise.all([
+        openBoard({
+          slug,
+          browser: BROWSER_MODE,
+          store: boards,
+          drafts,
+          storage: storage(),
+          stored: copy,
+          now: () => Date.now(),
+          nonce: () => Math.floor(Math.random() * 0x7fffffff),
+        }),
+        loadDrawEngine(),
+      ]);
       // Left before its board opened: the saver is disposed and nothing of it is on screen.
       if (destroyed) return;
       const { loaded, elements, resave } = opened;
