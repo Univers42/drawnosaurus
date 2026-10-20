@@ -36,6 +36,7 @@
     customColors,
     onToggle,
     onPick,
+    compact = false,
   }: {
     label: string;
     kind: ColorKind;
@@ -52,6 +53,14 @@
     customColors: () => string[];
     onToggle: (open: boolean) => void;
     onPick: (color: string) => void;
+    /**
+     * The trigger alone, without the row of quick picks.
+     *
+     * The phone's style strip has one 32px slot per property, and five swatches and a
+     * divider do not fit in one. The picker itself is unchanged: the trigger opens the
+     * same grid, wherever it is opened from.
+     */
+    compact?: boolean;
   } = $props();
 
   let trigger: HTMLButtonElement | undefined = $state();
@@ -81,10 +90,17 @@
       hexError = null;
       const rect = trigger?.getBoundingClientRect();
       if (rect) {
-        // Beside the panel, level with the row, kept on screen.
+        // Beside the panel, level with the row, kept on screen. The width is the
+        // picker's own (`13.5rem` below), so the edge is known before it is drawn: a
+        // trigger near the right of a narrow screen — the phone's bottom strip — has
+        // the picker opened to its left instead of off the screen.
+        const width = 216;
         const height = 330;
+        let left = rect.right + 16;
+        if (left + width > window.innerWidth - 8) left = rect.left - width - 16;
+        if (left + width > window.innerWidth - 8) left = window.innerWidth - width - 8;
         place = {
-          left: rect.right + 16,
+          left: Math.max(8, left),
           top: Math.max(8, Math.min(rect.top - 12, window.innerHeight - height - 8)),
         };
       }
@@ -185,24 +201,26 @@
 
 <svelte:window onpointerdown={onWindowPointerDown} />
 
-<div class="swatches">
-  <div class="picks">
-    {#each picks as color (color)}
-      <button
-        type="button"
-        class="dot"
-        class:transparent={isTransparent(color)}
-        class:on={value === color}
-        aria-label={color}
-        aria-pressed={value === color}
-        style:background={isTransparent(color) ? undefined : color}
-        onmousedown={holdFocus}
-        onclick={() => onPick(color)}
-      ></button>
-    {/each}
-  </div>
+<div class="swatches" class:compact>
+  {#if !compact}
+    <div class="picks">
+      {#each picks as color (color)}
+        <button
+          type="button"
+          class="dot"
+          class:transparent={isTransparent(color)}
+          class:on={value === color}
+          aria-label={color}
+          aria-pressed={value === color}
+          style:background={isTransparent(color) ? undefined : color}
+          onmousedown={holdFocus}
+          onclick={() => onPick(color)}
+        ></button>
+      {/each}
+    </div>
 
-  <div class="divider"></div>
+    <div class="divider"></div>
+  {/if}
 
   <button
     bind:this={trigger}
@@ -334,6 +352,11 @@
     gap: 8px;
     /* Never wraps: the divider and the current colour belong on the same line. */
     flex-wrap: nowrap;
+  }
+
+  /* The phone's strip has one slot per property: the trigger alone. */
+  .swatches.compact {
+    gap: 0;
   }
 
   .picks {

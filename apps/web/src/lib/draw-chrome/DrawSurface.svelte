@@ -128,6 +128,8 @@
   import DrawMainMenu from "./DrawMainMenu.svelte";
   import { downloadBlob } from "./download.ts";
   import DrawToolbar from "./DrawToolbar.svelte";
+  import DrawMobileToolbar from "./DrawMobileToolbar.svelte";
+  import DrawMobileActions from "./DrawMobileActions.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
   import { copyAsClipboard, outcomeWords } from "./clipboard.ts";
@@ -150,6 +152,8 @@
   import DrawModals from "./DrawModals.svelte";
   import PeerCursors from "./PeerCursors.svelte";
   import "./draw-chrome.css";
+  import { formFactorFor, type FormFactor } from "./formFactor.ts";
+  import { createTouchController } from "./touchGesture.ts";
 
   let {
     scene,
@@ -216,6 +220,41 @@
   let ink = $state("#1e1e1e");
   let tool = $state<DrawTool>("select");
   let toolLocked = $state(false);
+
+  /**
+   * The form factor this chrome is drawn for.
+   *
+   * The class it puts on the root (`.draw-chrome.phone`) is what every phone rule keys
+   * off — the oracle's approach — and the client controls the whole page here, so the
+   * window's inner box is the editor's box (`formFactor.ts` for why that is the right
+   * pair of numbers to measure). Read once now, then again on every resize and rotation:
+   * a rotation is a resize the browser announces either way.
+   */
+  let formFactor = $state<FormFactor>(
+    typeof window === "undefined"
+      ? "desktop"
+      : formFactorFor(window.innerWidth, window.innerHeight),
+  );
+
+  $effect(() => {
+    const track = (): void => {
+      formFactor = formFactorFor(window.innerWidth, window.innerHeight);
+    };
+    window.addEventListener("resize", track);
+    window.addEventListener("orientationchange", track);
+    return () => {
+      window.removeEventListener("resize", track);
+      window.removeEventListener("orientationchange", track);
+    };
+  });
+
+  // The bars a form factor swap leaves behind are measured chrome: re-measure the room
+  // when it settles, so a reveal or a fit counts the bars where they now are.
+  $effect(() => {
+    void formFactor;
+    queueMicrotask(measureRoom);
+  });
+
   let selectedCount = $state(0);
   /**
    * The engine's `styleRevision()` as last read. It moves on everything that can change
@@ -1090,6 +1129,123 @@
     activateEmbedAt(point);
     if (tool === "eraser") eraserTrail.stop();
   }
+
+  /**
+   * Drops the gesture the engine has open, and keeps the selection.
+   *
+   * The engine's Escape is the only way to drop a gesture in progress — and it is what
+   * the oracle does with a freedraw a second finger interrupts
+   * (`App.tsx@1118751f:8618-8630`) — but it also clears the selection, which the
+   * oracle's rule does not. So the selection is put back: a pinch is not a reason to
+   * forget what was selected.
+   */
+  function cancelEngineGesture(): void {
+    if (!engine) return;
+    const selected = engine.getSelectedElements().map((element) => element.id);
+    engine.cancelPointer();
+    if (selected.length > 0 && engine.getSelectedElements().length === 0) {
+      engine.select(selected);
+    }
+  }
+
+  /**
+   * The canvas menu at a point, the way a long press opens it.
+   *
+   * The board's own menu path opens it: a `contextmenu` event on the canvas, which the
+   * engine's pointer input turns into a hit test, a selection and a menu
+   * (`engine/host/pointerInput.ts`). A menu of our own would be a second menu, with its
+   * own rows and its own drift from the oracle's.
+   *
+   * The gesture the finger started is dropped first — the engine's Escape again — and
+   * the selection it clears is put back afterwards, unless the menu's own hit test
+   * found something to select instead.
+   */
+  function openCanvasMenuAt(x: number, y: number): void {
+    const canvas = canvasHost?.querySelector("canvas");
+    if (!canvas || !engine) return;
+    const selected = engine.getSelectedElements().map((element) => element.id);
+    engine.cancelPointer();
+    const rect = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: rect.left + x,
+        clientY: rect.top + y,
+        button: 2,
+      }),
+    );
+    if (selected.length > 0 && engine.getSelectedElements().length === 0) {
+      engine.select(selected);
+    }
+  }
+
+  /**
+   * Two fingers on the canvas.
+   *
+   * The controller owns the geometry (`touchGesture.ts`) and the engine owns the
+   * camera: the zoom goes through `zoomAt` and the pan through `panBy`, so the camera
+   * is moved the same way a mouse moves it and the board's own zoom-to-fit and
+   * follow-the-presenter keep working.
+   *
+   * The listeners are on the **capture** phase of the canvas host, so a touch the
+   * gesture claims is stopped before the engine's own pointer handling sees it: the
+   * board draws nothing under two fingers, and a stroke the first finger began is
+   * dropped rather than committed.
+   */
+  $effect(() => {
+    const host = canvasHost;
+    if (!host) return;
+    const controller = createTouchController({
+      zoomAt: (x, y, factor) => engine?.zoomAt(x, y, factor),
+      panBy: (dx, dy) => engine?.panBy(dx, dy),
+      cancelGesture: cancelEngineGesture,
+      openContextMenu: openCanvasMenuAt,
+    });
+    const point = (event: PointerEvent) => {
+      const rect = host.getBoundingClientRect();
+      return {
+        pointerId: event.pointerId,
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+        pointerType: event.pointerType,
+      };
+    };
+    const swallow = (event: PointerEvent, result: { swallow: boolean }): void => {
+      if (!result.swallow) return;
+      event.stopPropagation();
+      event.preventDefault();
+    };
+    const onDown = (event: PointerEvent): void => swallow(event, controller.down(point(event)));
+    const onMove = (event: PointerEvent): void => swallow(event, controller.move(point(event)));
+    const onUp = (event: PointerEvent): void => swallow(event, controller.up(point(event)));
+    /**
+     * The click a long press's lift produces.
+     *
+     * The menu opens under the finger that opened it, and the browser's compatibility
+     * click — the one every touch produces — lands on the menu's own backdrop, which
+     * would close the menu the long press had just opened. The click cannot be
+     * prevented at the source (the press was not, and the engine needs it), so it is
+     * swallowed here, on the window's capture phase, before the backdrop sees it.
+     */
+    const onClick = (event: MouseEvent): void => {
+      if (!controller.consumeClick()) return;
+      event.stopPropagation();
+      event.preventDefault();
+    };
+    host.addEventListener("pointerdown", onDown, true);
+    host.addEventListener("pointermove", onMove, true);
+    host.addEventListener("pointerup", onUp, true);
+    host.addEventListener("pointercancel", onUp, true);
+    window.addEventListener("click", onClick, true);
+    return () => {
+      host.removeEventListener("pointerdown", onDown, true);
+      host.removeEventListener("pointermove", onMove, true);
+      host.removeEventListener("pointerup", onUp, true);
+      host.removeEventListener("pointercancel", onUp, true);
+      window.removeEventListener("click", onClick, true);
+    };
+  });
 
   function handleSceneChange(json: string): void {
     refreshStyle();
@@ -2122,6 +2278,7 @@
 <div
   bind:this={chromeRoot}
   class="draw-chrome"
+  class:phone={formFactor === "phone"}
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
     onFocusModeKeydown(e);
@@ -2432,7 +2589,40 @@
 
   <PeerCursors {peers} camera={currentCamera} />
 
-  {#if !presenting}
+  <!--
+    The phone's dock: the compact style strip above the tool bar, both at the bottom,
+    where a thumb is. The desktop's own bars are not drawn at all on a phone — a row
+    of ten tools across the top of a 360px screen is the thing the oracle's phone
+    layout exists to replace (`MobileToolbar.tsx@1118751f`), and a second set of
+    controls under the same finger is worse than none.
+
+    The strip appears when a shape is selected or a drawing tool is in hand, the
+    oracle's own rule (`shouldRenderSelectedShapeActions`, the same predicate the
+    desktop's panel uses — `shapeActions.visible`); with neither, there is nothing
+    for it to act on.
+  -->
+  {#if !presenting && formFactor === "phone"}
+    <div class="mobile-dock" data-viewport-ui="bottom">
+      {#if shapeActions.visible}
+        <DrawMobileActions
+          {summary}
+          can={shapeActions}
+          {engine}
+          {themeMode}
+          onApply={applyStyle}
+          onPreview={previewStyle}
+          run={(action) => {
+            if (!engine) return;
+            action(engine);
+            refreshStyle();
+          }}
+        />
+      {/if}
+      <DrawMobileToolbar active={tool} onSelect={handleToolSelect} />
+    </div>
+  {/if}
+
+  {#if !presenting && formFactor !== "phone"}
     <DrawToolbar
       active={tool}
       {toolLocked}
@@ -2446,7 +2636,7 @@
     />
   {/if}
 
-  {#if panelVisible && !presenting && chromeVisible("inspector", zenMode)}
+  {#if panelVisible && !presenting && chromeVisible("inspector", zenMode) && formFactor !== "phone"}
     <DrawInspector
       {summary}
       can={shapeActions}
@@ -2470,7 +2660,7 @@
     />
   {/if}
 
-  {#if !presenting}
+  {#if !presenting && formFactor !== "phone"}
     <DrawZoomBar {engine} {zoom} {contentVisible} {zenMode} onFit={zoomToFit} />
   {/if}
 
