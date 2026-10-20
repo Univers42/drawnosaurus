@@ -19,6 +19,7 @@
     "test:integration": "pnpm --filter @drawnosaurus/api test:integration",
     "test:live-e2e-security": "pnpm --filter @drawnosaurus/web exec vitest run src/lib/realtime/liveE2eSecurity.test.ts src/lib/realtime/realtime.test.ts",
     "test:e2e": "playwright test",
+    "test:e2e:public": "E2E_MODE=public playwright test",
     "quality": "pnpm typecheck && pnpm lint && pnpm format && pnpm test"
   },
   "devDependencies": {

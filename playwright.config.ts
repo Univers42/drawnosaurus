@@ -11,10 +11,19 @@ import { defineConfig, devices } from "@playwright/test";
  * fail because the thing it measures changed.
  */
 
+/**
+ * `E2E_MODE=public` runs the public build's specs, `e2e/public/`, and only those: against a
+ * Vite of their own, started with `VITE_HYDRAWN_MODE=browser`, on 5474. The default run
+ * leaves them out — they need the browser store, which the Docker build does not carry. The
+ * two runs go one after the other, never at once: both write `apps/web/.svelte-kit`.
+ */
+const PUBLIC = process.env.E2E_MODE === "public";
+
 // 5473, deliberately not 4373. `make dev` puts its API on 4373, so the two collided: the
 // browser suite could not start while the dev stack — which the editor-inspector needs —
-// was up, and failed with "port already in use" rather than anything about the tests.
-const PORT = Number(process.env.E2E_PORT ?? 5473);
+// was up, and failed with "port already in use" rather than anything about the tests. The
+// public run has a port of its own, so neither reuses the other's server.
+const PORT = Number(process.env.E2E_PORT ?? (PUBLIC ? 5474 : 5473));
 const HOST = process.env.E2E_HOST ?? "127.0.0.1";
 const BASE_URL = process.env.E2E_BASE_URL ?? `http://${HOST}:${PORT}`;
 
@@ -38,6 +47,7 @@ const webServer = process.env.E2E_BASE_URL
         // package manager is on the PATH in only some of those.
         command: `node node_modules/vite/bin/vite.js dev --host ${HOST} --port ${PORT} --strictPort`,
         cwd: "apps/web",
+        env: PUBLIC ? { VITE_HYDRAWN_MODE: "browser" } : {},
         url: BASE_URL,
         reuseExistingServer: !process.env.CI,
         timeout: 180_000,
@@ -47,7 +57,8 @@ const webServer = process.env.E2E_BASE_URL
     };
 
 export default defineConfig({
-  testDir: "e2e",
+  testDir: PUBLIC ? "e2e/public" : "e2e",
+  testIgnore: PUBLIC ? [] : ["public/**"],
   // Deliberately zero. A retry turns "this is broken" into "this is sometimes broken",
   // which is the same information with the urgency removed.
   retries: 0,

@@ -194,6 +194,16 @@ test-e2e: $(ENGINE_PKG) reclaim-host-files ## Browser tests (Playwright) — zoo
 		pnpm exec playwright test
 	@echo -e "$(GREEN)✔ e2e green$(RESET)"
 
+# The public build's browser tests, e2e/public, in the pinned Playwright image: their own
+# Vite on 5474, started with VITE_HYDRAWN_MODE=browser (playwright.config.ts). Never at the
+# same time as test-e2e: both write apps/web/.svelte-kit. E2E_DOCKER_FLAGS passes more to
+# `docker run`, a memory cap say: E2E_DOCKER_FLAGS="--memory 3g --memory-swap 3g".
+PLAYWRIGHT_IMAGE := mcr.microsoft.com/playwright:v1.63.0-noble
+test-e2e-public: $(ENGINE_PKG) ## Browser tests of the public build (e2e/public), in the Playwright image
+	docker run --rm --ipc=host $(RUN_AS_HOST) $(E2E_DOCKER_FLAGS) -e CI= -e HOME=/tmp -e E2E_MODE=public \
+		-v "$(CURDIR):/app" -w /app $(PLAYWRIGHT_IMAGE) node node_modules/@playwright/test/cli.js test
+	@echo -e "$(GREEN)✔ public e2e green$(RESET)"
+
 fuzz-mermaid: $(ENGINE_PKG) reclaim-host-files ## Mermaid import fuzz, 1000 seeds per diagram type (~35 min)
 	@mkdir -p "$(or $(PLAYWRIGHT_BROWSERS_PATH),$(HOME)/.cache/ms-playwright)"
 	PLAYWRIGHT_BROWSERS_PATH="$(or $(PLAYWRIGHT_BROWSERS_PATH),$(HOME)/.cache/ms-playwright)" \
@@ -237,6 +247,9 @@ dev: $(ENGINE_PKG) ## Vite dev server + API with hot reload, on DEV_WEB_PORT and
 		-e PUBLIC_REALTIME_WS_URL=ws://localhost:$(DEV_REALTIME_PORT)/ws \
 		-e VITE_USE_POLLING=1 \
 		tooling pnpm --filter @drawnosaurus/web dev
+
+dev-public: $(ENGINE_PKG) ## Vite dev server of the public build (boards in this browser), on DEV_WEB_PORT
+	$(RUN) $(RUN_AS_HOST) --no-deps -p $(DEV_WEB_PORT):5173 -e VITE_HYDRAWN_MODE=browser -e VITE_USE_POLLING=1 tooling pnpm --filter @drawnosaurus/web dev
 
 build: $(ENGINE_PKG) ## Build the api, web, and realtime images
 	$(DC) build api web realtime
@@ -370,6 +383,6 @@ clean: ## Remove containers, volumes, images, and build output
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
 .PHONY: all help submodules wasm install lock typecheck lint format test build-public \
-	test-integration test-e2e fuzz-mermaid reclaim-host-files conformance parity parity-deps quality verify \
-	dev build up down logs shell clean \
+	test-integration test-e2e test-e2e-public fuzz-mermaid reclaim-host-files conformance parity parity-deps quality verify \
+	dev dev-public build up down logs shell clean \
 	oracle oracle-fixtures bench inspector-smoke stale

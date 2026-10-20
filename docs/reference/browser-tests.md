@@ -58,3 +58,20 @@ Read it before you believe a host failure found anything.**
 
 The suite's own Vite takes port **5473** (`E2E_PORT`, `playwright.config.ts`), deliberately
 not 4373, so it and `make dev` can run at once.
+
+## The public build's run
+
+`e2e/public/` holds the specs of the public build — boards in the browser's IndexedDB, no
+API, no relay. **`make test-e2e-public`** runs them, and only them, in the pinned Playwright
+image: `E2E_MODE=public` (`playwright.config.ts`) starts a Vite of their own on **5474** with
+`VITE_HYDRAWN_MODE=browser`. The default run leaves `e2e/public/` out. Pass a memory cap
+through, as `make test-e2e-public E2E_DOCKER_FLAGS="--memory 3g --memory-swap 3g"`.
+
+- **One run at a time.** Both runs write `apps/web/.svelte-kit`, so the two never go at once.
+- **Nothing is stubbed there.** The rule above is that a spec needs no server; the public
+  build has none to stub. `e2e/public/drawing.ts` opens the app as a person does, and
+  `nothingLeaves.spec.ts` holds that an unshared drawing makes no request outside the app's
+  own files and opens no websocket. Vite's hot-reload socket is the one it lets through: it
+  is the dev server's, and the build that ships has none.
+- **Each test starts empty.** A browser context of its own, so its IndexedDB and
+  localStorage hold nothing from another test.

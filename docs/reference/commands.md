@@ -20,6 +20,7 @@ target. The two exceptions are the targets that _deliberately_ run on the host â
 | `make down`                          | stop and remove this worktree's containers                                  |
 | `make logs`                          | tail the service logs                                                       |
 | `make dev`                           | Vite + API + realtime hot stack, on the `DEV_*` ports                       |
+| `make dev-public`                    | Vite for the public build alone (boards in the browser), on `DEV_WEB_PORT`  |
 | `make share` / `make unshare`        | put the running stack on the internet / take it off                         |
 | `make verify`                        | everything CI runs: `quality` + the integration tests                       |
 | `make quality`                       | `typecheck` + `lint` + `format` + `test`                                    |
@@ -27,6 +28,7 @@ target. The two exceptions are the targets that _deliberately_ run on the host â
 | `make test`                          | unit tests: contract, api, web                                              |
 | `make test-integration`              | API tests against a real MongoDB                                            |
 | `make test-e2e`                      | Playwright **on the host** (runs `playwright install chromium` first)       |
+| `make test-e2e-public`               | the public build's specs, `e2e/public/`, in the pinned Playwright image     |
 | `make conformance`                   | the `prompt/*.md` coverage matrix                                           |
 | `make fuzz-mermaid`                  | 1,000 seeds per Mermaid diagram type, ~35 min                               |
 | `make wasm`                          | build `engine/pkg` from the Rust crate                                      |
@@ -50,9 +52,10 @@ to turn a red test green.
 Non-standard, because a sibling stack owns the usual ones: **5273** (web), **5274**
 (`SHARE_PORT`, the door other computers knock on), **4300** (api), **27019** (mongo),
 **4402** (realtime), and **5373 / 4373 / 4473** for `make dev`'s web / api / realtime. The
-browser suite's own Vite takes **5473**.
+browser suite's own Vite takes **5473**, and the public build's suite **5474**.
 
-`make dev` gets a different set from `make up` on purpose, so a hot-reload server and the
+`make dev-public` takes `make dev`'s web port, so run one or the other. `make dev` gets a
+different set from `make up` on purpose, so a hot-reload server and the
 built images can run side by side â€” otherwise starting one silently takes the other's port
 and you debug the wrong build.
 
