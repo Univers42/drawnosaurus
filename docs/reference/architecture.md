@@ -145,7 +145,8 @@ it opens with is `lib/boards/openBoard.ts`: the store's copy, repaired from the 
 for at most `DRAFT_REPAIR_WAIT_MS` once the server has answered), the draft or the legacy
 copy when the server cannot be reached, and the sticky-note migration. The public build runs
 no draft, so an in-app navigation away from an unsaved edit waits for the save there, and
-does not happen if it failed (`lib/boards/holdForSave.ts`).
+does not happen if it failed; once the save line shows the failure, the next one goes through
+(`lib/boards/holdForSave.ts`).
 
 Every toolbar entry in `tools.ts` is typed `DrawTool`, the engine's own union — the sticky
 note included, which the engine owns now — so the toolbar cannot offer a tool `setTool` does

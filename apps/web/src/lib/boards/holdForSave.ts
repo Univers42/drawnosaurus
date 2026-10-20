@@ -10,7 +10,8 @@ import { autosaveIsTrouble } from "../draw-chrome/status.ts";
  * copy — and a board page left in the app is torn down at once: a save still waiting, sent
  * by a flush nobody waited for, could fail where no one would ever see it, and the edit was
  * lost without the person being told. So the navigation waits for the save, and does not
- * happen when it failed: the person stays on the drawing, the save line saying why.
+ * happen when it failed: the person stays on the drawing, the save line saying why, and the
+ * next navigation goes through.
  */
 
 /** The part of SvelteKit's `BeforeNavigate` this reads. */
@@ -36,16 +37,22 @@ export interface HoldOptions {
 }
 
 /**
- * For `beforeNavigate`. Cancels a navigation away from a drawing with something unsaved,
- * saves, and makes it again once saved; the repeat comes back here with nothing waiting,
- * so it goes through. Null when it let the navigation through at once, otherwise what
- * settles when the hold is over.
+ * For `beforeNavigate`. Cancels a navigation away from a drawing with an edit still to be
+ * sent or on its way, saves, and makes it again once saved; the repeat comes back here with
+ * nothing waiting, so it goes through. If the save fails, the person stays and is told; the
+ * next navigation goes through. Null when it let the navigation through at once, otherwise
+ * what settles when the hold is over.
  *
  * A page about to unload — a tab closing (`leave`), a link off the app — cannot be held for
  * a write: it is saved on hide, as before, as far as the browser lets that write finish.
  */
 export function holdForSave(navigation: Departure, options: HoldOptions): Promise<void> | null {
-  if (!options.browser || navigation.willUnload || options.status() === "idle") return null;
+  if (!options.browser || navigation.willUnload) return null;
+  // Nothing waiting; or the save line already shows a failure, so the person leaving has
+  // been told, and it is their choice. A save that fails for good — a full quota — would
+  // otherwise keep them on the drawing, "My drawings" included, the one way to free room.
+  const status = options.status();
+  if (status === "idle" || autosaveIsTrouble(status)) return null;
   navigation.cancel();
   return (async () => {
     try {
@@ -53,8 +60,8 @@ export function holdForSave(navigation: Departure, options: HoldOptions): Promis
     } catch {
       return;
     }
-    // Failed: the saver says so on the save line, and arms its retry. Edits made while
-    // the save was out leave it `pending`, and the repeat is held again for them.
+    // Failed: the saver says so on the save line, and retries what can be retried. Edits
+    // made while the save was out leave it `pending`, and the repeat is held again for them.
     if (autosaveIsTrouble(options.status())) return;
     if (navigation.type === "popstate") options.go(navigation.delta ?? 0);
     else if (navigation.to) await options.goto(navigation.to.url);
