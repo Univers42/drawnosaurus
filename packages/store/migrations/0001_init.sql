@@ -13,20 +13,26 @@ CREATE TABLE drawings (
   nonce TEXT NOT NULL,
   -- Milliseconds since the epoch. Writes sweep away drawings a year old.
   written_at INTEGER NOT NULL,
-  -- The scene, the pictures and the staged parts together: what the size cap counts.
+  -- Everything stored: the scene, the complete pictures, the staged scenes and the pictures
+  -- still being sent. src/handlers.ts says which of them the cap counts, and when.
   bytes INTEGER NOT NULL,
   scene_bytes INTEGER NOT NULL,
+  -- Complete pictures.
   pictures INTEGER NOT NULL,
-  -- What the staged uploads hold, and when a staged part last landed (milliseconds).
+  -- What the staged scenes hold, and when a staged part last landed (milliseconds).
   staged_bytes INTEGER NOT NULL,
-  staged_at INTEGER NOT NULL
+  staged_at INTEGER NOT NULL,
+  -- What the pictures still being sent hold, and when a part of one last landed.
+  pending_bytes INTEGER NOT NULL,
+  pending_at INTEGER NOT NULL
 );
 
 -- The sweep's lookup. Without it every write would read every drawing.
 CREATE INDEX drawings_written_at ON drawings (written_at);
 
 -- The bytes, one part per row, each under D1's row limit. item '' is the scene, '@' and an
--- upload id a scene being staged, any other item a picture's id. WITHOUT ROWID: the key is
+-- upload id a scene being staged, '#', a picture id, ':' and an upload id a picture still being
+-- sent, any other item a complete picture's id. WITHOUT ROWID: the key is
 -- the table, so a part costs one row written rather than two (D1 counts an index row as a
 -- row written).
 CREATE TABLE parts (

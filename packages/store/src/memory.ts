@@ -1,10 +1,14 @@
-import { SCENE, type Change, type Head, type Part, type StoreDb } from "./storeDb.ts";
+import type { Change, Head, Item, Part, StoreDb } from "./storeDb.ts";
 
 interface Drawing {
   head: Head;
   writtenAt: number;
   items: Map<string, Part[]>;
 }
+
+const dropStarting = (items: Map<string, Part[]>, prefix: string): void => {
+  for (const item of items.keys()) if (item.startsWith(prefix)) items.delete(item);
+};
 
 function apply(items: Map<string, Part[]>, change: Change): void {
   switch (change.kind) {
@@ -27,9 +31,21 @@ function apply(items: Map<string, Part[]>, change: Change): void {
       return;
     }
     case "dropStaged":
-      for (const item of items.keys()) if (item.startsWith("@")) items.delete(item);
+      dropStarting(items, "@");
+      return;
+    case "dropPending":
+      dropStarting(items, "#");
   }
 }
+
+const summary = (parts: Part[] | undefined): Item | null =>
+  parts?.[0]
+    ? {
+        parts: parts.length,
+        total: parts[0].total,
+        bytes: parts.reduce((size, part) => size + part.bytes.byteLength, 0),
+      }
+    : null;
 
 /**
  * The store's database in a Map, for the unit tests and the dev server. It keeps what the
@@ -42,20 +58,18 @@ export function memoryStore(): StoreDb {
     drawings.get(id)?.items.get(item);
   return {
     head: async (id) => drawings.get(id)?.head ?? null,
-    item: async (id, item) => {
-      const parts = partsOf(id, item);
-      return parts?.[0]
+    item: async (id, item) => summary(partsOf(id, item)),
+    part: async (id, item, n) => partsOf(id, item)?.[n] ?? null,
+    read: async (id, item, n) => {
+      const drawing = drawings.get(id);
+      return drawing
         ? {
-            parts: parts.length,
-            total: parts[0].total,
-            bytes: parts.reduce((size, part) => size + part.bytes.byteLength, 0),
+            rev: drawing.head.rev,
+            writtenAt: drawing.writtenAt,
+            item: summary(partsOf(id, item)),
+            part: partsOf(id, item)?.[n] ?? null,
           }
         : null;
-    },
-    part: async (id, item, n) => partsOf(id, item)?.[n] ?? null,
-    scene: async (id, n) => {
-      const drawing = drawings.get(id);
-      return drawing ? { rev: drawing.head.rev, part: partsOf(id, SCENE)?.[n] ?? null } : null;
     },
     write: async (write) => {
       const current = drawings.get(write.id);

@@ -7,12 +7,14 @@
  */
 
 /**
- * The items a drawing's parts belong to: the scene is `SCENE`, a picture is its id, and a
- * scene being staged is `staged(upload id)`. The slug rule keeps a picture's id from being
- * empty or starting with `@`.
+ * The items a drawing's parts belong to: the scene is `SCENE`, a complete picture is its id,
+ * a scene being staged is `staged(upload id)`, and a picture still being sent is
+ * `pending(picture id, upload id)`. The slug rule keeps an id from being empty or starting
+ * with `@` or `#`.
  */
 export const SCENE = "";
 export const staged = (sid: string): string => `@${sid}`;
+export const pending = (pid: string, uid: string): string => `#${pid}:${uid}`;
 
 /** What a write is decided on. */
 export interface Head {
@@ -22,13 +24,17 @@ export interface Head {
   proof: string;
   /** New on every write. */
   nonce: string;
-  /** The scene, the pictures and the staged parts together, as the size cap counts them. */
+  /** Everything stored: the scene, the pictures, the staged scenes and the pending pictures. */
   bytes: number;
   sceneBytes: number;
+  /** Complete pictures. */
   pictures: number;
-  /** What every staged upload of the drawing holds, and when a staged part last landed. */
+  /** What the staged scenes hold, and when a staged part last landed. */
   stagedBytes: number;
   stagedAt: number;
+  /** What the pictures still being sent hold, and when a part of one last landed. */
+  pendingBytes: number;
+  pendingAt: number;
 }
 
 /** One stored part, and the number of parts its item was declared with. */
@@ -44,6 +50,14 @@ export interface Item {
   bytes: number;
 }
 
+/** What a read finds: the drawing, an item of it, and one part of that item. */
+export interface Read {
+  rev: number;
+  writtenAt: number;
+  item: Item | null;
+  part: Part | null;
+}
+
 /** What a write does to the drawing's parts, applied in order after its head. */
 export type Change =
   /** Stores one part, in place of any at that place. */
@@ -52,8 +66,10 @@ export type Change =
   | { kind: "trim"; item: string; from: number }
   /** Gives one item's parts to another, which holds none. */
   | { kind: "rename"; from: string; to: string }
-  /** Deletes every staged upload of the drawing. */
-  | { kind: "dropStaged" };
+  /** Deletes every staged scene of the drawing. */
+  | { kind: "dropStaged" }
+  /** Deletes every picture of the drawing still being sent. */
+  | { kind: "dropPending" };
 
 export interface Write {
   id: string;
@@ -72,8 +88,8 @@ export interface StoreDb {
   /** Null when the item has no part stored. */
   item(id: string, item: string): Promise<Item | null>;
   part(id: string, item: string, n: number): Promise<Part | null>;
-  /** The scene's part `n` with the rev it is part of, read together; null with no drawing. */
-  scene(id: string, n: number): Promise<{ rev: number; part: Part | null } | null>;
+  /** The drawing, its `item` and that item's part `n`, read together; null with no drawing. */
+  read(id: string, item: string, n: number): Promise<Read | null>;
   /**
    * Lands `write` and its sweep only if the drawing's nonce is still `write.seen`, all or
    * nothing. False means nothing changed.

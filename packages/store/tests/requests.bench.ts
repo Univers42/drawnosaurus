@@ -20,28 +20,33 @@ const proof = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(
 const part = new Uint8Array(PART_BYTES).map((_, i) => Math.imul(i, 2654435761) >>> 24);
 const data = encodePart(part);
 
+type Upload = { parts: number; total: number; bytes: number };
+
 interface Rows {
-  /** What `SELECT count(*) … FROM parts` answers: the item's upload so far. */
-  item?: { parts: number; total: number; bytes: number };
+  /** What `SELECT count(*) … FROM parts` answers for each item: its upload so far. */
+  items?: Record<string, Upload>;
   /** Whether part n is stored, with the bytes the request sends. */
   stored?: boolean;
 }
 
-function binding({ item, stored = false }: Rows): D1Database {
+function binding({ items = {}, stored = false }: Rows): D1Database {
+  // A drawing with a scene, a picture, a staged scene and a picture being sent, all recent.
   const head = {
     rev: 1,
     proof,
     nonce: "nonce",
-    bytes: 4 * PART_BYTES,
+    bytes: 7 * PART_BYTES,
     scene_bytes: PART_BYTES,
     pictures: 1,
-    staged_bytes: PART_BYTES,
+    staged_bytes: 3 * PART_BYTES,
     staged_at: Date.now(),
+    pending_bytes: 2 * PART_BYTES,
+    pending_at: Date.now(),
   };
-  const rows = (sql: string): unknown[] => {
+  const rows = (sql: string, values: unknown[]): unknown[] => {
     if (/^\s*SELECT rev, proof/.test(sql)) return [head];
-    if (/^\s*SELECT rev FROM/.test(sql)) return [{ rev: 1 }];
-    if (/^\s*SELECT count/.test(sql)) return item ? [item] : [{ parts: 0 }];
+    if (/^\s*SELECT rev, written_at/.test(sql)) return [{ rev: 1, written_at: Date.now() }];
+    if (/^\s*SELECT count/.test(sql)) return [items[String(values[1])] ?? { parts: 0 }];
     if (/^\s*SELECT total, data/.test(sql)) return stored ? [{ total: 3, data }] : [];
     return [];
   };
@@ -50,10 +55,11 @@ function binding({ item, stored = false }: Rows): D1Database {
   const answers = new Map<string, string>();
   const cross = <T>(sql: string, values: unknown[]) => {
     JSON.stringify({ sql, params: values });
-    let answer = answers.get(sql);
+    const key = /^\s*SELECT/.test(sql) ? `${sql}${JSON.stringify(values)}` : sql;
+    let answer = answers.get(key);
     if (answer === undefined) {
-      answer = JSON.stringify({ results: rows(sql), meta: { changes: 1 } });
-      answers.set(sql, answer);
+      answer = JSON.stringify({ results: rows(sql, values), meta: { changes: 1 } });
+      answers.set(key, answer);
     }
     return JSON.parse(answer) as { results: T[]; meta: { changes: number } };
   };
@@ -79,37 +85,54 @@ const request = (method: string, path: string, headers: Record<string, string>, 
     body: body ? part : null,
   });
 
+const sent = (parts: number): Upload => ({ parts, total: 3, bytes: parts * PART_BYTES });
+const upload = "/pictures/picture1/uploads/upload01/parts";
+
 const cases: [string, Rows, () => Request][] = [
   ["PUT a scene of one part", {}, () => request("PUT", "", { "if-match": "1" })],
   [
     "PUT a staged part",
-    { item: { parts: 1, total: 3, bytes: PART_BYTES } },
+    { items: { "@upload01": sent(1) } },
     () => request("PUT", "/staged/upload01/parts/1", { "if-match": "1", "x-parts": "3" }),
   ],
   [
     "PUT a staged part again, the same bytes",
-    { item: { parts: 2, total: 3, bytes: 2 * PART_BYTES }, stored: true },
+    { items: { "@upload01": sent(2) }, stored: true },
     () => request("PUT", "/staged/upload01/parts/1", { "if-match": "1", "x-parts": "3" }),
   ],
   [
-    "PUT a picture part",
-    { item: { parts: 1, total: 3, bytes: PART_BYTES } },
-    () => request("PUT", "/pictures/picture1/parts/1", { "x-parts": "3" }),
+    "PUT a picture's part",
+    { items: { "#picture1:upload01": sent(1) } },
+    () => request("PUT", `${upload}/1`, { "x-parts": "3" }),
   ],
   [
-    "PUT a picture part again, the same bytes",
-    { item: { parts: 2, total: 3, bytes: 2 * PART_BYTES }, stored: true },
-    () => request("PUT", "/pictures/picture1/parts/1", { "x-parts": "3" }),
+    "PUT a picture's last part, which completes it",
+    { items: { "#picture1:upload01": sent(2) } },
+    () => request("PUT", `${upload}/2`, { "x-parts": "3" }),
+  ],
+  [
+    "PUT a picture's part again, the same bytes",
+    { items: { "#picture1:upload01": sent(2) }, stored: true },
+    () => request("PUT", `${upload}/1`, { "x-parts": "3" }),
+  ],
+  [
+    "PUT a part of a complete picture again, the same bytes",
+    { items: { picture1: sent(3) }, stored: true },
+    () => request("PUT", `${upload}/1`, { "x-parts": "3" }),
   ],
   [
     "POST a commit",
-    { item: { parts: 3, total: 3, bytes: 3 * PART_BYTES } },
+    { items: { "@upload01": sent(3) } },
     () => request("POST", "/staged/upload01", { "if-match": "1" }, false),
   ],
-  ["GET a scene part", { stored: true }, () => request("GET", "/parts/1", {}, false)],
+  [
+    "GET a scene part",
+    { items: { "": sent(3) }, stored: true },
+    () => request("GET", "/parts/1", {}, false),
+  ],
   [
     "GET a picture part",
-    { item: { parts: 3, total: 3, bytes: 3 * PART_BYTES }, stored: true },
+    { items: { picture1: sent(3) }, stored: true },
     () => request("GET", "/pictures/picture1/parts/1", {}, false),
   ],
 ];

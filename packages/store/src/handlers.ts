@@ -9,7 +9,16 @@ import {
   STAGED_IDLE_MS,
   SWEEP_LIMIT,
 } from "./limits.ts";
-import { SCENE, staged, type Change, type Head, type StoreDb } from "./storeDb.ts";
+import {
+  pending,
+  SCENE,
+  staged,
+  type Change,
+  type Head,
+  type Item,
+  type Read,
+  type StoreDb,
+} from "./storeDb.ts";
 
 /**
  * The online copy's HTTP surface. It stores sealed bytes and never opens them, and no request
@@ -19,50 +28,66 @@ import { SCENE, staged, type Change, type Head, type StoreDb } from "./storeDb.t
  *   PUT  /store/v1/drawings/:id                           a scene of one part, ETag "<rev>"
  *   PUT  /store/v1/drawings/:id/staged/:sid/parts/:n      part n of a larger scene, staged
  *   POST /store/v1/drawings/:id/staged/:sid               the staged scene made current, ETag
- *   GET  /store/v1/drawings/:id/pictures/:pid[/parts/:n]  a picture's part n (0)
- *   PUT  /store/v1/drawings/:id/pictures/:pid[/parts/:n]  a picture's part n (0)
+ *   GET  /store/v1/drawings/:id/pictures/:pid[/parts/:n]  a complete picture's part n (0)
+ *   PUT  /store/v1/drawings/:id/pictures/:pid             a picture of one part
+ *   PUT  /store/v1/drawings/:id/pictures/:pid/uploads/:uid/parts/:n
+ *                                                         part n of a larger picture
  *
  * A part read answers `x-parts: <count>`: a reader takes part 0, then the others, and starts
  * again when a scene part's ETag is not part 0's. A write sends `authorization: Bearer <write
- * token>`; a scene, a staged part and a commit send `if-match: <rev>`, 0 to create; a part
- * sends `x-parts: <count>`, which a picture of one part may leave out. An upload's parts go in
- * order, each but the last a whole PART_BYTES, and are write-once: the same bytes again are a
- * 204. A picture is readable once all its parts are in. `:sid` is an upload id the browser
- * picks; its staged scene is the one after the rev its parts and its commit name. Making a
- * scene current — a commit or a one-part write — deletes every staged upload of the drawing,
- * since each was staged on a rev that has just gone; staging idle for STAGED_IDLE_MS is
- * deleted by the drawing's next write.
+ * token>`; a scene, a staged part and a commit send `if-match: <rev>`, 0 to create; a staged
+ * or uploaded part sends `x-parts: <count>`, 2 to MAX_PARTS. Numbers are plain decimals: no
+ * sign, no leading zero, no exponent.
+ *
+ * An upload — a staged scene, or a picture of more than one part — sends its parts in order,
+ * each but the last a whole PART_BYTES, under an id the browser picks (`:sid`, `:uid`); a
+ * part sent again with the same bytes is a 204, with others a 409. A staged scene is for the
+ * rev after the one its parts and its commit name. A picture upload's last part makes it the
+ * picture, readable from then on and write-once: another upload of it is a 409 at its next
+ * part. So a picture sealed again — with a fresh IV, so other bytes — goes up as a new
+ * upload, and two browsers sending one picture cannot mix their parts.
+ *
+ * The cap, MAX_DRAWING_BYTES, counts the pictures, those still being sent included, beside
+ * the scene — and beside a staged scene instead of the scene it will replace. Making a scene
+ * current — a commit or a one-part write — deletes every staged scene of the drawing, since
+ * each was staged on the rev just passed. Staged scenes idle for STAGED_IDLE_MS, and pictures
+ * still being sent idle as long, are deleted by the drawing's next write. A drawing not
+ * written for EXPIRY_MS reads as a 404 at once, and writes sweep it away.
  *
  * Errors are the API's envelope, `{ error: { code, message } }`:
  *
- * - 400 `bad_id`, `bad_if_match`, `empty_body`, `bad_parts` (an x-parts past 1–MAX_PARTS, or
- *   under 2 for a staged scene; a part past it; a part but the last not whole);
- * - 401 no token; 403 a token whose hash is not the one the drawing's first write stored;
- * - 404 nothing stored there, or a picture not all in yet; 405 a method the route has not;
+ * - 400 `bad_id`, `bad_part` (a part number), `bad_if_match`, `empty_body`, `bad_parts` (an
+ *   x-parts out of range, or on a plain PUT; a part past it; a part but the last not whole);
+ * - 401 no token; 403 a token whose hash is not the one the drawing's first write stored,
+ *   answered before the body is read;
+ * - 404 nothing stored there, a picture not all in yet, or a drawing a year unwritten;
+ * - 405 a method the route has not;
  * - 409 `conflict`, a stale if-match, with the current rev as the ETag; `part_exists`, other
- *   bytes or another count where a part is stored; `part_out_of_order`; `staged_incomplete`,
- *   a commit whose upload is missing parts or was deleted;
- * - 413 `part_too_large`, a body over PART_BYTES; `drawing_too_large`, past
- *   MAX_DRAWING_BYTES with the pictures and the staged parts; `too_many_pictures`;
+ *   bytes or another count where a part is stored, or a complete picture sent again;
+ *   `part_out_of_order`; `staged_incomplete`, a commit whose upload is missing parts or was
+ *   deleted;
+ * - 413 `part_too_large`, a body over PART_BYTES; `drawing_too_large`; `too_many_pictures`;
  * - 428 a scene write, a staged part or a commit without if-match;
  * - 503 the database refused (a free quota spent), or other writes kept landing first.
  */
 
 const ROUTE =
-  /^\/store\/v1\/drawings\/([^/]+)(?:\/(pictures|staged)\/([^/]+))?(?:\/parts\/(\d{1,6}))?$/;
+  /^\/store\/v1\/drawings\/([^/]+)(?:\/(pictures|staged)\/([^/]+)(?:\/uploads\/([^/]+))?)?(?:\/parts\/([^/]+))?$/;
 
 // RFC 6750's b64token, 32 characters at least: a write token is derived from the drawing's
 // secret, and a short one would be guessable.
 const BEARER = /^Bearer ([\w.~+/-]{32,512}=*)$/;
 
-const REV = /^(?:(\d{1,15})|"(\d{1,15})")$/;
+/** A rev, bare or quoted as an ETag. */
+const REV = /^(?:(0|[1-9]\d{0,14})|"(0|[1-9]\d{0,14})")$/;
 
-const PARTS = /^\d{1,6}$/;
+/** A part number or a part count. */
+const NUMBER = /^(?:0|[1-9]\d{0,5})$/;
 
 /**
  * How often a write is decided again after another landed between its read and its own
- * write. Two, so a request makes at most two rounds of three reads and a batch of six: 18 of
- * the 50 queries D1 allows a free-plan invocation ("Queries per Worker invocation",
+ * write. Two, so a request makes at most two rounds of three reads and a batch of seven: 20
+ * of the 50 queries D1 allows a free-plan invocation ("Queries per Worker invocation",
  * https://developers.cloudflare.com/d1/platform/limits/).
  */
 const ATTEMPTS = 2;
@@ -70,8 +95,10 @@ const ATTEMPTS = 2;
 /** What a write is aimed at, once its route is read. */
 type Target =
   | { kind: "scene" }
-  | { kind: "part"; item: string; n: number; staged: boolean }
-  | { kind: "commit"; sid: string };
+  | { kind: "staged"; sid: string; n: number }
+  | { kind: "commit"; sid: string }
+  | { kind: "picture"; pid: string }
+  | { kind: "upload"; pid: string; uid: string; n: number };
 
 const etag = (rev: number): string => `"${rev}"`;
 
@@ -90,6 +117,12 @@ const tooLarge = (): Response =>
 
 const partExists = (): Response =>
   failure(409, "part_exists", "another part is stored at this place; parts are write-once");
+
+const tooManyPictures = (): Response =>
+  failure(413, "too_many_pictures", `a drawing's online copy holds ${MAX_PICTURES} pictures`);
+
+const stagedIncomplete = (): Response =>
+  failure(409, "staged_incomplete", "parts of this upload are missing; stage it again");
 
 function join(parts: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(parts.reduce((size, part) => size + part.byteLength, 0));
@@ -148,48 +181,99 @@ async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function getScene(db: StoreDb, id: string, n: number): Promise<Response> {
-  const scene = await db.scene(id, n);
-  if (scene === null || scene.rev === 0 || scene.part === null) {
+const expired = (found: Read, now: number): boolean => found.writtenAt < now - EXPIRY_MS;
+
+async function getScene(db: StoreDb, id: string, n: number, now: number): Promise<Response> {
+  const found = await db.read(id, SCENE, n);
+  if (found === null || expired(found, now) || found.rev === 0 || found.part === null) {
     return failure(404, "not_found", "no copy of this drawing, or no such part, is stored");
   }
-  return bytesResponse(scene.part.bytes, {
-    etag: etag(scene.rev),
-    "x-parts": String(scene.part.total),
+  return bytesResponse(found.part.bytes, {
+    etag: etag(found.rev),
+    "x-parts": String(found.part.total),
   });
 }
 
-async function getPicture(db: StoreDb, id: string, pid: string, n: number): Promise<Response> {
-  const upload = await db.item(id, pid);
-  const part = upload !== null && upload.parts === upload.total ? await db.part(id, pid, n) : null;
-  return part === null
-    ? failure(404, "not_found", "no such picture is stored, or not all of it yet")
-    : bytesResponse(part.bytes, { "x-parts": String(part.total) });
+async function getPicture(
+  db: StoreDb,
+  id: string,
+  pid: string,
+  n: number,
+  now: number,
+): Promise<Response> {
+  const found = await db.read(id, pid, n);
+  if (
+    found === null ||
+    expired(found, now) ||
+    found.item === null ||
+    found.item.parts !== found.item.total ||
+    found.part === null
+  ) {
+    return failure(404, "not_found", "no such picture is stored, or not all of it yet");
+  }
+  return bytesResponse(found.part.bytes, { "x-parts": String(found.part.total) });
 }
+
+type Totals = Omit<Head, "proof" | "nonce">;
 
 /** What a write leaves the head at, and does to the parts. */
 interface Plan {
-  next: Omit<Head, "proof" | "nonce">;
+  next: Totals;
   changes: Change[];
 }
 
-const NOTHING: Omit<Head, "proof" | "nonce"> = {
+const NOTHING: Totals = {
   rev: 0,
   bytes: 0,
   sceneBytes: 0,
   pictures: 0,
   stagedBytes: 0,
   stagedAt: 0,
+  pendingBytes: 0,
+  pendingAt: 0,
 };
 
 const DROP_STAGED: Change = { kind: "dropStaged" };
+const DROP_PENDING: Change = { kind: "dropPending" };
 
 /**
- * A scene made current. It replaces the scene before it, and every staged upload goes: each
+ * The head as this write finds it once the drawing's idle uploads are gone: staged scenes
+ * with no part landed for STAGED_IDLE_MS, and pictures still being sent likewise, each kind
+ * on its own clock. Every write deletes them, so they stop counting against the cap.
+ */
+function settle(head: Head | null, now: number): { was: Totals; idle: Change[] } {
+  const was = head ?? NOTHING;
+  const before = now - STAGED_IDLE_MS;
+  const stagedIdle = was.stagedBytes > 0 && was.stagedAt < before;
+  const pendingIdle = was.pendingBytes > 0 && was.pendingAt < before;
+  const dropped = (stagedIdle ? was.stagedBytes : 0) + (pendingIdle ? was.pendingBytes : 0);
+  return {
+    was: {
+      ...was,
+      bytes: was.bytes - dropped,
+      stagedBytes: stagedIdle ? 0 : was.stagedBytes,
+      pendingBytes: pendingIdle ? 0 : was.pendingBytes,
+    },
+    idle: [...(stagedIdle ? [DROP_STAGED] : []), ...(pendingIdle ? [DROP_PENDING] : [])],
+  };
+}
+
+/** The pictures the cap counts: the complete ones and those still being sent. */
+const picturesOf = (was: Totals): number => was.bytes - was.sceneBytes - was.stagedBytes;
+
+/**
+ * Whether a picture's part fits: the pictures beside the larger of the scene and the staged
+ * scenes, so that whichever is current after a commit still fits with them.
+ */
+const pictureFits = (was: Totals, size: number): boolean =>
+  picturesOf(was) + size + Math.max(was.sceneBytes, was.stagedBytes) <= MAX_DRAWING_BYTES;
+
+/**
+ * A scene made current. It replaces the scene before it, and every staged scene goes: each
  * was staged on the rev this write moves past, so its commit could only be a 409.
  */
-function publish(was: Plan["next"], sceneBytes: number, changes: Change[]): Plan | Response {
-  const bytes = was.bytes - was.sceneBytes - was.stagedBytes + sceneBytes;
+function publish(was: Totals, sceneBytes: number, changes: Change[]): Plan | Response {
+  const bytes = picturesOf(was) + sceneBytes;
   if (bytes > MAX_DRAWING_BYTES) return tooLarge();
   return {
     next: { ...was, rev: was.rev + 1, bytes, sceneBytes, stagedBytes: 0, stagedAt: 0 },
@@ -197,54 +281,38 @@ function publish(was: Plan["next"], sceneBytes: number, changes: Change[]): Plan
   };
 }
 
-/** One part of a picture or of a staged scene, which counts against the cap as it lands. */
-async function decidePart(
+/** A part sent again: the same bytes are a 204 that writes nothing, other bytes a 409. */
+async function again(
   db: StoreDb,
   id: string,
-  was: Plan["next"],
-  target: Extract<Target, { kind: "part" }>,
+  item: string,
+  n: number,
+  body: Uint8Array,
+): Promise<Response> {
+  const stored = await db.part(id, item, n);
+  return stored !== null && sameBytes(stored.bytes, body)
+    ? new Response(null, { status: 204 })
+    : partExists();
+}
+
+/** The answer for a part an upload already has or cannot take yet; null when it is next. */
+async function place(
+  db: StoreDb,
+  id: string,
+  item: string,
+  upload: Item | null,
+  n: number,
   total: number,
-  body: Uint8Array<ArrayBuffer>,
-  now: number,
-): Promise<Plan | Response> {
-  // Staging idle this long is abandoned: this write deletes it, the upload's own parts too.
-  const abandoned = was.stagedBytes > 0 && was.stagedAt < now - STAGED_IDLE_MS;
-  const upload = abandoned && target.staged ? null : await db.item(id, target.item);
+  body: Uint8Array,
+): Promise<Response | null> {
   if (upload !== null) {
     if (upload.total !== total) return partExists();
-    if (target.n < upload.parts) {
-      const stored = await db.part(id, target.item, target.n);
-      return stored !== null && sameBytes(stored.bytes, body)
-        ? new Response(null, { status: 204 })
-        : partExists();
-    }
+    if (n < upload.parts) return again(db, id, item, n, body);
   }
   const next = upload?.parts ?? 0;
-  if (target.n > next) {
-    return failure(409, "part_out_of_order", `an upload's parts go in order: part ${next} is next`);
-  }
-  const pictures = was.pictures + (target.staged || upload !== null ? 0 : 1);
-  if (pictures > MAX_PICTURES) {
-    return failure(
-      413,
-      "too_many_pictures",
-      `a drawing's online copy holds ${MAX_PICTURES} pictures`,
-    );
-  }
-  const dropped = abandoned ? was.stagedBytes : 0;
-  const bytes = was.bytes - dropped + body.byteLength;
-  if (bytes > MAX_DRAWING_BYTES) return tooLarge();
-  const put: Change = { kind: "put", item: target.item, n: target.n, total, bytes: body };
-  return {
-    next: {
-      ...was,
-      bytes,
-      pictures,
-      stagedBytes: was.stagedBytes - dropped + (target.staged ? body.byteLength : 0),
-      stagedAt: target.staged ? now : abandoned ? 0 : was.stagedAt,
-    },
-    changes: abandoned ? [DROP_STAGED, put] : [put],
-  };
+  return n > next
+    ? failure(409, "part_out_of_order", `an upload's parts go in order: part ${next} is next`)
+    : null;
 }
 
 async function decide(
@@ -257,46 +325,112 @@ async function decide(
   total: number,
   now: number,
 ): Promise<Plan | Response> {
-  const was = head ?? NOTHING;
-  // A picture is written on no rev: it is write-once, whatever the scene is at.
-  if ((target.kind !== "part" || target.staged) && was.rev !== expected) return conflict(was.rev);
+  const { was, idle } = settle(head, now);
+  const onRev = target.kind === "scene" || target.kind === "staged" || target.kind === "commit";
+  if (onRev && was.rev !== expected) return conflict(was.rev);
+  const plan = await decideTarget(db, id, was, idle, target, body, total, now);
+  return plan instanceof Response ? plan : { next: plan.next, changes: [...idle, ...plan.changes] };
+}
+
+async function decideTarget(
+  db: StoreDb,
+  id: string,
+  was: Totals,
+  idle: Change[],
+  target: Target,
+  body: Uint8Array<ArrayBuffer>,
+  total: number,
+  now: number,
+): Promise<Plan | Response> {
+  const size = body.byteLength;
   switch (target.kind) {
     case "scene":
-      return publish(was, body.byteLength, [
+      return publish(was, size, [
         { kind: "put", item: SCENE, n: 0, total: 1, bytes: body },
         { kind: "trim", item: SCENE, from: 1 },
       ]);
     case "commit": {
+      // Idle, its parts are among those this very write would delete.
+      if (idle.includes(DROP_STAGED)) return stagedIncomplete();
       const upload = await db.item(id, staged(target.sid));
-      if (upload === null || upload.parts !== upload.total) {
-        return failure(
-          409,
-          "staged_incomplete",
-          "parts of this upload are missing; stage it again",
-        );
-      }
+      if (upload === null || upload.parts !== upload.total) return stagedIncomplete();
       return publish(was, upload.bytes, [
         { kind: "trim", item: SCENE, from: 0 },
         { kind: "rename", from: staged(target.sid), to: SCENE },
       ]);
     }
-    case "part":
-      return decidePart(db, id, was, target, total, body, now);
+    case "staged": {
+      const item = staged(target.sid);
+      const upload = idle.includes(DROP_STAGED) ? null : await db.item(id, item);
+      const placed = await place(db, id, item, upload, target.n, total, body);
+      if (placed !== null) return placed;
+      // Beside the pictures, and not beside the scene its commit replaces.
+      if (picturesOf(was) + was.stagedBytes + size > MAX_DRAWING_BYTES) return tooLarge();
+      return {
+        next: {
+          ...was,
+          bytes: was.bytes + size,
+          stagedBytes: was.stagedBytes + size,
+          stagedAt: now,
+        },
+        changes: [{ kind: "put", item, n: target.n, total, bytes: body }],
+      };
+    }
+    case "picture": {
+      const stored = await db.item(id, target.pid);
+      if (stored !== null) {
+        return stored.total === 1 ? again(db, id, target.pid, 0, body) : partExists();
+      }
+      if (was.pictures + 1 > MAX_PICTURES) return tooManyPictures();
+      if (!pictureFits(was, size)) return tooLarge();
+      return {
+        next: { ...was, bytes: was.bytes + size, pictures: was.pictures + 1 },
+        changes: [{ kind: "put", item: target.pid, n: 0, total: 1, bytes: body }],
+      };
+    }
+    case "upload": {
+      // Complete, a picture is write-once: its own parts again are 204s, anything else a 409.
+      const complete = await db.item(id, target.pid);
+      if (complete !== null) {
+        return complete.total === total && target.n < complete.parts
+          ? again(db, id, target.pid, target.n, body)
+          : partExists();
+      }
+      const item = pending(target.pid, target.uid);
+      const upload = idle.includes(DROP_PENDING) ? null : await db.item(id, item);
+      const placed = await place(db, id, item, upload, target.n, total, body);
+      if (placed !== null) return placed;
+      if (was.pictures + 1 > MAX_PICTURES) return tooManyPictures();
+      if (!pictureFits(was, size)) return tooLarge();
+      const put: Change = { kind: "put", item, n: target.n, total, bytes: body };
+      if (target.n < total - 1) {
+        return {
+          next: {
+            ...was,
+            bytes: was.bytes + size,
+            pendingBytes: was.pendingBytes + size,
+            pendingAt: now,
+          },
+          changes: [put],
+        };
+      }
+      // The last part: the upload becomes the picture, readable under its id from now on.
+      return {
+        next: {
+          ...was,
+          bytes: was.bytes + size,
+          pictures: was.pictures + 1,
+          pendingBytes: was.pendingBytes - (upload?.bytes ?? 0),
+          pendingAt: now,
+        },
+        changes: [put, { kind: "rename", from: item, to: target.pid }],
+      };
+    }
   }
 }
 
-/** Why a part's place and size are refused, or null when they are not. */
-function badPart(n: number, total: number, size: number, staged: boolean): string | null {
-  const least = staged ? 2 : 1;
-  if (!(total >= least && total <= MAX_PARTS)) {
-    return staged
-      ? `x-parts must be from 2 to ${MAX_PARTS}: a scene of one part is a plain PUT`
-      : `x-parts must be from 1 to ${MAX_PARTS}`;
-  }
-  if (n >= total) return `part ${n} is past the ${total} parts declared`;
-  if (n < total - 1 && size !== PART_BYTES) return `every part but the last is ${PART_BYTES} bytes`;
-  return null;
-}
+const forbidden = (head: Head | null, proof: string): boolean =>
+  head !== null && !sameProof(head.proof, proof);
 
 async function write(
   request: Request,
@@ -312,15 +446,42 @@ async function write(
     });
   }
   let expected = 0;
-  if (target.kind !== "part" || target.staged) {
+  if (target.kind === "scene" || target.kind === "staged" || target.kind === "commit") {
     const header = request.headers.get("if-match");
     if (header === null) {
       return failure(428, "precondition_required", "this write needs if-match: <rev>, 0 to create");
     }
     const match = REV.exec(header.trim());
-    if (match === null) return failure(400, "bad_if_match", "if-match must be a rev, 0 to create");
+    if (match === null) {
+      return failure(400, "bad_if_match", "if-match is a rev in plain decimal, 0 to create");
+    }
     expected = Number(match[1] ?? match[2]);
   }
+  let total = 1;
+  const declared = request.headers.get("x-parts");
+  if (target.kind === "staged" || target.kind === "upload") {
+    total = declared !== null && NUMBER.test(declared) ? Number(declared) : 0;
+    if (total < 2 || total > MAX_PARTS) {
+      return failure(
+        400,
+        "bad_parts",
+        `x-parts must be from 2 to ${MAX_PARTS}: one part is a plain PUT`,
+      );
+    }
+    if (target.n >= total) {
+      return failure(400, "bad_parts", `part ${target.n} is past the ${total} parts declared`);
+    }
+  } else if (declared !== null && declared !== "1") {
+    return failure(400, "bad_parts", "a plain PUT holds one part; send more as an upload");
+  }
+
+  // The proof before the body: a stranger's request costs a head read, never its body.
+  const proof = await sha256Hex(token);
+  let head = await db.head(id);
+  if (forbidden(head, proof)) {
+    return failure(403, "forbidden", "this token cannot write this drawing");
+  }
+
   // A commit carries no part: what it publishes is staged already.
   let body = new Uint8Array(0);
   if (target.kind !== "commit") {
@@ -331,20 +492,20 @@ async function write(
     if (read.byteLength === 0) return failure(400, "empty_body", "there is nothing to store");
     body = read;
   }
-  let total = 1;
-  if (target.kind === "part") {
-    const declared = request.headers.get("x-parts") ?? (target.staged ? "" : "1");
-    total = PARTS.test(declared) ? Number(declared) : 0;
-    const problem = badPart(target.n, total, body.byteLength, target.staged);
-    if (problem !== null) return failure(400, "bad_parts", problem);
+  if (
+    (target.kind === "staged" || target.kind === "upload") &&
+    target.n < total - 1 &&
+    body.byteLength !== PART_BYTES
+  ) {
+    return failure(400, "bad_parts", `every part but the last is ${PART_BYTES} bytes`);
   }
-  const proof = await sha256Hex(token);
 
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
-    const head = await db.head(id);
-    // The first write's token holds the drawing; checked before anything is said about it.
-    if (head !== null && !sameProof(head.proof, proof)) {
-      return failure(403, "forbidden", "this token cannot write this drawing");
+    if (attempt > 0) {
+      head = await db.head(id);
+      if (forbidden(head, proof)) {
+        return failure(403, "forbidden", "this token cannot write this drawing");
+      }
     }
     const plan = await decide(db, id, head, target, expected, body, total, now);
     if (plan instanceof Response) return plan;
@@ -358,10 +519,8 @@ async function write(
       sweep: { before: now - EXPIRY_MS, limit: SWEEP_LIMIT },
     });
     if (landed) {
-      return new Response(null, {
-        status: 204,
-        headers: target.kind === "part" ? {} : { etag: etag(next.rev) },
-      });
+      const rev = target.kind === "scene" || target.kind === "commit";
+      return new Response(null, { status: 204, headers: rev ? { etag: etag(next.rev) } : {} });
     }
   }
   return failure(503, "busy", "other writes to this drawing kept landing first; try again");
@@ -369,40 +528,53 @@ async function write(
 
 type Answer = () => Promise<Response>;
 
+interface Route {
+  kind: string | undefined;
+  sub: string | undefined;
+  uid: string | undefined;
+  n: number | undefined;
+}
+
 /**
- * The methods a route answers, each with its answer; any other is a 405. A Map, not an
- * object: a method is any token, and `constructor` is one.
+ * The methods a route answers, each with its answer; any other is a 405, and null is no such
+ * route. A Map, not an object: a method is any token, and `constructor` is one.
  */
 function routeMethods(
   request: Request,
   db: StoreDb,
   now: number,
   id: string,
-  kind: string | undefined,
-  sub: string | undefined,
-  n: number | undefined,
-): Map<string, Answer> {
+  { kind, sub, uid, n }: Route,
+): Map<string, Answer> | null {
   const writing =
     (target: Target): Answer =>
     () =>
       write(request, db, now, id, target);
   if (kind === "pictures" && sub !== undefined) {
-    return new Map([
-      ["GET", () => getPicture(db, id, sub, n ?? 0)],
-      ["PUT", writing({ kind: "part", item: sub, n: n ?? 0, staged: false })],
-    ]);
+    if (uid !== undefined) {
+      return n === undefined
+        ? null
+        : new Map([["PUT", writing({ kind: "upload", pid: sub, uid, n })]]);
+    }
+    return n === undefined
+      ? new Map([
+          ["GET", () => getPicture(db, id, sub, 0, now)],
+          ["PUT", writing({ kind: "picture", pid: sub })],
+        ])
+      : new Map([["GET", () => getPicture(db, id, sub, n, now)]]);
   }
-  if (kind === "staged" && sub !== undefined) {
+  if (kind === "staged" && sub !== undefined && uid === undefined) {
     return n === undefined
       ? new Map([["POST", writing({ kind: "commit", sid: sub })]])
-      : new Map([["PUT", writing({ kind: "part", item: staged(sub), n, staged: true })]]);
+      : new Map([["PUT", writing({ kind: "staged", sid: sub, n })]]);
   }
+  if (kind !== undefined) return null;
   return n === undefined
     ? new Map([
-        ["GET", () => getScene(db, id, 0)],
+        ["GET", () => getScene(db, id, 0, now)],
         ["PUT", writing({ kind: "scene" })],
       ])
-    : new Map([["GET", () => getScene(db, id, n)]]);
+    : new Map([["GET", () => getScene(db, id, n, now)]]);
 }
 
 /** Answers one request to `/store/*`. `now` is the clock, in milliseconds. */
@@ -410,15 +582,19 @@ export async function handle(request: Request, db: StoreDb, now = Date.now()): P
   const route = ROUTE.exec(new URL(request.url).pathname);
   const id = route?.[1];
   if (route === null || id === undefined) return failure(404, "not_found", "no such route");
-  const [, , kind, sub, part] = route;
-  for (const value of sub === undefined ? [id] : [id, sub]) {
-    const checked = slugSchema.safeParse(value);
-    if (!checked.success) {
+  const [, , kind, sub, uid, part] = route;
+  for (const value of [id, sub, uid]) {
+    const checked = value === undefined ? null : slugSchema.safeParse(value);
+    if (checked && !checked.success) {
       return failure(400, "bad_id", `an id ${checked.error.issues[0]?.message ?? "is invalid"}`);
     }
   }
+  if (part !== undefined && !NUMBER.test(part)) {
+    return failure(400, "bad_part", "a part number is a plain decimal: 0, 1, 2…");
+  }
   const n = part === undefined ? undefined : Number(part);
-  const methods = routeMethods(request, db, now, id, kind, sub, n);
+  const methods = routeMethods(request, db, now, id, { kind, sub, uid, n });
+  if (methods === null) return failure(404, "not_found", "no such route");
   const answer = methods.get(request.method);
   if (answer === undefined) {
     const allow = [...methods.keys()].join(", ");

@@ -19,15 +19,19 @@ export const D1_MAX_ROW_BYTES = 2_000_000;
 export const PART_BYTES = 1 << 20;
 
 /**
- * The most one drawing may hold, its pictures counted. A write past it is a 413.
+ * The most one drawing may hold: its scene and its pictures, those still being sent
+ * included. A write past it is a 413. A staged scene is counted beside the pictures in place
+ * of the scene its commit replaces, so a 6 MiB scene can be replaced by another; while it is
+ * staged the drawing stores both, up to twice the cap, until the commit or STAGED_IDLE_MS.
  *
  * A D1 database holds at most 500 MB on the free plan ("Maximum database size",
  * https://developers.cloudflare.com/d1/platform/limits/), and every shared drawing of
  * everyone lives in one. A drawing at 10 MiB stores about 13.3 MiB of base64, 2.8% of it, so
  * at least 35 drawings at the cap fit, and thousands of drawings without photos. It holds two
- * pictures at the app's 4 MiB maximum (`IMAGE_MAX_BYTES`, apps/web) and their scene. The
- * Docker build lets a board reach 16 MB (`boardTooLarge`, apps/api), so a board between the
- * two saves there and is refused here, and the person is told.
+ * pictures at the app's 4 MiB maximum (`IMAGE_MAX_BYTES`, apps/web) and a scene of up to
+ * 2 MiB, sent in one part or staged in several. The Docker build lets a board reach 16 MB
+ * (`boardTooLarge`, apps/api), so a board between the two saves there and is refused here,
+ * and the person is told.
  */
 export const MAX_DRAWING_BYTES = 10 << 20;
 
@@ -35,10 +39,11 @@ export const MAX_DRAWING_BYTES = 10 << 20;
 export const MAX_PARTS = MAX_DRAWING_BYTES / PART_BYTES;
 
 /**
- * How long a drawing's staging may sit idle before its staged uploads count as abandoned:
- * 10 minutes since a staged part last landed. The next write to the drawing then deletes
- * them, so they stop counting against the cap. An upload sends a part in seconds; one that
- * pauses longer than this finds its parts gone at its commit and stages again.
+ * How long a drawing's unfinished uploads may sit idle before they count as abandoned: 10
+ * minutes since a part last landed, on one clock for its staged scenes and another for its
+ * pictures still being sent. The next write to the drawing then deletes that kind, so it
+ * stops counting against the cap. An upload sends a part in seconds; one that pauses longer
+ * than this finds its parts gone and sends them again under a new upload id.
  */
 export const STAGED_IDLE_MS = 10 * 60 * 1000;
 
@@ -54,11 +59,12 @@ export const STAGED_IDLE_MS = 10 * 60 * 1000;
  * CPU. No request carries more than one part (Ruling 27), so the worst request is set by
  * PART_BYTES, not by the drawing. Each kind at its worst, on Node 22, 2026-10-20
  * (tests/requests.bench.ts: the handler over a stand-in for the D1 binding's JSON), mean and
- * slowest sample, the higher of two runs:
+ * slowest sample, the highest of three runs:
  *
- *   a new part written — a one-part scene, a staged part, a picture part   3.9 ms   6.3 ms
+ *   a new part written — a one-part scene, a staged part, a picture's
+ *   part, a picture's last part, which completes it                        3.9 ms   6.3 ms
  *   a part sent again, the same bytes                                      1.4 ms   3.3 ms
- *   a part read, of a scene or a picture                                   1.4 ms   4.1 ms
+ *   a part read, of a scene or a picture                                   1.5 ms   4.1 ms
  *   a commit                                                               0.03 ms  1.9 ms
  *
  * The new part is the worst: base64 and the binding's JSON of a MiB are 3.0 ms of it
@@ -73,9 +79,10 @@ export const STAGED_IDLE_MS = 10 * 60 * 1000;
  *
  * - A typical save — a scene of one part, no new picture — is 1 request and 3 rows written:
  *   the drawing's row, its `written_at` index row, the part.
- * - A save that adds a 4 MB picture is 5 requests — 4 parts and the scene — and 15 rows. A
- *   picture is write-once, so the saves after it are back to 1 and 3, for a browser that
- *   remembers what it sent.
+ * - A save that adds a 4 MB picture is 5 requests — 4 parts and the scene — and 19 rows: 3
+ *   a part, and its last part renames the upload's 4 rows to the picture. A picture is
+ *   write-once, so the saves after it are back to 1 and 3, for a browser that remembers
+ *   what it sent.
  * - A scene of k parts is k + 1 requests: its parts, then the commit.
  * - Opening a drawing is 1 request, and 1 more per part of each picture.
  *
@@ -95,10 +102,11 @@ export const STAGED_IDLE_MS = 10 * 60 * 1000;
  */
 
 /**
- * The most pictures one drawing may hold. With the cap, it bounds the sweep. Every part but
- * an item's last is whole, so a drawing holds at most MAX_DRAWING_BYTES / PART_BYTES whole
- * parts, plus one last part per item: the scene, the pictures, and at most 10 staged uploads,
- * since each holds a whole part 0 — 10 + 1 + 200 + 10 = 221 rows.
+ * The most complete pictures one drawing may hold. With the cap, it bounds the sweep. Every
+ * part but an item's last is whole. The scene and the pictures fit the cap, so they hold at
+ * most 10 whole parts; the staged scenes fit beside the pictures, so 10 more. Then one last
+ * part per item: the scene, 200 pictures, and at most 10 staged scenes and 10 pictures being
+ * sent, since each holds a whole part 0 — 20 + 1 + 200 + 10 + 10 = 241 rows.
  */
 export const MAX_PICTURES = 200;
 
@@ -108,6 +116,6 @@ export const EXPIRY_MS = 365 * 24 * 60 * 60 * 1000;
 /**
  * The most expired drawings one write sweeps. Every drawing was written at least once, so
  * one per write keeps up while traffic holds steady; two drain a backlog even when it halves.
- * At most 2 × 221 part rows go in one request.
+ * At most 2 × 241 part rows go in one request.
  */
 export const SWEEP_LIMIT = 2;

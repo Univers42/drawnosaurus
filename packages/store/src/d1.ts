@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { SCENE, type Change, type Head, type Part, type StoreDb } from "./storeDb.ts";
+import type { Change, Head, Item, Part, StoreDb } from "./storeDb.ts";
 
 /*
  * The part of D1's Worker API the store calls, declared here rather than taken from
@@ -45,6 +45,8 @@ interface HeadRow {
   pictures: number;
   staged_bytes: number;
   staged_at: number;
+  pending_bytes: number;
+  pending_at: number;
 }
 
 const toHead = (row: HeadRow): Head => ({
@@ -56,6 +58,8 @@ const toHead = (row: HeadRow): Head => ({
   pictures: row.pictures,
   stagedBytes: row.staged_bytes,
   stagedAt: row.staged_at,
+  pendingBytes: row.pending_bytes,
+  pendingAt: row.pending_at,
 });
 
 interface PartRow {
@@ -79,6 +83,7 @@ const CHANGES = {
   rename: `UPDATE parts SET item = ?4 WHERE drawing_id = ?1 AND item = ?3 AND ${LANDED}`,
   // GLOB, not LIKE: case-sensitive, so SQLite reads it as a range on the key.
   dropStaged: `DELETE FROM parts WHERE drawing_id = ?1 AND item GLOB '@*' AND ${LANDED}`,
+  dropPending: `DELETE FROM parts WHERE drawing_id = ?1 AND item GLOB '#*' AND ${LANDED}`,
 } as const;
 
 const bindings = (change: Change): (string | number)[] => {
@@ -96,6 +101,7 @@ const bindings = (change: Change): (string | number)[] => {
     case "rename":
       return [change.from, change.to];
     case "dropStaged":
+    case "dropPending":
       return [];
   }
 };
@@ -106,12 +112,22 @@ export function d1Store(db: D1Database): StoreDb {
     db
       .prepare("SELECT total, data FROM parts WHERE drawing_id = ?1 AND item = ?2 AND n = ?3")
       .bind(id, item, n);
+  const itemOf = (id: string, item: string): D1PreparedStatement =>
+    db
+      .prepare(
+        `SELECT count(*) AS parts, max(total) AS total, sum(size) AS bytes
+         FROM parts WHERE drawing_id = ?1 AND item = ?2`,
+      )
+      .bind(id, item);
+  const toItem = (row: Item | undefined | null): Item | null =>
+    row === undefined || row === null || row.parts === 0 ? null : row;
 
   return {
     async head(id) {
       const row = await db
         .prepare(
-          `SELECT rev, proof, nonce, bytes, scene_bytes, pictures, staged_bytes, staged_at
+          `SELECT rev, proof, nonce, bytes, scene_bytes, pictures, staged_bytes, staged_at,
+             pending_bytes, pending_at
            FROM drawings WHERE id = ?1`,
         )
         .bind(id)
@@ -120,28 +136,29 @@ export function d1Store(db: D1Database): StoreDb {
     },
 
     async item(id, item) {
-      const row = await db
-        .prepare(
-          `SELECT count(*) AS parts, max(total) AS total, sum(size) AS bytes
-           FROM parts WHERE drawing_id = ?1 AND item = ?2`,
-        )
-        .bind(id, item)
-        .first<{ parts: number; total: number; bytes: number }>();
-      return row === null || row.parts === 0 ? null : row;
+      return toItem(await itemOf(id, item).first<Item>());
     },
 
     async part(id, item, n) {
       return toPart(await partOf(id, item, n).first<PartRow>());
     },
 
-    async scene(id, n) {
-      // One batch is one transaction, so the rev and the part are of the same write.
-      const [revs, rows] = (await db.batch([
-        db.prepare("SELECT rev FROM drawings WHERE id = ?1").bind(id),
-        partOf(id, SCENE, n),
-      ])) as [D1Result<{ rev: number }>, D1Result<PartRow>];
-      const head = revs.results[0];
-      return head === undefined ? null : { rev: head.rev, part: toPart(rows.results[0]) };
+    async read(id, item, n) {
+      // One batch is one transaction, so the drawing, the item and the part are of one write.
+      const [drawings, items, parts] = (await db.batch([
+        db.prepare("SELECT rev, written_at FROM drawings WHERE id = ?1").bind(id),
+        itemOf(id, item),
+        partOf(id, item, n),
+      ])) as [D1Result<{ rev: number; written_at: number }>, D1Result<Item>, D1Result<PartRow>];
+      const drawing = drawings.results[0];
+      return drawing === undefined
+        ? null
+        : {
+            rev: drawing.rev,
+            writtenAt: drawing.written_at,
+            item: toItem(items.results[0]),
+            part: toPart(parts.results[0]),
+          };
     },
 
     /**
@@ -159,8 +176,9 @@ export function d1Store(db: D1Database): StoreDb {
           ? db
               .prepare(
                 `INSERT INTO drawings (id, nonce, rev, proof, written_at, bytes, scene_bytes,
-                   pictures, staged_bytes, staged_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT (id) DO NOTHING`,
+                   pictures, staged_bytes, staged_at, pending_bytes, pending_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 ON CONFLICT (id) DO NOTHING`,
               )
               .bind(
                 id,
@@ -173,12 +191,15 @@ export function d1Store(db: D1Database): StoreDb {
                 head.pictures,
                 head.stagedBytes,
                 head.stagedAt,
+                head.pendingBytes,
+                head.pendingAt,
               )
           : db
               .prepare(
                 `UPDATE drawings SET nonce = ?2, rev = ?3, written_at = ?4, bytes = ?5,
-                   scene_bytes = ?6, pictures = ?7, staged_bytes = ?8, staged_at = ?9
-                 WHERE id = ?1 AND nonce = ?10`,
+                   scene_bytes = ?6, pictures = ?7, staged_bytes = ?8, staged_at = ?9,
+                   pending_bytes = ?10, pending_at = ?11
+                 WHERE id = ?1 AND nonce = ?12`,
               )
               .bind(
                 id,
@@ -190,6 +211,8 @@ export function d1Store(db: D1Database): StoreDb {
                 head.pictures,
                 head.stagedBytes,
                 head.stagedAt,
+                head.pendingBytes,
+                head.pendingAt,
                 write.seen,
               );
       const changes = write.changes.map((change) =>
