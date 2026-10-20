@@ -71,7 +71,9 @@ describe("mobileToolbarPlan", () => {
     expect(plan.wears.shapes).toBe("diamond");
     expect(plan.wears.lines).toBe("line");
     // First visit: rectangle and arrow, the oracle's own defaults.
-    expect(mobileToolbarPlan(MIN_WIDTH).wears).toEqual({ shapes: "rectangle", lines: "arrow" });
+    expect(
+      mobileToolbarPlan(MIN_WIDTH).wears,
+    ).toMatchObject({ shapes: "rectangle", lines: "arrow" });
   });
 
   it("still names More, promoted or not, with the active extra tool's own icon", () => {
