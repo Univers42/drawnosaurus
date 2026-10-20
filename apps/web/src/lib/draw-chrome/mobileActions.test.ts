@@ -69,7 +69,13 @@ describe("mobileActionBarPlan", () => {
 
   it("shows only what a plain rectangle needs", () => {
     const plan = mobileActionBarPlan(360, rectangle);
-    expect(plan.left).toEqual(["stroke", "background", "shape properties", "layer actions"]);
+    expect(plan.left).toEqual([
+      "stroke",
+      "background",
+      "shape properties",
+      "opacity",
+      "layer actions",
+    ]);
   });
 
   it("coalesces the trio of shape rows into one popover", () => {
