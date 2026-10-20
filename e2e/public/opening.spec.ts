@@ -41,3 +41,19 @@ test("a drawing deleted from the gallery is not opened again, as a blank under i
   expect(reopened.slug).not.toBe(slug);
   expect(await types(page)).toEqual([]);
 });
+
+/**
+ * A drawing not shared has no live link (`realtime/liveRoom.ts`), so there is nothing to say
+ * about one: no "Live collaboration offline" on the header, which every drawing showed while
+ * it tried a relay that does not exist. And no Share, the button or the menu's item, until
+ * this build has a Share dialog of its own — the one there is promises a live room.
+ */
+test("a drawing not shared shows no live status, and offers no Share", async ({ page }) => {
+  await openApp(page);
+
+  await expect(page.getByLabel("Live collaboration", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Share & collaborate" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Open main menu" }).click();
+  await expect(page.getByRole("menuitem", { name: "My drawings" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Live collaboration…" })).toHaveCount(0);
+});
