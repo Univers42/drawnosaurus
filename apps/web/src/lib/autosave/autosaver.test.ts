@@ -200,4 +200,81 @@ describe("SceneAutosaver", () => {
 
     expect(send).not.toHaveBeenCalled();
   });
+
+  /** A saver whose sends stay open until the test lets them land, one at a time. */
+  function holdingSaver(readScene: () => readonly StampedElement[]) {
+    const landings: Array<() => void> = [];
+    const send = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          landings.push(resolve);
+        }),
+    );
+    const saver = new SceneAutosaver({ readScene, send, now: () => 0, nonce: () => 1 });
+    return { saver, send, land: () => landings.shift()?.() };
+  }
+
+  it("flush() during a request in flight sends what was noted before it, once that lands", async () => {
+    let scene = [el("a")];
+    const { saver, send, land } = holdingSaver(() => scene);
+
+    saver.notify();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    scene = [el("a", 2)];
+    saver.notify();
+    const flushed = saver.flush();
+    // One request in flight at a time: the second waits for the first.
+    expect(send).toHaveBeenCalledTimes(1);
+
+    land();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]?.[0].elements[0]).toMatchObject({ id: "a", version: 2 });
+
+    land();
+    await flushed;
+  });
+
+  it("flush() then dispose() right after still sends what was noted before the flush", async () => {
+    let scene = [el("a")];
+    const { saver, send, land } = holdingSaver(() => scene);
+
+    saver.notify();
+    await vi.advanceTimersByTimeAsync(800);
+    expect(send).toHaveBeenCalledTimes(1);
+
+    scene = [el("a", 2)];
+    saver.notify();
+    const flushed = saver.flush();
+    // The page is leaving: the board component disposes straight after flushing.
+    saver.dispose();
+
+    land();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1]?.[0].elements[0]).toMatchObject({ id: "a", version: 2 });
+
+    land();
+    await flushed;
+  });
+
+  it("sends nothing noted after dispose()", async () => {
+    let scene = [el("a")];
+    const send = vi.fn().mockResolvedValue(undefined);
+    const saver = new SceneAutosaver({
+      readScene: () => scene,
+      send,
+      now: () => 0,
+      nonce: () => 1,
+    });
+
+    saver.dispose();
+    scene = [el("a", 2)];
+    saver.notify();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(send).not.toHaveBeenCalled();
+  });
 });
