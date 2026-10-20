@@ -10,5 +10,5 @@ export const serverStore: BoardStore = {
   replace: api.replaceBoard,
   remove: api.deleteBoard,
   putThumbnail: api.putThumbnail,
-  thumbnailUrl: api.thumbnailUrl,
+  thumbnail: async (slug, version) => api.thumbnailUrl(slug, version),
 };

@@ -3,6 +3,7 @@
   import { resolve } from "$app/paths";
   import type { BoardSummary, WorldBounds } from "@drawnosaurus/contract";
   import { boards as store } from "$lib/store/index.ts";
+  import { cardPicture } from "./cardPicture.ts";
 
   let boards = $state<BoardSummary[]>([]);
   let nextCursor = $state<string | null>(null);
@@ -12,6 +13,8 @@
   let title = $state("");
   /** Slugs whose picture failed to load: they fall back to the empty preview. */
   let brokenPictures = $state<ReadonlySet<string>>(new Set());
+
+  const picture = cardPicture((slug, version) => store.thumbnail(slug, version));
 
   const hidePicture = (slug: string): void => {
     brokenPictures = new Set([...brokenPictures, slug]);
@@ -108,7 +111,7 @@
             {#if board.thumbnailAt && board.elementCount > 0 && !brokenPictures.has(board.slug)}
               <img
                 class="preview-image"
-                src={store.thumbnailUrl(board.slug, board.thumbnailAt)}
+                use:picture={{ slug: board.slug, version: board.thumbnailAt }}
                 loading="lazy"
                 decoding="async"
                 alt=""

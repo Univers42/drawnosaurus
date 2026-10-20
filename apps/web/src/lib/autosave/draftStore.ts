@@ -10,6 +10,8 @@
  * that made it.
  */
 
+import { BOARDS, ELEMENTS, openDraftDb } from "./draftDb.ts";
+
 /** Anything with an id: the store does not look inside elements. */
 export interface DraftElement {
   id: string;
@@ -170,10 +172,6 @@ export function applyStack(stored: readonly string[], stack: StackChange): strin
   return [...stored, ...stack.appended.filter((id) => !present.has(id))];
 }
 
-const DB_NAME = "drawnosaurus-drafts";
-const ELEMENTS = "elements";
-const BOARDS = "boards";
-
 /** The browser's backend: two IndexedDB stores, elements by `[slug, id]` and orders by slug. */
 export function indexedDbBackend(): DraftBackend {
   const idb = (globalThis as { indexedDB?: IDBFactory }).indexedDB;
@@ -181,20 +179,7 @@ export function indexedDbBackend(): DraftBackend {
     return { write: async () => undefined, read: async () => null };
   }
   let opened: Promise<IDBDatabase> | null = null;
-  const db = (): Promise<IDBDatabase> => {
-    opened ??= new Promise((resolve, reject) => {
-      const request = idb.open(DB_NAME, 1);
-      request.onupgradeneeded = () => {
-        const database = request.result;
-        const elements = database.createObjectStore(ELEMENTS, { keyPath: ["slug", "id"] });
-        elements.createIndex("slug", "slug");
-        database.createObjectStore(BOARDS, { keyPath: "slug" });
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    return opened;
-  };
+  const db = (): Promise<IDBDatabase> => (opened ??= openDraftDb(idb));
   const done = (tx: IDBTransaction) =>
     new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();

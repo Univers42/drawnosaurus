@@ -15,7 +15,9 @@ The gallery (`apps/web/src/lib/gallery/Gallery.svelte`) shows a picture of each 
 4. `PUT /v1/boards/:slug/thumbnail` with `Content-Type: image/png`. A hidden tab flushes at
    once. A board with elements and no picture uploads once when it opens (backfill).
 5. The list and the board carry `thumbnailAt`; the card shows
-   `GET /v1/boards/:slug/thumbnail?v=<thumbnailAt>`.
+   `GET /v1/boards/:slug/thumbnail?v=<thumbnailAt>`. It asks the store for that address
+   (`BoardStore.thumbnail`) through `lib/gallery/cardPicture.ts`, which releases every
+   address it was given: in the public build each is an object URL for a Blob in IndexedDB.
 
 ## The API
 
@@ -65,4 +67,5 @@ back to the badge alone when the image fails to load (`onerror`).
 
 Tests: `packages/contract/tests/thumbnail.test.ts`,
 `apps/api/tests/integration/thumbnails.test.ts`,
-`apps/web/src/lib/thumbnail/thumbnailUploader.test.ts`, `e2e/galleryThumbnail.spec.ts`.
+`apps/web/src/lib/thumbnail/thumbnailUploader.test.ts`,
+`apps/web/src/lib/gallery/cardPicture.test.ts`, `e2e/galleryThumbnail.spec.ts`.

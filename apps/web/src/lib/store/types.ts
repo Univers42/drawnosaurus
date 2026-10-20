@@ -19,6 +19,10 @@ export interface BoardStore {
   replace(slug: string, scene: OsidrawFile, rev: number): Promise<Board>;
   remove(slug: string): Promise<void>;
   putThumbnail(slug: string, blob: Blob): Promise<void>;
-  /** Where the gallery loads a board's picture; `version` (its `thumbnailAt`) busts the cache. */
-  thumbnailUrl(slug: string, version: string): string;
+  /**
+   * Where the gallery loads a board's picture from, or null when there is none; `version`
+   * (its `thumbnailAt`) busts the cache. Async because the browser's store reads the
+   * picture from IndexedDB, and its address is an object URL the caller must revoke.
+   */
+  thumbnail(slug: string, version: string): Promise<string | null>;
 }
