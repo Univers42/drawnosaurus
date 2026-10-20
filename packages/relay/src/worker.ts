@@ -50,10 +50,13 @@ export class RelayObject {
   constructor(ctx: DurableObjectState) {
     this.ctx = ctx;
     // The client's ping is answered by the runtime, "without waking WebSockets in
-    // hibernation", and auto-responses "will not incur additional wall-clock time"
-    // (https://developers.cloudflare.com/durable-objects/api/state/#setwebsocketautoresponse,
-    // https://developers.cloudflare.com/durable-objects/platform/pricing/). Any other ping
-    // still reaches the relay, which answers it with `server_time` as the Rust one does.
+    // hibernation" (https://developers.cloudflare.com/durable-objects/api/state/#setwebsocketautoresponse),
+    // so it bills no duration: auto-responses "will not incur additional wall-clock time"
+    // (https://developers.cloudflare.com/durable-objects/platform/pricing/, footnote 3, on
+    // duration). Whether each still counts as a request is not said. If not, a tab open all
+    // day costs only its presence, 288 requests, about 347 tab-days of the free 100,000; if
+    // so, 1,152, about 87. Any other ping still reaches the relay, which answers it with
+    // `server_time` as the Rust one does.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
     // Woken from hibernation, the constructor runs again with the sockets still open.
     for (const ws of ctx.getWebSockets()) {
@@ -107,11 +110,27 @@ export class RelayObject {
     }
   }
 
-  /** Forgets the socket's connection, and tells the others on its drawings it is gone. */
+  /**
+   * Forgets the socket's connection, and tells the others on its drawings it is gone.
+   *
+   * A close can be what wakes the object, and "disconnected WebSockets are not returned" by
+   * `getWebSockets` (the state API page), so the constructor may not have restored this
+   * one: its connection is taken from its own attachment, as the hibernation page's close
+   * handler reads one. The attachment is then cleared, so a close reported again — after
+   * its error, or on a later wake — announces nothing more.
+   */
   private forget(ws: WebSocket): void {
     try {
-      const id = connectionOf(ws)?.id;
-      if (id !== undefined) this.deliver(this.relay.close(id));
+      const conn = connectionOf(ws);
+      if (!conn) return;
+      if (!this.relay.connection(conn.id)) this.relay.open(conn);
+      const out = this.relay.close(conn.id);
+      try {
+        ws.serializeAttachment(null);
+      } catch {
+        // Gone with its socket: "if either side closes the connection, attachments are lost".
+      }
+      this.deliver(out);
     } catch (error) {
       console.error("relay: close not announced", error);
     }

@@ -46,6 +46,13 @@ export const MAX_FRAME_LENGTH = MAX_PAYLOAD_BYTES + 1_024;
 export const MAX_TOPIC_BYTES = 256;
 
 /**
+ * The longest event type a publish may name, in UTF-8 bytes; the client's longest are
+ * `preview-end` and `present-end`, 11 (`RealtimeMessage`, realtimeClient.ts). It too is
+ * copied into every EVENT, for every matching subscription.
+ */
+export const MAX_EVENT_TYPE_BYTES = 64;
+
+/**
  * How deep a frame may nest: serde_json's recursion limit, which drops a frame 128 levels
  * deep and serves one 127 deep (measured on engine/realtime). Deeper, `JSON.stringify`
  * would overflow the stack.
@@ -178,6 +185,7 @@ export class Relay {
    */
   private publish(topic: string, eventType: string, payload: unknown): Outbound[] {
     if (byteLength(topic) > MAX_TOPIC_BYTES) return [];
+    if (byteLength(eventType) > MAX_EVENT_TYPE_BYTES) return [];
     const body = JSON.stringify(payload);
     if (byteLength(body) > MAX_PAYLOAD_BYTES) return [];
     const sequence = (this.sequences.get(topic) ?? 0) + 1;

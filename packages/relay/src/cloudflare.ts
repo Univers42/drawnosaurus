@@ -15,7 +15,11 @@ export interface DurableObjectState {
    * Up to 10 tags of up to 256 characters each.
    */
   acceptWebSocket(ws: WebSocket, tags?: string[]): void;
-  /** The accepted sockets — all of them, or those tagged `tag`. May list one already closed. */
+  /**
+   * The accepted sockets — all of them, or those tagged `tag`. "Disconnected WebSockets are
+   * not returned", but one may be "even after `ws.close` has been called", while CLOSING
+   * (https://developers.cloudflare.com/durable-objects/api/state/#getwebsockets).
+   */
   getWebSockets(tag?: string): WebSocket[];
   /**
    * A message equal to `pair.request` is answered with `pair.response` by the runtime,

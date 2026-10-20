@@ -206,7 +206,8 @@ describe("the Durable Object", () => {
   /*
    * Fix round 1. https://developers.cloudflare.com/durable-objects/api/state/ — a request
    * matching the pair is answered "without waking WebSockets in hibernation"; the pricing
-   * page's footnote 3 — such auto-responses "will not be charged".
+   * page's footnote 3, on duration — such auto-responses "will not incur additional
+   * wall-clock time". Whether each counts as a request it does not say.
    */
   it("has the runtime answer the client's ping itself, set again on every wake", () => {
     const state = new FakeState();

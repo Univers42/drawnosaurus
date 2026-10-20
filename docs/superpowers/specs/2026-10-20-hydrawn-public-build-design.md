@@ -166,7 +166,9 @@ dropped without an answer, as the Rust relay drops a frame it cannot read:
   the payload cap lets through is refused;
 - a frame nested deeper than 127 levels (`MAX_DEPTH`), serde_json's recursion limit as
   measured on `engine/realtime`, and short of where `JSON.stringify` overflows the stack;
-- a publish to a topic over 256 bytes (`MAX_TOPIC_BYTES`); the client's are 44.
+- a publish to a topic over 256 bytes (`MAX_TOPIC_BYTES`); the client's are 44;
+- a publish whose event type is over 64 bytes (`MAX_EVENT_TYPE_BYTES`); the client's are 11
+  at most (`preview-end`, `present-end`). Both are copied into every EVENT.
 
 Each topic's sequence is kept for at most 10,000 topics, the least recently published
 forgotten first (`MAX_TOPICS`): forgetting one restarts it at 1, as waking does, and the
@@ -180,7 +182,9 @@ other connection subscribed to one of its topic patterns â€” the same drawing â€
 client already handles (`handleControl`, `realtimeClient.ts`: it lets go at once of what
 that peer held) and the browser tests' stub relay already sends (`e2e/board.ts`, `relay()`).
 The Rust relay sends nothing; there the client lets go only once the peer's presence is
-45 s stale (`PEER_STALE_MS`).
+45 s stale (`PEER_STALE_MS`). A close can be what wakes the object, and a disconnected socket
+is not listed by `getWebSockets`, so the closer's connection is read from its own attachment,
+then cleared, so that it is announced once.
 
 The relay sees only sealed frames, and the drawing id in the topic; it cannot read a
 drawing. It stores nothing: what each connection has subscribed to is kept in that
