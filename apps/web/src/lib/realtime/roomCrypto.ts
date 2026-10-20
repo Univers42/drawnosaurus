@@ -17,6 +17,7 @@
 
 import { gcm } from "@noble/ciphers/aes.js";
 import { hkdf } from "@noble/hashes/hkdf.js";
+import { hmac } from "@noble/hashes/hmac.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 
 export const ROOM_HASH_PARAM = "room";
@@ -24,6 +25,10 @@ export const HKDF_INFO = "drawnosaurus-live-v1";
 export const ROOM_KEY_BYTES = 32;
 export const IV_BYTES = 12;
 export const ENVELOPE_VERSION = 1;
+/** HKDF's info for the online copy's write token (`deriveWriteToken`). */
+export const WRITE_TOKEN_INFO = "hydrawn-store-write-v1";
+/** HKDF's info for the key a picture's name in the online copy is an HMAC under. */
+export const PICTURE_ID_INFO = "hydrawn-store-picture-v1";
 
 export interface SealedEnvelope {
   v: number;
@@ -210,23 +215,44 @@ export async function importRoomKey(
   return { engine: "webcrypto", subtle, key };
 }
 
+/** AES-256-GCM: the ciphertext, then the 16-byte tag, in both engines. */
+async function encrypt(key: RoomKey, iv: Uint8Array, plaintext: Uint8Array): Promise<Uint8Array> {
+  if (key.engine === "fallback") return gcm(key.key, iv).encrypt(plaintext);
+  return new Uint8Array(
+    await key.subtle.encrypt(
+      { name: "AES-GCM", iv: toArrayBuffer(iv) },
+      key.key,
+      toArrayBuffer(plaintext),
+    ),
+  );
+}
+
+/** What `encrypt` sealed, or null: a wrong key or a tampered byte, in either engine. */
+async function decrypt(
+  key: RoomKey,
+  iv: Uint8Array,
+  ciphertext: Uint8Array,
+): Promise<Uint8Array | null> {
+  try {
+    if (key.engine === "fallback") return gcm(key.key, iv).decrypt(ciphertext);
+    return new Uint8Array(
+      await key.subtle.decrypt(
+        { name: "AES-GCM", iv: toArrayBuffer(iv) },
+        key.key,
+        toArrayBuffer(ciphertext),
+      ),
+    );
+  } catch {
+    return null;
+  }
+}
+
 export async function seal(key: RoomKey, plaintext: Uint8Array): Promise<SealedEnvelope> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
-  // Ciphertext then the 16-byte tag, in both: the envelope is the same either way.
-  const ciphertext =
-    key.engine === "webcrypto"
-      ? new Uint8Array(
-          await key.subtle.encrypt(
-            { name: "AES-GCM", iv: toArrayBuffer(iv) },
-            key.key,
-            toArrayBuffer(plaintext),
-          ),
-        )
-      : gcm(key.key, iv).encrypt(plaintext);
   return {
     v: ENVELOPE_VERSION,
     iv: bytesToBase64Url(iv),
-    ct: bytesToBase64Url(ciphertext),
+    ct: bytesToBase64Url(await encrypt(key, iv, plaintext)),
   };
 }
 
@@ -234,22 +260,101 @@ export async function open(key: RoomKey, envelope: SealedEnvelope): Promise<Uint
   if (envelope.v !== ENVELOPE_VERSION || !envelope.iv || !envelope.ct) {
     return null;
   }
+  let iv: Uint8Array;
+  let ct: Uint8Array;
   try {
-    const iv = base64UrlToBytes(envelope.iv);
-    const ct = base64UrlToBytes(envelope.ct);
-    if (iv.byteLength !== IV_BYTES || ct.byteLength === 0) return null;
-    if (key.engine === "fallback") return gcm(key.key, iv).decrypt(ct);
-    return new Uint8Array(
-      await key.subtle.decrypt(
-        { name: "AES-GCM", iv: toArrayBuffer(iv) },
-        key.key,
-        toArrayBuffer(ct),
-      ),
-    );
+    iv = base64UrlToBytes(envelope.iv);
+    ct = base64UrlToBytes(envelope.ct);
   } catch {
-    // A wrong key or a tampered frame: the tag does not verify, in either engine.
     return null;
   }
+  if (iv.byteLength !== IV_BYTES || ct.byteLength === 0) return null;
+  return decrypt(key, iv, ct);
+}
+
+/**
+ * Bytes sealed for the online copy: the IV, then the ciphertext and its tag. Binary, not the
+ * live frames' JSON envelope — the store keeps bytes, and base64 would be a third more of
+ * them against its cap.
+ */
+export async function sealBytes(key: RoomKey, plaintext: Uint8Array): Promise<Uint8Array> {
+  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const ciphertext = await encrypt(key, iv, plaintext);
+  const sealed = new Uint8Array(IV_BYTES + ciphertext.byteLength);
+  sealed.set(iv);
+  sealed.set(ciphertext, IV_BYTES);
+  return sealed;
+}
+
+/** What `sealBytes` sealed, or null when it was sealed under another secret or changed. */
+export async function openBytes(key: RoomKey, sealed: Uint8Array): Promise<Uint8Array | null> {
+  // A tag is 16 bytes: anything shorter than an IV and a tag cannot have been sealed.
+  if (sealed.byteLength < IV_BYTES + 16) return null;
+  return decrypt(key, sealed.subarray(0, IV_BYTES), sealed.subarray(IV_BYTES));
+}
+
+/**
+ * HKDF-SHA256 of the secret with an empty salt, as RFC 5869 has it: Web Crypto's when the
+ * page has it, `@noble`'s when it has not, byte for byte the same.
+ */
+async function hkdfBytes(
+  raw: Uint8Array,
+  info: string,
+  subtle: SubtleCrypto | null,
+): Promise<Uint8Array> {
+  const label = textEncoder.encode(info);
+  if (!subtle) return hkdf(sha256, raw, new Uint8Array(), label, 32);
+  const ikm = await subtle.importKey("raw", toArrayBuffer(raw), "HKDF", false, ["deriveBits"]);
+  const bits = await subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(), info: label },
+    ikm,
+    256,
+  );
+  return new Uint8Array(bits);
+}
+
+/**
+ * The online copy's write token: the bearer whose SHA-256 the store keeps from the first
+ * write and checks on every later one (`packages/store/src/handlers.ts`). From the secret
+ * alone, so everyone holding the link writes with the same one, on Web Crypto or without;
+ * base64url, 43 characters, inside the store's bearer pattern.
+ */
+export async function deriveWriteToken(
+  raw: Uint8Array,
+  subtle: SubtleCrypto | null = pageSubtle() ?? null,
+): Promise<string> {
+  return bytesToBase64Url(await hkdfBytes(raw, WRITE_TOKEN_INFO, subtle));
+}
+
+/**
+ * What a picture is called in the online copy: an HMAC over its bytes, under a key HKDF
+ * draws from the secret — 128 bits, as 32 hex digits, which the store's id rule takes.
+ *
+ * Derived from the content, so two browsers sending one picture name it alike and the
+ * second is told it is already there (the store's write-once 409). Keyed, so the store
+ * cannot tell one picture from a known one: a plain hash would let it check which picture
+ * it holds against any copy found elsewhere.
+ */
+export async function pictureStoreId(
+  raw: Uint8Array,
+  bytes: Uint8Array,
+  subtle: SubtleCrypto | null = pageSubtle() ?? null,
+): Promise<string> {
+  const key = await hkdfBytes(raw, PICTURE_ID_INFO, subtle);
+  let mac: Uint8Array;
+  if (subtle) {
+    const hmacKey = await subtle.importKey(
+      "raw",
+      toArrayBuffer(key),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    mac = new Uint8Array(await subtle.sign("HMAC", hmacKey, toArrayBuffer(bytes)));
+  } else {
+    mac = hmac(sha256, key, bytes);
+  }
+  return Array.from(mac.subarray(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export function isSealedEnvelope(value: unknown): value is SealedEnvelope {
