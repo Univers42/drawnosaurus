@@ -131,16 +131,49 @@ In the public build:
 
 ### The relay
 
-The existing relay, unchanged: the `realtime-server` image built by
-`docker/realtime.Dockerfile` from `engine/realtime`, run with no auth, as the Docker
-build runs it. Hosted on **Render's free plan**. The public build is pointed at it with the
-existing `PUBLIC_REALTIME_WS_URL` (`realtimeClient.ts`, `liveSocketUrl`). Its
-`REALTIME_STATIC_DIR` is pointed at an empty directory, so the relay does not serve
-`sandbox/static` to the internet.
+The Docker build keeps the Rust relay (`engine/realtime`, behind the gateway). The public
+build's relay is a **Cloudflare Worker, `hydrawn-relay`, with one Durable Object**
+(`packages/relay`) — the owner's decision (Ruling 23, 2026-10-20): it runs on the
+Cloudflare account the site already uses, on the free plan, with no new account and no
+cold start.
 
-Render's free service sleeps after 15 minutes without traffic and takes about a minute to
-wake. **When the Share dialog opens, the page calls the relay's health endpoint**
-(`/v1/health`) so it is waking while the link is being copied **(my call)**.
+It is a small TypeScript relay that speaks, frame for frame, the part of
+`engine/realtime`'s wire protocol the web client uses: `AUTH` with no authentication (the
+Rust relay's no-auth mode), `SUBSCRIBE` to `boards/<id>/*`, `PUBLISH` fanned out as
+`EVENT` to every matching subscription, the publisher's own included, and `PING` answered
+with `PONG`. A publish whose payload is over 64 KiB is dropped without an answer, as the
+Rust relay drops it, so the client behaves the same against both. Its tests drive it only
+with the client's own frame builders and readers (`realtimeProtocol.ts`), so the two cannot
+drift apart unnoticed. The public build is pointed at it with `VITE_HYDRAWN_RELAY_URL`
+(`lib/config.ts`, `relayWsUrl`); the socket is `wss://<worker host>/ws`.
+
+The relay sees only sealed frames, and the drawing id in the topic; it cannot read a
+drawing. It stores nothing: what each connection has subscribed to is kept in that
+socket's hibernation attachment, not in the object's storage.
+
+**One object for every drawing.** Duration is billed per active object: one object busy
+all day is about 0.125 GB × 86,400 s ≈ 10,800 GB-s, under the free 13,000 GB-s a day; one
+object per drawing would multiply that by the number of drawings live at once. It uses the
+WebSocket Hibernation API, so while nobody sends anything it is not billed for duration.
+The ceiling is one object for every live drawing — 32,768 sockets, one thread; the upgrade
+path is sharding by drawing id.
+
+The free plan, read on 2026-10-20
+([pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/),
+[limits](https://developers.cloudflare.com/durable-objects/platform/limits/)):
+
+- Durable Objects are on Workers Free, with the SQLite storage backend only;
+- 100,000 requests a day, and incoming WebSocket messages are counted 20:1 (about
+  2,000,000 messages a day); outgoing messages are not charged;
+- 13,000 GB-s of duration a day, and a hibernating object is not billed for duration;
+- a received message can be up to 32 MiB.
+
+When an allowance runs out, Cloudflare refuses further requests until 00:00 UTC; the page
+sees an ordinary connection failure, which it already shows as offline (`liveLabel`).
+
+Nothing has to wake the relay before a share: there is no cold start. `GET /v1/health`
+answers 200 without reaching the object, so a call to it from the Share dialog is harmless,
+but no longer needed.
 
 How a newcomer gets the drawing from the people already in the room is the existing
 join/sync exchange (`liveBroadcast.ts` › `inventory` / `missing`); it does not need the
@@ -229,19 +262,26 @@ is a logo **(my call)**.
 
 ### Hosting, and what is free
 
-| Piece     | Where                   | Free allowance (checked 2026-10-20)                                                     |
-| --------- | ----------------------- | --------------------------------------------------------------------------------------- |
-| The site  | Cloudflare Pages        | static requests and bandwidth unlimited; 20,000 files, 25 MiB per file                  |
-| The store | Pages Functions + D1    | 100,000 function requests/day; D1 5 GB, 100,000 rows written and 5,000,000 read per day |
-| The relay | Render free web service | 750 hours/month; sleeps after 15 min idle, ~1 min to wake                               |
+| Piece     | Where                        | Free allowance (checked 2026-10-20)                                                                     |
+| --------- | ---------------------------- | ------------------------------------------------------------------------------------------------------- |
+| The site  | Cloudflare Pages             | static requests and bandwidth unlimited; 20,000 files, 25 MiB per file                                  |
+| The store | Pages Functions + D1         | 100,000 function requests/day; D1 5 GB, 100,000 rows written and 5,000,000 read per day                 |
+| The relay | Workers + one Durable Object | 100,000 requests/day, incoming WebSocket messages counted 20:1; 13,000 GB-s/day, none while hibernating |
 
 At one save per 20 s per person editing, 100,000 writes a day is about 550 person-hours
 of editing shared drawings per day, across everyone — fewer when pictures add parts. Vercel was considered and dropped: it cannot hold the
 relay's websockets, and its free plan is 100 GB a month and non-commercial only.
 
-**Deploying is the owner's.** The builder prepares the Cloudflare and Render configuration
-and writes the steps down; nothing is deployed, and no account is created, without the
-owner's go-ahead.
+For the relay, an open shared drawing sends a ping every 5 s and its presence every 15 s
+(`LINK_CHECK_MS`, `PRESENCE_HEARTBEAT_MS`, `realtimeClient.ts`): 23,040 messages, about
+1,150 requests, per tab open all day — so 100,000 requests a day is about 87 tab-days of
+drawings left open. A moving pointer sends up to one cursor per animation frame
+(`DrawSurface.svelte`); at 60 a second that is 10,800 requests an hour, so pointer motion,
+not idle tabs, is what spends the allowance.
+
+**Deploying is the owner's.** The builder prepares the Cloudflare configuration and writes
+the steps down; nothing is deployed, and no account is created, without the owner's
+go-ahead.
 
 ## Tests
 
@@ -268,11 +308,10 @@ Red first, and shown red — `CLAUDE.md`, _What a test is for_.
 - That Cloudflare Pages serves the SPA fallback for `/boards/<id>` deep links.
 - How `$env/dynamic/public` behaves in an `adapter-static` build; prefer static env in
   the public build.
-- That Render builds `docker/realtime.Dockerfile` with the `engine` submodule checked out,
-  or else deploys a pre-built image; and whether the relay needs `REALTIME_ALLOW_NOAUTH`
-  to run with no auth.
+- That the deployed relay hibernates, and that its messages are counted 20:1, as the
+  pricing page says — read from the account's Durable Object metrics.
 - That the relay accepts websocket upgrades from another origin (the site and the relay are
-  on different hosts in the public build).
+  on different hosts in the public build): the Worker checks no `Origin`.
 - The new reference page, `docs/reference/public-build.md`, and the index row for it in
   `CLAUDE.md`; `docs/reference/architecture.md`, `docs/reference/commands.md` and
   `docs/collaboration.md` updated to match.
@@ -280,9 +319,9 @@ Red first, and shown red — `CLAUDE.md`, _What a test is for_.
 ## Risks
 
 - **The relay is open.** Anyone can use it to pass their own traffic; the damage is
-  capped by Render's free hours. ponytail: no gate; upgrade path — the relay already
-  supports JWT auth (`engine/realtime/realtime.toml`, `[auth]`), with tokens minted by a
-  Pages Function.
-- **The first share after a quiet spell waits about a minute** for the relay to wake.
+  capped by the free plan's daily allowances — which also means someone can spend the
+  day's allowance and take live sharing offline for everyone until 00:00 UTC. ponytail: no
+  gate; upgrade path — the Worker checks the `Origin`, or a token minted by a Pages
+  Function, before it upgrades the socket.
 - **Free tiers change.** Every figure above was read on 2026-10-20 and is a claim about
   that day.
