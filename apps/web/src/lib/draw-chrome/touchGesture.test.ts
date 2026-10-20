@@ -27,7 +27,6 @@ function makeHooks(): TouchHooks & {
     panBy: vi.fn(),
     cancelGesture: vi.fn(),
     openContextMenu: vi.fn(),
-    scale: () => 1,
   };
 }
 
@@ -78,7 +77,7 @@ describe("createTouchController", () => {
     expect(hooks.zoomAt).not.toHaveBeenCalled();
   });
 
-  it("does both in one move: a hand walking fingers apart pans while it grows", () => {
+  it("does both in one move: a hand walking fingers apart drifts while it grows", () => {
     const hooks = makeHooks();
     const c = createTouchController(hooks);
     down(c, 1, 100, 200);
@@ -86,11 +85,14 @@ describe("createTouchController", () => {
     hooks.zoomAt.mockClear();
     hooks.panBy.mockClear();
 
-    move(c, 1, 80, 200);
-    move(c, 2, 220, 200);
+    // The pair flushes once both fingers have reported: the centre walked up ten
+    // pixels (twice that on the board) while the spread grew to 1.5 — one move does
+    // both, and neither hook is called with a no-op.
+    move(c, 1, 75, 190);
+    move(c, 2, 225, 190);
 
-    expect(hooks.zoomAt).toHaveBeenCalledWith(150, 200, 1.5);
-    expect(hooks.panBy).toHaveBeenCalledWith(0, 0);
+    expect(hooks.zoomAt).toHaveBeenCalledWith(150, 190, 1.5);
+    expect(hooks.panBy).toHaveBeenCalledWith(0, -20);
   });
 
   it("a second finger cancels the shape the first was drawing", () => {
@@ -119,17 +121,24 @@ describe("createTouchController", () => {
     expect(down(c, 3, 300, 300).swallow).toBe(false);
   });
 
-  it("zooms from the scale the engine holds, not from 1", () => {
+  it("zooms in steps, each measured from where the last move left the fingers", () => {
     const hooks = makeHooks();
-    hooks.scale = () => 1.4;
     const c = createTouchController(hooks);
     down(c, 1, 100, 200);
     down(c, 2, 200, 200);
     hooks.zoomAt.mockClear();
+
     move(c, 1, 50, 200);
     move(c, 2, 250, 200);
-    // The ratio of distances, applied to the engine's own scale.
-    expect(hooks.zoomAt).toHaveBeenCalledWith(150, 200, 2.8);
+    expect(hooks.zoomAt).toHaveBeenLastCalledWith(150, 200, 2);
+
+    // A further spread is a further ratio — 1.5 of the distance the first move left,
+    // not 3 of the starting distance: the engine already holds the factor's result,
+    // since `zoomAt`'s factor multiplies the scale it has now
+    // (`camera.ts@1118751f` — `target.scale / after.scale` at the WASM boundary).
+    move(c, 1, 0, 200);
+    move(c, 2, 300, 200);
+    expect(hooks.zoomAt).toHaveBeenLastCalledWith(150, 200, 1.5);
   });
 
   it("a long press opens the context menu where the finger rests", () => {
@@ -147,10 +156,10 @@ describe("createTouchController", () => {
     const hooks = makeHooks();
     let c = createTouchController(hooks);
     down(c, 1, 120, 340);
-    move(c, 1, 121, 341);
+    move(c, 1, 150, 370);
     vi.advanceTimersByTime(600);
     expect(hooks.openContextMenu).not.toHaveBeenCalled();
-    up(c, 1, 121, 341);
+    up(c, 1, 150, 370);
 
     hooks.cancelGesture.mockClear();
     c = createTouchController(hooks);
@@ -173,6 +182,7 @@ describe("createTouchController", () => {
     const c = createTouchController(hooks);
     down(c, 1, 100, 200);
     down(c, 2, 200, 200);
+    hooks.cancelGesture.mockClear();
     expect(c.down({ pointerId: 3, x: 300, y: 300, pointerType: "mouse" } as never).swallow).toBe(
       false,
     );
