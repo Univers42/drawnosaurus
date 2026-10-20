@@ -21,7 +21,12 @@
   import { migrateLegacyStickyGroups } from "$lib/notes/stickyNotes.ts";
   import { ThumbnailUploader } from "$lib/thumbnail/thumbnailUploader.ts";
 
-  const slug = $derived(page.params.slug ?? "");
+  /**
+   * Read once: this page is one board's for its whole life (`+layout.svelte` makes a new
+   * one for each slug). Followed from the URL, it changed under a save still in flight,
+   * and a board's edits were sent to the next one.
+   */
+  const slug = page.params.slug ?? "";
 
   let scene = $state<Scene | undefined>(undefined);
   let status = $state<AutosaveStatus>("idle");
