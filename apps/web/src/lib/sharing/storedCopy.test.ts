@@ -161,11 +161,13 @@ describe("StoredCopy", () => {
     // Moved, twice: the image changes, its picture does not.
     await copy.save({ elements: [image("img", photo, 2)] });
     await copy.save({ elements: [{ ...image("img", photo, 3), dataUrl: undefined }] });
+    // Pasted: another image, the same picture.
+    await copy.save({ elements: [image("pasted", photo)] });
 
     const pictures = net.sent.filter((request) => request.path.includes("/pictures/"));
     expect(pictures.map((request) => request.method)).toEqual(["PUT"]);
     const read = await copyOf(net, raw).read();
-    expect(read?.elements).toEqual([image("img", photo, 3)]);
+    expect(read?.elements).toEqual([image("img", photo, 3), image("pasted", photo)]);
   });
 
   it("takes a picture another browser already sent as stored, and sends it no further", async () => {
