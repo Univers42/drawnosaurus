@@ -160,7 +160,9 @@
   const figureRatio = $derived(
     summary.figureRatio ?? (FIGURE_RATIO_RANGE.min + FIGURE_RATIO_RANGE.max) / 2,
   );
-  const figureRatioText = $derived(summary.figureRatio === null ? "mixed" : summary.figureRatio.toFixed(2));
+  const figureRatioText = $derived(
+    summary.figureRatio === null ? "mixed" : summary.figureRatio.toFixed(2),
+  );
   const wrap = $derived(textWrap(summary));
   const arrowheadSides = $derived([
     { end: "start" as const, value: summary.startArrowhead },
@@ -641,20 +643,36 @@
         <InspectorRow label="Align">
           <InspectorIconRow
             buttons={[
-              { label: "Align left", icon: "alignLeft", onPick: () => run((e) => e.alignSelection("left")) },
+              {
+                label: "Align left",
+                icon: "alignLeft",
+                onPick: () => run((e) => e.alignSelection("left")),
+              },
               {
                 label: "Align horizontal centres",
                 icon: "alignCenterX",
                 onPick: () => run((e) => e.alignSelection("centerX")),
               },
-              { label: "Align right", icon: "alignRight", onPick: () => run((e) => e.alignSelection("right")) },
-              { label: "Align top", icon: "alignTop", onPick: () => run((e) => e.alignSelection("top")) },
+              {
+                label: "Align right",
+                icon: "alignRight",
+                onPick: () => run((e) => e.alignSelection("right")),
+              },
+              {
+                label: "Align top",
+                icon: "alignTop",
+                onPick: () => run((e) => e.alignSelection("top")),
+              },
               {
                 label: "Align vertical centres",
                 icon: "alignCenterY",
                 onPick: () => run((e) => e.alignSelection("centerY")),
               },
-              { label: "Align bottom", icon: "alignBottom", onPick: () => run((e) => e.alignSelection("bottom")) },
+              {
+                label: "Align bottom",
+                icon: "alignBottom",
+                onPick: () => run((e) => e.alignSelection("bottom")),
+              },
             ]}
           />
         </InspectorRow>

@@ -186,7 +186,8 @@
   } = $props();
 
   let engine = $state.raw<DrawEngine | null>(null);
-  let theme = $state<DrawTheme>(LIGHT_THEME);  let themeMode = $state<ThemeMode>("light");
+  let theme = $state<DrawTheme>(LIGHT_THEME);
+  let themeMode = $state<ThemeMode>("light");
   let themePreference = $state<ThemePreference>("light");
   let canvasBackground = $state<string | null>(null);
   let grid = $state<GridPreference>({ ...DEFAULT_GRID_PREFERENCE });
@@ -206,7 +207,9 @@
    * a rotation is a resize the browser announces either way.
    */
   let formFactor = $state<FormFactor>(
-    typeof window === "undefined" ? "desktop" : formFactorFor(window.innerWidth, window.innerHeight),
+    typeof window === "undefined"
+      ? "desktop"
+      : formFactorFor(window.innerWidth, window.innerHeight),
   );
 
   $effect(() => {
@@ -1204,7 +1207,8 @@
       host.removeEventListener("pointerup", onUp, true);
       host.removeEventListener("pointercancel", onUp, true);
       window.removeEventListener("click", onClick, true);
-    };  });
+    };
+  });
 
   function handleSceneChange(json: string): void {
     refreshStyle();

@@ -104,8 +104,7 @@ async function pinch(
   steps = 4,
 ): Promise<void> {
   const session = await touch(page);
-  const points = (half: number) =>
-    pair({ x: at.x - half, y: at.y }, { x: at.x + half, y: at.y });
+  const points = (half: number) => pair({ x: at.x - half, y: at.y }, { x: at.x + half, y: at.y });
   await session.send("Input.dispatchTouchEvent", {
     type: "touchStart",
     touchPoints: points(spread.from / 2),
@@ -203,11 +202,7 @@ test.describe("phone portrait 390×844", () => {
     // The shapes button on the bottom bar opens its popover; pick the rectangle.
     await page.getByRole("button", { name: /^Shapes \(/ }).click();
     await page.getByRole("menuitemradio", { name: "Rectangle" }).click();
-    await touchStroke(
-      page,
-      { x: area.x - 70, y: area.y - 40 },
-      { x: area.x + 70, y: area.y + 60 },
-    );
+    await touchStroke(page, { x: area.x - 70, y: area.y - 40 }, { x: area.x + 70, y: area.y + 60 });
 
     const kinds = await elementKinds(page);
     expect(kinds).toContain("rectangle");
@@ -295,7 +290,10 @@ test.describe("phone narrow 360×740", () => {
       // The option's accessible name carries its shortcut with it ("Export… Ctrl+Shift+E"),
       // so the label is a prefix of the name, not the whole of it.
       const pattern = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/…$/, "…?");
-      await page.getByRole("option", { name: new RegExp(`^${pattern}`) }).first().click();
+      await page
+        .getByRole("option", { name: new RegExp(`^${pattern}`) })
+        .first()
+        .click();
       await expect(paletteInput).toBeHidden();
     }
 
@@ -325,7 +323,7 @@ test.describe("phone narrow 360×740", () => {
       const engine = window.__drawEngine!;
       const canvas = document.querySelector("canvas")!.getBoundingClientRect();
       const element = JSON.parse(engine.exportJson()).elements.find(
-        (el) => el.type === "rectangle" && !el.isDeleted,
+        (el: { type: string; isDeleted?: boolean }) => el.type === "rectangle" && !el.isDeleted,
       );
       const { x, y, scale } = engine.camera;
       return {

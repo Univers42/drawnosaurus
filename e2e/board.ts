@@ -53,6 +53,14 @@ declare global {
       groupSelection(): void;
       /** Places an embed as the dialog does; the new element's id, or null if refused. */
       insertEmbed(url: string, x: number, y: number): string | null;
+      /** Places a picture as the image dialog does, in screen pixels. */
+      insertImage(
+        dataUrl: string,
+        naturalWidth: number,
+        naturalHeight: number,
+        screenX: number,
+        screenY: number,
+      ): string | null;
       /** The embeds on screen and where their frames go, as JSON. */
       embedFramesJson(): string;
       /** The selection, serialised as this scene's own clipboard JSON — Ctrl+C's write. */

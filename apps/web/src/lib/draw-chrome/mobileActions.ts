@@ -57,10 +57,7 @@ export function duplicateOutsideActions(width: number): boolean {
   return width >= MOBILE_STRIP_MIN_WIDTH + 2 * MOBILE_STRIP_SLOT_WIDTH;
 }
 
-export function mobileActionBarPlan(
-  width: number,
-  actions: ShapeActions,
-): MobileActionBarPlan {
+export function mobileActionBarPlan(width: number, actions: ShapeActions): MobileActionBarPlan {
   const left: StripItem[] = [];
   if (actions.strokeColor) left.push("stroke");
   if (actions.backgroundColor) left.push("background");

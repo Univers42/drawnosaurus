@@ -30,8 +30,7 @@ export const MQ_MAX_TABLET = 1180;
 /** `isMobileBreakpoint` (`editorInterface.ts@1118751f:117-125`). */
 export function isMobileBreakpoint(width: number, height: number): boolean {
   return (
-    width <= MQ_MAX_MOBILE ||
-    (height < MQ_MAX_HEIGHT_LANDSCAPE && width < MQ_MAX_WIDTH_LANDSCAPE)
+    width <= MQ_MAX_MOBILE || (height < MQ_MAX_HEIGHT_LANDSCAPE && width < MQ_MAX_WIDTH_LANDSCAPE)
   );
 }
 

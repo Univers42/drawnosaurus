@@ -137,7 +137,9 @@
           type="button"
           class="tool"
           class:active={active === worn}
-          aria-label={family === "shapes" ? `Shapes (${SHAPE_FAMILY.length})` : `Lines (${LINEAR_FAMILY.length})`}
+          aria-label={family === "shapes"
+            ? `Shapes (${SHAPE_FAMILY.length})`
+            : `Lines (${LINEAR_FAMILY.length})`}
           aria-haspopup="menu"
           aria-expanded={open === family}
           title={labelFor(slot)}
