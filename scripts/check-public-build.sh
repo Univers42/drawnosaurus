@@ -27,7 +27,7 @@ fail() {
 [ -f "$dir/index.html" ] || fail "$dir/index.html is missing"
 [ ! -e "$dir/404.html" ] || fail "$dir/404.html exists and would replace the SPA fallback"
 
-wasm=$(find "$dir" -type f -name '*.wasm' | head -n 1)
+wasm=$(find "$dir" -type f -name '*.wasm')
 [ -n "$wasm" ] || fail "no .wasm file under $dir"
 
 big=$(find "$dir" -type f -size +"$max_bytes"c)
@@ -38,5 +38,5 @@ count=$(find "$dir" -type f | wc -l | tr -d ' ')
 
 [ "$failed" -eq 0 ] || exit 1
 
-wasm_bytes=$(wc -c <"$wasm" | tr -d ' ')
-echo "check-public-build: ok - wasm $wasm_bytes bytes, $count files"
+wasm_bytes=$(find "$dir" -type f -name '*.wasm' -exec cat {} + | wc -c | tr -d ' ')
+echo "check-public-build: ok - wasm $wasm_bytes bytes (all .wasm files), $count files"

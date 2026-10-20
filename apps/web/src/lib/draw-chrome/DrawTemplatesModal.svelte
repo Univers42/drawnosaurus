@@ -2,7 +2,8 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { ApiClientError, createBoard, replaceBoard } from "$lib/api/client.ts";
+  import { ApiClientError } from "$lib/api/client.ts";
+  import { boards } from "$lib/store/index.ts";
   import { TEMPLATES } from "$lib/templates/index.ts";
   import { takeFocus } from "./focusHandback.ts";
 
@@ -45,8 +46,8 @@
     busyId = template.id;
     error = null;
     try {
-      const summary = await createBoard(template.name);
-      await replaceBoard(summary.slug, template.file, summary.rev);
+      const summary = await boards.create(template.name);
+      await boards.replace(summary.slug, template.file, summary.rev);
       onClose();
       await goto(resolve("/boards/[slug]", { slug: summary.slug }));
     } catch (cause) {

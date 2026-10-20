@@ -1,4 +1,4 @@
-import { env } from "$env/dynamic/public";
+import { relayToken, relayWsUrl } from "../config.ts";
 import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
 import type { Inventory } from "./liveBroadcast.ts";
 import type { Claims, PeerState } from "./peerClaims.ts";
@@ -289,7 +289,7 @@ export class RealtimeChannel<T extends StampedElement> {
         if (this.ws !== socket) return;
         this.reconnectAttempt = 0;
         this.heardAt = Date.now();
-        socket.send(authFrame(env.PUBLIC_REALTIME_TOKEN || DEV_AUTH_TOKEN));
+        socket.send(authFrame(relayToken() || DEV_AUTH_TOKEN));
       };
       socket.onmessage = (event) => {
         if (this.ws !== socket) return;
@@ -419,7 +419,7 @@ export class RealtimeChannel<T extends StampedElement> {
   }
 
   private defaultWsUrl(): string {
-    return liveSocketUrl(env.PUBLIC_REALTIME_WS_URL ?? "", window.location.href);
+    return liveSocketUrl(relayWsUrl(), window.location.href);
   }
 
   /**

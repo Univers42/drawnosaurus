@@ -242,6 +242,10 @@ build: $(ENGINE_PKG) ## Build the api, web, and realtime images
 	$(DC) build api web realtime
 	@echo -e "$(GREEN)✔ images built$(RESET)"
 
+build-public: $(ENGINE_PKG) ## Build the browser-only public site into apps/web/build and check its shape
+	$(TOOLING) sh -c 'VITE_HYDRAWN_MODE=browser pnpm --filter @drawnosaurus/web build'
+	sh scripts/check-public-build.sh apps/web/build
+
 up: $(ENGINE_PKG) ## Start the stack mongo + api + web behind the gateway on WEB_PORT + realtime
 	$(DC) up -d --build mongo realtime api web
 	@# Recreated every time, because it is cheap and a kept one can be stale: its
@@ -365,7 +369,7 @@ clean: ## Remove containers, volumes, images, and build output
 	rm -rf engine/pkg apps/web/build apps/web/.svelte-kit
 	@echo -e "$(GREEN)✔ clean$(RESET)"
 
-.PHONY: all help submodules wasm install lock typecheck lint format test \
+.PHONY: all help submodules wasm install lock typecheck lint format test build-public \
 	test-integration test-e2e fuzz-mermaid reclaim-host-files conformance parity parity-deps quality verify \
 	dev build up down logs shell clean \
 	oracle oracle-fixtures bench inspector-smoke stale

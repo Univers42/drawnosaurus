@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import type { BoardSummary, WorldBounds } from "@drawnosaurus/contract";
-  import { createBoard, deleteBoard, listBoards, thumbnailUrl } from "$lib/api/client.ts";
+  import { boards as store } from "$lib/store/index.ts";
 
   let boards = $state<BoardSummary[]>([]);
   let nextCursor = $state<string | null>(null);
@@ -22,7 +22,7 @@
 
   async function load(cursor?: string): Promise<void> {
     try {
-      const page = await listBoards(24, cursor);
+      const page = await store.list(24, cursor);
       boards = cursor === undefined ? page.boards : [...boards, ...page.boards];
       nextCursor = page.nextCursor;
       error = null;
@@ -43,7 +43,7 @@
     if (name === "" || busy) return;
     busy = true;
     try {
-      const board = await createBoard(name);
+      const board = await store.create(name);
       boards = [board, ...boards];
       title = "";
       error = null;
@@ -60,7 +60,7 @@
     if (!confirm("Are you sure you want to delete this board?")) return;
     busy = true;
     try {
-      await deleteBoard(slug);
+      await store.remove(slug);
       boards = boards.filter((b) => b.slug !== slug);
     } catch (cause) {
       error = describe(cause);
@@ -108,7 +108,7 @@
             {#if board.thumbnailAt && board.elementCount > 0 && !brokenPictures.has(board.slug)}
               <img
                 class="preview-image"
-                src={thumbnailUrl(board.slug, board.thumbnailAt)}
+                src={store.thumbnailUrl(board.slug, board.thumbnailAt)}
                 loading="lazy"
                 decoding="async"
                 alt=""

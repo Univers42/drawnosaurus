@@ -1,4 +1,3 @@
-import { env } from "$env/dynamic/public";
 import type {
   Board,
   BoardList,
@@ -6,6 +5,7 @@ import type {
   OsidrawFile,
   ShareInfo,
 } from "@drawnosaurus/contract";
+import { apiBase } from "../config.ts";
 import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
 
 /**
@@ -13,10 +13,10 @@ import type { ScenePatch, StampedElement } from "../autosave/sceneDiff.ts";
  *
  * Paths are relative by default so dev goes through the Vite proxy and prod
  * through the same origin — no CORS in the common case. PUBLIC_API_URL overrides
- * it, read from the DYNAMIC env so one image can point at different backends
- * without a rebuild.
+ * it, read from the DYNAMIC env (see config.ts) so one image can point at different
+ * backends without a rebuild.
  */
-const baseUrl = (): string => (env.PUBLIC_API_URL ?? "").replace(/\/$/, "");
+const baseUrl = apiBase;
 
 export class ApiClientError extends Error {
   readonly status: number;

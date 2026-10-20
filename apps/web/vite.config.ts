@@ -29,7 +29,20 @@ const realtimeTarget = process.env.REALTIME_PROXY_TARGET ?? "http://127.0.0.1:44
  */
 const usePolling = process.env.VITE_USE_POLLING === "1";
 
+/**
+ * "server" is the Docker build (adapter-node, the API behind the gateway); "browser" is
+ * the public build (adapter-static, boards in IndexedDB). It is build input, so a typo
+ * must stop the build rather than quietly produce the other one.
+ */
+const mode = process.env.VITE_HYDRAWN_MODE ?? "server";
+if (mode !== "server" && mode !== "browser") {
+  throw new Error(`VITE_HYDRAWN_MODE must be "server" or "browser", got "${mode}"`);
+}
+
 export default defineConfig({
+  // Folded in, so `BROWSER_MODE` (lib/mode.ts) is a constant and the minifier drops the
+  // branch that does not apply.
+  define: { "import.meta.env.VITE_HYDRAWN_MODE": JSON.stringify(mode) },
   plugins: [sveltekit()],
   server: {
     fs: { allow: [engineSrc, enginePkg] },

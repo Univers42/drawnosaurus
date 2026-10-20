@@ -5,7 +5,8 @@
   import { elementsFromJson } from "@osionos/draw-engine/json";
   import { Scene, type DrawElement } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
-  import { ApiClientError, getBoard, patchElements, putThumbnail } from "$lib/api/client.ts";
+  import { ApiClientError } from "$lib/api/client.ts";
+  import { boards } from "$lib/store/index.ts";
   import {
     SceneAutosaver,
     type AutosaveStatus,
@@ -66,7 +67,7 @@
 
   const thumbnails = new ThumbnailUploader({
     render: async () => (engine === null ? null : await engine.exportThumbnail()),
-    upload: (blob) => putThumbnail(slug, blob),
+    upload: (blob) => boards.putThumbnail(slug, blob),
     now: () => Date.now(),
   });
 
@@ -83,7 +84,7 @@
       // In parts, pictures last and alone, so one the server refuses holds back only
       // itself. See `splitPatch`.
       for (const part of splitPatch({ ...patch, elements: saved.strip(patch.elements) })) {
-        await patchElements(slug, part);
+        await boards.patchElements(slug, part);
       }
       saved.note(patch.elements);
     },
@@ -107,7 +108,7 @@
       // Read beside the board rather than after it, so it costs the page no time.
       const draft = drafts.load(slug) as Promise<DrawElement[] | null>;
       try {
-        const board = await getBoard(slug);
+        const board = await boards.get(slug);
         title = board.title;
         loaded = elementsFromJson(JSON.stringify(board.scene)) ?? [];
         needsThumbnailBackfill = loaded.some((element) => !element.isDeleted) && !board.thumbnailAt;
@@ -189,7 +190,7 @@
 
   /** The board as the server has it, deletions included — for catching up after a drop. */
   async function fetchLatest(): Promise<DrawElement[]> {
-    const board = await getBoard(slug, { tombstones: true });
+    const board = await boards.get(slug, { tombstones: true });
     return elementsFromJson(JSON.stringify(board.scene)) ?? [];
   }
 
