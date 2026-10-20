@@ -8,7 +8,9 @@ import type { BoardStore, SecretStore } from "./types.ts";
  * IndexedDB in the public one. `BROWSER_MODE` is a constant by build time, so the minifier
  * keeps one branch and drops the other store's code with it.
  */
-export const boards: BoardStore = BROWSER_MODE ? browserStore({ idb: globalThis.indexedDB }) : serverStore;
+export const boards: BoardStore = BROWSER_MODE
+  ? browserStore({ idb: globalThis.indexedDB })
+  : serverStore;
 
 /**
  * Where a shared drawing's secret is kept in this browser: on the drawing's own row, in

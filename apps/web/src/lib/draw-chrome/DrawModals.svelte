@@ -13,6 +13,7 @@
   import DrawCommandPalette from "./DrawCommandPalette.svelte";
   import DrawContextMenu from "./DrawContextMenu.svelte";
   import type { ClipboardFormatName } from "@osionos/draw-engine/types";
+  import { BROWSER_MODE } from "../mode.ts";
   import VectorizeDialog from "./VectorizeDialog.svelte";
 
   let {
@@ -20,7 +21,6 @@
     slug = "",
     peers = [],
     connectionStatus = "disconnected",
-    browser = false,
     secret = null,
     onShareLive,
     menu = $bindable(null),
@@ -46,8 +46,6 @@
     slug?: string;
     peers?: PeerCursor[];
     connectionStatus?: ConnectionStatus;
-    /** The public build. Passed in: only the routes read `BROWSER_MODE`. */
-    browser?: boolean;
     /** The public build's: the drawing's secret, when it is shared. */
     secret?: Uint8Array | null;
     /** The public build's: "Share live", which mints the secret and writes the first copy. */
@@ -118,8 +116,9 @@
 
 {#if showShare}
   <!-- Two Share dialogs, one per build: the server's offers the links it can serve, and
-       the public build's the one link the online copy and the relay make. -->
-  {#if browser}
+       the public build's the one link the online copy and the relay make. The mode is
+       read here, so each build carries only its own dialog. -->
+  {#if BROWSER_MODE}
     <DrawPublicShareModal
       {slug}
       {secret}

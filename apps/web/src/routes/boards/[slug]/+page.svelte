@@ -128,7 +128,7 @@
    * copy, and no live link.
    */
   let copy: StoredCopy<DrawElement> | null = null;
-  let online: OnlineCopy<DrawElement> | null = null;
+  let online = $state<OnlineCopy<DrawElement> | null>(null);
 
   /** The copy for `secret`, and the saver that writes it. */
   function useCopy(secret: Uint8Array): void {

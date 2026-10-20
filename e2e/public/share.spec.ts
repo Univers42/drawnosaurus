@@ -29,6 +29,8 @@ test("the Share dialog shows the link, copies it, and the QR code encodes it", a
   expect(url).toContain(`/boards/${slug}`);
   // The address bar carries it too, so the link can be copied from there.
   expect(page.url()).toBe(url);
+  // And the header says the drawing's online copy is there.
+  await expect(page.getByLabel("Shared copy")).toHaveText("Shared copy saved");
 
   // Copy puts the link on the clipboard.
   await page.getByRole("button", { name: "Copy link" }).click();

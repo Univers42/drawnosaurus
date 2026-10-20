@@ -2570,7 +2570,6 @@
       {slug}
       {peers}
       connectionStatus={liveStatus}
-      {browser}
       secret={roomSecret}
       {onShareLive}
       bind:menu
