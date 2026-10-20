@@ -12,6 +12,7 @@ import {
   subscribeFrame,
 } from "../../../apps/web/src/lib/realtime/realtimeProtocol.ts";
 import { Relay, type Outbound } from "../src/relay.ts";
+import { PING, PONG } from "../src/worker.ts";
 
 /**
  * The token `realtimeClient.ts` sends when none is configured (`DEV_AUTH_TOKEN`) — always,
@@ -88,5 +89,49 @@ describe("the web client against the relay", () => {
         collabPayloadFromServerFrame,
       ),
     ).toEqual([SEALED]);
+  });
+
+  /*
+   * Fix round 1. The frame cap is read before parsing, so it must never refuse a frame the
+   * client sends and the relay would forward: the largest is a PUBLISH of a 64 KiB payload,
+   * under the longest topic a slug makes (32 characters, `slugSchema` in
+   * packages/contract) and the longest event type the client sends (`preview-end`,
+   * `RealtimeMessage` in realtimeClient.ts).
+   */
+  it("has its largest frame forwarded: a 64 KiB payload, the longest slug, the longest event type", () => {
+    const relay = new Relay();
+    const slug = "z9".repeat(16);
+    const a = connect(relay, slug);
+    const b = connect(relay, slug);
+    const payload = "A".repeat(65_534);
+    const frame = publishFrame(slug, "preview-end", payload);
+    expect(frame.length).toBe(65_536 + 111);
+    expect(sentTo(relay.receive(a, frame), b).map(collabPayloadFromServerFrame)).toEqual([payload]);
+  });
+
+  /*
+   * Ruling 26. `handleControl` (realtimeClient.ts) takes a frame with no `clientId`, of
+   * type `gone`, naming a `socket` — the name its peer was given in AUTH_OK and repeats in
+   * its presence — and lets go of everything that peer held.
+   */
+  it("is told a peer has gone, naming the socket AUTH_OK gave that peer", () => {
+    const relay = new Relay();
+    const a = connect(relay, "drawing");
+    const { id: b } = relay.open();
+    const [authOk] = sentTo(relay.receive(b, authFrame(CLIENT_TOKEN)), b);
+    relay.receive(b, subscribeFrame("drawing"));
+    const socket = (authOk as { conn_id: string }).conn_id;
+    const told = sentTo(relay.close(b), a);
+    expect(told).toEqual([{ type: "gone", socket }]);
+    expect(told.every((f) => !("clientId" in (f as object)))).toBe(true);
+  });
+
+  /*
+   * The runtime answers the client's ping itself (`setWebSocketAutoResponse`, worker.ts), so
+   * the pair has to be the client's ping byte for byte, and an answer its isPong takes.
+   */
+  it("pings with exactly the frame the runtime answers, and reads that answer as a pong", () => {
+    expect(pingFrame()).toBe(PING);
+    expect((JSON.parse(PONG) as { type?: unknown }).type).toBe("PONG");
   });
 });

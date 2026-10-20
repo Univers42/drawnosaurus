@@ -74,8 +74,9 @@ export class Relay {
   }
 
   /** Forgets a connection: it is sent nothing more, and what it sends is not served. */
-  close(id: string): void {
+  close(id: string): Outbound[] {
     this.connections.delete(id);
+    return [];
   }
 
   /**

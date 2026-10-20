@@ -1,6 +1,6 @@
 /**
  * The few Cloudflare Workers types this package uses, declared by hand: the whole of
- * `@cloudflare/workers-types` is one more dependency for six names. Each is as Cloudflare's
+ * `@cloudflare/workers-types` is one more dependency for seven names. Each is as Cloudflare's
  * reference gives it, read 2026-10-20:
  *
  * - `DurableObjectState`: https://developers.cloudflare.com/durable-objects/api/state/
@@ -17,6 +17,11 @@ export interface DurableObjectState {
   acceptWebSocket(ws: WebSocket, tags?: string[]): void;
   /** The accepted sockets — all of them, or those tagged `tag`. May list one already closed. */
   getWebSockets(tag?: string): WebSocket[];
+  /**
+   * A message equal to `pair.request` is answered with `pair.response` by the runtime,
+   * "without waking WebSockets in hibernation"; both at most 2,048 characters.
+   */
+  setWebSocketAutoResponse(pair?: WebSocketRequestResponsePair): void;
 }
 
 /** The runtime's handle on one object; this code only passes it back to `get`. */
@@ -42,4 +47,13 @@ declare global {
 
   /** Two connected sockets: `0` goes back to the caller in the 101, `1` stays here. */
   const WebSocketPair: new () => { 0: WebSocket; 1: WebSocket };
+
+  interface WebSocketRequestResponsePair {
+    readonly request: string;
+    readonly response: string;
+  }
+  const WebSocketRequestResponsePair: new (
+    request: string,
+    response: string,
+  ) => WebSocketRequestResponsePair;
 }

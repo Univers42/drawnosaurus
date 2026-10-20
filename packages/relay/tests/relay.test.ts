@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Relay, topicMatches, type Outbound } from "../src/relay.ts";
 
 /*
@@ -283,5 +283,122 @@ describe("a connection restored from what `connection` returned — a woken obje
     expect(sentTo(after.receive(a, publish("one", { v: 1 })), b)).toMatchObject([
       { type: "EVENT", event: { payload: { v: 1 } } },
     ]);
+  });
+});
+
+/*
+ * Fix round 1. What one frame may cost the one object every drawing shares: none of these
+ * frames is one the client sends, so refusing them changes nothing it can see.
+ */
+describe("what one frame may cost", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** A connection subscribed to every topic, which sees whatever is published. */
+  function watcher(relay: Relay): string {
+    const { id } = relay.open();
+    relay.receive(id, AUTH);
+    relay.receive(id, JSON.stringify({ type: "SUBSCRIBE", sub_id: "all", topic: "**" }));
+    return id;
+  }
+
+  it("drops a frame far longer than any the client sends without parsing it, and carries on", () => {
+    const relay = new Relay();
+    const all = watcher(relay);
+    const a = joined(relay, "one");
+    const huge = JSON.stringify({
+      type: "PUBLISH",
+      topic: `boards/${"x".repeat(5_000_000)}/live`,
+      event_type: "patch",
+      payload: 1,
+    });
+    const parse = vi.spyOn(JSON, "parse");
+    expect(relay.receive(a, huge)).toEqual([]);
+    expect(parse.mock.calls.some(([text]) => text === huge)).toBe(false);
+    expect(sentTo(relay.receive(a, publish("one", 1)), all)).toHaveLength(1);
+  });
+
+  it("drops a publish whose topic is over 256 bytes, and serves one of 256", () => {
+    const relay = new Relay();
+    const all = watcher(relay);
+    const a = joined(relay, "one");
+    const topic = (bytes: number) => `boards/${"x".repeat(bytes - 7)}`;
+    const to = (t: string) =>
+      JSON.stringify({ type: "PUBLISH", topic: t, event_type: "patch", payload: 1 });
+    expect(sentTo(relay.receive(a, to(topic(257))), all)).toEqual([]);
+    expect(sentTo(relay.receive(a, to(topic(256))), all)).toHaveLength(1);
+  });
+
+  it("keeps a sequence for at most 10,000 topics, forgetting the least recently published", () => {
+    const relay = new Relay();
+    const all = watcher(relay);
+    const a = joined(relay, "one");
+    const sequenceOf = (topic: string) => {
+      const out = relay.receive(
+        a,
+        JSON.stringify({ type: "PUBLISH", topic, event_type: "patch", payload: 1 }),
+      );
+      return (sentTo(out, all)[0]?.event as { sequence?: number } | undefined)?.sequence;
+    };
+    expect(sequenceOf("t/0")).toBe(1);
+    for (let i = 1; i <= 10_000; i += 1) sequenceOf(`t/${i}`);
+    // 10,001 topics seen: the first is forgotten, the last is still counted.
+    expect(sequenceOf("t/10000")).toBe(2);
+    expect(sequenceOf("t/0")).toBe(1);
+  });
+
+  it("drops a frame nested deeper than 127 levels, as serde_json's recursion limit does", () => {
+    const relay = new Relay();
+    const a = joined(relay, "one");
+    const b = joined(relay, "one");
+    /** A PUBLISH whose payload is `n` arrays deep, so the frame is `n + 1` deep. */
+    const nested = (n: number) =>
+      `{"type":"PUBLISH","topic":"boards/one/live","event_type":"patch","payload":${"[".repeat(n)}${"]".repeat(n)}}`;
+    expect(sentTo(relay.receive(a, nested(126)), b)).toHaveLength(1);
+    expect(relay.receive(a, nested(127))).toEqual([]);
+    // Deep enough that JSON.stringify would throw RangeError; still under the frame cap.
+    expect(() => relay.receive(a, nested(30_000))).not.toThrow();
+    expect(relay.receive(a, nested(30_000))).toEqual([]);
+    // Brackets inside a string are not nesting.
+    expect(sentTo(relay.receive(a, publish("one", "[".repeat(1_000))), b)).toHaveLength(1);
+    expect(sentTo(relay.receive(a, publish("one", 1)), b)).toHaveLength(1);
+  });
+});
+
+/*
+ * Fix round 1, Ruling 26: beyond the Rust relay, and additive. The client lets go of what a
+ * peer held as soon as it hears `gone` about that peer's socket (`realtimeClient.ts`,
+ * `handleControl`); the browser tests' stub relay sends it (`e2e/board.ts`, `relay()`).
+ */
+describe("a connection that closes", () => {
+  it("is announced as gone, by the name AUTH_OK gave it, to the others on its drawing only", () => {
+    const relay = new Relay();
+    const a = joined(relay, "one");
+    const b = joined(relay, "one");
+    const c = joined(relay, "two");
+    const out = relay.close(b);
+    expect(out).toEqual([{ to: a, frame: `{"type":"gone","socket":"${b}"}` }]);
+    expect(sentTo(out, c)).toEqual([]);
+  });
+
+  it("is announced once to a peer, however many of its subscriptions they share", () => {
+    const relay = new Relay();
+    const a = joined(relay, "one");
+    relay.receive(a, subscribe("two", "second"));
+    const b = joined(relay, "one");
+    relay.receive(b, subscribe("two", "second"));
+    expect(relay.close(b).map((o) => o.to)).toEqual([a]);
+  });
+
+  it("is announced to no one when it never subscribed, or is already gone", () => {
+    const relay = new Relay();
+    const a = joined(relay, "one");
+    const { id } = relay.open();
+    relay.receive(id, AUTH);
+    expect(relay.close(id)).toEqual([]);
+    const b = joined(relay, "one");
+    expect(relay.close(b).map((o) => o.to)).toEqual([a]);
+    expect(relay.close(b)).toEqual([]);
   });
 });

@@ -26,12 +26,32 @@ class FakeSocket {
     this.closed = true;
   }
 
+  /** Makes the next `serializeAttachment` throw, as one over 16,384 bytes would. */
+  failNextAttachment = false;
+
   serializeAttachment(value: unknown): void {
+    if (this.failNextAttachment) {
+      this.failNextAttachment = false;
+      throw new Error("attachment refused");
+    }
     this.attachment = structuredClone(value);
   }
 
   deserializeAttachment(): unknown {
     return structuredClone(this.attachment);
+  }
+
+  /** The server's name for it, from the AUTH_OK it was sent. */
+  connId(): string | undefined {
+    const authOk = this.sent.map((f) => JSON.parse(f) as Record<string, unknown>);
+    return authOk.find((f) => f.type === "AUTH_OK")?.conn_id as string | undefined;
+  }
+
+  /** The control frames (no `clientId`, a `socket`) it was sent — `welcome` and `gone`. */
+  control(): unknown[] {
+    return this.sent
+      .map((f) => JSON.parse(f) as Record<string, unknown>)
+      .filter((f) => typeof f.socket === "string" && !("clientId" in f));
   }
 
   /** The collab payloads it was sent, as the client reads them. */
@@ -56,6 +76,24 @@ class FakeState {
   getWebSockets(tag?: string): FakeSocket[] {
     return this.accepted.filter((a) => tag === undefined || a.tags.includes(tag)).map((a) => a.ws);
   }
+
+  /** The pair the runtime answers by itself, without waking the object. */
+  autoResponse: { request: string; response: string } | undefined;
+
+  setWebSocketAutoResponse(pair?: { request: string; response: string }): void {
+    this.autoResponse = pair;
+  }
+}
+
+/** Cloudflare's `WebSocketRequestResponsePair`, which Node does not have. */
+class RequestResponsePair {
+  readonly request: string;
+  readonly response: string;
+
+  constructor(request: string, response: string) {
+    this.request = request;
+    this.response = response;
+  }
 }
 
 /** The 101 the object answers an upgrade with; Node's own Response refuses that status. */
@@ -79,6 +117,7 @@ describe("the Durable Object", () => {
       },
     );
     vi.stubGlobal("Response", UpgradeResponse);
+    vi.stubGlobal("WebSocketRequestResponsePair", RequestResponsePair);
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -154,6 +193,70 @@ describe("the Durable Object", () => {
     expect(a.sent).toHaveLength(before);
     object.webSocketMessage(asSocket(a), pingFrame());
     expect(a.sent).toHaveLength(before + 1);
+  });
+
+  /*
+   * Fix round 1. https://developers.cloudflare.com/durable-objects/api/state/ — a request
+   * matching the pair is answered "without waking WebSockets in hibernation"; the pricing
+   * page's footnote 3 — such auto-responses "will not be charged".
+   */
+  it("has the runtime answer the client's ping itself, set again on every wake", () => {
+    const state = new FakeState();
+    objectOn(state);
+    expect(state.autoResponse?.request).toBe(pingFrame());
+    expect((JSON.parse(state.autoResponse?.response ?? "null") as { type?: unknown }).type).toBe(
+      "PONG",
+    );
+    state.autoResponse = undefined;
+    objectOn(state);
+    expect(state.autoResponse).toBeDefined();
+  });
+
+  it("serves the others when a frame nests 30,000 deep, which JSON.stringify cannot render", () => {
+    const state = new FakeState();
+    const object = objectOn(state);
+    const a = join(object, state, "drawing");
+    const b = join(object, state, "drawing");
+    const deep = `{"type":"PUBLISH","topic":"boards/drawing/live","event_type":"patch","payload":${"[".repeat(30_000)}${"]".repeat(30_000)}}`;
+    expect(() => object.webSocketMessage(asSocket(a), deep)).not.toThrow();
+    object.webSocketMessage(asSocket(b), publishFrame("drawing", "patch", { v: 1 }));
+    expect(a.payloads()).toEqual([{ v: 1 }]);
+  });
+
+  it("lets no error out of webSocketMessage, logs it, and serves the others", () => {
+    const state = new FakeState();
+    const object = objectOn(state);
+    const a = join(object, state, "drawing");
+    const b = join(object, state, "drawing");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    a.failNextAttachment = true;
+    expect(() => object.webSocketMessage(asSocket(a), pingFrame())).not.toThrow();
+    expect(logged).toHaveBeenCalledTimes(1);
+    object.webSocketMessage(asSocket(b), publishFrame("drawing", "patch", { v: 1 }));
+    expect(a.payloads()).toEqual([{ v: 1 }]);
+    logged.mockRestore();
+  });
+
+  /* Ruling 26: `gone`, in the shape `handleControl` takes and `e2e/board.ts` › `relay()` sends. */
+  it("tells the others on the drawing that a socket has closed, by its name", () => {
+    const state = new FakeState();
+    const object = objectOn(state);
+    const a = join(object, state, "drawing");
+    const b = join(object, state, "drawing");
+    const other = join(object, state, "another");
+    object.webSocketClose(asSocket(b));
+    expect(a.control()).toEqual([{ type: "gone", socket: b.connId() }]);
+    expect(a.sent.at(-1)).toBe(`{"type":"gone","socket":"${b.connId()}"}`);
+    expect(other.control()).toEqual([]);
+  });
+
+  it("tells the others on the drawing that a socket has erred, by its name", () => {
+    const state = new FakeState();
+    const object = objectOn(state);
+    const a = join(object, state, "drawing");
+    const b = join(object, state, "drawing");
+    object.webSocketError(asSocket(b));
+    expect(a.control()).toEqual([{ type: "gone", socket: b.connId() }]);
   });
 });
 

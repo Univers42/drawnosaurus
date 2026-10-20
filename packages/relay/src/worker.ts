@@ -5,6 +5,11 @@ interface Env {
   RELAY: DurableObjectNamespace;
 }
 
+/** The client's ping (`pingFrame()`, realtimeProtocol.ts), byte for byte. */
+export const PING = '{"type":"PING"}';
+/** A pong as the client reads one (`isPong`, realtimeClient.ts: any frame of type PONG). */
+export const PONG = '{"type":"PONG"}';
+
 /**
  * The Worker `hydrawn-relay`: `/ws` upgrades go to the relay's Durable Object, `/v1/health`
  * is answered here, and anything else is a 404.
