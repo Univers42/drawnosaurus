@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import type { BoardSummary, WorldBounds } from "@drawnosaurus/contract";
+  import { forgetLastDrawing } from "$lib/boards/lastDrawing.ts";
   import { boards as store } from "$lib/store/index.ts";
   import { cardPicture } from "./cardPicture.ts";
 
@@ -64,6 +65,8 @@
     busy = true;
     try {
       await store.remove(slug);
+      // Or the public build's `/` would open it again, as a blank under its old id.
+      forgetLastDrawing(localStorage, slug);
       boards = boards.filter((b) => b.slug !== slug);
     } catch (cause) {
       error = describe(cause);

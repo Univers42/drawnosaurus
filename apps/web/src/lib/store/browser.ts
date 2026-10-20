@@ -60,9 +60,10 @@ const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
 /**
  * 26 base32 characters, 130 random bits. A drawing's slug is also its relay topic and its
  * key in the online store once it is shared, so it must not be guessable. Thirty-two
- * letters divide 256, so a byte's low five bits pick one without bias.
+ * letters divide 256, so a byte's low five bits pick one without bias. Also the address `/`
+ * opens a new drawing at (`routes/+page.svelte`).
  */
-function mintSlug(): string {
+export function mintSlug(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(26));
   return Array.from(bytes, (byte) => BASE32.charAt(byte & 31)).join("");
 }

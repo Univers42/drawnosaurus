@@ -7,6 +7,7 @@
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { ApiClientError } from "$lib/api/client.ts";
   import { holdForSave } from "$lib/boards/holdForSave.ts";
+  import { rememberLastDrawing } from "$lib/boards/lastDrawing.ts";
   import { openBoard } from "$lib/boards/openBoard.ts";
   import { BROWSER_MODE } from "$lib/mode.ts";
   import { boards } from "$lib/store/index.ts";
@@ -108,6 +109,10 @@
   });
 
   onMount(() => {
+    // What `/` reopens in the public build (`boards/lastDrawing.ts`). The Docker build's `/`
+    // is the gallery.
+    if (BROWSER_MODE) rememberLastDrawing(storage(), slug);
+
     void (async () => {
       const opened = await openBoard({
         slug,
