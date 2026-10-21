@@ -410,3 +410,101 @@ test.describe("phone landscape 844×390", () => {
     }
   });
 });
+
+/**
+ * The phone's main menu.
+ *
+ * The bottom bar is under the menu, not over it: the oracle's own rule is that the top
+ * bar is on top (`MobileMenu.tsx@1118751f:150-153`), so a menu opened from it paints
+ * over the bottom bar rather than under it. Every row must therefore be reachable and
+ * tappable, the menu must stay inside the screen, and a row must show no keyboard
+ * shortcut — there is no keyboard on a phone.
+ */
+async function expectMenuIsUsable(page: Page): Promise<void> {
+  await openBoard(page);
+
+  // A shape selected: the style strip is on the bottom bar, over the menu's lower part.
+  await page.evaluate(() => {
+    const engine = window.__drawEngine!;
+    const canvas = document.querySelector("canvas")!.getBoundingClientRect();
+    const id = engine.insertDefaultShape("rectangle", canvas.width / 2, canvas.height / 2);
+    if (id) engine.select([id]);
+  });
+
+  await page.getByRole("button", { name: "Open main menu" }).click();
+  const menu = page.getByRole("menu", { name: "Main menu" });
+  await expect(menu).toBeVisible();
+
+  // The menu's box is inside the screen.
+  const size = page.viewportSize()!;
+  const box = (await menu.boundingBox())!;
+  expect(box.x, "the menu's left edge").toBeGreaterThanOrEqual(-0.5);
+  expect(box.x + box.width, "the menu's right edge").toBeLessThanOrEqual(size.width + 0.5);
+  expect(box.y, "the menu's top edge").toBeGreaterThanOrEqual(-0.5);
+  expect(box.y + box.height, "the menu's bottom edge").toBeLessThanOrEqual(size.height + 0.5);
+
+  // Scroll the menu to its end: the rows that hang below the screen are reachable.
+  await page.evaluate(() => {
+    const container = document.querySelector<HTMLElement>(".dropdown-menu-container");
+    if (container) container.scrollTop = container.scrollHeight;
+  });
+
+  // What is at the middle of the first canvas-background swatch is the swatch, and what
+  // is at the middle of the menu's last row is that row: nothing is painted over them.
+  const hits = await page.evaluate(() => {
+    const swatch = document.querySelector<HTMLElement>(
+      '[aria-label="Canvas background"] .swatch',
+    );
+    const stamp = document.querySelector<HTMLElement>('[data-testid="build-stamp"]');
+    if (!swatch || !stamp) return { swatch: false, stamp: false, over: "the menu is not open" };
+    const at = (node: HTMLElement): Element | null => {
+      const r = node.getBoundingClientRect();
+      return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    };
+    const overSwatch = at(swatch);
+    const overStamp = at(stamp);
+    return {
+      swatch: overSwatch === swatch || (overSwatch !== null && swatch.contains(overSwatch)),
+      stamp: overStamp === stamp || (overStamp !== null && stamp.contains(overStamp)),
+      over: `${overSwatch?.className ?? "nothing"} / ${overStamp?.className ?? "nothing"}`,
+    };
+  });
+  expect(hits.swatch, `the first canvas background swatch is on top (${hits.over})`).toBe(true);
+  expect(hits.stamp, `the menu's last row is on top (${hits.over})`).toBe(true);
+}
+
+for (const viewport of [
+  { width: 390, height: 664 },
+  { width: 360, height: 600 },
+]) {
+  test.describe(`phone menu ${viewport.width}×${viewport.height}`, () => {
+    test.use({ viewport, hasTouch: true, isMobile: true });
+
+    test("the menu is above the bottom bar and every row can be reached", async ({ page }) => {
+      await expectMenuIsUsable(page);
+    });
+
+    test("no row of the menu shows a keyboard shortcut", async ({ page }) => {
+      await openBoard(page);
+      await page.getByRole("button", { name: "Open main menu" }).click();
+      const menu = page.getByRole("menu", { name: "Main menu" });
+      await expect(menu).toBeVisible();
+      await expect(
+        menu.locator(".dropdown-menu-item__shortcut"),
+        "the menu shows a shortcut",
+      ).toHaveCount(0);
+    });
+  });
+}
+
+test.describe("desktop menu 1280×800", () => {
+  test.use({ viewport: { width: 1280, height: 800 } });
+
+  test("the menu still shows its keyboard shortcuts", async ({ page }) => {
+    await openBoard(page);
+    await page.getByRole("button", { name: "Open main menu" }).click();
+    const menu = page.getByRole("menu", { name: "Main menu" });
+    await expect(menu).toBeVisible();
+    await expect(menu.getByText("Ctrl+O")).toBeVisible();
+  });
+});
