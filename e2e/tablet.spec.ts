@@ -166,6 +166,44 @@ for (const viewport of TABLETS) {
       });
       expect(stroke, "the shape's stroke is the colour that was picked").toBe("#e03131");
     });
+
+    test("the compact panel's own popover opens on screen and changes the shape", async ({
+      page,
+    }) => {
+      await openBoard(page);
+      await selectRectangle(page);
+
+      const panel = page.getByRole("complementary", { name: "Style panel" });
+      await panel.getByRole("button", { name: "Shape properties" }).click();
+
+      const popover = page.getByRole("dialog", { name: "Shape properties" });
+      await expect(popover, "the popover opened").toBeVisible();
+
+      const size = page.viewportSize()!;
+      const box = (await popover.boundingBox())!;
+      expect(box.x, "the popover's left edge").toBeGreaterThanOrEqual(-0.5);
+      expect(box.x + box.width, "the popover's right edge").toBeLessThanOrEqual(
+        size.width + 0.5,
+      );
+      expect(box.y, "the popover's top edge").toBeGreaterThanOrEqual(-0.5);
+      expect(box.y + box.height, "the popover's bottom edge").toBeLessThanOrEqual(
+        size.height + 0.5,
+      );
+
+      await popover
+        .getByRole("group", { name: "Stroke width" })
+        .getByRole("button", { name: "L" })
+        .click();
+
+      const width = await page.evaluate(() => {
+        const engine = window.__drawEngine!;
+        const element = JSON.parse(engine.exportJson()).elements.find(
+          (el: { type: string }) => el.type === "rectangle",
+        );
+        return element.strokeWidth;
+      });
+      expect(width, "the shape's stroke width").toBe(4);
+    });
   });
 }
 
