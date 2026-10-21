@@ -222,9 +222,11 @@ tablet's.
 The widths are measured, not guessed: the header measures its own parts (the menu, the
 title's natural width, the chips' width), the tool bar measures itself, and `topBar.ts`
 turns the two into the plan. The tool bar takes its own row when the space beside it is
-less than what the ends need — a menu, a title at 48px and a folded chip on one side,
-the Share button and the Help button on the other. With this chrome's 497px bar that is
-below about 815px of viewport.
+less than what the ends need — a menu, a title at its minimum and a folded chip on one
+side, the Share button and the Help button on the other. With this chrome's 497px bar
+that is below about 800px of viewport, and the chips fold into one icon below about
+950px; both move a little with the board's title, which is one of the widths the plan
+measures.
 
 | the number     | ours | what it decides                                      |
 | -------------- | ---- | ---------------------------------------------------- |
