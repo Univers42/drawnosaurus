@@ -130,6 +130,7 @@
   import DrawToolbar from "./DrawToolbar.svelte";
   import DrawMobileToolbar from "./DrawMobileToolbar.svelte";
   import DrawMobileActions from "./DrawMobileActions.svelte";
+  import DrawTabletActions from "./DrawTabletActions.svelte";
   import DrawInspector from "./DrawInspector.svelte";
   import { getShapeActions } from "./shapeActions.ts";
   import { copyAsClipboard, outcomeWords } from "./clipboard.ts";
@@ -153,6 +154,7 @@
   import PeerCursors from "./PeerCursors.svelte";
   import "./draw-chrome.css";
   import { formFactorFor, type FormFactor } from "./formFactor.ts";
+  import { TITLE_MAX, type TopBarPlan } from "./topBar.ts";
   import { createTouchController } from "./touchGesture.ts";
 
   let {
@@ -256,6 +258,21 @@
   });
 
   let selectedCount = $state(0);
+
+  /**
+   * The top bar's plan, and the tool bar's width it is measured against.
+   *
+   * The header measures the parts it owns and asks the plan what to do with them
+   * (`topBar.ts`); the plan's one answer that is not the header's own is whether the
+   * tool bar has a row of its own, which is the chrome's business — hence the class on
+   * the root.
+   */
+  let toolbarWidth = $state(0);
+  let topBarPlan = $state<TopBarPlan>({
+    toolbarOwnRow: false,
+    titleMaxWidth: TITLE_MAX,
+    foldChips: false,
+  });
   /**
    * The engine's `styleRevision()` as last read. It moves on everything that can change
    * what the panel shows — a selection, a style, an undo, a peer's edit to what is
@@ -2306,6 +2323,8 @@
   bind:this={chromeRoot}
   class="draw-chrome"
   class:phone={formFactor === "phone"}
+  class:tablet={formFactor === "tablet"}
+  class:toolbar-row={topBarPlan.toolbarOwnRow}
   style:cursor={hoverCursor ?? toolCursor}
   onkeydowncapture={(e) => {
     onFocusModeKeydown(e);
@@ -2328,12 +2347,16 @@
       onToggleMenu={() => (showMainMenu = !showMainMenu)}
       onOpenShare={openShare}
       onOpenShortcuts={() => (showShortcuts = true)}
+      {toolbarWidth}
+      phone={formFactor === "phone"}
+      onPlan={(plan) => (topBarPlan = plan)}
     >
       {#snippet menu()}
         {#if showMainMenu}
           <DrawMainMenu
             bind:this={mainMenu}
             {engine}
+            {formFactor}
             {themePreference}
             {canvasBackground}
             {grid}
@@ -2657,6 +2680,7 @@
       {toolLocked}
       {zenMode}
       onSelect={handleToolSelect}
+      onWidth={(width) => (toolbarWidth = width)}
       onToggleToolLock={() => {
         if (!engine) return;
         engine.setToolLocked(!engine.getToolLocked());
@@ -2665,28 +2689,51 @@
     />
   {/if}
 
+  <!--
+    The style panel. On a tablet it is the oracle's compact column of icon buttons and
+    popovers, not the desktop's panel of rows: the panel is 216px wide and as tall as the
+    screen, over the drawing, and a tablet has room for a column where a desktop has room
+    for a panel (`editorInterface.ts@1118751f:152-164`, `deriveStylesPanelMode`: a tablet
+    is `compact`). The full inspector is not drawn there at all.
+  -->
   {#if panelVisible && !presenting && chromeVisible("inspector", zenMode) && formFactor !== "phone"}
-    <DrawInspector
-      {summary}
-      can={shapeActions}
-      {engine}
-      {themeMode}
-      {openPicker}
-      builtinPresets={BUILTIN_PRESETS}
-      {userPresets}
-      onApplyPreset={(preset) => applyStyle(preset.style)}
-      onSavePreset={saveCurrentAsPreset}
-      onRenamePreset={renamePreset}
-      onDeletePreset={deletePreset}
-      onOpenPicker={(kind) => (openPicker = kind)}
-      onApply={applyStyle}
-      onPreview={previewStyle}
-      run={(action) => {
-        if (!engine) return;
-        action(engine);
-        refreshStyle();
-      }}
-    />
+    {#if formFactor === "tablet"}
+      <DrawTabletActions
+        {summary}
+        can={shapeActions}
+        {engine}
+        {themeMode}
+        onApply={applyStyle}
+        onPreview={previewStyle}
+        run={(action) => {
+          if (!engine) return;
+          action(engine);
+          refreshStyle();
+        }}
+      />
+    {:else}
+      <DrawInspector
+        {summary}
+        can={shapeActions}
+        {engine}
+        {themeMode}
+        {openPicker}
+        builtinPresets={BUILTIN_PRESETS}
+        {userPresets}
+        onApplyPreset={(preset) => applyStyle(preset.style)}
+        onSavePreset={saveCurrentAsPreset}
+        onRenamePreset={renamePreset}
+        onDeletePreset={deletePreset}
+        onOpenPicker={(kind) => (openPicker = kind)}
+        onApply={applyStyle}
+        onPreview={previewStyle}
+        run={(action) => {
+          if (!engine) return;
+          action(engine);
+          refreshStyle();
+        }}
+      />
+    {/if}
   {/if}
 
   {#if !presenting && formFactor !== "phone"}

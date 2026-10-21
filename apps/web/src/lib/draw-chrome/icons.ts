@@ -61,6 +61,10 @@ export type IconName =
   | "arrowRound"
   | "arrowElbow"
   | "polygonClosed"
+  // The compact panel's two popover triggers: the sliders that stand for "the shape's
+  // own properties" and the two letters that stand for "the typing's".
+  | "adjustments"
+  | "textSize"
   // The Shapes tool (toolbar) and its kind picker (inspector): one glyph per
   // `FigureKind`, plus the toolbar's own — a hexagon, the default figure.
   | "figure"
@@ -413,6 +417,25 @@ export const ICONS: Record<IconName, readonly SvgNode[]> = {
   ],
   // A closed line, filled: the shape the polygon toggle turns a selected line into.
   polygonClosed: [{ tag: "path", d: "M12 2 2 9.5 5.5 21h13L22 9.5Z" }],
+  // Three sliders, the way every settings panel says "the properties": the oracle's
+  // `adjustmentsIcon`, which its compact panel hangs the shape properties off
+  // (`Actions.tsx@1118751f:280`).
+  adjustments: [
+    { tag: "line", x1: "4", y1: "7", x2: "20", y2: "7" },
+    { tag: "circle", cx: "9", cy: "7", r: "2.5" },
+    { tag: "line", x1: "4", y1: "12", x2: "20", y2: "12" },
+    { tag: "circle", cx: "15", cy: "12", r: "2.5" },
+    { tag: "line", x1: "4", y1: "17", x2: "20", y2: "17" },
+    { tag: "circle", cx: "11", cy: "17", r: "2.5" },
+  ],
+  // A big letter and a small one: the oracle's `TextSizeIcon`, which its compact panel
+  // hangs the text properties off (`Actions.tsx@1118751f:467`).
+  textSize: [
+    { tag: "path", d: "M4 18 9 6l5 12" },
+    { tag: "line", x1: "5.8", y1: "14", x2: "12.2", y2: "14" },
+    { tag: "path", d: "M15 18 17.5 11l2.5 7" },
+    { tag: "line", x1: "16", y1: "15.5", x2: "19", y2: "15.5" },
+  ],
   // The Shapes tool's own badge: a hexagon, the figure default (`FigureParams::default`).
   figure: [{ tag: "path", d: "M12 2 20 7 20 17 12 22 4 17 4 7Z" }],
   figurePolygon: [{ tag: "path", d: "M12 2 20 7 20 17 12 22 4 17 4 7Z" }],

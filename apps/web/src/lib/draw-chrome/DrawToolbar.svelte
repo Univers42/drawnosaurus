@@ -22,6 +22,7 @@
     zenMode = false,
     onSelect,
     onToggleToolLock,
+    onWidth,
   }: {
     active: DrawTool;
     toolLocked: boolean;
@@ -33,11 +34,29 @@
     zenMode?: boolean;
     onSelect: (tool: DrawTool) => void;
     onToggleToolLock: () => void;
+    /**
+     * How wide the bar is, measured.
+     *
+     * The top bar's plan needs it: the bar sits in the middle of the header's row, and
+     * what is left of the row for the title and the status chips is what the bar leaves
+     * (`topBar.ts`).
+     */
+    onWidth?: (width: number) => void;
   } = $props();
 
   let open = $state(false);
   let root: HTMLDivElement | undefined = $state();
   let trigger: HTMLButtonElement | undefined = $state();
+
+  /** The bar's own width, measured and reported: the plan's middle. */
+  $effect(() => {
+    if (!root) return;
+    const report = (): void => onWidth?.(root!.offsetWidth);
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(root);
+    return () => observer.disconnect();
+  });
 
   /**
    * The trigger wears the active extra tool's own icon.
@@ -163,7 +182,12 @@
 <style>
   .bar {
     position: absolute;
-    top: 14px;
+    /*
+      The bar's row: the header's row, or a row of its own below it when the header's
+      row cannot hold the bar and the header's two ends together (`topBar.ts`'s plan,
+      and the chrome's `--chrome-toolbar-top`).
+    */
+    top: var(--chrome-toolbar-top, 14px);
     left: 50%;
     transform: translateX(-50%);
     display: flex;
