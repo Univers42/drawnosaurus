@@ -38,6 +38,7 @@ header. Which file owns which of those: `docs/reference/architecture.md`. What a
 | `docs/reference/conventions.md`         | strict TS, the 7-day dependency hold, the never-edit list                                                             |
 | `.claude/skills/canvas-engine/SKILL.md` | camera maths, the keyboard bindings, the frame budget                                                                 |
 | `docs/reference/shortcuts.md`           | which chord reaches the board, when an open overlay stops it, and where the focus goes when that overlay closes       |
+| `docs/reference/dynamic-size.md`        | the "Dynamic size" setting: invariant, sizeScale, what gets a scale, rendering, style panel keys, testing             |
 | `docs/reference/<area>.md`              | one page per area — camera, selection, text, resize, zorder, binding, mermaid, groups, images, palette…               |
 
 ## Durable gotchas
