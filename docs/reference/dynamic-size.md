@@ -49,8 +49,10 @@ the result scaled.**
 ## Who gets one
 
 - An element a person makes with a tool while the setting is on: freehand, line, arrow,
-  rectangle, diamond, ellipse, figure, text, sticky note, frame, a palette insert, and
-  images and embeds placed by a click.
+  rectangle, diamond, ellipse, figure, text, sticky note, frame, and a palette insert.
+- **Not pictures or embeds.** Both are already fitted to the view they are placed in
+  (`fit_image`), so they look the same on screen at any zoom, and neither has an outline.
+  A scale on top made them `1/z` times too big, off the point they were placed at.
 - **A label** typed into a shape takes its shape's scale, not the camera's.
 - **Flowchart** nodes and their arrows take their source node's.
 - **Pasted, duplicated, imported, template and Mermaid** elements keep the scale they came
@@ -83,7 +85,8 @@ keys between scales. This is the engine's work (`selection_style.rs`); the panel
 
 ## Tests
 
-- **Engine:** `tests/ci_dynamic_size.rs`, red first (`4c8f282`), then green (`325651b`).
+- **Engine:** `tests/ci_dynamic_size.rs`, red first (`4c8f282`), then green (`325651b`);
+  pictures and embeds red (`e1e30b8`), then green (`812a03c`).
 - **Unit:** `theme.test.ts` (the preference), `packages/contract/tests/element.test.ts` (the
   field's range).
 - **Browser:** `e2e/dynamicSize.spec.ts` — a stroke at 10% is ten times its key, the switch
