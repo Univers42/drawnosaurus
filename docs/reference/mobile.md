@@ -105,6 +105,27 @@ status is an `aria-live` region and hiding it takes it out of the tree), and the
 button is its icon alone. The row has to fit 360px, and the status and the word "Share"
 are what do not.
 
+## The main menu
+
+**VERIFIED** — the top bar is above the bottom bar, so a menu opened from it paints over
+the bar rather than under it: the oracle's own rule (`MobileMenu.tsx@1118751f:150-153`),
+"welcome screen, bottom bar, and top bar all have the same z-index; ordered in this
+reverse order so that top bar is on top". Here the two are siblings with the same
+z-index and the header comes first in the document, so the header's z-index is the one
+that says which is on top (`DrawHeader.svelte`'s own).
+
+**VERIFIED** — the menu scrolls inside the screen instead of running past it: the
+oracle's `DropdownMenu.scss@1118751f:59-68` gives the container `overflow-y: auto` and a
+`max-height`. Ours is the same rule, sized by `dvh` and not by `vh`: `100vh` is the page
+with the browser's bars hidden, and on a phone the bottom of that page is under them
+(`e2e/public/phoneViewport.spec.ts`).
+
+**VERIFIED** — no row of the menu shows a keyboard shortcut: the oracle draws it only
+when the form factor is not `"phone"`
+(`dropdownMenu/DropdownMenuItemContent.tsx@1118751f:28-29`). There is no keyboard on a
+phone, and a chord there is noise where the row's name should be. `mainMenu.ts` holds the
+chords and the rule; a tablet and a desktop keep every one of them.
+
 ## The overlays
 
 Every dialog is capped at the screen's height and scrolls inside it
@@ -240,18 +261,19 @@ desktop has always had.
 
 ## Where each part lives
 
-| part               | where                                                                               |
-| ------------------ | ----------------------------------------------------------------------------------- |
-| the form factor    | `apps/web/src/lib/draw-chrome/formFactor.ts` (+ its test)                           |
-| the bottom bar     | `apps/web/src/lib/draw-chrome/DrawMobileToolbar.svelte`, plan in `mobileToolbar.ts` |
-| the style strip    | `apps/web/src/lib/draw-chrome/DrawMobileActions.svelte`, plan in `mobileActions.ts` |
-| the gestures       | `apps/web/src/lib/draw-chrome/touchGesture.ts` (+ its test)                         |
-| the touch wiring   | `DrawSurface.svelte` — the capture-phase listeners on the canvas host               |
-| the tablet's panel | `apps/web/src/lib/draw-chrome/DrawTabletActions.svelte`, plan in `tabletActions.ts` |
-| the panel's rows   | `apps/web/src/lib/draw-chrome/ShapeActionRows.svelte`                               |
-| the top bar's plan | `apps/web/src/lib/draw-chrome/topBar.ts` (+ its test)                               |
-| the phone's CSS    | `apps/web/src/lib/draw-chrome/draw-chrome.css`, under `.draw-chrome.phone`          |
-| the browser tests  | `e2e/mobile.spec.ts`, `e2e/tablet.spec.ts`                                          |
+| part                 | where                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| the form factor      | `apps/web/src/lib/draw-chrome/formFactor.ts` (+ its test)                           |
+| the bottom bar       | `apps/web/src/lib/draw-chrome/DrawMobileToolbar.svelte`, plan in `mobileToolbar.ts` |
+| the style strip      | `apps/web/src/lib/draw-chrome/DrawMobileActions.svelte`, plan in `mobileActions.ts` |
+| the gestures         | `apps/web/src/lib/draw-chrome/touchGesture.ts` (+ its test)                         |
+| the touch wiring     | `DrawSurface.svelte` — the capture-phase listeners on the canvas host               |
+| the tablet's panel   | `apps/web/src/lib/draw-chrome/DrawTabletActions.svelte`, plan in `tabletActions.ts` |
+| the panel's rows     | `apps/web/src/lib/draw-chrome/ShapeActionRows.svelte`                               |
+| the top bar's plan   | `apps/web/src/lib/draw-chrome/topBar.ts` (+ its test)                               |
+| the menu's shortcuts | `apps/web/src/lib/draw-chrome/mainMenu.ts` (+ its test)                             |
+| the phone's CSS      | `apps/web/src/lib/draw-chrome/draw-chrome.css`, under `.draw-chrome.phone`          |
+| the browser tests    | `e2e/mobile.spec.ts`, `e2e/tablet.spec.ts`                                          |
 
 ## The browser tests
 
