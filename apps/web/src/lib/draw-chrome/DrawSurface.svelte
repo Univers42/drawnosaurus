@@ -1873,15 +1873,42 @@
   });
 
   /**
+   * The engine, when it is up — and it is not up for a moment: the WASM module it is
+   * made of has to arrive and be compiled first.
+   *
+   * Until it is, the canvas cannot answer a draw, and a patch from a peer has nowhere to
+   * go: `applyRemote` returns when there is no engine, and the patch is lost for good.
+   * So the live link waits for it, and the room is joined by a page that can answer.
+   */
+  let engineUp: Promise<void> | null = null;
+  let engineUpNow: (() => void) | null = null;
+
+  function whenEngineUp(): Promise<void> {
+    engineUp ??= new Promise<void>((resolve) => {
+      engineUpNow = resolve;
+    });
+    return engineUp;
+  }
+
+  /**
    * The live link, under the drawing's secret: the key comes from the secret, and every
    * frame is sealed with it. The relay sees the drawing's id and nothing else.
    *
    * Started when a `roomSecret` arrives, so sharing a drawing brings it online without a
    * reload, and once only: a second call would open a second socket.
+   *
+   * Started when the engine is up, though: a link that joins the room before the engine
+   * can answer drops every patch that arrives in the meantime, and a person whose board
+   * cannot be drawn on is in the room as if it could.
    */
   async function startLive(raw: Uint8Array): Promise<void> {
     if (liveStarted || liveCancelled) return;
     liveStarted = true;
+    // The engine, if it is not up yet. `engine` is the engine itself, and it is set the
+    // moment the engine is up: a link that starts after that must not wait for a promise
+    // nobody is left to resolve.
+    if (!engine) await whenEngineUp();
+    if (liveCancelled) return;
     const roomKey = await importRoomKey(raw);
     if (liveCancelled) return;
     realtime = new RealtimeChannel(slug, roomKey);
@@ -2360,6 +2387,8 @@
       {onCameraChange}
       onReady={(next) => {
         engine = next;
+        // The engine is up: the live link, waiting for it, may go.
+        engineUpNow?.();
         // Known from the start rather than from the first pan: the cursor we send and
         // the peers' cursors we draw are both placed with it, and without it ours was
         // never sent and theirs sat at the corner until someone moved the camera.

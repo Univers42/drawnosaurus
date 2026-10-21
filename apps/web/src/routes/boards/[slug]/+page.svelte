@@ -3,6 +3,7 @@
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import { elementsFromJson } from "@osionos/draw-engine/json";
+  import { loadDrawEngine } from "@osionos/draw-engine/engine";
   import { Scene, type DrawElement } from "@osionos/draw-engine/types";
   import type { DrawEngine } from "@osionos/draw-engine/engine";
   import { ApiClientError } from "$lib/api/client.ts";
@@ -41,6 +42,13 @@
   let title = $state("Board");
   /** The public build's: the stored drawing could not be read, so it opened empty. */
   let unread = $state(false);
+  /**
+   * The engine could not load, so there is no board to draw on. The loader keeps the
+   * rejection (`engine/src/wasmLoad.ts`), so the engine is not tried again in this page:
+   * a reload is the only way to have it, and the page says so rather than waiting for
+   * ever.
+   */
+  let engineFailed = $state(false);
   /**
    * The public build's: the drawing's secret, when it is shared. It arrives with the
    * link, and a share mints one — either way the live link starts on it.
@@ -205,18 +213,37 @@
         roomSecret = secret;
         useCopy(secret);
       }
-      const opened = await openBoard({
-        slug,
-        browser: BROWSER_MODE,
-        store: boards,
-        drafts,
-        storage: storage(),
-        stored: copy,
-        now: () => Date.now(),
-        nonce: () => Math.floor(Math.random() * 0x7fffffff),
-      });
+      // The engine and the board, fetched together: the board is presented when both
+      // are here. Until the engine is up the canvas cannot answer a draw — a drag on it
+      // draws nothing, and a peer's patch has nowhere to go — so a page that shows the
+      // board anyway is a board that looks alive and is not. The two waits overlap, so
+      // the slower of them is all it costs.
+      const [opened, engineUp] = await Promise.all([
+        openBoard({
+          slug,
+          browser: BROWSER_MODE,
+          store: boards,
+          drafts,
+          storage: storage(),
+          stored: copy,
+          now: () => Date.now(),
+          nonce: () => Math.floor(Math.random() * 0x7fffffff),
+        }),
+        // The engine's loader keeps a rejection, so the engine is not tried again in
+        // this page: the failure is the page's to report, not the loader's to retry.
+        loadDrawEngine().then(
+          () => true,
+          () => false,
+        ),
+      ]);
       // Left before its board opened: the saver is disposed and nothing of it is on screen.
       if (destroyed) return;
+      if (!engineUp) {
+        // The engine could not load: there is no board to draw on, and a reload is the
+        // only way to have one. Said here, in place of the board.
+        engineFailed = true;
+        return;
+      }
       const { loaded, elements, resave } = opened;
       title = opened.title;
       needsThumbnailBackfill = opened.needsThumbnailBackfill;
@@ -414,6 +441,11 @@
         {shared}
         ariaLabel="Board canvas"
       />
+    {:else if engineFailed}
+      <div class="loading-state engine-failed">
+        <p role="alert">The drawing engine could not load.</p>
+        <button type="button" onclick={() => location.reload()}>Reload</button>
+      </div>
     {:else}
       <div class="loading-state">
         <p>Loading board…</p>
@@ -445,5 +477,11 @@
     height: 100%;
     color: var(--muted);
     font-size: 14px;
+  }
+
+  /* The engine could not load: the board is not there, and the page says so. */
+  .loading-state.engine-failed {
+    gap: 0.75rem;
+    color: var(--ink);
   }
 </style>
