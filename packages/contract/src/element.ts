@@ -298,6 +298,11 @@ export const drawElementSchema = z.object({
   // a figure, and the engine's own resolved_sides/resolved_ratio give a kind-specific
   // default to a figure whose sides/ratio is absent too.
   figure: figureSchema.optional(),
+  // Dynamic size (`docs/reference/dynamic-size.md`): 1/zoom for an element drawn zoomed
+  // out. The engine clamps it to [0.1, 10], which keeps a key's width and font size inside
+  // the limits above. Declared, or the schema would strip it and a saved drawing would
+  // come back drawn at the wrong scale.
+  sizeScale: finite.min(0.1).max(10).optional(),
 
   // The reconciliation stamp. `version` counts edits, `versionNonce` is random
   // per edit and breaks ties between concurrent writers.

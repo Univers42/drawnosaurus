@@ -209,6 +209,31 @@ export function pickGridMode(modes: SnapModes, patch: Partial<GridPreference>): 
   return { objectsSnap: turnedOn ? false : modes.objectsSnap, grid };
 }
 
+const DYNAMIC_SIZE_STORAGE_KEY = "drawnosaurus:dynamic-size";
+
+/**
+ * Dynamic size, per browser: **on** unless it was turned off (`docs/reference/dynamic-size.md`).
+ * Only the word `"false"` turns it off, so nothing unexpected takes it away by surprise.
+ */
+export function readDynamicSizePreference(storage?: Pick<Storage, "getItem">): boolean {
+  try {
+    return storage?.getItem(DYNAMIC_SIZE_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+export function persistDynamicSizePreference(
+  storage: Pick<Storage, "setItem"> | undefined,
+  on: boolean,
+): void {
+  try {
+    storage?.setItem(DYNAMIC_SIZE_STORAGE_KEY, String(on));
+  } catch {
+    // Not persisting is survivable; the current page still honours the choice.
+  }
+}
+
 /**
  * Resolve engine chrome from the host tokens. The engine stays token-agnostic.
  *

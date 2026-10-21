@@ -53,7 +53,9 @@
     persistGridPreference,
     persistObjectsSnapPreference,
     pickGridMode,
+    persistDynamicSizePreference,
     readCanvasBackground,
+    readDynamicSizePreference,
     readGridPreference,
     readObjectsSnapPreference,
     readThemePreference,
@@ -219,6 +221,9 @@
   let grid = $state<GridPreference>({ ...DEFAULT_GRID_PREFERENCE });
   /** Snapping to other elements while moving. Off until turned on, as in Excalidraw. */
   let objectsSnap = $state(false);
+  /** Dynamic size: drawn zoomed out, an element looks as it would at 100%. On until
+   *  turned off — the owner's call, beyond Excalidraw (`docs/reference/dynamic-size.md`). */
+  let dynamicSize = $state(true);
   let ink = $state("#1e1e1e");
   let tool = $state<DrawTool>("select");
   let toolLocked = $state(false);
@@ -719,6 +724,16 @@
       typeof localStorage === "undefined" ? undefined : localStorage,
       focusModeEnabled,
     );
+  }
+
+  /** The main menu's "Dynamic size" switch. */
+  function toggleDynamicSize(): void {
+    dynamicSize = !dynamicSize;
+    persistDynamicSizePreference(
+      typeof localStorage === "undefined" ? undefined : localStorage,
+      dynamicSize,
+    );
+    engine?.setDynamicSize(dynamicSize);
   }
 
   /**
@@ -1826,10 +1841,12 @@
     canvasBackground = readCanvasBackground(localStorage);
     grid = readGridPreference(localStorage);
     objectsSnap = readObjectsSnapPreference(localStorage);
+    dynamicSize = readDynamicSizePreference(localStorage);
     focusModeEnabled = readFocusModePreference(localStorage);
     userPresets = readUserPresets(localStorage);
     // In case the engine was ready first; `onReady` covers the usual order.
     engine?.setObjectsSnap(objectsSnap);
+    engine?.setDynamicSize(dynamicSize);
     themeMode = resolveThemeMode(themePreference, systemPrefersDark());
     document.documentElement.classList.toggle("dark", themeMode === "dark");
 
@@ -2361,11 +2378,13 @@
             {canvasBackground}
             {grid}
             {objectsSnap}
+            {dynamicSize}
             {focusModeEnabled}
             onPickTheme={pickTheme}
             onPickCanvasBackground={pickCanvasBackground}
             onPickGrid={pickGrid}
             onToggleObjectsSnap={flipObjectsSnap}
+            onToggleDynamicSize={toggleDynamicSize}
             onToggleFocusMode={toggleFocusMode}
             onOpenExport={() => (showExport = true)}
             onOpenMermaid={() => (showMermaid = true)}
@@ -2419,6 +2438,7 @@
         zoom = zoomPercent(next.camera.scale);
         next.setGrid(grid);
         next.setObjectsSnap(objectsSnap);
+        next.setDynamicSize(dynamicSize);
         styleRevision = next.styleRevision();
         exposeForDevTools(next);
         refreshEmbedFrames();

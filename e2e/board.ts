@@ -43,6 +43,7 @@ declare global {
       getGrid(): { enabled: boolean; size: number; step: number; snap: boolean };
       setGrid(grid: { enabled?: boolean }): void;
       getObjectsSnap(): boolean;
+      dynamicSize(): boolean;
       applyRemotePatch(json: string): boolean;
       debugSnapshot(): {
         interaction: { markedForErasure: string[] };
@@ -116,6 +117,7 @@ export interface SceneElement {
   backgroundColor?: string;
   fillStyle?: string;
   strokeWidth?: number;
+  sizeScale?: number;
   roughness?: number;
   opacity?: number;
   x: number;

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_GRID, LIGHT_THEME } from "@osionos/draw-engine/types";
 import {
   DEFAULT_GRID_PREFERENCE,
+  persistDynamicSizePreference,
   persistObjectsSnapPreference,
   persistThemePreference,
   pickGridMode,
+  readDynamicSizePreference,
   readObjectsSnapPreference,
   readThemePreference,
   resolveThemeMode,
@@ -208,5 +210,37 @@ describe("the grid default", () => {
     } finally {
       DEFAULT_GRID_PREFERENCE.size = 20;
     }
+  });
+});
+
+describe("dynamic size", () => {
+  const memory = () => {
+    const store = new Map<string, string>();
+    return {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+    };
+  };
+
+  it("is on when nothing was stored, as the owner decided", () => {
+    expect(readDynamicSizePreference(memory())).toBe(true);
+    expect(readDynamicSizePreference(undefined)).toBe(true);
+  });
+
+  it("remembers being turned off, and on again", () => {
+    const storage = memory();
+    persistDynamicSizePreference(storage, false);
+    expect(readDynamicSizePreference(storage)).toBe(false);
+    persistDynamicSizePreference(storage, true);
+    expect(readDynamicSizePreference(storage)).toBe(true);
+  });
+
+  it("stays on when storage throws", () => {
+    const broken = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    expect(readDynamicSizePreference(broken)).toBe(true);
   });
 });
