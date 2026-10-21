@@ -33,11 +33,13 @@
     canvasBackground = null,
     grid,
     objectsSnap = false,
+    dynamicSize = true,
     focusModeEnabled = true,
     onPickTheme,
     onPickCanvasBackground,
     onPickGrid,
     onToggleObjectsSnap,
+    onToggleDynamicSize,
     onToggleFocusMode,
     onOpenExport,
     onOpenMermaid,
@@ -53,11 +55,13 @@
     canvasBackground: string | null;
     grid: GridPreference;
     objectsSnap?: boolean;
+    dynamicSize?: boolean;
     focusModeEnabled?: boolean;
     onPickTheme: (preference: ThemePreference) => void;
     onPickCanvasBackground: (color: string) => void;
     onPickGrid: (patch: Partial<GridPreference>) => void;
     onToggleObjectsSnap: () => void;
+    onToggleDynamicSize: () => void;
     onToggleFocusMode: () => void;
     onOpenExport: () => void;
     onOpenMermaid: () => void;
@@ -352,6 +356,21 @@
         aria-checked={focusModeEnabled}
         aria-label="Focus while typing"
         onclick={onToggleFocusMode}
+      >
+        <span class="knob"></span>
+      </button>
+    </div>
+
+    <div class="dropdown-menu-item-bare">
+      <span class="dropdown-menu-item__text">Dynamic size</span>
+      <button
+        type="button"
+        role="switch"
+        class="switch"
+        class:on={dynamicSize}
+        aria-checked={dynamicSize}
+        aria-label="Dynamic size"
+        onclick={onToggleDynamicSize}
       >
         <span class="knob"></span>
       </button>
