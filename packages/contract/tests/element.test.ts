@@ -34,6 +34,14 @@ describe("drawElementSchema", () => {
     expect(drawElementSchema.safeParse({ ...element(), type: "hologram" }).success).toBe(false);
   });
 
+  it("keeps a dynamic-size scale in range, and refuses one outside it", () => {
+    expect(drawElementSchema.parse({ ...element(), sizeScale: 10 }).sizeScale).toBe(10);
+    expect(drawElementSchema.parse({ ...element(), sizeScale: 0.1 }).sizeScale).toBe(0.1);
+    for (const bad of [0.05, 11, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(drawElementSchema.safeParse({ ...element(), sizeScale: bad }).success).toBe(false);
+    }
+  });
+
   it("strips unknown keys instead of failing, so a newer engine still writes", () => {
     const parsed = drawElementSchema.parse({ ...element(), somethingNew: "from a later engine" });
     expect(parsed).not.toHaveProperty("somethingNew");
