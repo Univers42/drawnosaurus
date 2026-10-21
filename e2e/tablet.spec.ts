@@ -182,9 +182,7 @@ for (const viewport of TABLETS) {
       const size = page.viewportSize()!;
       const box = (await popover.boundingBox())!;
       expect(box.x, "the popover's left edge").toBeGreaterThanOrEqual(-0.5);
-      expect(box.x + box.width, "the popover's right edge").toBeLessThanOrEqual(
-        size.width + 0.5,
-      );
+      expect(box.x + box.width, "the popover's right edge").toBeLessThanOrEqual(size.width + 0.5);
       expect(box.y, "the popover's top edge").toBeGreaterThanOrEqual(-0.5);
       expect(box.y + box.height, "the popover's bottom edge").toBeLessThanOrEqual(
         size.height + 0.5,
