@@ -91,4 +91,14 @@ describe("topBarPlan", () => {
     expect(plan.foldChips).toBe(false);
     expect(plan.titleMaxWidth).toBe(128);
   });
+
+  it("does not fold the chips for a title that fits whole", () => {
+    // A title of four letters is four letters, not a stub: the chips keep their width
+    // while there is room for both. At 940 the side of the row is 207.5, and the menu,
+    // the gap, the title's frame, the title and the chip with its gap are 60 + 24 + 120
+    // = 204 — which fits.
+    const plan = topBarPlan({ ...measured, viewport: 940, title: 24 });
+    expect(plan.foldChips).toBe(false);
+    expect(plan.titleMaxWidth).toBe(28);
+  });
 });

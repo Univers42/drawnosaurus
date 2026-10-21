@@ -68,12 +68,17 @@ export function topBarPlan(widths: TopBarWidths): TopBarPlan {
   const chipsBlock = widths.chips > 0 ? widths.chips + widths.gap : 0;
   const foldedBlock = widths.chips > 0 ? widths.gap + FOLDED_CHIPS : 0;
 
+  // What the title needs of the row: its own text, or `TITLE_MIN` if it is longer than
+  // that. A title of four letters is not a stub at four letters, and it should not cost
+  // the chips their width.
+  const titleNeed = Math.min(widths.title, TITLE_MIN);
+
   // The space each end of the row has when the tool bar is in it.
   const side = (widths.viewport - widths.toolbar) / 2 - widths.margin;
 
   // The ends at their smallest: the title keeps a readable width, the chips are one
   // icon, and the right end is the Share button and the Help button.
-  const leftMin = widths.leftFixed + TITLE_MIN + foldedBlock;
+  const leftMin = widths.leftFixed + titleNeed + foldedBlock;
   const rightMin = widths.right;
 
   // A row that cannot hold the tool bar and both ends is not a row: the tool bar takes
@@ -90,7 +95,7 @@ export function topBarPlan(widths: TopBarWidths): TopBarPlan {
   // The title gives way first: it takes what is left of the row.
   let titleMax = budget - widths.leftFixed - chipsBlock;
   let foldChips = false;
-  if (titleMax < TITLE_MIN && chipsBlock > 0) {
+  if (titleMax < titleNeed && chipsBlock > 0) {
     // Not even a cut title would fit beside the chips: they fold into one icon and the
     // title takes the room they were taking.
     foldChips = true;
