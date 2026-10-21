@@ -144,6 +144,28 @@ for (const viewport of TABLETS) {
       expect(covered, "the style panel's share of the screen").toBeLessThan(0.15);
     });
 
+    test("the menu is above the tool bar's row", async ({ page }) => {
+      await openBoard(page);
+      await page.getByRole("button", { name: "Open main menu" }).click();
+      const menu = page.getByRole("menu", { name: "Main menu" });
+      await expect(menu).toBeVisible();
+
+      // The top bar is above the tool bar's row — the oracle's own rule (`MobileMenu.tsx
+      // @1118751f:150-153`): the top bar is on top. What is at the middle of the menu's
+      // first row is that row, not the tool bar painted over it.
+      const over = await page.evaluate(() => {
+        const row = document.querySelector<HTMLElement>('[role="menuitem"]');
+        if (!row) return { hit: false, what: "the menu is not open" };
+        const r = row.getBoundingClientRect();
+        const at = document.elementFromPoint(r.right - 20, r.top + r.height / 2);
+        return {
+          hit: at === row || (at !== null && row.contains(at)),
+          what: (at as HTMLElement | null)?.className?.toString() ?? "nothing",
+        };
+      });
+      expect(over.hit, `the menu's first row is on top (${over.what})`).toBe(true);
+    });
+
     test("a stroke colour picked in the compact panel reaches the shape", async ({ page }) => {
       await openBoard(page);
       await selectRectangle(page);
