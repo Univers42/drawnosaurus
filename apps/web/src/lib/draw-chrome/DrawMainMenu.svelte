@@ -8,6 +8,8 @@
   import MainMenuIcon from "./MainMenuIcon.svelte";
   import { CANVAS_BACKGROUNDS, GRID_SIZES } from "./inspector.ts";
   import { openDrawing } from "./openFile.ts";
+  import { menuShortcuts } from "./mainMenu.ts";
+  import type { FormFactor } from "./formFactor.ts";
   import type { GridPreference, ThemePreference } from "./theme.ts";
 
   /**
@@ -29,6 +31,7 @@
    */
   let {
     engine,
+    formFactor = "desktop",
     themePreference = "light",
     canvasBackground = null,
     grid,
@@ -49,6 +52,11 @@
     onClose,
   }: {
     engine: DrawEngine | null;
+    /**
+     * Which form factor the menu is drawn for. It decides the shortcuts: a phone shows
+     * none of them, because there is no keyboard to press them on (`mainMenu.ts`).
+     */
+    formFactor?: FormFactor;
     themePreference: ThemePreference;
     canvasBackground: string | null;
     grid: GridPreference;
@@ -166,6 +174,14 @@
       { value: "dark", icon: "moon", label: "Dark" },
       { value: "system", icon: "system", label: "System" },
     ];
+
+  /**
+   * The shortcuts the rows show.
+   *
+   * None of them on a phone: there is no keyboard there, and the chord would be noise
+   * where the row's name should be (`mainMenu.ts`, the oracle's own rule).
+   */
+  const shortcuts = $derived(menuShortcuts(formFactor));
 </script>
 
 <svelte:window
@@ -204,7 +220,9 @@
     <button type="button" role="menuitem" class="dropdown-menu-item" onclick={openFile}>
       <MainMenuIcon name="folder" />
       <span class="dropdown-menu-item__text">Open</span>
-      <span class="dropdown-menu-item__shortcut">Ctrl+O</span>
+      {#if shortcuts.open}
+        <span class="dropdown-menu-item__shortcut">{shortcuts.open}</span>
+      {/if}
     </button>
 
     <button
@@ -215,7 +233,9 @@
     >
       <MainMenuIcon name="disk" />
       <span class="dropdown-menu-item__text">Save to disk</span>
-      <span class="dropdown-menu-item__shortcut">Ctrl+S</span>
+      {#if shortcuts.save}
+        <span class="dropdown-menu-item__shortcut">{shortcuts.save}</span>
+      {/if}
     </button>
 
     <button
@@ -226,7 +246,9 @@
     >
       <MainMenuIcon name="image" />
       <span class="dropdown-menu-item__text">Export image…</span>
-      <span class="dropdown-menu-item__shortcut">Ctrl+Shift+E</span>
+      {#if shortcuts.export}
+        <span class="dropdown-menu-item__shortcut">{shortcuts.export}</span>
+      {/if}
     </button>
 
     <button
@@ -270,7 +292,9 @@
     >
       <MainMenuIcon name="play" />
       <span class="dropdown-menu-item__text">Present</span>
-      <span class="dropdown-menu-item__shortcut">Ctrl+Alt+P</span>
+      {#if shortcuts.present}
+        <span class="dropdown-menu-item__shortcut">{shortcuts.present}</span>
+      {/if}
     </button>
 
     <button
@@ -291,7 +315,9 @@
     >
       <MainMenuIcon name="help" />
       <span class="dropdown-menu-item__text">Keyboard shortcuts</span>
-      <span class="dropdown-menu-item__shortcut">?</span>
+      {#if shortcuts.help}
+        <span class="dropdown-menu-item__shortcut">{shortcuts.help}</span>
+      {/if}
     </button>
 
     <button
@@ -328,7 +354,9 @@
 
     <div class="dropdown-menu-item-bare">
       <span class="dropdown-menu-item__text">Snap to objects</span>
-      <span class="dropdown-menu-item__shortcut">Alt+S</span>
+      {#if shortcuts.snap}
+        <span class="dropdown-menu-item__shortcut">{shortcuts.snap}</span>
+      {/if}
       <button
         type="button"
         role="switch"
@@ -458,8 +486,14 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     box-shadow: var(--shadow-md);
+    /*
+      The menu scrolls inside the screen rather than running past it: the oracle's own
+      rule (`DropdownMenu.scss@1118751f:59-68`, `overflow-y: auto` and a `max-height`).
+      `dvh`, not `vh`: `100vh` is the page with the browser's bars hidden, and on a phone
+      the bottom of that page is under them (`e2e/public/phoneViewport.spec.ts`).
+    */
     overflow-y: auto;
-    max-height: calc(100svh - 6rem);
+    max-height: calc(100dvh - 6rem);
   }
 
   .dropdown-menu-item,

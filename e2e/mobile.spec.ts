@@ -452,9 +452,7 @@ async function expectMenuIsUsable(page: Page): Promise<void> {
   // What is at the middle of the first canvas-background swatch is the swatch, and what
   // is at the middle of the menu's last row is that row: nothing is painted over them.
   const hits = await page.evaluate(() => {
-    const swatch = document.querySelector<HTMLElement>(
-      '[aria-label="Canvas background"] .swatch',
-    );
+    const swatch = document.querySelector<HTMLElement>('[aria-label="Canvas background"] .swatch');
     const stamp = document.querySelector<HTMLElement>('[data-testid="build-stamp"]');
     if (!swatch || !stamp) return { swatch: false, stamp: false, over: "the menu is not open" };
     const at = (node: HTMLElement): Element | null => {

@@ -2329,6 +2329,7 @@
           <DrawMainMenu
             bind:this={mainMenu}
             {engine}
+            {formFactor}
             {themePreference}
             {canvasBackground}
             {grid}

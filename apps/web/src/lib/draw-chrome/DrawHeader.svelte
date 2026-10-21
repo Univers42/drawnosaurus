@@ -320,7 +320,19 @@
     justify-content: space-between;
     align-items: center;
     pointer-events: none;
-    z-index: 20;
+    /*
+      The top bar is on top.
+
+      The oracle's own rule (`MobileMenu.tsx@1118751f:150-153`): "welcome screen, bottom
+      bar, and top bar all have the same z-index; ordered in this reverse order so that
+      top bar is on top". Here the top bar and the bottom bar are siblings with the same
+      z-index, and the header comes first in the document, so the header's z-index is the
+      one that says which of the two is on top — and the menu, which opens from the
+      header, is over the bar and over the tool bar's own row.
+
+      30 is above the bars (20) and below the dialogs (100).
+    */
+    z-index: 30;
   }
 
   /* The dropdown positions itself against this, so it follows the button. */
