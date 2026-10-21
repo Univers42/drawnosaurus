@@ -354,7 +354,7 @@
     overflow: visible;
     width: 13rem;
     max-width: calc(100vw - 90px);
-    max-height: calc(100vh - 120px);
+    max-height: calc(100dvh - 120px);
     overflow-y: auto;
     padding: 12px;
     border-radius: 10px;
